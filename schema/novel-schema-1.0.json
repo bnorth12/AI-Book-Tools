@@ -1,0 +1,106 @@
+{
+  "$id": "https://example.com/novel-schema-1.0.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI Book Tools Shared Novel Schema",
+  "description": "Version 1.0 of the shared novel/story JSON schema for NovelWriter, BookEditor, and BookDecomposer.",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.0$",
+      "description": "Version of the shared schema."
+    },
+    "sourceTool": {
+      "type": "string",
+      "description": "Name of the tool that produced this JSON file."
+    },
+    "sourceVersion": {
+      "type": "string",
+      "description": "Optional version of the tool that produced this JSON file."
+    },
+    "novelData": {
+      "type": "object",
+      "description": "Core story and editing data.",
+      "properties": {
+        "genre": { "type": "string" },
+        "title": { "type": "string" },
+        "storyArc": { "type": "string" },
+        "generalPlot": { "type": "string" },
+        "setting": { "type": "string" },
+        "numChapters": { "type": "integer", "minimum": 0 },
+        "chapterLength": { "type": "integer", "minimum": 0 },
+        "authorStyle": { "type": "string" },
+        "styleGuide": { "type": "string" },
+        "author": { "type": "string" },
+        "characters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "backstory": { "type": "string" },
+              "arc": { "type": "string" },
+              "role": { "type": "string" },
+              "notes": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        },
+        "subplots": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "chapterOutlines": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "chapterArcs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "chapters": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "editedChapters": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "bookText": { "type": "string" },
+        "outlineImprovements": { "type": "string" },
+        "bookImprovementsWithStatus": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "status": { "type": "string" },
+              "breakdown": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        },
+        "requestLog": {
+          "type": "object",
+          "properties": {
+            "lastPrompt": { "type": "string" },
+            "status": { "type": "string" },
+            "returnedInfo": { "type": "string" },
+            "tokenUsage": { "type": "string" },
+            "cost": { "type": "string" },
+            "originTab": { "type": ["string", "null"] }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["schemaVersion", "novelData"],
+  "additionalProperties": true
+}

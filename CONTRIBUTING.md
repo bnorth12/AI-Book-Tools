@@ -14,6 +14,7 @@ Thank you for your interest in contributing to AI Book Tools! This document prov
 - Check if the feature has already been requested
 - Describe the problem you're trying to solve
 - Explain how the feature would work
+- Reference shared data model work when relevant, such as `schema/novel-schema-1.0.json`
 - Consider alternative solutions
 
 ### 🛠️ Code Contributions

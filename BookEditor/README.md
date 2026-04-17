@@ -31,6 +31,10 @@ An AI-powered book editing and improvement tool that helps refine existing manus
 - `BookEditor.html` - Main editing interface
 - `Beyond Prepared.txt` - Sample content or reference material
 
+## Shared Schema
+
+This tool will move toward a shared import/export format using `schema/novel-schema-1.0.json` so it can accept compatible data from `NovelWriter` and `BookDecomposer`.
+
 ## Version
 
 Current version: 0.2.0

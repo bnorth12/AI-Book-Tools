@@ -50,6 +50,8 @@ The tool generates a comprehensive JSON structure containing:
 - Chapter-by-chapter outlines
 - Author style recommendations
 
+This tool will align its JSON export with the shared schema in `schema/novel-schema-1.0.json` to support compatibility with `BookEditor` and `NovelWriter`.
+
 ## Version
 
 Current version: 0.X.0

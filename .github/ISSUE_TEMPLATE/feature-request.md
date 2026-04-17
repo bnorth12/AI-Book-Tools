@@ -30,6 +30,7 @@ If you have technical suggestions:
 - Which tool(s) would this affect?
 - Any technical constraints or considerations?
 - Similar features in other tools that could be referenced
+- If this request affects cross-tool data interchange, reference `schema/novel-schema-1.0.json`
 
 ## Checklist
 - [ ] This feature would benefit other users

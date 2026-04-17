@@ -115,6 +115,11 @@ We have a community Discord server for:
 - [ ] Integration with other writing platforms
 - [ ] Advanced AI model support
 
+### Shared Novel Schema
+- [ ] Normalize `NovelWriter`, `BookEditor`, and `BookDecomposer` around a versioned shared schema
+- [ ] Add import/export compatibility for `schema/novel-schema-1.0.json`
+- [ ] Track implementation tasks in `schema/novel-schema-1.0-tasks.md`
+
 ### Version 2.0 Goals
 - Improved user interface design
 - Better error handling and user feedback
