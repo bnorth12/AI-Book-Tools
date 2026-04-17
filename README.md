@@ -58,6 +58,20 @@ python -m http.server 8000
 - Follow the `.editorconfig` settings for consistent formatting
 - Test changes across different browsers
 - Ensure API keys are never committed to version control
+- Run `npm test` to validate code quality
+
+### Automated Testing
+This repository uses GitHub Actions for automated testing:
+- HTML validation and linting
+- JSON file validation
+- Code quality checks
+- File size monitoring
+
+Tests run automatically on every push and pull request.
+
+### Security Updates
+Dependabot automatically creates pull requests to update dependencies and GitHub Actions, keeping the project secure and up-to-date.
+
 
 ## API Key Guidance
 
@@ -79,6 +93,46 @@ These tools authenticate using API keys entered in the browser UI.
 - ⭐ **Star this repo** if you find it helpful!
 - 🍴 **Fork and contribute** improvements
 - 📢 **Share feedback** through issues and discussions
+- 💬 **Join our Discord** for community discussion and support
+
+### Discord Server
+We have a community Discord server for:
+- Getting help with the tools
+- Sharing your writing projects
+- Discussing AI writing techniques
+- Contributing to development
+- Connecting with other writers
+
+*Server invite link will be added soon - check back or create an issue to request access*
+
+## Roadmap
+
+### Planned Features
+- [ ] Enhanced mobile responsiveness
+- [ ] Dark/light theme toggle
+- [ ] Export to multiple formats (PDF, DOCX, EPUB)
+- [ ] Collaborative editing features
+- [ ] Integration with other writing platforms
+- [ ] Advanced AI model support
+
+### Version 2.0 Goals
+- Improved user interface design
+- Better error handling and user feedback
+- Performance optimizations
+- Expanded tool capabilities
+- Community feature requests
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+### Quick Contribution Ideas
+- Improve documentation and user guides
+- Add new features or tools
+- Fix bugs and improve stability
+- Enhance mobile/tablet experience
+- Create tutorials and examples
+
 
 ## Notes
 

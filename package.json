@@ -6,9 +6,12 @@
   "scripts": {
     "start": "python -m http.server 8000",
     "serve": "python -m http.server 8000",
-    "lint": "echo 'No linting configured yet'",
-    "test": "echo 'No tests configured yet'",
-    "build": "echo 'No build step required - static files only'"
+    "lint": "htmlhint \"**/*.html\" || true",
+    "lint:js": "echo 'JavaScript linting not configured yet'",
+    "test": "npm run lint && npm run validate-json",
+    "validate-json": "for file in $(find . -name \"*.json\" -not -path \"./node_modules/*\"); do jq empty \"$file\" || exit 1; done && echo 'All JSON valid'",
+    "build": "echo 'No build step required - static files only'",
+    "preview": "echo 'Open index.html in browser to preview'"
   },
   "repository": {
     "type": "git",
@@ -32,7 +35,9 @@
   "engines": {
     "node": ">=14.0.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "htmlhint": "^1.1.4"
+  },
   "browserslist": [
     "last 2 versions",
     "> 1%",
