@@ -1,0 +1,41 @@
+{
+  "name": "ai-book-tools",
+  "version": "1.0.0",
+  "description": "Static HTML/JavaScript tools for AI-assisted writing and book editing",
+  "main": "index.html",
+  "scripts": {
+    "start": "python -m http.server 8000",
+    "serve": "python -m http.server 8000",
+    "lint": "echo 'No linting configured yet'",
+    "test": "echo 'No tests configured yet'",
+    "build": "echo 'No build step required - static files only'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bnorth12/AI-Book-Tools.git"
+  },
+  "keywords": [
+    "writing",
+    "ai",
+    "novel",
+    "book",
+    "editor",
+    "author",
+    "creative-writing"
+  ],
+  "author": "bnorth12",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bnorth12/AI-Book-Tools/issues"
+  },
+  "homepage": "https://github.com/bnorth12/AI-Book-Tools#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {},
+  "browserslist": [
+    "last 2 versions",
+    "> 1%",
+    "not dead"
+  ]
+}
