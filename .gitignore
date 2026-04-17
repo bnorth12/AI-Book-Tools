@@ -1,0 +1,24 @@
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore editor files
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# Ignore local environment files
+.env
+npm-debug.log*
+
+# Ignore application logs
+*.log
+
+# Ignore generated files
+dist/
+build/
+
+# Keep API keys out of version control
+*.key
+*.secret

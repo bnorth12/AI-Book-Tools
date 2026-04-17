@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Book Decomposer</title>
+    <style>
+        .tabcontent { display: none; padding: 20px; }
+        .tabcontent.active { display: block; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <div class="tab">
+        <button onclick="showTab(1)">Input Book</button>
+        <button onclick="showTab(2)">Chapters Preview</button>
+        <button onclick="showTab(3)">Extracted Elements</button>
+        <button onclick="showTab(4)">Output JSON</button>
+    </div>
+
+    <div id="tab1" class="tabcontent active">
+        <h2>Input Book</h2>
+        <label for="title">Book Title:</label><br>
+        <input type="text" id="title" name="title" placeholder="Enter book title"><br><br>
+        <label for="bookFile">Upload Book Text File (.txt):</label><br>
+        <input type="file" id="bookFile" accept=".txt"><br><br>
+        <label for="apiKey">API Key:</label><br>
+        <input type="text" id="apiKey" name="apiKey" placeholder="Enter your API key"><br><br>
+        <button onclick="processBook()">Process Book</button>
+        <p id="loading" style="display:none;">Processing...</p>
+    </div>
+
+    <div id="tab2" class="tabcontent">
+        <h2>Chapters Preview</h2>
+        <table id="chaptersTable"><tr><th>Chapter</th><th>Preview</th></tr></table>
+    </div>
+
+    <div id="tab3" class="tabcontent">
+        <h2>Extracted Elements</h2>
+        <table id="elementsTable"><tr><th>Field</th><th>Value</th></tr></table>
+    </div>
+
+    <div id="tab4" class="tabcontent">
+        <h2>Output JSON</h2>
+        <pre id="jsonOutput"></pre>
+    </div>
+
+    <script src="BookDecomposer.js"></script>
+</body>
+</html>

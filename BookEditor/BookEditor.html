@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BookEditor V.0.3.0</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { text-align: center; color: #333; }
+        #nav { overflow: hidden; border-bottom: 1px solid #ccc; margin-bottom: 20px; }
+        #nav button { background-color: #0078d4; color: white; border: none; padding: 10px 20px; float: left; cursor: pointer; }
+        #nav button:hover { background-color: #005ea2; }
+        #nav button.active { background-color: #004d8c; }
+        .tab { display: none; }
+        .tab.active { display: block; }
+        label { display: block; margin: 10px 0 5px; }
+        input[type="text"], input[type="number"], select, textarea { width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box; }
+        #genre { height: 30px; }
+        #bookText, #chatQuestion, #chatResponse { height: 600px; resize: vertical; }
+        #lastPrompt, #returnedInfo { height: 200px; resize: vertical; }
+        button { background-color: #0078d4; color: white; border: none; padding: 10px 20px; cursor: pointer; margin-right: 10px; }
+        button:hover { background-color: #005ea2; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        th.incorporate, td.incorporate { width: 110px; }
+        #tokenCounter, #requestLogTokens { margin-top: 20px; font-size: 14px; }
+        #loading { display: none; color: #0078d4; margin-top: 10px; }
+        #logCounter { margin-left: 10px; }
+        #editedOutputContainer textarea {
+		    height: 200px; /* Increase textarea height */
+		    width: 100%;   /* Ensure full width */
+		    resize: vertical; /* Allow vertical resizing */
+		}
+    </style>
+</head>
+<body>
+    <h1>BookEditor V.0.2.0</h1>
+    <div id="nav">
+        <button onclick="showTab(1)" class="active">1. Project Setup</button>
+        <button onclick="showTab(2)">2. Book Input</button>
+        <button onclick="showTab(3)">3. Chat Bot</button>
+        <button onclick="showTab(4)">4. Improvements List</button>
+        <button onclick="showTab(5)">5. Edited Output</button>
+        <button onclick="showTab(6)">6. Request Log</button>
+    </div>
+
+    <!-- Tab 1: Project Setup -->
+    <div id="tab1" class="tab active">
+        <h2>Project Setup</h2>
+        <label for="apiKey">API Key:</label>
+        <input type="text" id="apiKey" placeholder="Enter your xAI API key">
+        <label for="model">LLM Model:</label>
+        <select id="model">
+            <option value="grok-2-latest">Grok-2-Latest</option>
+            <option value="grok-2">Grok-2</option>
+            <option value="grok-beta">Grok-Beta</option>
+        </select>
+        <label for="maxTokens">Max Tokens per Operation:</label>
+        <input type="number" id="maxTokens" min="500" value="4500">
+        <label for="genre">Book Genre (6-8 words max):</label>
+        <textarea id="genre" placeholder="e.g., Science Fiction"></textarea>
+        <button onclick="exportSession()">Export Session</button>
+        <label for="importFile">Import Session:</label>
+        <input type="file" id="importFile" accept=".json" onchange="importSession(event)">
+        <div id="tokenCounter">
+            <p>Tokens Used on Last Operation: <span id="lastTokens">0 (Text: 0, Audio: 0, Image: 0, Cached: 0, Completion: 0)</span></p>
+            <p>Total Tokens Used: <span id="totalTokens">0 (Text: 0, Audio: 0, Image: 0, Cached: 0, Completion: 0)</span></p>
+        </div>
+        <button onclick="showTab(2)">Next: Book Input</button>
+        <div id="loading">Processing...</div>
+    </div>
+
+    <!-- Tab 2: Book Input -->
+    <div id="tab2" class="tab">
+        <h2>Book Input</h2>
+        <button onclick="suggestImprovements()">Suggest Improvements</button>
+        <button onclick="showTab(1)">Back</button>
+        <button onclick="showTab(3)">Next: Chat Bot</button>
+        <label>Input Method:</label>
+        <div style="margin-bottom: 10px;">
+            <input type="radio" id="inputText" name="inputMethod" value="text" checked onchange="toggleInputFields()"> Enter Text
+            <input type="radio" id="inputURL" name="inputMethod" value="url" style="margin-left: 20px;" onchange="toggleInputFields()"> Provide URL
+        </div>
+        <div id="textInput" style="display: block;">
+            <label for="bookText">Full Book Text:</label>
+            <textarea id="bookText" placeholder="Paste the full contents of your book here"></textarea>
+        </div>
+        <div id="urlInput" style="display: none;">
+            <label for="bookURL">Book URL:</label>
+            <input type="text" id="bookURL" placeholder="Paste the URL to your book (e.g., Google Drive link)">
+        </div>
+        <div id="loading">Processing...</div>
+    </div>
+
+    <!-- Tab 3: Chat Bot -->
+    <div id="tab3" class="tab">
+        <h2>Chat Bot</h2>
+        <label for="chatQuestion">Ask a Question About the Book:</label>
+        <textarea id="chatQuestion" placeholder="Type your question here (e.g., 'Who are the main characters?')"></textarea>
+        <button onclick="submitChatQuestion()">Submit Question</button>
+        <label for="chatResponse">Response:</label>
+        <textarea id="chatResponse" readonly placeholder="Response will appear here"></textarea>
+        <button onclick="showTab(2)">Back</button>
+        <button onclick="showTab(4)">Next: Improvements List</button>
+        <div id="loading">Processing...</div>
+    </div>
+
+    <!-- Tab 4: Improvements List -->
+	<div id="tab4" class="tab">
+	    <button onclick="addImprovement()">Add Improvement</button>
+	    <button onclick="editSelected()">Edit Selected</button>
+	    <button onclick="deleteSelected()">Delete Selected</button>
+	    <table id="improvementsTable">
+	        <thead><tr><th>Incorporate</th><th>Suggested Improvement</th><th>Selected</th></tr></thead>
+	        <tbody id="improvementsTableBody"></tbody>
+	    </table>
+	    <button onclick="showTab(3)">Back</button>
+	    <button onclick="showTab(5)">Next: Edited Output</button>
+	    <div id="loading">Processing...</div> <!-- Added -->
+	</div>
+
+    <!-- Tab 5: Edited Output -->
+    <div id="tab5" class="tab">
+        <div id="editedOutputContainer"></div>
+        <button onclick="exportBook()">Export Book</button>
+        <button onclick="showTab(4)">Back</button>
+        <button onclick="showTab(6)">Next: Request Log</button>
+    </div>
+
+    <!-- Tab 6: Request Log -->
+    <div id="tab6" class="tab">
+        <h2>Request Log</h2>
+        <button onclick="prevLog()">Previous</button>
+        <button onclick="nextLog()">Next</button>
+        <span id="logCounter">0 of 0</span>
+        <label for="lastPrompt">Last Prompt Sent:</label>
+        <textarea id="lastPrompt" readonly>No requests made yet.</textarea>
+        <label for="returnedInfo">Raw Information Returned:</label>
+        <textarea id="returnedInfo" readonly>No response yet.</textarea>
+        <div id="requestLogTokens">
+            <p>Tokens Used: <span id="requestTokens">0 (Text: 0, Audio: 0, Image: 0, Cached: 0, Completion: 0)</span></p>
+        </div>
+        <button onclick="showTab(5)">Back</button>
+        <div id="loading">Processing...</div>
+    </div>
+
+    <script>
+        let totalTokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { text_tokens: 0, audio_tokens: 0, image_tokens: 0, cached_tokens: 0 } };
+        let requestLog = [];
+        let currentLogIndex = -1;
+        let chatBotMessages = null;
+        let chapters = [];         // Original chapters parsed from book text
+		let editedChapters = [];   // Edited chapters, initialized empty or with nulls
+
+        // Show a specific tab and update navigation
+        function showTab(tabNumber) {
+            const tabs = document.getElementsByClassName("tab");
+            for (let i = 0; i < tabs.length; i++) tabs[i].classList.remove("active");
+            document.getElementById("tab" + tabNumber).classList.add("active");
+            const navButtons = document.getElementById("nav").getElementsByTagName("button");
+            for (let i = 0; i < navButtons.length; i++) navButtons[i].classList.remove("active");
+            navButtons[tabNumber - 1].classList.add("active");
+            const loadings = document.getElementsByClassName("loading");
+            for (let i = 0; i < loadings.length; i++) loadings[i].style.display = "none";
+        }
+
+
+
+
+
+
+
+
+        // Toggle between text and URL input fields in Tab 2
+        function toggleInputFields() {
+            const inputMethod = document.querySelector('input[name="inputMethod"]:checked').value;
+            document.getElementById("textInput").style.display = inputMethod === "text" ? "block" : "none";
+            document.getElementById("urlInput").style.display = inputMethod === "url" ? "block" : "none";
+        }
+
+
+
+
+
+
+
+
+        // Call the xAI Grok API with provided messages and handle response
+        // Call the xAI Grok API with provided messages and handle response
+		async function callGrokAPI(messages, callback, nextTab, customMaxTokens) {
+		    console.log("Starting API call with messages:", messages.length);
+		    const apiKey = document.getElementById("apiKey").value;
+		    const model = document.getElementById("model").value;
+		    const maxTokens = customMaxTokens || parseInt(document.getElementById("maxTokens").value);
+		    const currentTab = document.querySelector(".tab.active");
+		    const loading = currentTab.querySelector("#loading");
+
+		    if (!apiKey) {
+		        console.error("No API key provided.");
+		        alert("Please enter a valid API key in Project Setup.");
+		        return;
+		    }
+
+		    clearRequestLog();
+		    const promptText = messages.map(m => `${m.role}: ${m.content}`).join("\n");
+		    updatePromptSent(promptText);
+		    if (loading) loading.style.display = "block"; // Check if loading exists
+
+		    const url = "https://api.x.ai/v1/chat/completions";
+		    const headers = {
+		        "Authorization": `Bearer ${apiKey}`,
+		        "Content-Type": "application/json"
+		    };
+		    const data = {
+		        "model": model,
+		        "messages": messages,
+		        "max_tokens": maxTokens,
+		        "temperature": 0.7,
+		        "stream": false
+		    };
+
+		    try {
+		        console.log("Sending request to Grok API with max_tokens:", maxTokens);
+		        const response = await fetch(url, {
+		            method: "POST",
+		            headers: headers,
+		            body: JSON.stringify(data)
+		        });
+		        if (!response.ok) {
+		            const errorText = await response.text();
+		            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+		        }
+		        const result = await response.json();
+		        console.log("API response received:", result);
+		        if (!result.choices || !result.choices[0] || !result.choices[0].message || !result.choices[0].message.content) {
+		            throw new Error("Invalid API response: missing choices or content");
+		        }
+		        const usage = result.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { text_tokens: 0, audio_tokens: 0, image_tokens: 0, cached_tokens: 0 } };
+		        totalTokenUsage.prompt_tokens += usage.prompt_tokens;
+		        totalTokenUsage.completion_tokens += usage.completion_tokens;
+		        totalTokenUsage.total_tokens += usage.total_tokens;
+		        totalTokenUsage.prompt_tokens_details.text_tokens += usage.prompt_tokens_details.text_tokens;
+		        totalTokenUsage.prompt_tokens_details.audio_tokens += usage.prompt_tokens_details.audio_tokens;
+		        totalTokenUsage.prompt_tokens_details.image_tokens += usage.prompt_tokens_details.image_tokens;
+		        totalTokenUsage.prompt_tokens_details.cached_tokens += usage.prompt_tokens_details.cached_tokens;
+		        updateTokenCounter(usage);
+		        requestLog.push({ prompt: promptText, response: result.choices[0].message.content, usage: usage });
+		        currentLogIndex = requestLog.length - 1;
+		        updateRequestLogDisplay();
+		        callback(result.choices[0].message.content);
+		        showTab(nextTab);
+		    } catch (error) {
+		        console.error("API Error:", error);
+		        throw error;
+		    } finally {
+		        if (loading) loading.style.display = "none"; // Check if loading exists
+		        console.log("API call completed.");
+		    }
+}
+
+
+
+
+
+
+
+
+        // Update the last prompt sent in the request log
+        function updatePromptSent(prompt) {
+            if (currentLogIndex >= 0 && currentLogIndex < requestLog.length) {
+                document.getElementById("lastPrompt").value = requestLog[currentLogIndex].prompt;
+            } else {
+                document.getElementById("lastPrompt").value = prompt;
+            }
+        }
+
+
+
+
+
+
+
+
+        // Update the response received in the request log
+        function updateResponseReceived(response, usage) {
+            if (currentLogIndex >= 0 && currentLogIndex < requestLog.length) {
+                document.getElementById("returnedInfo").value = requestLog[currentLogIndex].response;
+                document.getElementById("requestTokens").textContent = `${requestLog[currentLogIndex].usage.total_tokens} (Text: ${requestLog[currentLogIndex].usage.prompt_tokens_details.text_tokens}, Audio: ${requestLog[currentLogIndex].usage.prompt_tokens_details.audio_tokens}, Image: ${requestLog[currentLogIndex].usage.prompt_tokens_details.image_tokens}, Cached: ${requestLog[currentLogIndex].usage.prompt_tokens_details.cached_tokens}, Completion: ${requestLog[currentLogIndex].usage.completion_tokens})`;
+            } else {
+                document.getElementById("returnedInfo").value = response;
+                document.getElementById("requestTokens").textContent = `${usage.total_tokens} (Text: ${usage.prompt_tokens_details.text_tokens}, Audio: ${usage.prompt_tokens_details.audio_tokens}, Image: ${usage.prompt_tokens_details.image_tokens}, Cached: ${usage.prompt_tokens_details.cached_tokens}, Completion: ${usage.completion_tokens})`;
+            }
+        }
+
+
+
+
+
+
+
+
+        // Update the token usage counters in Tab 1
+        function updateTokenCounter(usage) {
+            const lastTokens = document.getElementById("lastTokens");
+            const totalTokens = document.getElementById("totalTokens");
+            lastTokens.textContent = `${usage.total_tokens} (Text: ${usage.prompt_tokens_details.text_tokens}, Audio: ${usage.prompt_tokens_details.audio_tokens}, Image: ${usage.prompt_tokens_details.image_tokens}, Cached: ${usage.prompt_tokens_details.cached_tokens}, Completion: ${usage.completion_tokens})`;
+            totalTokens.textContent = `${totalTokenUsage.total_tokens} (Text: ${totalTokenUsage.prompt_tokens_details.text_tokens}, Audio: ${totalTokenUsage.prompt_tokens_details.audio_tokens}, Image: ${totalTokenUsage.prompt_tokens_details.image_tokens}, Cached: ${totalTokenUsage.prompt_tokens_details.cached_tokens}, Completion: ${totalTokenUsage.completion_tokens})`;
+        }
+
+
+
+
+
+
+
+
+        // Clear the request log display in Tab 6
+        function clearRequestLog() {
+            document.getElementById("lastPrompt").value = "No requests made yet.";
+            document.getElementById("returnedInfo").value = "No response yet.";
+            document.getElementById("requestTokens").textContent = "0 (Text: 0, Audio: 0, Image: 0, Cached: 0, Completion: 0)";
+            document.getElementById("logCounter").textContent = "0 of 0";
+        }
+
+
+
+
+
+
+
+
+        // Update the request log display based on current index
+        function updateRequestLogDisplay() {
+            if (currentLogIndex < 0 || currentLogIndex >= requestLog.length) {
+                clearRequestLog();
+                return;
+            }
+            const entry = requestLog[currentLogIndex];
+            document.getElementById("lastPrompt").value = entry.prompt;
+            document.getElementById("returnedInfo").value = entry.response;
+            document.getElementById("requestTokens").textContent = `${entry.usage.total_tokens} (Text: ${entry.usage.prompt_tokens_details.text_tokens}, Audio: ${entry.usage.prompt_tokens_details.audio_tokens}, Image: ${entry.usage.prompt_tokens_details.image_tokens}, Cached: ${entry.usage.prompt_tokens_details.cached_tokens}, Completion: ${entry.usage.completion_tokens})`;
+            document.getElementById("logCounter").textContent = `${currentLogIndex + 1} of ${requestLog.length}`;
+        }
+
+
+
+
+
+
+
+
+        // Navigate to the previous log entry in Tab 6
+        function prevLog() {
+            if (currentLogIndex > 0) {
+                currentLogIndex--;
+                updateRequestLogDisplay();
+            }
+        }
+
+
+
+
+
+
+
+
+        // Navigate to the next log entry in Tab 6
+        function nextLog() {
+            if (currentLogIndex < requestLog.length - 1) {
+                currentLogIndex++;
+                updateRequestLogDisplay();
+            }
+        }
+
+
+
+
+
+
+
+
+        // Generate improvement suggestions for each chapter and populate Tab 4
+        async function suggestImprovements() {
+            const bookTextElement = document.getElementById("bookText");
+            const genreElement = document.getElementById("genre");
+
+            if (!bookTextElement) {
+                alert("Error: 'bookText' element not found in HTML. Please add <textarea id='bookText'>.");
+                return;
+            }
+            const bookText = bookTextElement.value;
+            if (!bookText) {
+                alert("Please enter book text to analyze in the 'bookText' field.");
+                return;
+            }
+
+            const genre = genreElement ? genreElement.value : "Fiction";
+            if (!genreElement) console.warn("'genre' element not found; using default genre: Fiction.");
+            const summary = "A fictional narrative to be summarized dynamically.";
+
+            const chapterMatches = Array.from(bookText.matchAll(/(\d+)\.\s*"(.+?)"(?=\s*\n|$)/g));
+			            chapters = [];
+			            editedChapters = []; // Reset editedChapters
+			            for (let i = 0; i < chapterMatches.length; i++) {
+			                const match = chapterMatches[i];
+			                const start = match.index;
+			                const end = (i + 1 < chapterMatches.length) ? chapterMatches[i + 1].index : bookText.length;
+			                const chapterText = bookText.substring(start, end).trim();
+			                chapters.push(chapterText);
+			                editedChapters.push(null); // Initialize empty slot for edited version
+            }
+
+            console.log(`Detected ${chapters.length} chapters...`);
+            chapters.forEach((ch, i) => console.log(`Chapter ${i + 1} length: ${ch.length} chars`));
+
+            if (chapters.length === 0) {
+                alert("No chapters detected. Ensure chapters are formatted as '1. \"Title...\"' followed by content.");
+                return;
+            }
+
+            console.log("Uploading all chapters into context...");
+            const contextMessages = chapters.map((chapterText, i) => ({
+                role: "user",
+                content: [
+                    "You are an expert book editor.",
+                    `Add Chapter ${i + 1} of ${chapters.length} to your context for analysis.`,
+                    "Do not respond with suggestions yet—just confirm receipt with 'Received Chapter X of Y'.",
+                    "Here is the chapter text:",
+                    chapterText
+                ].join("\n")
+            }));
+
+            for (let i = 0; i < contextMessages.length; i++) {
+                await new Promise((resolve) => {
+                    callGrokAPI([contextMessages[i]], (response) => {
+                        console.log(`Context response: ${response}`);
+                        resolve();
+                    }, 2, 100);
+                });
+            }
+            console.log("All chapters uploaded into context.");
+
+            const improvementPromises = chapters.map(async (chapterText, i) => {
+                const chapterNum = i + 1;
+                const messages = [{
+                    role: "user",
+                    content: [
+                        "You are an expert book editor.",
+                        "Using the full book context of 17 chapters already provided, analyze this chapter text for improvement opportunities:",
+                        chapterText,
+                        "Use this placeholder book summary for initial consistency (refined later):",
+                        summary,
+                        "Genre: " + genre,
+                        `Suggest ONE comprehensive improvement for Chapter ${chapterNum} only, covering THREE categories: Additions, Deletions, Edits to Existing Text.`,
+                        "For each category, provide:",
+                        "1. Action: What to add/delete/edit (e.g., 'Insert X', 'Cut Y', 'Rephrase Z').",
+                        "2. Location: Where in the chapter (e.g., 'after first paragraph', 'at chapter end').",
+                        "3. Amount: EXACTLY how many characters to add/delete/edit—specify 'exactly X chars' and quote the precise text (e.g., 'exactly 350 chars: \"Text here\"'). Verify character counts match quoted text.",
+                        "4. Why: Why this improves the chapter (e.g., '*Why*: Enhances theme Z'), ensuring coherence with the full book context.",
+                        "Include all THREE categories—do not skip any. If no change is needed, state 'None' with a reason (e.g., 'None—pacing already optimal').",
+                        "Base suggestions on improving narrative flow, character depth, setting, pacing, or genre alignment—tailor to the provided genre and full book context.",
+                        "Additions must add EXACTLY the specified characters—quote the text to insert.",
+                        "Deletions must remove EXACTLY the specified range—quote the precise text to cut.",
+                        "Edits must replace text with EQUAL OR GREATER length—quote original and new text—do not truncate beyond specified range.",
+                        `Return as: [Chapter ${chapterNum}]:\nAdditions: [Action] [Location]—exactly X chars: "[Exact Text]". *Why*: Why.\nDeletions: [Action] [Location]—exactly X chars: "[Exact Text]". *Why*: Why.\nEdits: [Action] [Location]—exactly X chars: "[Original Text]" to "[New Text]". *Why*: Why.\nUse newlines (\n) to separate each category clearly for readability.`
+                    ].join("\n")
+                }];
+
+                console.log(`Requesting improvement for Chapter ${chapterNum}...`);
+                return new Promise((resolve) => {
+                    callGrokAPI(messages, (response) => {
+                        console.log(`Received improvement for Chapter ${chapterNum}:`, response);
+                        resolve(response);
+                    }, 4, 800).catch((error) => {
+                        console.error(`Error fetching improvement for Chapter ${chapterNum}:`, error);
+                        resolve(`[Chapter ${chapterNum}]:\nAdditions: None\nDeletions: None\nEdits: None`); // Fallback
+                    });
+                });
+            });
+
+            console.log("Awaiting all improvement promises...");
+            const improvements = await Promise.all(improvementPromises);
+            console.log("Improvements array length:", improvements.length);
+            console.log("Improvements received:", improvements);
+            populateImprovementsTable(improvements);
+            showTab(4);
+        }
+
+
+
+
+
+
+
+        // Incorporate a single chapter improvement into its Tab 5 textarea
+        async function incorporateChapter(index) {
+            const improvement = document.getElementById(`improvement${index}`).innerText;
+            const chapterText = chapters[index];
+            const messages = [{
+                role: "user",
+                content: [
+                    "You are an expert book editor.",
+                    "Use the full book context already provided.",
+                    `Edit Chapter ${index + 1} using this improvement:`,
+                    improvement,
+                    "PRESERVE FULL CHAPTER TEXT VERBATIM as the baseline—DO NOT summarize, condense, or truncate beyond the EXACT deletions specified in the improvement. Apply Additions EXACTLY as quoted—insert the precise text at the specified location. Replace Edits EXACTLY as quoted with the new text, maintaining or increasing length as specified—DO NOT shorten beyond the original range. Return the ENTIRE edited chapter with ALL line breaks (\n) intact—no exceptions. DO NOT append or repeat the original chapter text beyond the specified edits.",
+                    "Here is the original chapter text:",
+                    chapterText
+                ].join("\n")
+            }];
+            await callGrokAPI(messages, (response) => {
+                console.log(`API response for Chapter ${index + 1}: ${response.length} chars`, response); // Debug response
+                editedChapters[index] = response; // Overwrite explicitly
+                const container = document.getElementById("editedOutputContainer");
+                let textarea = document.getElementById(`chapter${index + 1}`);
+                if (!textarea) {
+                    const label = document.createElement("label");
+                    label.innerText = `Chapter ${index + 1}`;
+                    textarea = document.createElement("textarea");
+                    textarea.id = `chapter${index + 1}`;
+                    textarea.readOnly = true;
+                    container.appendChild(label);
+                    container.appendChild(textarea);
+                    container.appendChild(document.createElement("br"));
+                }
+                textarea.value = response;
+                console.log(`Chapter ${index + 1} updated: ${response.length} chars (input: ${chapterText.length})`);
+                if (response.length < chapterText.length - 100) {
+                    console.error(`Warning: Chapter ${index + 1} truncated significantly—expected near ${chapterText.length}, got ${response.length}`);
+                }
+            }, 5, 20000);
+        }
+
+
+
+
+
+
+
+
+		// Populate Tab 4 with improvement suggestions and controls
+        function populateImprovementsTable(improvements) {
+            const tbody = document.getElementById("improvementsTableBody");
+            tbody.innerHTML = "";
+            console.log("Populating table with improvements, length:", improvements.length);
+
+            improvements.forEach((improvement, index) => {
+                if (improvement && improvement.trim()) {
+                    console.log(`Processing improvement for row ${index + 1}:`, improvement);
+                    const row = document.createElement("tr");
+                    // Split improvement into lines and format with <br> for readability
+                    const formattedImprovement = improvement.trim()
+                        .replace(/\n/g, '<br>')
+                        .replace(/(Additions:|Deletions:|Edits:)/g, '<br><strong>$1</strong>') // Bold category headers
+                        .replace(/\*Why\*/g, '<br><em>*Why*</em>'); // Italicize *Why*
+                    row.innerHTML = `
+                        <td><button onclick="incorporateChapter(${index})">Incorporate Improvement</button></td>
+                        <td contenteditable="true" id="improvement${index}">${formattedImprovement}</td>
+                        <td><input type="radio" name="selectedRow" value="${index}" ${index === 0 ? 'checked' : ''}></td>
+                    `;
+                    tbody.appendChild(row);
+                    console.log(`Added row ${index + 1}:`, improvement.trim());
+                } else {
+                    console.warn(`Skipping empty or invalid improvement at index ${index}:`, improvement);
+                }
+            });
+            console.log("Table population complete, rows added:", tbody.children.length);
+        }
+
+
+
+
+
+
+
+
+        <!--
+        // Set up Tab 5 with individual chapter textareas
+        function setupEditedOutput() {
+		            const container = document.getElementById("editedOutputContainer");
+		            container.innerHTML = "";
+		            chapters.forEach((chapter, i) => {
+		                const label = document.createElement("label");
+		                label.innerText = `Chapter ${i + 1}`;
+		                const textarea = document.createElement("textarea");
+		                textarea.id = `chapter${i + 1}`;
+		                textarea.readOnly = true;
+		                textarea.value = chapter;
+		                container.appendChild(label);
+		                container.appendChild(textarea);
+		                container.appendChild(document.createElement("br"));
+		            });
+		            console.log("Tab 5 textareas initialized, count:", chapters.length);
+        }
+        -->
+
+
+
+
+
+
+
+
+        // Export the edited book from Tab 5 as a text file
+        function exportBook() {
+            const editedText = chapters.map((_, i) => document.getElementById(`chapter${i + 1}`).value).join("\n\n");
+            console.log(`Exported book length: ${editedText.length} chars`);
+            const blob = new Blob([editedText], { type: "text/plain" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "EditedBook.txt";
+            link.click();
+            return editedText;
+        }
+
+
+
+
+
+
+
+
+        // Submit a chat question in Tab 3 and display the response
+        async function submitChatQuestion() {
+            const bookText = document.getElementById("bookText").value.trim();
+            if (!bookText) {
+                alert("Please enter book text in Tab 2 before using the Chat Bot.");
+                return;
+            }
+
+            if (!chatBotMessages) {
+                const maxCharsPerChunk = 28000;
+                const chunks = [];
+                for (let i = 0; i < bookText.length; i += maxCharsPerChunk) {
+                    chunks.push(`Part ${chunks.length + 1} of ${Math.ceil(bookText.length / maxCharsPerChunk)}:\n${bookText.substring(i, i + maxCharsPerChunk)}`);
+                }
+                chatBotMessages = [];
+                for (let i = 0; i < chunks.length; i++) {
+                    chatBotMessages.push({
+                        role: "user",
+                        content: [
+                            "You are an expert book editor.",
+                            `I’m providing part ${i + 1} of ${chunks.length} of a book. Add this to your context for analysis.`,
+                            "Do not respond with suggestions—just confirm receipt with 'Received Part X of Y'.",
+                            "Here is the chunk:",
+                            chunks[i]
+                        ].join("\n")
+                    });
+                    await callGrokAPI(chatBotMessages, function(response) {
+                        console.log(`Chat Bot Chunk ${i + 1} loaded:`, response);
+                        chatBotMessages.push({ role: "assistant", content: response });
+                    }, 3);
+                }
+            }
+
+            const question = document.getElementById("chatQuestion").value.trim();
+            if (!question) {
+                alert("Please enter a question.");
+                return;
+            }
+
+            chatBotMessages.push({
+                role: "user",
+                content: [
+                    "You are an expert book editor.",
+                    "Using the full book text in context, answer this question:",
+                    question
+                ].join("\n")
+            });
+
+            await callGrokAPI(chatBotMessages, function(response) {
+                document.getElementById("chatResponse").value = response;
+                chatBotMessages.push({ role: "assistant", content: response });
+            }, 3);
+        }
+
+
+
+
+
+
+
+
+        // Add a new editable improvement row to Tab 4
+        function addImprovement() {
+            const tbody = document.getElementById("improvementsTableBody");
+            const index = tbody.children.length;
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td><button onclick="incorporateChapter(${index})">Incorporate Improvement</button></td>
+                <td contenteditable="true" id="improvement${index}">[Chapter ${index + 1}]:\nAdditions: None\nDeletions: None\nEdits: None</td>
+                <td><input type="radio" name="selectedRow" value="${index}"></td>
+            `;
+            tbody.appendChild(row);
+            console.log(`Added manual row ${index + 1}`);
+        }
+
+
+
+
+
+
+
+
+        // Edit the selected improvement row in Tab 4
+        function editSelected() {
+            const tbody = document.getElementById("improvementsTableBody");
+            const rows = tbody.getElementsByTagName("tr");
+            let selectedRow = null;
+            for (let i = 0; i < rows.length; i++) {
+                const radio = rows[i].querySelector("input[name='selectedRow']");
+                if (radio.checked) {
+                    selectedRow = rows[i];
+                    break;
+                }
+            }
+            if (selectedRow) {
+                const currentText = selectedRow.cells[1].innerText;
+                const rowNum = parseInt(selectedRow.querySelector("input[name='selectedRow']").value) + 1;
+                const newText = prompt(`Edit improvement for row ${rowNum}:`, currentText);
+                if (newText) selectedRow.cells[1].innerText = newText;
+            } else {
+                alert("Select a row to edit by checking its 'Selected' radio button.");
+            }
+        }
+
+
+
+
+
+
+
+
+        // Delete the selected improvement row from Tab 4
+        function deleteSelected() {
+            const tbody = document.getElementById("improvementsTableBody");
+            const rows = tbody.getElementsByTagName("tr");
+            let selectedRow = null;
+            for (let i = 0; i < rows.length; i++) {
+                const radio = rows[i].querySelector("input[name='selectedRow']");
+                if (radio.checked) {
+                    selectedRow = rows[i];
+                    break;
+                }
+            }
+            if (selectedRow) {
+                tbody.removeChild(selectedRow);
+            } else {
+                alert("Select a row to delete by checking its 'Selected' radio button.");
+            }
+        }
+
+
+
+
+
+
+
+
+        // Export the current session state as a JSON file
+                // Export the current session state as a JSON file
+		        function exportSession() {
+		            const sessionData = {
+		                apiKey: document.getElementById("apiKey")?.value || "",
+		                model: document.getElementById("model")?.value || "grok-2-latest",
+		                maxTokens: parseInt(document.getElementById("maxTokens")?.value) || 4500,
+		                genre: document.getElementById("genre")?.value || "",
+		                bookText: document.getElementById("bookText")?.value || "",
+		                improvements: Array.from(document.getElementById("improvementsTableBody").rows).map(row => row.cells[1].innerText),
+		                chapters: chapters,          // Original chapters
+		                editedChapters: editedChapters // Edited chapters (nulls for unincorporated)
+		            };
+		            const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: "application/json" });
+		            const link = document.createElement("a");
+		            link.href = URL.createObjectURL(blob);
+		            link.download = "BookEditorSession.json";
+		            link.click();
+        }
+
+
+
+
+
+
+
+
+
+		// Import a session state from a JSON file
+		function importSession(event) {
+			const file = event.target.files[0];
+			const reader = new FileReader();
+			reader.onload = function(e) {
+				const sessionData = JSON.parse(e.target.result);
+				document.getElementById("apiKey").value = sessionData.apiKey || "";
+				document.getElementById("model").value = sessionData.model || "grok-2-latest";
+				document.getElementById("maxTokens").value = sessionData.maxTokens || 4500;
+				document.getElementById("genre").value = sessionData.genre || "";
+				document.getElementById("bookText").value = sessionData.bookText || "";
+				chapters = sessionData.chapters || [];
+				editedChapters = sessionData.editedChapters || Array(chapters.length).fill(null); // Ensure length match
+				populateImprovementsTable(sessionData.improvements || []);
+
+				// Only populate Tab 5 with incorporated chapters
+				const container = document.getElementById("editedOutputContainer");
+				container.innerHTML = "";
+				editedChapters.forEach((chapter, i) => {
+					if (chapter !== null) { // Only show incorporated chapters
+						const label = document.createElement("label");
+						label.innerText = `Chapter ${i + 1}`;
+						const textarea = document.createElement("textarea");
+						textarea.id = `chapter${i + 1}`;
+						textarea.readOnly = true;
+						textarea.value = chapter;
+						container.appendChild(label);
+						container.appendChild(textarea);
+						container.appendChild(document.createElement("br"));
+					}
+				});
+				console.log("Imported session: chapters:", chapters.length, "editedChapters:", editedChapters.filter(ch => ch !== null).length);
+			};
+			reader.readAsText(file);
+}
+
+
+    </script>
+</body>
+</html>

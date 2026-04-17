@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Novel Writer 0.3.3 User Guide</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        h2 {
+            color: #555;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 5px;
+        }
+        h3 {
+            color: #777;
+        }
+        .tab-section {
+            margin-bottom: 30px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        button.example {
+            background-color: #0078d4; /* Blue to match app */
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        button.example:hover {
+            background-color: #005ea2; /* Darker blue on hover */
+        }
+        .note {
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-left: 4px solid #0078d4; /* Match button blue */
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Novel Writer 0.3.3 User Guide</h1>
+    <p>Welcome to *Novel Writer 0.3.3*, a web-based tool for creating and refining novels with AI assistance. This guide explains how to use each tab to build your story from scratch or import an existing session.</p>
+
+    <div class="tab-section" id="tab1">
+        <h2>Tab 1: API & Story Info</h2>
+        <p>Set up your API key and define basic story details.</p>
+        <h3>How to Use</h3>
+        <ul>
+            <li><strong>API Key</strong>: Enter your xAI API key to enable AI features.</li>
+            <li><strong>Model</strong>: Select an AI model (e.g., "Grok-2-Latest").</li>
+            <li><strong>Max Tokens</strong>: Set the token limit per AI update (default: 4500).</li>
+            <li><strong>Genre</strong>: Choose your novel’s genre.</li>
+            <li><strong>Author Style</strong>: Pick an author’s style or fetch more options.</li>
+            <li><strong>Style Guide</strong>: View or edit the selected author’s style.</li>
+            <li><strong>Title, Story Arc, General Plot, Setting</strong>: Enter manually or click <button class="example">Suggest</button> for AI ideas.</li>
+            <li><strong>Number of Chapters</strong>: Set how many chapters (default: 10).</li>
+            <li><strong>Target Chapter Length</strong>: Define word count per chapter (default: 2000).</li>
+            <li><button class="example">AI Suggest</button>: Generate all story info at once.</li>
+            <li><button class="example">Next: Characters</button>: Move to Tab 2.</li>
+            <li><button class="example">Export Session</button>: Save your work as a JSON file.</li>
+            <li><strong>Import Session</strong>: Upload a JSON file to load a previous session.</li>
+        </ul>
+    </div>
+
+    <div class="tab-section" id="tab2">
+        <h2>Tab 2: Characters</h2>
+        <p>Create and refine your novel’s characters.</p>
+        <h3>How to Use</h3>
+        <ul>
+            <li><strong>Number of Characters to Generate</strong>: Set how many characters to create (default: 3).</li>
+            <li><strong>Name, Backstory, Arc</strong>: Enter known details or leave blank for AI to fill.</li>
+            <li><button class="example">Add Another Character</button>: Add more character slots.</li>
+            <li><button class="example">Suggest Characters</button>: Generate characters based on Tab 1 info.</li>
+            <li><button class="example">Refine Characters with Subplots</button>: Enhance characters with subplot ties (after Tab 3).</li>
+            <li><button class="example">Back</button>: Return to Tab 1.</li>
+            <li><button class="example">Next: Subplots</button>: Move to Tab 3.</li>
+        </ul>
+        <div class="note">Note: Enter any Tab 1 character info first for better AI suggestions.</div>
+    </div>
+
+    <div class="tab-section" id="tab3">
+        <h2>Tab 3: Subplots</h2>
+        <p>Define subplots to enrich your story.</p>
+        <h3>How to Use</h3>
+        <ul>
+            <li><strong>Minimum Number of Subplots</strong>: Set a baseline (default: 2).</li>
+            <li><strong>Subplot Fields</strong>: Enter known subplots or leave blank for AI.</li>
+            <li><button class="example">Add Another Subplot</button>: Add more subplot slots.</li>
+            <li><button class="example">AI Suggest</button>: Generate subplots based on prior tabs.</li>
+            <li><button class="example">Back</button>: Return to Tab 2.</li>
+            <li><button class="example">Next: Outlines</button>: Move to Tab 4.</li>
+        </ul>
+    </div>
+
+    <div class="tab-section" id="tab4">
+        <h2>Tab 4: Outlines</h2>
+        <p>Create and refine novel and chapter outlines.</p>
+        <h3>How to Use</h3>
+        <ul>
+            <li><strong>Novel Outline, Plot Outline, Story Arc Outline</strong>: View or edit outlines.</li>
+            <li><strong>Improvements to Implement</strong>: Paste suggestions to refine outlines.</li>
+            <li><button class="example">AI Suggest Outlines</button>: Generate initial outlines.</li>
+            <li><button class="example">Incorporate Suggestions</button>: Apply improvements to outlines.</li>
+            <li><strong>Chapter Outlines</strong>: Click chapter subpages to edit individual outlines and arcs.</li>
+            <li><button class="example">Back</button>: Return to Tab 3.</li>
+            <li><button class="example">Next: Generate Chapters</button>: Move to Tab 5.</li>
+        </ul>
+    </div>
+
+    <div class="tab-section" id="tab5">
+        <h2>Tab 5: Generate Chapters</h2>
+        <p>Generate initial chapter drafts.</p>
+        <h3>How to Use</h3>
+        <ul>
+            <li><strong>Chapter Subpages</strong>: Select a chapter, click <button class="example">Generate Chapter</button> to create its draft.</li>
+            <li><button class="example">Back</button>: Return to Tab 4.</li>
+            <li><button class="example">Next: Edit Chapters</button>: Move to Tab 6.</li>
+        </ul>
+    </div>
+
+    <div class="tab-section" id="tab6">
+        <h2>Tab 6: Edit Chapters</h2>
+        <p>Refine and update chapter drafts.</p>
+        <h3>How to Use</h3>
+        <ul>
+            <li><strong>Chapter Subpages</strong>: Select a chapter, edit content manually or paste improvements into "Improvements to Implement."</li>
+            <li><button class="example">Update Chapter</button>: Apply improvements via AI.</li>
+            <li><button class="example">Back</button>: Return to Tab 5.</li>
+            <li><button class="example">Next: Book</button>: Move to Tab 7.</li>
+        </ul>
+    </div>
+
+    <div class="tab-section" id="tab7">
+        <h2>Tab 7: Book</h2>
+        <p>View the full book, suggest improvements, and break them down.</p>
+        <h3>How to Use</h3>
+        <ul>
+            <li><strong>Complete Book</strong>: Displays all chapters concatenated.</li>
+            <li><button class="example">Export Book</button>: Save the book as text.</li>
+            <li><button class="example">Suggest Improvements</button>: Generate improvement suggestions.</li>
+            <li><strong>Improvements Table</strong>: View suggestions, set status (To Incorporate, Incorporated, Ignored), click <button class="example">Break Down</button> to see detailed edits.</li>
+            <li><button class="example">Export Session</button>: Save your full session.</li>
+            <li><button class="example">Back</button>: Return to Tab 6.</li>
+            <li><button class="example">Next: Consolidated Breakdowns</button>: Move to Tab 8.</li>
+        </ul>
+    </div>
+
+    <div class="tab-section" id="tab8">
+        <h2>Tab 8: Consolidated Breakdown Suggestions</h2>
+        <p>View all improvement breakdowns in one place.</p>
+        <h3>How to Use</h3>
+        <ul>
+            <li><strong>Textareas</strong>: Displays sorted suggestions for Characters, Subplots, Novel Outlines, Chapter Outlines, and Chapter Content.</li>
+            <li><button class="example">Consolidate Breakdowns</button>: Refresh the view manually.</li>
+            <li>Auto-populates after breaking down all improvements in Tab 7 or importing a session with breakdowns.</li>
+            <li><button class="example">Back</button>: Return to Tab 7.</li>
+            <li><button class="example">Next: Request Log</button>: Move to Tab 9.</li>
+        </ul>
+        <div class="note">Note: Copy suggestions to Tab 4 or 6’s "Improvements to Implement" fields to apply them.</div>
+    </div>
+
+    <div class="tab-section" id="tab9">
+        <h2>Tab 9: Request Log</h2>
+        <p>Monitor AI interactions.</p>
+        <h3>How to Use</h3>
+        <ul>
+            <li><strong>Last Prompt Sent</strong>: Shows the latest AI request.</li>
+            <li><strong>Status</strong>: Displays current AI task status (e.g., "Idle," "Pending").</li>
+            <li><strong>Returned Information</strong>: Shows raw AI responses.</li>
+            <li><strong>Token Usage, Cost</strong>: Tracks API usage (if available).</li>
+            <li><button class="example">Back</button>: Return to Tab 8.</li>
+            <li><button class="example">Next: Element Values</button>: Move to Tab 10.</li>
+        </ul>
+    </div>
+
+    <div class="tab-section" id="tab10">
+        <h2>Tab 10: Element Values</h2>
+        <p>View the current values of all elements for debugging and verification.</p>
+        <h3>How to Use</h3>
+        <ul>
+            <li><strong>Current Element Values</strong>: Displays the values of all inputs, textareas, and selects across all tabs.</li>
+            <li><button class="example">Refresh Values</button>: Updates the display with the latest element values.</li>
+            <li><button class="example">Back</button>: Return to Tab 9.</li>
+        </ul>
+        <div class="note">Note: Use this tab to check the state of your novel’s data at any point—helpful for troubleshooting or confirming settings.</div>
+    </div>
+</body>
+</html>
