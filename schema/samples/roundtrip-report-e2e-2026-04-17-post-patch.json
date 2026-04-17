@@ -1,0 +1,21 @@
+{
+  "pass": true,
+  "checks": {
+    "input.wrapper.schemaVersion": true,
+    "input.wrapper.sourceTool": true,
+    "bookeditor.export.wrapper.schemaVersion": true,
+    "bookeditor.export.wrapper.sourceTool": true,
+    "title.preserved": true,
+    "chapters.length.preserved": true,
+    "editedChapters.length.preserved": true,
+    "numChapters.consistent": true,
+    "bookText.prefix.preserved": true,
+    "chapterLength.preserved": true
+  },
+  "informational": {
+    "inputChapterLength": 2959,
+    "outputChapterLength": 2959,
+    "inputChapterCount": 17,
+    "outputChapterCount": 17
+  }
+}

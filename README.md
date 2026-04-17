@@ -15,7 +15,7 @@ Static HTML/JavaScript tools for AI-assisted writing and book editing.
 
 ## Project Structure
 
-```
+```text
 AI-Book-Tools/
 ├── index.html                 # Main launcher page
 ├── README.md                  # This file
@@ -36,11 +36,13 @@ AI-Book-Tools/
 ## Development
 
 ### Prerequisites
+
 - Modern web browser
 - Git (for version control)
 - Text editor (VS Code recommended)
 
 ### Local Development
+
 ```bash
 # Clone the repository
 git clone https://github.com/bnorth12/AI-Book-Tools.git
@@ -55,13 +57,16 @@ python -m http.server 8000
 ```
 
 ### Code Quality
+
 - Follow the `.editorconfig` settings for consistent formatting
 - Test changes across different browsers
 - Ensure API keys are never committed to version control
 - Run `npm test` to validate code quality
 
 ### Automated Testing
+
 This repository uses GitHub Actions for automated testing:
+
 - HTML validation and linting
 - JSON file validation
 - Code quality checks
@@ -70,8 +75,8 @@ This repository uses GitHub Actions for automated testing:
 Tests run automatically on every push and pull request.
 
 ### Security Updates
-Dependabot automatically creates pull requests to update dependencies and GitHub Actions, keeping the project secure and up-to-date.
 
+Dependabot automatically creates pull requests to update dependencies and GitHub Actions, keeping the project secure and up-to-date.
 
 ## API Key Guidance
 
@@ -96,18 +101,21 @@ These tools authenticate using API keys entered in the browser UI.
 - 💬 **Join our Discord** for community discussion and support
 
 ### Discord Server
+
 We have a community Discord server for:
+
 - Getting help with the tools
 - Sharing your writing projects
 - Discussing AI writing techniques
 - Contributing to development
 - Connecting with other writers
 
-*Server invite link will be added soon - check back or create an issue to request access*
+Server invite link will be added soon. Check back or create an issue to request access.
 
 ## Roadmap
 
 ### Planned Features
+
 - [ ] Enhanced mobile responsiveness
 - [ ] Dark/light theme toggle
 - [ ] Export to multiple formats (PDF, DOCX, EPUB)
@@ -116,11 +124,13 @@ We have a community Discord server for:
 - [ ] Advanced AI model support
 
 ### Shared Novel Schema
+
 - [ ] Normalize `NovelWriter`, `BookEditor`, and `BookDecomposer` around a versioned shared schema
 - [ ] Add import/export compatibility for `schema/novel-schema-1.0.json`
 - [ ] Track implementation tasks in `schema/novel-schema-1.0-tasks.md`
 
 ### Version 2.0 Goals
+
 - Improved user interface design
 - Better error handling and user feedback
 - Performance optimizations
@@ -132,12 +142,12 @@ We have a community Discord server for:
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ### Quick Contribution Ideas
+
 - Improve documentation and user guides
 - Add new features or tools
 - Fix bugs and improve stability
 - Enhance mobile/tablet experience
 - Create tutorials and examples
-
 
 ## Notes
 

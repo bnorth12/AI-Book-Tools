@@ -73,12 +73,14 @@
 			        <input type="text" id="apiKey" placeholder="Enter your xAI API key">
 			        <label for="model">Model:</label>
 			        <select id="model">
-			            <option value="grok-2-latest">Grok-2-Latest</option>
-			            <option value="grok-2">Grok-2</option>
-			            <option value="grok-beta">Grok-Beta</option>
+			            <option value="grok-4.20-0309-reasoning" selected>grok-4.20-0309-reasoning (Recommended)</option>
+			            <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
+			            <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
+			            <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
+			            <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
 			        </select>
 			        <label for="maxTokens">Max Tokens per Update:</label>
-			        <input type="number" id="maxTokens" min="500" value="4500">
+			        <input type="number" id="maxTokens" min="500" value="6000">
 			        <label for="genre">Genre:</label>
 			        <select id="genre" onchange="enableAuthorFetch()">
 			            <option value="scifi">Science Fiction</option>
@@ -412,6 +414,14 @@
 		    }
 
 		    const endpoint = 'https://api.x.ai/v1/chat/completions';
+		    const genre = document.getElementById('genre')?.value;
+		    const adjustedMessages = Array.isArray(messages) ? [...messages] : [];
+		    if (genre === 'scifi') {
+		        adjustedMessages.unshift({
+		            role: 'system',
+		            content: 'When writing science fiction, prioritize hard-science plausibility, coherent cause-and-effect, and realistic technological constraints. Avoid space-opera tropes unless explicitly requested.'
+		        });
+		    }
 		    console.log('Attempting API call to:', endpoint, 'Model:', model, 'Max Tokens:', maxTokens, 'Messages:', messages);
 		    loadingDiv.style.display = 'block';
 
@@ -424,10 +434,10 @@
 		            },
 		            body: JSON.stringify({
 		                model: model,
-		                messages: messages,
+		                messages: adjustedMessages,
 		                max_tokens: maxTokens,
 		                stream: false,
-		                temperature: 0
+		                temperature: 0.65
 		            })
 		        });
 		        if (!response.ok) {
@@ -440,7 +450,7 @@
 		                      jsonResponse.choices[0].message.content : text;
 
 		        // Parse content if it’s JSON
-		        if (messages[1].content.includes('Return as JSON')) {
+		        if (adjustedMessages.some(m => typeof m.content === 'string' && m.content.includes('Return as JSON'))) {
 		            content = content.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
 		            try {
 		                jsonResponse = JSON.parse(content);
@@ -2263,8 +2273,8 @@
 		            requestLog = sessionData.requestLog || requestLog;
 
 		            document.getElementById('apiKey').value = novelData.apiKey || '';
-		            document.getElementById('model').value = novelData.model || 'grok-2-latest';
-		            document.getElementById('maxTokens').value = novelData.maxTokens || 4500;
+		            document.getElementById('model').value = novelData.model || 'grok-4.20-0309-reasoning';
+		            document.getElementById('maxTokens').value = novelData.maxTokens || 6000;
 		            document.getElementById('genre').value = novelData.genre || 'scifi';
 		            const authorSelect = document.getElementById('authorStyle');
 		            authorSelect.innerHTML = '';
@@ -3085,8 +3095,8 @@
 		    };
 		    requestLog = { lastPrompt: 'No requests made yet.', status: 'Idle', returnedInfo: 'No response yet.', tokenUsage: 'Not available', cost: 'Not available', originTab: null };
 		    document.getElementById('apiKey').value = localStorage.getItem('xaiApiKey') || '';
-		    document.getElementById('model').value = 'grok-2-latest';
-		    document.getElementById('maxTokens').value = '4500';
+		    document.getElementById('model').value = 'grok-4.20-0309-reasoning';
+		    document.getElementById('maxTokens').value = '6000';
 		    document.getElementById('genre').value = 'scifi';
 		    document.getElementById('authorStyle').value = '';
 		    document.getElementById('styleGuide').value = '';

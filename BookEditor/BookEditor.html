@@ -52,12 +52,14 @@
         <input type="text" id="apiKey" placeholder="Enter your xAI API key">
         <label for="model">LLM Model:</label>
         <select id="model">
-            <option value="grok-2-latest">Grok-2-Latest</option>
-            <option value="grok-2">Grok-2</option>
-            <option value="grok-beta">Grok-Beta</option>
+            <option value="grok-4.20-0309-reasoning" selected>grok-4.20-0309-reasoning (Recommended)</option>
+            <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
+            <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
+            <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
+            <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
         </select>
         <label for="maxTokens">Max Tokens per Operation:</label>
-        <input type="number" id="maxTokens" min="500" value="4500">
+        <input type="number" id="maxTokens" min="500" value="6000">
         <label for="genre">Book Genre (6-8 words max):</label>
         <textarea id="genre" placeholder="e.g., Science Fiction"></textarea>
         <button onclick="exportSession()">Export Session</button>
@@ -123,6 +125,8 @@
     <!-- Tab 5: Edited Output -->
     <div id="tab5" class="tab">
         <div id="editedOutputContainer"></div>
+        <button onclick="importBook()">Import Book</button>
+        <button onclick="recalculateChapterLength()">Recalculate Chapter Length</button>
         <button onclick="exportBook()">Export Book</button>
         <button onclick="showTab(4)">Back</button>
         <button onclick="showTab(6)">Next: Request Log</button>
@@ -152,6 +156,28 @@
         let chatBotMessages = null;
         let chapters = [];         // Original chapters parsed from book text
 		let editedChapters = [];   // Edited chapters, initialized empty or with nulls
+        let novelData = {
+            genre: "",
+            title: "",
+            storyArc: "",
+            generalPlot: "",
+            setting: "",
+            numChapters: 0,
+            chapterLength: 0,
+            authorStyle: "",
+            styleGuide: "",
+            author: "",
+            characters: [],
+            subplots: [],
+            chapterOutlines: [],
+            chapterArcs: [],
+            chapters: [],
+            editedChapters: [],
+            bookText: "",
+            outlineImprovements: [],
+            bookImprovementsWithStatus: [],
+            requestLog: []
+        };
 
         // Show a specific tab and update navigation
         function showTab(tabNumber) {
@@ -216,7 +242,7 @@
 		        "model": model,
 		        "messages": messages,
 		        "max_tokens": maxTokens,
-		        "temperature": 0.7,
+                "temperature": 0.65,
 		        "stream": false
 		    };
 
@@ -411,6 +437,17 @@
 			                editedChapters.push(null); // Initialize empty slot for edited version
             }
 
+            // Keep shared schema fields synchronized after book ingestion.
+            novelData.genre = genre;
+            novelData.bookText = bookText;
+            novelData.chapters = [...chapters];
+            novelData.editedChapters = [...editedChapters];
+            novelData.numChapters = chapters.length;
+            novelData.chapterLength = chapters.length > 0 ? Math.round(bookText.split(/\s+/).length / chapters.length) : 0;
+            if (!novelData.title && chapterMatches.length > 0) {
+                novelData.title = chapterMatches[0][2] || "";
+            }
+
             console.log(`Detected ${chapters.length} chapters...`);
             chapters.forEach((ch, i) => console.log(`Chapter ${i + 1} length: ${ch.length} chars`));
 
@@ -602,16 +639,34 @@
 
 
 
-        // Export the edited book from Tab 5 as a text file
+        // Export the current novel data using the shared schema format.
         function exportBook() {
-            const editedText = chapters.map((_, i) => document.getElementById(`chapter${i + 1}`).value).join("\n\n");
-            console.log(`Exported book length: ${editedText.length} chars`);
-            const blob = new Blob([editedText], { type: "text/plain" });
+            novelData.genre = document.getElementById("genre")?.value || novelData.genre;
+            novelData.bookText = document.getElementById("bookText")?.value || novelData.bookText;
+            novelData.chapters = [...chapters];
+            novelData.editedChapters = [...editedChapters];
+            novelData.numChapters = chapters.length;
+            novelData.requestLog = [...requestLog];
+
+            const data = {
+                schemaVersion: "1.0",
+                sourceTool: "BookEditor",
+                novelData: novelData
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
-            link.download = "EditedBook.txt";
+            link.download = "book_data.json";
             link.click();
-            return editedText;
+        }
+
+        // Explicit user action to recompute chapterLength from current book text/chapter count.
+        function recalculateChapterLength() {
+            const chapterCount = chapters.length;
+            const text = document.getElementById("bookText")?.value || novelData.bookText || "";
+            novelData.chapterLength = chapterCount > 0 ? Math.round(text.split(/\s+/).length / chapterCount) : 0;
+            alert(`Chapter length recalculated: ${novelData.chapterLength}`);
         }
 
 
@@ -763,8 +818,8 @@
 		        function exportSession() {
 		            const sessionData = {
 		                apiKey: document.getElementById("apiKey")?.value || "",
-		                model: document.getElementById("model")?.value || "grok-2-latest",
-		                maxTokens: parseInt(document.getElementById("maxTokens")?.value) || 4500,
+                        model: document.getElementById("model")?.value || "grok-4.20-0309-reasoning",
+                        maxTokens: parseInt(document.getElementById("maxTokens")?.value) || 6000,
 		                genre: document.getElementById("genre")?.value || "",
 		                bookText: document.getElementById("bookText")?.value || "",
 		                improvements: Array.from(document.getElementById("improvementsTableBody").rows).map(row => row.cells[1].innerText),
@@ -793,8 +848,8 @@
 			reader.onload = function(e) {
 				const sessionData = JSON.parse(e.target.result);
 				document.getElementById("apiKey").value = sessionData.apiKey || "";
-				document.getElementById("model").value = sessionData.model || "grok-2-latest";
-				document.getElementById("maxTokens").value = sessionData.maxTokens || 4500;
+                document.getElementById("model").value = sessionData.model || "grok-4.20-0309-reasoning";
+                document.getElementById("maxTokens").value = sessionData.maxTokens || 6000;
 				document.getElementById("genre").value = sessionData.genre || "";
 				document.getElementById("bookText").value = sessionData.bookText || "";
 				chapters = sessionData.chapters || [];
@@ -820,9 +875,58 @@
 				console.log("Imported session: chapters:", chapters.length, "editedChapters:", editedChapters.filter(ch => ch !== null).length);
 			};
 			reader.readAsText(file);
-}
+		}
 
+        function importBook() {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".json";
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+                if (!file) return;
 
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        const importedNovelData = (data && data.schemaVersion && data.novelData) ? data.novelData : data;
+                        if (!importedNovelData || typeof importedNovelData !== "object") {
+                            throw new Error("Invalid schema payload.");
+                        }
+
+                        novelData = { ...novelData, ...importedNovelData };
+                        document.getElementById("genre").value = novelData.genre || "";
+                        document.getElementById("bookText").value = novelData.bookText || "";
+                        chapters = Array.isArray(novelData.chapters) ? novelData.chapters : [];
+                        editedChapters = Array.isArray(novelData.editedChapters)
+                            ? novelData.editedChapters
+                            : Array(chapters.length).fill(null);
+
+                        const container = document.getElementById("editedOutputContainer");
+                        container.innerHTML = "";
+                        editedChapters.forEach((chapter, i) => {
+                            if (chapter !== null && chapter !== undefined) {
+                                const label = document.createElement("label");
+                                label.innerText = `Chapter ${i + 1}`;
+                                const textarea = document.createElement("textarea");
+                                textarea.id = `chapter${i + 1}`;
+                                textarea.readOnly = true;
+                                textarea.value = chapter;
+                                container.appendChild(label);
+                                container.appendChild(textarea);
+                                container.appendChild(document.createElement("br"));
+                            }
+                        });
+
+                        alert("Book imported successfully!");
+                    } catch (error) {
+                        alert("Error parsing JSON file: " + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
     </script>
 </body>
 </html>

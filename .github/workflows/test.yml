@@ -1,51 +1,82 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: Test Static Files
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-    - name: Lint HTML files
-      run: |
-        npm install -g htmlhint
-        htmlhint "**/*.html" || true
+      - name: Lint HTML files
+        run: |
+          npm install -g htmlhint
+          htmlhint "**/*.html" || true
 
-    - name: Check for console.log statements
-      run: |
-        if grep -r "console\.log" --include="*.js" --include="*.html" .; then
-          echo "⚠️  Found console.log statements that should be removed for production"
-        else
-          echo "✅ No console.log statements found"
-        fi
+      - name: Check for console.log statements
+        run: |
+          if grep -r "console\.log" --include="*.js" --include="*.html" .; then
+            echo "WARNING: Found console.log statements that should be removed for production"
+          else
+            echo "OK: No console.log statements found"
+          fi
 
-    - name: Validate JSON files
-      run: |
-        for file in $(find . -name "*.json" -not -path "./node_modules/*"); do
-          if ! jq empty "$file" 2>/dev/null; then
-            echo "❌ Invalid JSON: $file"
+      - name: Validate JSON files
+        run: |
+          for file in $(find . -name "*.json" -not -path "./node_modules/*"); do
+            if ! jq empty "$file" 2>/dev/null; then
+              echo "ERROR: Invalid JSON: $file"
+              exit 1
+            fi
+          done
+          echo "OK: All JSON files are valid"
+
+      - name: Grok endpoint smoke test
+        env:
+          XAI_API_KEY: '${{ secrets.XAI_API_KEY }}'
+        run: |
+          set -euo pipefail
+          if [ -z "${XAI_API_KEY:-}" ]; then
+            echo "INFO: XAI_API_KEY is not available in this run context; skipping endpoint smoke test"
+            exit 0
+          fi
+
+          response=$(curl -sS https://api.x.ai/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${XAI_API_KEY}" \
+            -d '{
+              "model": "grok-4.20-0309-reasoning",
+              "messages": [{"role": "user", "content": "Reply with the single token: ok"}],
+              "max_tokens": 8,
+              "temperature": 0
+            }')
+
+          if ! echo "$response" | jq -e '.choices[0].message.content' >/dev/null; then
+            echo "ERROR: Grok endpoint returned an unexpected response shape"
+            echo "$response" | jq -c '{error, id, model}' || true
             exit 1
           fi
-        done
-        echo "✅ All JSON files are valid"
 
-    - name: Check file sizes
-      run: |
-        echo "📊 File sizes:"
-        find . -name "*.html" -o -name "*.js" -o -name "*.css" | xargs ls -lh | head -20
+          echo "OK: Grok endpoint smoke test passed"
+
+      - name: Check file sizes
+        run: |
+          echo "File sizes:"
+          find . -name "*.html" -o -name "*.js" -o -name "*.css" | xargs ls -lh | head -20

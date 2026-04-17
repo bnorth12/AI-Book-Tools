@@ -41,6 +41,7 @@ An AI-powered tool that analyzes existing books and breaks them down into struct
 ## Output Format
 
 The tool generates a comprehensive JSON structure containing:
+
 - Book metadata (title, chapter count, length estimates)
 - Complete chapter breakdowns
 - Character profiles with backstories and arcs

@@ -1,0 +1,17 @@
+{
+  "pass": true,
+  "checks": {
+    "wrapper.schemaVersion": true,
+    "wrapper.sourceTool": true,
+    "wrapper.sourceVersion": true,
+    "novelData.title": true,
+    "novelData.numChapters": true,
+    "novelData.chapterLength": true,
+    "novelData.chapters.length": true,
+    "novelData.editedChapters.length": true,
+    "bookeditor.import.chapters.length": true,
+    "bookeditor.import.editedChapters.length": true,
+    "bookeditor.import.genre": true,
+    "bookeditor.import.bookText.prefix_match": true
+  }
+}

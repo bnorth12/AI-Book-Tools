@@ -1,5 +1,33 @@
 let bookChunks = [];
-let novelData = {};
+let novelData = {
+    genre: "",
+    title: "",
+    storyArc: "",
+    generalPlot: "",
+    setting: "",
+    numChapters: 0,
+    chapterLength: 0,
+    authorStyle: "",
+    styleGuide: "",
+    author: "",
+    characters: [],
+    subplots: [],
+    chapterOutlines: [],
+    chapterArcs: [],
+    chapters: [],
+    editedChapters: [],
+    bookText: "",
+    outlineImprovements: "",
+    bookImprovementsWithStatus: [],
+    requestLog: {
+        lastPrompt: "",
+        status: "",
+        returnedInfo: "",
+        tokenUsage: "",
+        cost: "",
+        originTab: null
+    }
+};
 let isBookProcessed = false;
 
 function chunkText(text, chunkSize) {
@@ -29,10 +57,10 @@ async function callGrokAPI(messages, maxTokens, isJSON) {
                 "Authorization": `Bearer ${apiKey}`
             },
             body: JSON.stringify({
-                model: "grok-2-latest",
+                model: "grok-4.20-0309-reasoning",
                 messages: messages,
                 max_tokens: maxTokens,
-                temperature: 0.7,
+                temperature: 0.65,
                 response_format: isJSON ? { type: "json_object" } : undefined
             })
         });
@@ -81,8 +109,38 @@ window.processBook = async function() {
     const file = fileInput.files[0];
     const bookText = await file.text();
 
-    // Pre-parse chapters
-    novelData.chapters = [];
+    // Reset schema object for a fresh run and pre-parse chapters.
+    novelData = {
+        ...novelData,
+        genre: "",
+        title: "",
+        storyArc: "",
+        generalPlot: "",
+        setting: "",
+        numChapters: 0,
+        chapterLength: 0,
+        authorStyle: "",
+        styleGuide: "",
+        author: "",
+        characters: [],
+        subplots: [],
+        chapterOutlines: [],
+        chapterArcs: [],
+        chapters: [],
+        editedChapters: [],
+        bookText: bookText,
+        outlineImprovements: "",
+        bookImprovementsWithStatus: [],
+        requestLog: {
+            lastPrompt: "",
+            status: "",
+            returnedInfo: "",
+            tokenUsage: "",
+            cost: "",
+            originTab: null
+        }
+    };
+
     const chapterMatches = Array.from(bookText.matchAll(/(\d+)\.\s*"(.+?)"(?=\s*\n|$)/g));
     for (let i = 0; i < chapterMatches.length; i++) {
         const match = chapterMatches[i];
@@ -90,14 +148,24 @@ window.processBook = async function() {
         const end = (i + 1 < chapterMatches.length) ? chapterMatches[i + 1].index : bookText.length;
         novelData.chapters.push(bookText.substring(start, end).trim());
     }
+
+    // Fallback: if chapter markers are not detected, treat whole text as one chapter.
+    if (novelData.chapters.length === 0 && bookText.trim()) {
+        novelData.chapters = [bookText.trim()];
+    }
+
     novelData.numChapters = novelData.chapters.length;
-    novelData.chapterLength = Math.round(novelData.chapters.reduce((sum, c) => sum + c.split(/\s+/).length, 0) / novelData.numChapters);
+    novelData.chapterLength = novelData.numChapters > 0
+        ? Math.round(novelData.chapters.reduce((sum, c) => sum + c.split(/\s+/).length, 0) / novelData.numChapters)
+        : 0;
     novelData.title = bookTitle;
+    novelData.editedChapters = Array(novelData.numChapters).fill(null);
 
     // Use chapters as chunks, split if > 15,000 chars
     bookChunks = [];
     for (let i = 0; i < novelData.chapters.length; i++) {
-        const chapter = `${i + 1}. "${chapterMatches[i][2]}"\n${novelData.chapters[i]}`;
+        const chapterTitle = chapterMatches[i] ? chapterMatches[i][2] : `Chapter ${i + 1}`;
+        const chapter = `${i + 1}. "${chapterTitle}"\n${novelData.chapters[i]}`;
         if (chapter.length <= 15000) {
             bookChunks.push(chapter);
         } else {
@@ -115,7 +183,7 @@ window.processBook = async function() {
     try {
         let messages = [{
             role: "system",
-            content: `I’m loading a book titled '${bookTitle}' with ${bookChunks.length} chunks (chapters or parts). I’ll provide all chunks next. Use ONLY this book’s content—no improvisation or external references—and build a complete understanding of the narrative. Confirm with: '${bookTitle}'`
+            content: `I’m loading a book titled '${bookTitle}' with ${bookChunks.length} chunks (chapters or parts). I’ll provide all chunks next. Use ONLY this book’s content (no external references) and build a complete understanding of the narrative. In the final extraction, do not leave core narrative fields empty without an explicit reason. Confirm with: '${bookTitle}'`
         }];
         let response = await callGrokAPI(messages, 200, false);
         if (!response.includes(bookTitle)) throw new Error("Title not confirmed by API.");
@@ -132,49 +200,90 @@ window.processBook = async function() {
             console.log(`Chunk ${i + 1} sent, response: ${response}`);
         }
 
-        const masterPrompt = `
-            Using the full context of '${bookTitle}' (all ${bookChunks.length} chunks), provide the following in a single JSON structure:
-            1. Genre: Determine the genre based on the narrative themes and setting.
-            2. Story Arc: Extract the main story arc (200-300 words), summarizing the protagonist’s journey and all major turning points.
-            3. General Plot: Extract the general plot (300-400 words), detailing all major events and conflicts.
-            4. Setting: Extract the setting (200-300 words), describing primary locations and world context.
-            5. Characters: Extract ALL main characters, including names, backstories, and arcs.
-            6. Subplots: Extract ALL significant subplots as a list, including protagonist’s journey, character arcs, and event-driven threads.
-            7. Chapter Outlines: Extract outlines for all ${novelData.numChapters} chapters, summarizing key events.
-            8. Chapter Arcs: Extract arcs for all ${novelData.numChapters} chapters, detailing character and plot development.
-            9. Author Style: Suggest an author style matching the narrative’s tone and prose ("edgar").
-            10. Style Guide: Generate an editable style guide (300-400 words) based on the suggested author.
-            Return as JSON:
-            {
-                "novelData": {
-                    "genre": "<genre>",
-                    "title": "${bookTitle}",
-                    "storyArc": "<arc>",
-                    "generalPlot": "<plot>",
-                    "setting": "<setting>",
-                    "numChapters": ${novelData.numChapters},
-                    "chapterLength": ${novelData.chapterLength},
-                    "authorStyle": "edgar",
-                    "styleGuide": "<guide>",
-                    "author": "edgar",
-                    "characters": [{"name": "<name>", "backstory": "<backstory>", "arc": "<arc>"}, ...],
-                    "subplots": ["<subplot1>", "<subplot2>", ...],
-                    "chapterOutlines": ["<chapter1>", "<chapter2>", ...],
-                    "chapterArcs": ["<arc1>", "<arc2>", ...],
-                    "chapters": [],
-                    "requestLog": ""
-                }
-            }
-        `;
+                const masterPrompt = `
+                        Using the full context of '${bookTitle}' (all ${bookChunks.length} chunks), return ONE JSON object only.
+
+                        Extraction goals:
+                        1. Genre: Determine genre from the source text.
+                        2. Story Arc: 200-300 words on the central narrative movement and major turning points.
+                        3. General Plot: 300-400 words on major events/conflicts.
+                        4. Setting: 200-300 words describing world/location context.
+                        5. Characters: Main cast with name, backstory, and arc.
+                        6. Subplots: Significant secondary threads. If no clear subplot exists, include one explicit explanatory item instead of returning an empty list.
+                        7. Chapter Outlines: EXACTLY ${novelData.numChapters} items, one per chapter.
+                        8. Chapter Arcs: EXACTLY ${novelData.numChapters} items, one per chapter.
+                        9. Author Style + Style Guide: best-fit prose profile and editable style guide.
+
+                        Quality rules:
+                        - For fiction-like narratives, treat characters, storyArc, generalPlot, setting, chapterOutlines, and chapterArcs as required analytical outputs.
+                        - Do not leave critical fields blank. If evidence is weak, provide best-effort extraction plus a brief caveat sentence.
+                        - Use only evidence from the provided book text.
+                        - Keep JSON valid and machine-readable.
+
+                        Return as JSON with this shape:
+                        {
+                            "novelData": {
+                                "genre": "<genre>",
+                                "title": "${bookTitle}",
+                                "storyArc": "<non-empty story arc or explicit rationale>",
+                                "generalPlot": "<non-empty plot or explicit rationale>",
+                                "setting": "<non-empty setting description or explicit rationale>",
+                                "numChapters": ${novelData.numChapters},
+                                "chapterLength": ${novelData.chapterLength},
+                                "authorStyle": "edgar",
+                                "styleGuide": "<style guide>",
+                                "author": "edgar",
+                                "characters": [{"name": "<name>", "backstory": "<backstory>", "arc": "<arc>"}],
+                                "subplots": ["<subplot or explicit 'no distinct subplot' rationale>"],
+                                "chapterOutlines": ["<exactly ${novelData.numChapters} chapter-outline items>"],
+                                "chapterArcs": ["<exactly ${novelData.numChapters} chapter-arc items>"],
+                                "chapters": ["<chapter1 text>", "<chapter2 text>", ...],
+                                "editedChapters": [],
+                                "bookText": "<full book text>",
+                                "outlineImprovements": "",
+                                "bookImprovementsWithStatus": [],
+                                "requestLog": {"lastPrompt": "", "status": "", "returnedInfo": "", "tokenUsage": "", "cost": "", "originTab": null}
+                            }
+                        }
+                `;
         messages.push({ role: "user", content: masterPrompt });
         const fullResponse = await callGrokAPI(messages, 12000, true);
 
         const parsed = JSON.parse(fullResponse);
-        Object.assign(novelData, parsed);
+        const parsedNovelData = parsed.novelData && typeof parsed.novelData === "object" ? parsed.novelData : parsed;
+        const preservedChapters = [...novelData.chapters];
+        const preservedEditedChapters = [...novelData.editedChapters];
+        const preservedBookText = novelData.bookText;
+
+        novelData = {
+            ...novelData,
+            ...parsedNovelData,
+            // Preserve source-of-truth chapter content from local parse.
+            chapters: preservedChapters,
+            editedChapters: Array.isArray(parsedNovelData.editedChapters)
+                ? parsedNovelData.editedChapters
+                : preservedEditedChapters,
+            bookText: preservedBookText,
+            numChapters: preservedChapters.length,
+            chapterLength: preservedChapters.length > 0
+                ? Math.round(preservedChapters.reduce((sum, c) => sum + c.split(/\s+/).length, 0) / preservedChapters.length)
+                : 0,
+            title: bookTitle,
+            requestLog: {
+                ...(novelData.requestLog || {}),
+                ...(parsedNovelData.requestLog && typeof parsedNovelData.requestLog === "object" ? parsedNovelData.requestLog : {})
+            }
+        };
 
         isBookProcessed = true;
     } catch (error) {
         console.error("Processing error:", error);
+        novelData.requestLog = {
+            ...(novelData.requestLog || {}),
+            status: "error",
+            returnedInfo: error.message,
+            originTab: "tab1"
+        };
         alert("Error: " + error.message);
     }
 
@@ -210,8 +319,82 @@ function populateElementsTable() {
 }
 
 function generateJSON() {
-    document.getElementById("jsonOutput").textContent = JSON.stringify(novelData, null, 2);
+    const payload = {
+        schemaVersion: "1.0",
+        sourceTool: "BookDecomposer",
+        sourceVersion: "0.X.0",
+        novelData: novelData
+    };
+    document.getElementById("jsonOutput").textContent = JSON.stringify(payload, null, 2);
 }
+
+function buildSchemaPayload() {
+    return {
+        schemaVersion: "1.0",
+        sourceTool: "BookDecomposer",
+        sourceVersion: "0.X.0",
+        novelData: novelData
+    };
+}
+
+window.exportJSON = function() {
+    const payload = buildSchemaPayload();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "bookdecomposer-output.json";
+    link.click();
+};
+
+window.importJSON = function() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = function(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const raw = JSON.parse(e.target.result);
+                const incoming = raw && raw.novelData && typeof raw.novelData === "object" ? raw.novelData : raw;
+                if (!incoming || typeof incoming !== "object") {
+                    throw new Error("Invalid JSON structure.");
+                }
+
+                novelData = {
+                    ...novelData,
+                    ...incoming,
+                    characters: Array.isArray(incoming.characters) ? incoming.characters : (novelData.characters || []),
+                    subplots: Array.isArray(incoming.subplots) ? incoming.subplots : (novelData.subplots || []),
+                    chapterOutlines: Array.isArray(incoming.chapterOutlines) ? incoming.chapterOutlines : (novelData.chapterOutlines || []),
+                    chapterArcs: Array.isArray(incoming.chapterArcs) ? incoming.chapterArcs : (novelData.chapterArcs || []),
+                    chapters: Array.isArray(incoming.chapters) ? incoming.chapters : (novelData.chapters || []),
+                    editedChapters: Array.isArray(incoming.editedChapters) ? incoming.editedChapters : (novelData.editedChapters || []),
+                    bookImprovementsWithStatus: Array.isArray(incoming.bookImprovementsWithStatus)
+                        ? incoming.bookImprovementsWithStatus
+                        : (novelData.bookImprovementsWithStatus || []),
+                    requestLog: {
+                        ...(novelData.requestLog || {}),
+                        ...(incoming.requestLog && typeof incoming.requestLog === "object" ? incoming.requestLog : {})
+                    }
+                };
+
+                document.getElementById("title").value = novelData.title || "";
+                populateChaptersTable();
+                populateElementsTable();
+                generateJSON();
+                isBookProcessed = true;
+                showTab(4);
+            } catch (error) {
+                alert("Error importing JSON: " + error.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+};
 
 function showTab(tabNumber) {
     document.querySelectorAll(".tabcontent").forEach(tab => tab.classList.remove("active"));

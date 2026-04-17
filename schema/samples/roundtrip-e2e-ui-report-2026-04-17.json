@@ -1,0 +1,57 @@
+{
+  "date": "2026-04-17",
+  "fixture": "schema/samples/beyond-prepared-shared-schema.json",
+  "ui": {
+    "bookDecomposer": {
+      "imported": {
+        "schemaVersion": "1.0",
+        "sourceTool": "BookDecomposer",
+        "title": "Beyond Prepared",
+        "numChapters": 17,
+        "chapterLength": 2959,
+        "chaptersLength": 17,
+        "editedChaptersLength": 17
+      },
+      "exported": {
+        "schemaVersion": "1.0",
+        "sourceTool": "BookDecomposer",
+        "title": "Beyond Prepared",
+        "numChapters": 17,
+        "chapterLength": 2959,
+        "chaptersLength": 17,
+        "editedChaptersLength": 17
+      },
+      "preserved": {
+        "title": true,
+        "numChapters": true,
+        "chapterLength": true,
+        "chaptersLength": true,
+        "editedChaptersLength": true
+      }
+    },
+    "bookEditor": {
+      "importStatus": "success",
+      "exportedWithoutRecalc": {
+        "schemaVersion": "1.0",
+        "sourceTool": "BookEditor",
+        "title": "Beyond Prepared",
+        "genre": "",
+        "numChapters": 17,
+        "chapterLength": 2959,
+        "chaptersLength": 17,
+        "editedChaptersLength": 17,
+        "bookTextPrefixMatch": true
+      },
+      "explicitRecalcCheck": {
+        "beforeRecalc": 2959,
+        "afterRecalc": 2964,
+        "changedOnlyAfterUserAction": true
+      }
+    }
+  },
+  "deterministicRoundTrip": {
+    "report": "schema/samples/roundtrip-report-e2e-2026-04-17-post-patch.json",
+    "pass": true,
+    "notes": "Patched behavior verified: BookEditor preserves imported chapterLength unless user clicks Recalculate Chapter Length."
+  }
+}

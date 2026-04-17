@@ -5,12 +5,14 @@ Thank you for your interest in contributing to AI Book Tools! This document prov
 ## Ways to Contribute
 
 ### 🐛 Reporting Bugs
+
 - Use the bug report template when creating issues
 - Include detailed steps to reproduce the problem
 - Mention your browser and operating system
 - Attach screenshots if applicable
 
 ### 💡 Suggesting Features
+
 - Check if the feature has already been requested
 - Describe the problem you're trying to solve
 - Explain how the feature would work
@@ -18,6 +20,7 @@ Thank you for your interest in contributing to AI Book Tools! This document prov
 - Consider alternative solutions
 
 ### 🛠️ Code Contributions
+
 - Fork the repository
 - Create a feature branch from `main`
 - Make your changes
@@ -32,6 +35,7 @@ Thank you for your interest in contributing to AI Book Tools! This document prov
    - Git for version control
 
 2. **Local Development**
+
    ```bash
    git clone https://github.com/bnorth12/AI-Book-Tools.git
    cd AI-Book-Tools
@@ -46,17 +50,20 @@ Thank you for your interest in contributing to AI Book Tools! This document prov
 ## Code Style Guidelines
 
 ### HTML
+
 - Use semantic HTML elements
 - Include alt text for images
 - Maintain consistent indentation (4 spaces)
 
 ### JavaScript
+
 - Use modern ES6+ features when appropriate
 - Add comments for complex logic
 - Handle errors gracefully
 - Avoid global variables when possible
 
 ### CSS
+
 - Use consistent naming conventions
 - Prefer CSS custom properties for theming
 - Ensure responsive design principles
@@ -83,6 +90,7 @@ Thank you for your interest in contributing to AI Book Tools! This document prov
 ## Version Numbering
 
 We use [Semantic Versioning](https://semver.org/):
+
 - **MAJOR.MINOR.PATCH** (e.g., 1.2.3)
 - MAJOR: Breaking changes
 - MINOR: New features, backward compatible
