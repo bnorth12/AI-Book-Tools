@@ -1,4 +1,5 @@
-# AI-Book-Tools
+# AI Book Tools
+
 
 Static HTML/JavaScript tools for AI-assisted writing and book editing.
 
@@ -40,3 +41,20 @@ Open `index.html` in a browser and launch the tool you want to use.
 
 - This is a static web project; no build step is required.
 - The `.gitignore` file is configured to keep local secrets and temporary files out of version control.
+
+## Publishing to GitHub
+
+If you have created a repository named `AI Book Tools` under `bnorth12`, add the remote and push from this folder:
+
+```powershell
+git remote add origin https://github.com/bnorth12/AI-Book-Tools.git
+# Use main if you want the default GitHub branch name
+git branch -M main
+git push -u origin main
+```
+
+If you want to keep `master` instead of renaming:
+
+```powershell
+git push -u origin master
+```
