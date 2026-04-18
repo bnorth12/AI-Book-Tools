@@ -1,11 +1,11 @@
-<!-- Novel Writer 0.3.3 -->
+<!-- Novel Writer 0.3.4 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <!-- Metadata for character encoding and responsive viewport -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Novel Writer 0.3.3</title>
+	<title>Novel Writer 0.3.4</title>
     <!-- Inline CSS for layout and styling -->
     <style>
         body { font-family: Arial, sans-serif; max-width: 1000px; margin: 20px auto; padding: 0 20px; }
@@ -22,7 +22,7 @@
         #improvementsTable textarea { height: 150px; }
         button { background-color: #007bff; color: white; padding: 10px 20px; border: none; cursor: pointer; margin: 5px; }
         button:hover { background-color: #0056b3; }
-        #loading { display: none; color: #555; margin-top: 10px; }
+		.loading-indicator { display: none; color: #555; margin-top: 10px; }
         #nav { margin-bottom: 20px; }
         #nav button { background-color: #f8f9fa; color: #333; }
         #nav button.active { background-color: #007bff; color: white; }
@@ -43,6 +43,18 @@
 		    margin-top: 5px;
 		    font-size: 14px;
 		}
+		.counter-note { font-size: 14px; color: #444; margin-bottom: 10px; }
+		#promptManagerTable { width: 100%; border-collapse: collapse; margin-top: 10px; }
+		#promptManagerTable th, #promptManagerTable td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+		#promptManagerTable th { background-color: #f7f7f7; }
+		#promptManagerTable textarea { height: 130px; }
+		textarea.subplot { height: 300px; }
+		#consolidatedCharacters, #consolidatedSubplots { height: 300px; }
+		#consolidatedNovelOutlines { height: 200px; }
+		#consolidatedChapterOutlines, #consolidatedChapters { height: 400px; }
+		#elementValues { height: 600px; }
+		#promptManagerTable th:first-child { width: 140px; }
+		#promptManagerTable th:nth-child(2) { width: 220px; }
     </style>
 </head>
 
@@ -62,6 +74,7 @@
 	        <button onclick="showTab(8)">8. Consolidated Breakdowns</button>
 	        <button onclick="showTab(9)">9. Request Log</button>
 	        <button onclick="showTab(10)">10. Element Values</button>
+	        <button onclick="showTab(11)">11. Agent Prompts</button>
 	        <button onclick="window.open('user_guide.html', '_blank')">Help</button>
 	        <!-- Updated -->
     	</div>
@@ -126,7 +139,7 @@
 			        <button onclick="exportSession()">Export Session</button>
 			        <label for="importFile">Import Session:</label>
 			        <input type="file" id="importFile" accept=".json" onchange="importSession(event)">
-			        <div id="loading">Processing...</div>
+			        <div class="loading-indicator">Processing...</div>
     </div>
 
         <!-- Tab 2: Characters - Define and generate character details -->
@@ -135,6 +148,7 @@
 	        <div class="note">NOTE: Enter any known character information from Tab 1 here before using AI Suggest to fill in additional details.</div>
 	        <label for="numCharacters">Number of Characters to Generate:</label>
 	        <input type="number" id="numCharacters" min="1" value="3">
+	        <div id="characterCounterInfo" class="counter-note">Character entries: 1</div>
 	        <div id="characterList">
 	            <div class="character">
 	                <label>Name:</label>
@@ -150,7 +164,7 @@
 			<button onclick="refineCharacters()">Refine Characters with Subplots</button>
 	        <button onclick="showTab(1)">Back</button>
 	        <button onclick="showTab(3)">Next: Subplots</button>
-	        <div id="loading">Processing...</div>
+	        <div class="loading-indicator">Processing...</div>
     </div>
 
         <!-- Tab 3: Subplots - Define and generate subplot details -->
@@ -158,17 +172,18 @@
 	        <h2>Subplots</h2>
 	        <label for="minSubplots">Minimum Number of Subplots to Generate:</label>
 	        <input type="number" id="minSubplots" min="1" value="2">
+	        <div id="subplotCounterInfo" class="counter-note">Subplot entries: 1</div>
 	        <div id="subplotList">
 	            <div class="subplot-section">
 	                <label>Subplot 1:</label>
-	                <textarea class="subplot" placeholder="e.g., a hidden conspiracy" style="height: 300px;"></textarea>
+	                <textarea class="subplot" placeholder="e.g., a hidden conspiracy"></textarea>
 	            </div>
 	        </div>
 	        <button onclick="addSubplot()">Add Another Subplot</button>
 	        <button onclick="suggestSubplots()">AI Suggest</button>
 	        <button onclick="showTab(2)">Back</button>
 	        <button onclick="showTab(4)">Next: Outlines</button>
-	        <div id="loading">Processing...</div>
+	        <div class="loading-indicator">Processing...</div>
     </div>
 
         <!-- Tab 4: Outlines - Create novel and chapter outlines with improvement incorporation -->
@@ -190,7 +205,7 @@
 	        <div id="chapterOutlines"></div>
 	        <button onclick="showTab(3)">Back</button>
 	        <button onclick="showTab(5)">Next: Generate Chapters</button>
-	        <div id="loading">Processing...</div>
+	        <div class="loading-indicator">Processing...</div>
     </div>
 
         <!-- Tab 5: Generate Chapters - Initial chapter generation -->
@@ -200,7 +215,7 @@
 	        <div id="chapterGenContainer"></div>
 	        <button onclick="showTab(4)">Back</button>
 	        <button onclick="showTab(6)">Next: Edit Chapters</button>
-	        <div id="loading">Processing...</div>
+	        <div class="loading-indicator">Processing...</div>
 	    </div>
 
 	    <!-- Tab 6: Edit Chapters - Edit and refine generated chapters with improvement incorporation -->
@@ -210,7 +225,7 @@
 	        <div id="chapterEditContainer"></div>
 	        <button onclick="showTab(5)">Back</button>
 	        <button onclick="showTab(7)">Next: Book</button>
-	        <div id="loading">Processing...</div>
+	        <div class="loading-indicator">Processing...</div>
     </div>
 
         <!-- Tab 7: Book - View, export, improve the complete book, and break down improvements -->
@@ -234,8 +249,8 @@
 		        </tbody>
 		    </table>
 		    <button onclick="showTab(6)">Back</button>
-		    <button onclick="showTab(8)">Next: Request Log</button>
-		    <div id="loading">Processing...</div>
+	        <button onclick="showTab(8)">Next: Consolidated Breakdowns</button>
+	        <div class="loading-indicator">Processing...</div>
 	</div>
 
 
@@ -243,20 +258,19 @@
 	<div id="tab8" class="tab">
 		<h2>Consolidated Breakdown Suggestions</h2>
 		<label for="consolidatedCharacters">Characters:</label>
-		<textarea id="consolidatedCharacters" style="width: 100%; height: 300px;" readonly></textarea>
+		<textarea id="consolidatedCharacters" readonly></textarea>
 		<label for="consolidatedSubplots">Subplots:</label>
-		<textarea id="consolidatedSubplots" style="width: 100%; height: 300px;" readonly></textarea>
+		<textarea id="consolidatedSubplots" readonly></textarea>
 		<label for="consolidatedNovelOutlines">Novel Outlines:</label>
-		<textarea id="consolidatedNovelOutlines" style="width: 100%; height: 200px;" readonly></textarea>
+		<textarea id="consolidatedNovelOutlines" readonly></textarea>
 		<label for="consolidatedChapterOutlines">Chapter Outlines:</label>
-		<textarea id="consolidatedChapterOutlines" style="width: 100%; height: 400px;" readonly></textarea>
+		<textarea id="consolidatedChapterOutlines" readonly></textarea>
 		<label for="consolidatedChapters">Chapter Content:</label>
-		<textarea id="consolidatedChapters" style="width: 100%; height: 400px;" readonly></textarea>
+		<textarea id="consolidatedChapters" readonly></textarea>
 		<button onclick="populateConsolidatedBreakdowns()">Consolidate Breakdowns</button>
 		<button onclick="showTab(7)">Back</button>
 		<button onclick="showTab(9)">Next: Request Log</button>
 	</div>
-</body>
 
 	<!-- Tab 9: Request Log - View API interaction logs -->
 	<div id="tab9" class="tab">
@@ -274,7 +288,7 @@
 			<pre id="cost">Not available</pre>
 		</div>
 		<button onclick="showTab(8)">Back</button>
-		<div id="loading">Processing...</div>
+		<div class="loading-indicator">Processing...</div>
 	</div>
 
 	<!-- Tab 10: Element Values - Display all element values for debugging -->
@@ -282,15 +296,43 @@
 	        <h2>Element Values</h2>
 	        <button onclick="displayElementValues()">Refresh Values</button>
 	        <label for="elementValues">Current Element Values:</label>
-	        <textarea id="elementValues" style="width: 100%; height: 600px;" readonly placeholder="Click 'Refresh Values' to display current element values"></textarea>
+	        <textarea id="elementValues" readonly placeholder="Click 'Refresh Values' to display current element values"></textarea>
 	        <button onclick="showTab(9)">Back</button>
-	        <div id="loading">Processing...</div>
+	        <button onclick="showTab(11)">Next: Agent Prompts</button>
+	        <div class="loading-indicator">Processing...</div>
     </div>
 
+	<!-- Tab 11: Agent Prompts - Manage tab-specific system prompts -->
+	<div id="tab11" class="tab">
+		<h2>Agent Prompts</h2>
+		<div class="note">Edit the system prompts per tab/agent and export/import prompt profiles without changing code.</div>
+		<table id="promptManagerTable">
+			<thead>
+				<tr>
+					<th>Tab</th>
+					<th>Agent Name</th>
+					<th>System Prompt</th>
+				</tr>
+			</thead>
+			<tbody id="promptManagerBody"></tbody>
+		</table>
+		<button onclick="savePromptCatalogFromUI()">Save Prompt Edits</button>
+		<button onclick="resetPromptCatalogToDefaults()">Reset To Defaults</button>
+		<button onclick="exportPromptCatalog()">Export Prompt Profile</button>
+		<label for="promptImportFile">Import Prompt Profile:</label>
+		<input type="file" id="promptImportFile" accept=".json" onchange="importPromptCatalog(event)">
+		<button onclick="showTab(10)">Back</button>
+		<div class="loading-indicator">Processing...</div>
+	</div>
+
         <script>
-        console.log('Novel Writer 0.3.2 - Loaded Version: ' + Date.now());
+		const APP_VERSION = '0.3.4';
+        console.log(`Novel Writer ${APP_VERSION} - Loaded Version: ` + Date.now());
 	    // Global data structures
 	    let novelData = {
+	        apiKey: '',
+	        model: 'grok-4.20-0309-reasoning',
+	        maxTokens: 6000,
 	        genre: 'scifi',
 	        title: '',
 	        storyArc: '',
@@ -310,6 +352,8 @@
 	        chapterOutlines: [],
 	        chapterArcs: [],
 	        chapters: [],
+	        editedChapters: [],
+	        bookText: '',
 	        bookImprovements: [],
 	        bookImprovementsWithStatus: [], // Now stores {text, status, breakdown}
 	        outlineImprovements: '',
@@ -349,11 +393,150 @@
 	        }
 	    };
 
+		const defaultPromptCatalog = {
+			tab1: {
+				fetchAuthors: { name: 'Author Discovery Agent', systemPrompt: 'You are an expert on literature.' },
+				fetchStyleGuide: { name: 'Style Guide Agent', systemPrompt: 'You are an expert on literary styles.' },
+				suggestStoryArc: { name: 'Story Arc Agent', systemPrompt: 'You are a creative writing assistant specializing in detailed narrative planning.' },
+				suggestGeneralPlot: { name: 'General Plot Agent', systemPrompt: 'You are a creative writing assistant specializing in detailed narrative planning.' },
+				suggestSetting: { name: 'World-Building Agent', systemPrompt: 'You are a creative writing assistant specializing in immersive world-building.' },
+				suggestStoryInfo: { name: 'Story Bootstrap Agent', systemPrompt: 'You are a creative writing assistant specializing in immersive, thematic narratives.' }
+			},
+			tab2: {
+				suggestCharacters: { name: 'Character Generation Agent', systemPrompt: 'You are a creative writing assistant specializing in immersive, character-driven narratives.' },
+				refineCharacters: { name: 'Character Refinement Agent', systemPrompt: 'You are a creative writing assistant specializing in character-driven narrative refinement.' }
+			},
+			tab3: {
+				suggestSubplots: { name: 'Subplot Design Agent', systemPrompt: 'You are a creative writing assistant specializing in intricate, character-driven narrative development.' }
+			},
+			tab4: {
+				generateNovelOutlines: { name: 'Novel Outline Agent', systemPrompt: 'You are a creative writing assistant specializing in detailed narrative planning.' },
+				generateChapterOutline: { name: 'Chapter Outline Agent', systemPrompt: 'You are a creative writing assistant specializing in detailed narrative planning.' },
+				updateChapterOutline: { name: 'Outline Update Agent', systemPrompt: 'You are a creative writing assistant.' },
+				incorporateOutlineSuggestions: { name: 'Outline Incorporation Agent', systemPrompt: 'You are a creative writing assistant.' }
+			},
+			tab5: {
+				generateChapter: { name: 'Chapter Draft Agent', systemPrompt: 'You are a creative writing assistant specializing in immersive, character-driven narratives with adaptable genre voice.' }
+			},
+			tab6: {
+				updateChapter: { name: 'Chapter Revision Agent', systemPrompt: 'You are a creative writing assistant.' },
+				checkSpellingAndGrammar: { name: 'Spelling & Grammar Agent', systemPrompt: 'You are a grammar and spelling checker.' }
+			},
+			tab7: {
+				suggestBookImprovements: { name: 'Book Critique Agent', systemPrompt: 'You are a literary editor specializing in detailed narrative critique.' },
+				breakdownImprovement: { name: 'Breakdown Agent', systemPrompt: 'You are a literary editor specializing in actionable narrative breakdowns.' }
+			}
+		};
+
+		let promptCatalog = JSON.parse(JSON.stringify(defaultPromptCatalog));
+
+		function getAgentPrompt(tabKey, agentKey, fallbackPrompt) {
+			return promptCatalog?.[tabKey]?.[agentKey]?.systemPrompt || fallbackPrompt;
+		}
+
+		function renderPromptManagerTable() {
+			const body = document.getElementById('promptManagerBody');
+			if (!body) return;
+			body.innerHTML = '';
+			Object.entries(promptCatalog).forEach(([tabKey, agents]) => {
+				Object.entries(agents).forEach(([agentKey, config]) => {
+					const row = document.createElement('tr');
+					row.innerHTML = `
+						<td>${tabKey}</td>
+						<td>${config.name}<br><small>${agentKey}</small></td>
+						<td><textarea data-tab="${tabKey}" data-agent="${agentKey}">${config.systemPrompt}</textarea></td>
+					`;
+					body.appendChild(row);
+				});
+			});
+		}
+
+		function savePromptCatalogFromUI() {
+			const textareas = document.querySelectorAll('#promptManagerBody textarea[data-tab][data-agent]');
+			textareas.forEach(textarea => {
+				const tabKey = textarea.getAttribute('data-tab');
+				const agentKey = textarea.getAttribute('data-agent');
+				if (promptCatalog[tabKey] && promptCatalog[tabKey][agentKey]) {
+					promptCatalog[tabKey][agentKey].systemPrompt = textarea.value;
+				}
+			});
+			alert('Prompt edits saved for this session.');
+		}
+
+		function resetPromptCatalogToDefaults() {
+			promptCatalog = JSON.parse(JSON.stringify(defaultPromptCatalog));
+			renderPromptManagerTable();
+			alert('Prompt catalog reset to defaults.');
+		}
+
+		function exportPromptCatalog() {
+			savePromptCatalogFromUI();
+			const payload = {
+				schemaVersion: '1.0',
+				type: 'NovelWriterPromptCatalog',
+				sourceTool: 'NovelWriter',
+				sourceVersion: APP_VERSION,
+				promptCatalog
+			};
+			const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+			const url = window.URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `NovelWriter-Prompts-${new Date().toISOString().slice(0, 10)}.json`;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			window.URL.revokeObjectURL(url);
+		}
+
+		function importPromptCatalog(event) {
+			const file = event.target.files?.[0];
+			if (!file) return;
+			const reader = new FileReader();
+			reader.onload = function(e) {
+				try {
+					const parsed = JSON.parse(e.target.result);
+					const importedCatalog = parsed?.promptCatalog;
+					if (!importedCatalog || typeof importedCatalog !== 'object') {
+						throw new Error('Invalid prompt catalog format.');
+					}
+					Object.entries(defaultPromptCatalog).forEach(([tabKey, agents]) => {
+						if (!promptCatalog[tabKey]) promptCatalog[tabKey] = {};
+						Object.entries(agents).forEach(([agentKey, fallback]) => {
+							const importedPrompt = importedCatalog?.[tabKey]?.[agentKey]?.systemPrompt;
+							promptCatalog[tabKey][agentKey] = {
+								name: fallback.name,
+								systemPrompt: importedPrompt || fallback.systemPrompt
+							};
+						});
+					});
+					renderPromptManagerTable();
+					alert('Prompt profile imported successfully.');
+				} catch (error) {
+					alert(`Failed to import prompt profile: ${error.message}`);
+				}
+			};
+			reader.readAsText(file);
+		}
+
+		function updateCharacterCounter() {
+			const count = document.querySelectorAll('#characterList .character').length;
+			document.getElementById('characterCounterInfo').textContent = `Character entries: ${count}`;
+		}
+
+		function updateSubplotCounter() {
+			const count = document.querySelectorAll('#subplotList .subplot-section').length;
+			document.getElementById('subplotCounterInfo').textContent = `Subplot entries: ${count}`;
+		}
+
 	    // Initialize the application on page load
 	    document.addEventListener('DOMContentLoaded', () => {
 	        console.log('DOM loaded, showing tab 1');
 	        showTab(1);
 	        updateChapterSubpages();
+			updateCharacterCounter();
+			updateSubplotCounter();
+			renderPromptManagerTable();
 	    });
 
 	    // Show a specific tab and update its content
@@ -376,7 +559,9 @@
 	            showEditChapterSubpage(1);
 	        }
 	        if (tabNum === 7) updateBookTab();
-	        if (tabNum === 8) updateRequestLog();
+	        if (tabNum === 8) populateConsolidatedBreakdowns();
+	        if (tabNum === 9) updateRequestLog();
+			if (tabNum === 11) renderPromptManagerTable();
 	    }
 
 	    // Update the request log display
@@ -396,7 +581,7 @@
 
 
 
-		//This is the main function used to provide prompts and request information from the AI API
+		// This is the main function used to provide prompts and request information from the AI API.
         async function callAI(messages, tabElement, callbackOrOptions = {}, options = {}) {
 		    const apiKey = document.getElementById('apiKey').value;
 		    const model = document.getElementById('model').value;
@@ -404,7 +589,7 @@
 		    const callback = isCallback ? callbackOrOptions : null;
 		    const opts = isCallback ? options : callbackOrOptions;
 		    const maxTokens = opts.max_tokens || parseInt(document.getElementById('maxTokens').value);
-		    const loadingDiv = tabElement.querySelector('#loading');
+		    const loadingDiv = tabElement.querySelector('.loading-indicator');
 
 		    if (!apiKey) {
 		        console.error('API Key is missing');
@@ -423,7 +608,7 @@
 		        });
 		    }
 		    console.log('Attempting API call to:', endpoint, 'Model:', model, 'Max Tokens:', maxTokens, 'Messages:', messages);
-		    loadingDiv.style.display = 'block';
+		    if (loadingDiv) loadingDiv.style.display = 'block';
 
 		    try {
 		        const response = await fetch(endpoint, {
@@ -450,7 +635,7 @@
 		                      jsonResponse.choices[0].message.content : text;
 
 		        // Parse content if it’s JSON
-		        if (adjustedMessages.some(m => typeof m.content === 'string' && m.content.includes('Return as JSON'))) {
+				if (adjustedMessages.some(m => typeof m.content === 'string' && (m.content.includes('Return as JSON') || m.content.includes('Return the response as a JSON')))) {
 		            content = content.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
 		            try {
 		                jsonResponse = JSON.parse(content);
@@ -479,7 +664,7 @@
 		        updateRequestLog();
 		        throw error;
 		    } finally {
-		        loadingDiv.style.display = 'none';
+		        if (loadingDiv) loadingDiv.style.display = 'none';
 		    }
 }
 
@@ -508,11 +693,11 @@
 		    const genre = document.getElementById('genre').value;
 		    const apiKey = document.getElementById('apiKey').value;
 		    const authorSelect = document.getElementById('authorStyle');
-		    const loadingDiv = document.getElementById('tab1').querySelector('#loading');
-		    loadingDiv.style.display = 'block';
+		    const loadingDiv = document.getElementById('tab1').querySelector('.loading-indicator');
+		    if (loadingDiv) loadingDiv.style.display = 'block';
 
 		    const messages = [
-		        { role: 'system', content: 'You are an expert on literature.' },
+		        { role: 'system', content: getAgentPrompt('tab1', 'fetchAuthors', 'You are an expert on literature.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -560,7 +745,7 @@
 		        requestLog.status = 'Completed (Default)';
 		        requestLog.returnedInfo = 'Default authors used due to missing API key.';
 		        updateRequestLog();
-		        loadingDiv.style.display = 'none';
+		        if (loadingDiv) loadingDiv.style.display = 'none';
 		        return;
 		    }
 
@@ -609,7 +794,7 @@
 		        } else {
 		            console.warn('Unexpected response format:', response);
 		            alert('Failed to process authors due to unexpected response format.');
-		            loadingDiv.style.display = 'none';
+		            if (loadingDiv) loadingDiv.style.display = 'none';
 		            return;
 		        }
 
@@ -657,7 +842,7 @@
 		        authorSelect.appendChild(fetchOption);
 		        novelData.authors = [];
 		    }
-		    loadingDiv.style.display = 'none';
+		    if (loadingDiv) loadingDiv.style.display = 'none';
 }
 
 
@@ -675,7 +860,7 @@
 		        return;
 		    }
 		    const messages = [
-		        { role: 'system', content: 'You are an expert on literary styles.' },
+		        { role: 'system', content: getAgentPrompt('tab1', 'fetchStyleGuide', 'You are an expert on literary styles.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -760,7 +945,7 @@
 		async function suggestStoryArc() {
 		    collectData();
 		    const messages = [
-		        { role: 'system', content: 'You are a creative writing assistant specializing in detailed narrative planning.' },
+		        { role: 'system', content: getAgentPrompt('tab1', 'suggestStoryArc', 'You are a creative writing assistant specializing in detailed narrative planning.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -854,7 +1039,7 @@
 		    console.log('suggestGeneralPlot - novelData state:', { genre, title, storyArc, numChapters, authorStyle, styleGuide });
 
 		    const messages = [
-		        { role: 'system', content: 'You are a creative writing assistant specializing in detailed narrative planning.' },
+		        { role: 'system', content: getAgentPrompt('tab1', 'suggestGeneralPlot', 'You are a creative writing assistant specializing in detailed narrative planning.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -942,7 +1127,7 @@
 		async function suggestSetting() {
 		    collectData();
 		    const messages = [
-		        { role: "system", content: "You are a creative writing assistant specializing in immersive world-building." },
+		        { role: "system", content: getAgentPrompt('tab1', 'suggestSetting', 'You are a creative writing assistant specializing in immersive world-building.') },
 		        {
 		            role: "user",
 		            content: [
@@ -1073,7 +1258,7 @@
 		    ];
 
 		    const messages = [
-		        { role: 'system', content: 'You are a creative writing assistant specializing in immersive, character-driven narratives.' },
+		        { role: 'system', content: getAgentPrompt('tab2', 'suggestCharacters', 'You are a creative writing assistant specializing in immersive, character-driven narratives.') },
 		        { role: 'user', content: promptLines.join('\n') }
 		    ];
 		    requestLog.lastPrompt = messages[1].content;
@@ -1154,11 +1339,18 @@
 		            });
 		        }
 
-		        novelData.characters = Array.from(charList.getElementsByClassName('character')).map(c => ({
-		            name: c.querySelector('.charName').value,
-		            backstory: c.querySelector('.charBackstory').value,
-		            arc: c.querySelector('.charArc').value
-		        }));
+		        novelData.characters = Array.from(charList.getElementsByClassName('character')).map((c, i) => {
+		            const existing = novelData.characters[i] || {};
+		            return {
+		                name: c.querySelector('.charName').value,
+		                backstory: c.querySelector('.charBackstory').value,
+		                arc: c.querySelector('.charArc').value,
+		                ...(existing.role !== undefined ? { role: existing.role } : {}),
+		                ...(existing.notes !== undefined ? { notes: existing.notes } : {})
+		            };
+		        });
+				document.getElementById('numCharacters').value = novelData.characters.length || 1;
+				updateCharacterCounter();
 
 		        requestLog.status = 'Completed';
 		        updateRequestLog();
@@ -1220,7 +1412,7 @@
 		    ];
 
 		    const messages = [
-		        { role: 'system', content: 'You are a creative writing assistant specializing in character-driven narrative refinement.' },
+		        { role: 'system', content: getAgentPrompt('tab2', 'refineCharacters', 'You are a creative writing assistant specializing in character-driven narrative refinement.') },
 		        { role: 'user', content: promptLines.join('\n') }
 		    ];
 		    requestLog.lastPrompt = messages[1].content;
@@ -1241,11 +1433,18 @@
 		                div.querySelector('.charArc').value = char.arc;
 		            }
 		        });
-		        novelData.characters = Array.from(charList.getElementsByClassName('character')).map(c => ({
-		            name: c.querySelector('.charName').value,
-		            backstory: c.querySelector('.charBackstory').value,
-		            arc: c.querySelector('.charArc').value
-		        }));
+		        novelData.characters = Array.from(charList.getElementsByClassName('character')).map((c, i) => {
+		            const existing = novelData.characters[i] || {};
+		            return {
+		                name: c.querySelector('.charName').value,
+		                backstory: c.querySelector('.charBackstory').value,
+		                arc: c.querySelector('.charArc').value,
+		                ...(existing.role !== undefined ? { role: existing.role } : {}),
+		                ...(existing.notes !== undefined ? { notes: existing.notes } : {})
+		            };
+		        });
+				document.getElementById('numCharacters').value = novelData.characters.length || 1;
+				updateCharacterCounter();
 		    });
 }
 
@@ -1261,7 +1460,7 @@
 	       console.log('Existing subplots:', existingSubplots.length, 'Min subplots:', minSubplots, 'Num to generate:', numToGenerate);
 
 	       const messages = [
-	           { role: 'system', content: 'You are a creative writing assistant specializing in intricate, character-driven narrative development.' },
+	           { role: 'system', content: getAgentPrompt('tab3', 'suggestSubplots', 'You are a creative writing assistant specializing in intricate, character-driven narrative development.') },
 	           {
 	               role: 'user',
 	               content: [
@@ -1360,6 +1559,8 @@
 	           });
 
 	           novelData.subplots = Array.from(subplotList.getElementsByClassName('subplot')).map(s => s.value);
+			   document.getElementById('minSubplots').value = Array.from(subplotList.getElementsByClassName('subplot-section')).length || 1;
+			   updateSubplotCounter();
 	           console.log('Updated novelData.subplots:', novelData.subplots);
 
 	           requestLog.status = 'Completed';
@@ -1570,7 +1771,7 @@
 		        return;
 		    }
 		    const messages = [
-		        { role: 'system', content: 'You are a grammar and spelling checker.' },
+		        { role: 'system', content: getAgentPrompt('tab6', 'checkSpellingAndGrammar', 'You are a grammar and spelling checker.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -1609,6 +1810,7 @@
 	            .map((chapter, index) => `Chapter ${index + 1}\n\n${chapter}`)
 	            .join('\n\n---\n\n');
 	        bookContent.value = fullBook || 'No chapters generated yet.';
+	        novelData.bookText = fullBook;
 	        console.log('Updated book content:', fullBook);
 	        updateBookImprovementsTable(novelData.bookImprovements.length ? novelData.bookImprovements.join('\n') : '');
 	    }
@@ -1655,7 +1857,7 @@
 			        return;
 			    }
 			    const messages = [
-			        { role: 'system', content: 'You are a literary editor specializing in detailed narrative critique.' },
+			        { role: 'system', content: getAgentPrompt('tab7', 'suggestBookImprovements', 'You are a literary editor specializing in detailed narrative critique.') },
 			        {
 			            role: 'user',
 			            content: [
@@ -1810,6 +2012,15 @@
 			    console.log('Updated improvements table with:', novelData.bookImprovementsWithStatus);
 }
 
+		    // Keep the table status in sync with saved improvement metadata.
+		    function updateImprovementStatus(index, status) {
+			    if (!novelData.bookImprovementsWithStatus[index]) {
+			        return;
+			    }
+			    novelData.bookImprovementsWithStatus[index].status = status;
+			    console.log(`Improvement ${index + 1} status updated to: ${status}`);
+		    }
+
 
 
 
@@ -1839,7 +2050,7 @@
 			            .join('\n\n---\n\n');
 
 			    const messages = [
-			        { role: 'system', content: 'You are a literary editor specializing in actionable narrative breakdowns.' },
+			        { role: 'system', content: getAgentPrompt('tab7', 'breakdownImprovement', 'You are a literary editor specializing in actionable narrative breakdowns.') },
 			        {
 			            role: 'user',
 			            content: [
@@ -2166,7 +2377,17 @@
 			    output += `requestStatus: ${document.getElementById('requestStatus')?.textContent || ''}\n\n`;
 			    output += `returnedInfo: ${document.getElementById('returnedInfo')?.textContent || ''}\n\n`;
 			    output += `tokenUsage: ${document.getElementById('tokenUsage')?.textContent || ''}\n\n`;
-			    output += `cost: ${document.getElementById('cost')?.textContent || ''}\n`;
+			    output += `cost: ${document.getElementById('cost')?.textContent || ''}\n\n`;
+
+				// Tab 11: Agent Prompts
+				output += 'Tab 11: Agent Prompts\n';
+				Object.entries(promptCatalog).forEach(([tabKey, agents]) => {
+					output += `${tabKey}:\n`;
+					Object.entries(agents).forEach(([agentKey, config]) => {
+						output += `  ${config.name} (${agentKey}): ${config.systemPrompt}\n`;
+					});
+					output += '\n';
+				});
 
 			    document.getElementById('elementValues').value = output;
 }
@@ -2186,7 +2407,7 @@
 			    }
 			    novelData.outlineImprovements = improvements;
 			    const messages = [
-			        { role: 'system', content: 'You are a creative writing assistant.' },
+			        { role: 'system', content: getAgentPrompt('tab4', 'incorporateOutlineSuggestions', 'You are a creative writing assistant.') },
 			        {
 			            role: 'user',
 			            content: [
@@ -2222,7 +2443,7 @@
 
 
 
-		    // Export the entire session as JSON
+		    // Export the entire session as JSON using the shared schema envelope.
 			function exportSession() {
 			    collectData();
 			    const tableBody = document.getElementById('improvementsTableBody');
@@ -2240,9 +2461,28 @@
 			            breakdown: existingBreakdown
 			        };
 			    });
-			    const sessionData = {
-			        novelData: novelData,
-			        requestLog: requestLog
+			    // Build clean novelData: exclude sensitive and operational fields not part of the shared schema
+		    const {
+		        apiKey: _apiKey,
+		        model: _model,
+		        maxTokens: _maxTokens,
+		        authors: _authors,
+		        bookImprovements: _bookImprovements,
+		        chapterImprovements: _chapterImprovements,
+		        novelOutline: _novelOutline,
+		        plotOutline: _plotOutline,
+		        storyArcOutline: _storyArcOutline,
+		        ...exportableNovelData
+		    } = novelData;
+		    const sessionData = {
+			        schemaVersion: '1.0',
+			        sourceTool: 'NovelWriter',
+			        sourceVersion: APP_VERSION,
+			        exportedAt: new Date().toISOString(),
+			        novelData: {
+			            ...exportableNovelData,
+			            requestLog: { ...requestLog }
+			        }
 			    };
 			    const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json;charset=utf-8' });
 			    const url = window.URL.createObjectURL(blob);
@@ -2253,14 +2493,69 @@
 			    a.click();
 			    document.body.removeChild(a);
 			    window.URL.revokeObjectURL(url);
-			    console.log('Exported session as JSON file with improvements, statuses, and breakdowns');
+			    console.log('Exported schema-aligned session JSON with improvements, statuses, and breakdowns');
 }
 
 
 
 
 
-        // Import a session from a JSON file
+		// Validate and normalize incoming session payloads.
+		function normalizeImportedSessionData(rawData) {
+		    const warnings = [];
+		    const isSchemaEnvelope = rawData && typeof rawData === 'object' && rawData.schemaVersion === '1.0' && rawData.novelData && typeof rawData.novelData === 'object';
+		    const isLegacyEnvelope = rawData && typeof rawData === 'object' && rawData.novelData && typeof rawData.novelData === 'object';
+		    const isBareLegacy = rawData && typeof rawData === 'object' && typeof rawData.genre === 'string' && Array.isArray(rawData.chapters);
+
+		    if (!isSchemaEnvelope && !isLegacyEnvelope && !isBareLegacy) {
+		        throw new Error('Unsupported session format. Expected shared schema v1.0 or legacy NovelWriter export.');
+		    }
+
+		    let normalizedNovelData;
+		    let normalizedRequestLog;
+		    let importMode;
+
+		    if (isSchemaEnvelope) {
+		        normalizedNovelData = rawData.novelData;
+		        normalizedRequestLog = rawData.requestLog || rawData.novelData.requestLog || requestLog;
+		        importMode = 'strict-schema';
+		    } else if (isLegacyEnvelope) {
+		        normalizedNovelData = rawData.novelData;
+		        normalizedRequestLog = rawData.requestLog || rawData.novelData.requestLog || requestLog;
+		        importMode = 'legacy-envelope';
+		        warnings.push('Imported legacy NovelWriter envelope; migrated to current in-memory schema.');
+		    } else {
+		        normalizedNovelData = rawData;
+		        normalizedRequestLog = rawData.requestLog || requestLog;
+		        importMode = 'legacy-bare';
+		        warnings.push('Imported legacy bare NovelWriter data; migrated to current in-memory schema.');
+		    }
+
+		    return {
+		        novelData: {
+		            ...novelData,
+		            ...normalizedNovelData,
+		            authors: Array.isArray(normalizedNovelData.authors) ? normalizedNovelData.authors : [],
+		            characters: Array.isArray(normalizedNovelData.characters) ? normalizedNovelData.characters : [],
+		            subplots: Array.isArray(normalizedNovelData.subplots) ? normalizedNovelData.subplots : [],
+		            chapterOutlines: Array.isArray(normalizedNovelData.chapterOutlines) ? normalizedNovelData.chapterOutlines : [],
+		            chapterArcs: Array.isArray(normalizedNovelData.chapterArcs) ? normalizedNovelData.chapterArcs : [],
+		            chapters: Array.isArray(normalizedNovelData.chapters) ? normalizedNovelData.chapters : [],
+		            editedChapters: Array.isArray(normalizedNovelData.editedChapters) ? normalizedNovelData.editedChapters : [],
+		            bookImprovements: Array.isArray(normalizedNovelData.bookImprovements) ? normalizedNovelData.bookImprovements : [],
+		            bookImprovementsWithStatus: Array.isArray(normalizedNovelData.bookImprovementsWithStatus) ? normalizedNovelData.bookImprovementsWithStatus : [],
+		            chapterImprovements: Array.isArray(normalizedNovelData.chapterImprovements) ? normalizedNovelData.chapterImprovements : []
+		        },
+		        requestLog: {
+		            ...requestLog,
+		            ...normalizedRequestLog
+		        },
+		        importMode,
+		        warnings
+		    };
+		}
+
+        // Import a session from a JSON file.
 	    function importSession(event) {
 		    const file = event.target.files[0];
 		    if (!file) return;
@@ -2268,9 +2563,10 @@
 		    const reader = new FileReader();
 		    reader.onload = function(e) {
 		        try {
-		            const sessionData = JSON.parse(e.target.result);
-		            novelData = sessionData.novelData || novelData;
-		            requestLog = sessionData.requestLog || requestLog;
+		            const rawSessionData = JSON.parse(e.target.result);
+		            const { novelData: importedNovelData, requestLog: importedRequestLog, importMode, warnings } = normalizeImportedSessionData(rawSessionData);
+		            novelData = importedNovelData;
+		            requestLog = importedRequestLog;
 
 		            document.getElementById('apiKey').value = novelData.apiKey || '';
 		            document.getElementById('model').value = novelData.model || 'grok-4.20-0309-reasoning';
@@ -2284,7 +2580,7 @@
 		                option.textContent = author.name;
 		                authorSelect.appendChild(option);
 		            });
-		            novelData.authors.forEach(author => {
+		            (novelData.authors || []).forEach(author => {
 		                if (!Object.values(defaultAuthors).some(d => d.name === author.name)) {
 		                    const option = document.createElement('option');
 		                    option.value = author.value;
@@ -2307,7 +2603,7 @@
 
 		            const charList = document.getElementById('characterList');
 		            charList.innerHTML = '';
-		            novelData.characters.forEach(char => {
+		            (novelData.characters || []).forEach(char => {
 		                const div = document.createElement('div');
 		                div.className = 'character';
 		                div.innerHTML = `
@@ -2318,11 +2614,12 @@
 		                charList.appendChild(div);
 		            });
 		            // Set numCharacters to match imported character count
-		            document.getElementById('numCharacters').value = novelData.characters.length || 3;
+		            document.getElementById('numCharacters').value = (novelData.characters || []).length || 3;
+					updateCharacterCounter();
 
 		            const subplotList = document.getElementById('subplotList');
 		            subplotList.innerHTML = '';
-		            novelData.subplots.forEach((subplot, index) => {
+		            (novelData.subplots || []).forEach((subplot, index) => {
 		                const subplotDiv = document.createElement('div');
 		                subplotDiv.className = 'subplot-section';
 		                subplotDiv.innerHTML = `
@@ -2331,6 +2628,8 @@
 		                `;
 		                subplotList.appendChild(subplotDiv);
 		            });
+					document.getElementById('minSubplots').value = (novelData.subplots || []).length || 1;
+					updateSubplotCounter();
 
 		            document.getElementById('novelOutline').value = novelData.novelOutline || '';
 		            document.getElementById('plotOutline').value = novelData.plotOutline || '';
@@ -2356,12 +2655,17 @@
 		            updateRequestLog();
 		            updateBookTab();
 
-		            console.log('Imported session successfully');
-		            alert('Session imported successfully!');
+		            if (warnings.length > 0) {
+		                console.warn('Import completed with warnings:', warnings);
+		            }
+		            console.log(`Imported session successfully (${importMode})`);
+		            alert(`Session imported successfully (${importMode}).${warnings.length ? '\nWarnings:\n- ' + warnings.join('\n- ') : ''}`);
 		        } catch (error) {
 		            console.error('Failed to import session:', error);
 		            if (error instanceof SyntaxError) {
 		                alert('Failed to import session: Invalid JSON file');
+		            } else if (error.message && error.message.includes('Unsupported session format')) {
+		                alert(`Failed to import session: ${error.message}`);
 		            } else {
 		                console.log('Non-critical import error, data still loaded:', error);
 		                alert('Session imported with minor issues. Check console for details.');
@@ -2392,7 +2696,7 @@
 		    });
 
 		    const messages = [
-		        { role: 'system', content: 'You are a creative writing assistant specializing in detailed narrative planning.' },
+		        { role: 'system', content: getAgentPrompt('tab4', 'generateNovelOutlines', 'You are a creative writing assistant specializing in detailed narrative planning.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -2520,7 +2824,7 @@
 		    });
 
 		    const messages = [
-		        { role: 'system', content: 'You are a creative writing assistant specializing in detailed narrative planning.' },
+		        { role: 'system', content: getAgentPrompt('tab4', 'generateChapterOutline', 'You are a creative writing assistant specializing in detailed narrative planning.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -2660,7 +2964,7 @@
 		    const styleGuide = novelData.styleGuide || defaultAuthors["nealstephenson"].styleGuide;
 
 		    const messages = [
-		        { role: "system", content: "You are a creative writing assistant." },
+		        { role: "system", content: getAgentPrompt('tab4', 'updateChapterOutline', 'You are a creative writing assistant.') },
 		        {
 		            role: "user",
 		            content: [
@@ -2727,7 +3031,7 @@
 
 		    // Part 1
 		    const messagesPart1 = [
-		        { role: 'system', content: `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.` },
+			    { role: 'system', content: getAgentPrompt('tab5', 'generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
 		        {
 		            role: 'user',
 		            content: [
@@ -2792,7 +3096,7 @@
 
 		    // Part 2
 			const messagesPart2 = [
-			    { role: 'system', content: `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.` },
+			    { role: 'system', content: getAgentPrompt('tab5', 'generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
 			    {
 			        role: 'user',
 			        content: [
@@ -2895,7 +3199,7 @@
 		    novelData.chapterImprovements[chapterNum-1] = improvements;
 
 		    const messages = [
-		        { role: 'system', content: 'You are a creative writing assistant.' },
+		        { role: 'system', content: getAgentPrompt('tab6', 'updateChapter', 'You are a creative writing assistant.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -2947,7 +3251,7 @@
 	    async function suggestStoryInfo() {
 		    collectData();
 		    const messages = [
-		        { role: 'system', content: 'You are a creative writing assistant specializing in immersive, thematic narratives.' },
+		        { role: 'system', content: getAgentPrompt('tab1', 'suggestStoryInfo', 'You are a creative writing assistant specializing in immersive, thematic narratives.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -3008,6 +3312,9 @@
 		        <label>Arc:</label><textarea class="charArc" placeholder="e.g., development path"></textarea>
 		    `;
 		    charList.appendChild(div);
+			const numCharactersInput = document.getElementById('numCharacters');
+			numCharactersInput.value = String((parseInt(numCharactersInput.value || '0', 10) || 0) + 1);
+			updateCharacterCounter();
 }
 
 		//addSubplot
@@ -3021,12 +3328,18 @@
 		        <textarea class="subplot" placeholder="e.g., a hidden conspiracy" style="height: 300px;"></textarea>
 		    `;
 		    subplotList.appendChild(div);
+			const minSubplotsInput = document.getElementById('minSubplots');
+			minSubplotsInput.value = String((parseInt(minSubplotsInput.value || '0', 10) || 0) + 1);
+			updateSubplotCounter();
 }
 
 
 
 	   // Collect data from all tabs into novelData
 	   function collectData() {
+	       novelData.apiKey = document.getElementById('apiKey').value;
+	       novelData.model = document.getElementById('model').value;
+	       novelData.maxTokens = parseInt(document.getElementById('maxTokens').value);
 	       novelData.genre = document.getElementById('genre').value;
 	       novelData.title = document.getElementById('title').value;
 	       novelData.storyArc = document.getElementById('storyArc').value;
@@ -3036,11 +3349,16 @@
 	       novelData.chapterLength = parseInt(document.getElementById('chapterLength').value);
 	       novelData.authorStyle = document.getElementById('authorStyle').value;
 	       novelData.styleGuide = document.getElementById('styleGuide').value;
-	       novelData.characters = Array.from(document.getElementsByClassName('character')).map(c => ({
-	           name: c.querySelector('.charName').value,
-	           backstory: c.querySelector('.charBackstory').value,
-	           arc: c.querySelector('.charArc').value
-	       }));
+	       novelData.characters = Array.from(document.getElementsByClassName('character')).map((c, i) => {
+	           const existing = novelData.characters[i] || {};
+	           return {
+	               name: c.querySelector('.charName').value,
+	               backstory: c.querySelector('.charBackstory').value,
+	               arc: c.querySelector('.charArc').value,
+	               ...(existing.role !== undefined ? { role: existing.role } : {}),
+	               ...(existing.notes !== undefined ? { notes: existing.notes } : {})
+	           };
+	       });
 	       novelData.subplots = Array.from(document.getElementsByClassName('subplot')).map(s => s.value);
 	       novelData.novelOutline = document.getElementById('novelOutline').value;
 	       novelData.plotOutline = document.getElementById('plotOutline').value;
@@ -3074,6 +3392,14 @@
 	           const imp = document.getElementById(`chapterImprovement${i+1}`);
 	           return imp ? imp.value : novelData.chapterImprovements[i] || '';
 	       });
+	       const fullBook = novelData.chapters
+	           .filter(chapter => chapter.trim() !== '')
+	           .map((chapter, index) => `Chapter ${index + 1}\n\n${chapter}`)
+	           .join('\n\n---\n\n');
+	       novelData.bookText = fullBook;
+	       novelData.editedChapters = [...novelData.chapters];
+		   updateCharacterCounter();
+		   updateSubplotCounter();
 		}
 
 
@@ -3087,11 +3413,13 @@
 		// Reset state for tests with real API setup
 		function resetState() {
 		    novelData = {
+		        apiKey: '', model: 'grok-4.20-0309-reasoning', maxTokens: 6000,
 		        genre: 'scifi', title: '', storyArc: '', generalPlot: '', setting: '',
 		        numChapters: 10, chapterLength: 2000, authorStyle: '', styleGuide: '',
 		        authors: [], characters: [], subplots: [], novelOutline: '', plotOutline: '',
 		        storyArcOutline: '', chapterOutlines: [], chapterArcs: [], chapters: [],
-		        bookImprovements: [], outlineImprovements: '', chapterImprovements: []
+		        editedChapters: [], bookText: '', bookImprovements: [], bookImprovementsWithStatus: [],
+		        outlineImprovements: '', chapterImprovements: []
 		    };
 		    requestLog = { lastPrompt: 'No requests made yet.', status: 'Idle', returnedInfo: 'No response yet.', tokenUsage: 'Not available', cost: 'Not available', originTab: null };
 		    document.getElementById('apiKey').value = localStorage.getItem('xaiApiKey') || '';
@@ -3108,6 +3436,9 @@
 		    document.getElementById('chapterLength').value = '2000';
 		    document.getElementById('characterList').innerHTML = '<div class="character"><label>Name:</label><input type="text" class="charName"><label>Backstory:</label><textarea class="charBackstory"></textarea><label>Arc:</label><textarea class="charArc"></textarea></div>';
 		    document.getElementById('subplotList').innerHTML = '<div class="subplot-section"><label>Subplot 1:</label><textarea class="subplot" style="height: 300px;"></textarea></div>';
+			document.getElementById('numCharacters').value = '10';
+			document.getElementById('minSubplots').value = '5';
+			document.getElementById('numChapters').value = '15';
 
 		    // Prompt for API key if not set
 		    if (!document.getElementById('apiKey').value) {
@@ -3120,6 +3451,8 @@
 		        }
 		    }
 		    updateChapterSubpages(); // Ensure chapter subpages are initialized
+			updateCharacterCounter();
+			updateSubplotCounter();
 		}
 
 		// Utility to log test results
@@ -3141,9 +3474,22 @@
 		        logTest("Tab1", "fetchAuthors", false, `Failed: ${e.message}`);
 		    }
 
+			try {
+				const authorSelect = document.getElementById('authorStyle');
+				const nonDefaultFetchedOption = Array.from(authorSelect.options).find(opt => opt.value && !defaultAuthors[opt.value]);
+				if (nonDefaultFetchedOption) {
+					authorSelect.value = nonDefaultFetchedOption.value;
+				} else {
+					authorSelect.value = 'nealstephenson';
+				}
+				console.assert(authorSelect.value !== '', 'Fetched or fallback author should be selected');
+				logTest("Tab1", "selectFetchedAuthor", authorSelect.value !== '', `Selected author: ${authorSelect.value}`);
+			} catch (e) {
+				logTest("Tab1", "selectFetchedAuthor", false, `Failed: ${e.message}`);
+			}
+
 		    // fetchStyleGuide
 		    try {
-		        document.getElementById('authorStyle').value = 'nealstephenson';
 		        await fetchStyleGuide();
 		        console.assert(document.getElementById('styleGuide').value.length > 50, "fetchStyleGuide should set a detailed style guide");
 		        logTest("Tab1", "fetchStyleGuide", document.getElementById('styleGuide').value.length > 50, "Style guide fetched");
@@ -3185,29 +3531,6 @@
 		        logTest("Tab1", "suggestStoryInfo", novelData.title && novelData.storyArc && novelData.generalPlot && novelData.setting && novelData.styleGuide, "Story info suggested");
 		    } catch (e) {
 		        logTest("Tab1", "suggestStoryInfo", false, `Failed: ${e.message}`);
-		    }
-
-		    // exportSession
-		    try {
-		        exportSession();
-		        console.assert(true, "exportSession should execute without error");
-		        logTest("Tab1", "exportSession", true, "Session exported");
-		    } catch (e) {
-		        logTest("Tab1", "exportSession", false, `Failed: ${e.message}`);
-		    }
-
-		    // importSession
-		    try {
-		        const mockFile = { content: JSON.stringify({ novelData: { title: "Imported" }, requestLog: { status: "Imported" } }) };
-		        const mockEvent = { target: { files: [mockFile] } };
-		        const originalReadAsText = FileReader.prototype.readAsText;
-		        FileReader.prototype.readAsText = function(file) { this.onload({ target: { result: file.content } }); };
-		        await importSession(mockEvent);
-		        console.assert(novelData.title === "Imported" && requestLog.status === "Imported", "importSession should load data");
-		        logTest("Tab1", "importSession", novelData.title === "Imported" && requestLog.status === "Imported", "Session imported");
-		        FileReader.prototype.readAsText = originalReadAsText;
-		    } catch (e) {
-		        logTest("Tab1", "importSession", false, `Failed: ${e.message}`);
 		    }
 
 		    console.groupEnd();
@@ -3526,11 +3849,138 @@
 		    console.groupEnd();
 		}
 
+		// Test Session export/import at the end of workflow
+		async function testSessionRoundtripMock() {
+		    console.group("Session Roundtrip Tests");
+		    try {
+		        const snapshot = {
+		            schemaVersion: '1.0',
+		            sourceTool: 'NovelWriter',
+		            sourceVersion: APP_VERSION,
+		            novelData: {
+		                ...novelData,
+		                title: 'Imported Session Smoke',
+		                requestLog: { ...requestLog, status: 'Imported' }
+		            },
+		            requestLog: { ...requestLog, status: 'Imported' }
+		        };
+		        const mockFile = { content: JSON.stringify(snapshot) };
+		        const mockEvent = { target: { files: [mockFile] } };
+		        const originalReadAsText = FileReader.prototype.readAsText;
+		        FileReader.prototype.readAsText = function(file) { this.onload({ target: { result: file.content } }); };
+		        await importSession(mockEvent);
+		        FileReader.prototype.readAsText = originalReadAsText;
+		        const imported = novelData.title === 'Imported Session Smoke' && requestLog.status === 'Imported';
+		        console.assert(imported, 'Session mock import should load schema envelope values');
+		        logTest("Session", "importSession", imported, 'Session imported from schema envelope');
+		    } catch (e) {
+		        logTest("Session", "importSession", false, `Failed: ${e.message}`);
+		    }
+
+		    try {
+		        exportSession();
+		        logTest("Session", "exportSession", true, "Session exported at end of run");
+		    } catch (e) {
+		        logTest("Session", "exportSession", false, `Failed: ${e.message}`);
+		    }
+		    console.groupEnd();
+		}
+
+		// Test advanced user workflow with non-default complexity and tab interaction order.
+		async function testAdvancedWorkflow() {
+		    console.group("Advanced Workflow Tests");
+		    resetState();
+		    document.getElementById('title').value = `Smoke Test Novel ${new Date().toISOString().slice(0, 10)}`;
+		    document.getElementById('numChapters').value = '15';
+		    document.getElementById('numCharacters').value = '10';
+		    document.getElementById('minSubplots').value = '5';
+		    updateChapterSubpages();
+
+		    try {
+		        await fetchAuthors();
+		        const authorSelect = document.getElementById('authorStyle');
+		        const fetched = Array.from(authorSelect.options).find(opt => opt.value && !defaultAuthors[opt.value]);
+		        authorSelect.value = fetched ? fetched.value : 'nealstephenson';
+		        await fetchStyleGuide();
+		        await suggestStoryInfo();
+		        logTest("Workflow", "tab1Setup", true, `Author selected: ${authorSelect.value}`);
+		    } catch (e) {
+		        logTest("Workflow", "tab1Setup", false, `Failed: ${e.message}`);
+		    }
+
+		    try {
+		        addCharacter();
+		        const characterEntries = document.querySelectorAll('#characterList .character').length;
+		        const numCharacters = parseInt(document.getElementById('numCharacters').value, 10);
+		        console.assert(numCharacters >= characterEntries, 'Character counter should track added entries');
+		        await suggestCharacters();
+		        logTest("Workflow", "characters", true, `Character entries: ${document.querySelectorAll('#characterList .character').length}`);
+		    } catch (e) {
+		        logTest("Workflow", "characters", false, `Failed: ${e.message}`);
+		    }
+
+		    try {
+		        addSubplot();
+		        const subplotEntries = document.querySelectorAll('#subplotList .subplot-section').length;
+		        const minSubplots = parseInt(document.getElementById('minSubplots').value, 10);
+		        console.assert(minSubplots >= subplotEntries, 'Subplot counter should track added entries');
+		        await suggestSubplots();
+		        await refineCharacters();
+		        logTest("Workflow", "subplotsAndRefine", true, `Subplot entries: ${document.querySelectorAll('#subplotList .subplot-section').length}`);
+		    } catch (e) {
+		        logTest("Workflow", "subplotsAndRefine", false, `Failed: ${e.message}`);
+		    }
+
+		    try {
+		        await generateNovelOutlines();
+		        document.getElementById('outlineImprovements').value = 'Increase chapter-level urgency and reduce repetitive atmospheric descriptions.';
+		        await incorporateOutlineSuggestions();
+		        await generateChapterOutline(1);
+		        document.getElementById('chapterImprovement1').value = 'Add stronger transition into the central conflict and clarify scene objective.';
+		        await updateChapterOutline(1);
+		        logTest("Workflow", "outlines", true, 'Outlines and improvements applied');
+		    } catch (e) {
+		        logTest("Workflow", "outlines", false, `Failed: ${e.message}`);
+		    }
+
+		    try {
+		        await generateChapter(1);
+		        document.getElementById('chapterEditImprovement1').value = 'Tighten pacing and improve dialogue continuity.';
+		        await updateChapter(1);
+		        await checkSpellingAndGrammar(1, 'edit');
+		        logTest("Workflow", "chapterGenerationEdit", true, 'Chapter generated, edited, and grammar checked');
+		    } catch (e) {
+		        logTest("Workflow", "chapterGenerationEdit", false, `Failed: ${e.message}`);
+		    }
+
+		    try {
+		        showTab(7);
+		        await suggestBookImprovements();
+		        const selects = Array.from(document.querySelectorAll('#improvementsTableBody select'));
+		        if (selects.length > 0) selects[0].value = 'To Incorporate';
+		        if (selects.length > 1) selects[1].value = 'Ignored';
+		        if (selects.length > 2) selects[2].value = 'Incorporated';
+		        selects.forEach((select, index) => updateImprovementStatus(index, select.value));
+		        const firstToIncorporateIndex = novelData.bookImprovementsWithStatus.findIndex(item => item.status === 'To Incorporate');
+		        if (firstToIncorporateIndex >= 0) {
+		            await breakdownImprovement(firstToIncorporateIndex);
+		        }
+		        populateConsolidatedBreakdowns();
+		        showTab(10);
+		        displayElementValues();
+		        logTest("Workflow", "bookAndBreakdowns", true, 'Book improvements, mixed statuses, breakdown, and element values executed');
+		    } catch (e) {
+		        logTest("Workflow", "bookAndBreakdowns", false, `Failed: ${e.message}`);
+		    }
+		    console.groupEnd();
+		}
+
 		// Full Regression Test
 		async function runFullRegression() {
 		    console.group("Running Full Regression Test with Real API Calls");
 		    console.warn("Note: This test uses real API calls and requires a valid xAI API key. It may take longer and incur API usage costs.");
 		    await testTab1();
+			await testAdvancedWorkflow();
 		    await testCharacters();
 		    await testSubplots();
 		    await testOutlines();
@@ -3540,6 +3990,7 @@
 		    await testRequestLog();
 		    await testNavigation();
 		    await testUtilities();
+			await testSessionRoundtripMock();
 		    console.groupEnd();
 		    console.log("Regression Test Complete");
 		}
@@ -3547,6 +3998,8 @@
 		// Export test functions for individual runs
 		window.regressionTests = {
 		    runFull: runFullRegression,
+			advancedWorkflow: testAdvancedWorkflow,
+			sessionRoundtrip: testSessionRoundtripMock,
 		    tab1: testTab1,
 		    characters: testCharacters,
 		    subplots: testSubplots,
@@ -3562,7 +4015,7 @@
 		/*
 		 * Instructions for Running Automated Tests via Console
 		 *
-		 * These tests are designed to verify the functionality of Novel Writer 0.3.3 by interacting with the real xAI API.
+		 * These tests are designed to verify the functionality of Novel Writer 0.3.4 by interacting with the real xAI API.
 		 * They can be executed through the browser's developer console (e.g., Chrome DevTools).
 		 *
 		 * Prerequisites:
@@ -3616,5 +4069,6 @@
 
 	</body>
 </html>
+
 
 

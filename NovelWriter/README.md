@@ -13,6 +13,10 @@ A comprehensive AI-assisted novel writing tool that guides you through the entir
 - **Book Assembly**: Combine all chapters into a complete novel
 - **Style Guide**: Maintain consistent writing style throughout your work
 - **Request Logging**: Track all AI interactions and API usage
+- **Shared Schema Export**: Session exports include `schemaVersion`, `sourceTool`, and `sourceVersion` metadata for cross-tool compatibility
+- **Hybrid Import Validation**: Supports strict shared-schema imports and best-effort migration for legacy NovelWriter session files
+- **Agent Prompt Manager (Tab 11)**: Edit system prompts by tab/agent and import/export prompt profiles independently of session files
+- **Counter Synchronization**: Character and subplot counters now stay aligned when adding entries, importing sessions, and running AI generation
 
 ## Usage
 
@@ -21,6 +25,19 @@ A comprehensive AI-assisted novel writing tool that guides you through the entir
 3. Configure your story basics (genre, author style, etc.)
 4. Work through each tab in order to build your novel
 5. Use the Help button to access the detailed user guide
+
+## Regression Workflow Guidance
+
+Use the advanced workflow regression path for realistic smoke testing:
+
+1. Set a unique title (for example, `Smoke Test Novel YYYY-MM-DD`)
+2. Use non-default complexity values (`numChapters`, `numCharacters`, `minSubplots`)
+3. Fetch authors and select a fetched author where available
+4. Fetch style guide, run AI suggest on tab 1, then continue left-to-right
+5. Exercise add-character/add-subplot, refine-with-subplots, outline incorporation, chapter edit improvements, and spelling/grammar
+6. Apply mixed book improvement statuses before breakdown and consolidated breakdown checks
+7. Exercise element values
+8. Export/import session only near the end of the run
 
 ## Requirements
 
@@ -35,4 +52,4 @@ A comprehensive AI-assisted novel writing tool that guides you through the entir
 
 ## Version
 
-Current version: 0.3.3
+Current version: 0.3.4

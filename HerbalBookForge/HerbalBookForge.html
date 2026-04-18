@@ -24,15 +24,35 @@
 </head>
 <body class="herbal-bg text-emerald-100 min-h-screen font-sans">
 
+    <!--
+    EXECUTIVE OVERVIEW (HBF1)
+    HerbalBookForge SHALL be a single-file browser-based AI-assisted authoring toolchain for creating high-quality, trustworthy herbal medicine books (200–300 paperback pages) on herbs such as Yarrow, Prickly/Wild/Opium Lettuce, Comfrey, Calendula, and Arnica.
+    The User SHALL be a person writing/editing the herbal book with strict human-in-the-loop control so the final book is accurate and free of AI slop.
+    The Developer SHALL vibe-code the app iteratively.
+    Four internal herbal-medicine expert agents SHALL be defined inside the app with specialized prompts: Book Goals Agent, Outliner/Structurer, Drafter, Safety & Accuracy Checker.
+    Every relevant API call SHALL include BOTH collections_search (default collection_840cb08d-163e-430a-a1aa-dd65b500e9bb) and web_search.
+    All functionality SHALL be traceable via numbered SHALL requirements embedded as comments with version/date tracking.
+    Version: 0.9.5 | Date: 2026-04-17
+    -->
+
+    <!-- TOP-LEVEL REQUIREMENTS -->
+    <!-- HBF1: HerbalBookForge SHALL be a single standalone HTML file with Tailwind dark herbal theme and tab navigation. -->
+    <!-- HBF2: The app SHALL enforce strict separation: Developer = vibe-coder; Internal agents = strictly herbal experts only. -->
+    <!-- HBF3: Every tab SHALL contain its own requirements as comments using [noun] SHALL [verb] format with unique IDs. -->
+    <!-- HBF4: Generic shared script SHALL be in one dedicated section at the bottom. -->
+    <!-- HBF5: Prompts Editor tab SHALL allow editing of base prompts for all four agents with defaults loaded. -->
+    <!-- HBF6: Change management SHALL be tracked with version/date annotations next to every implemented requirement. -->
+    <!-- HBF7: Every user-visible feature and non-trivial workflow function SHALL map to at least one numbered SHALL requirement comment. -->
+    <!-- HBF8: Each implemented user-visible or state-mutating function SHALL be traceable to at least one requirement ID in its tab or generic section. -->
+
     <!-- HEADER -->
     <header class="border-b border-emerald-800 bg-black/30 backdrop-blur-md sticky top-0 z-50">
         <div class="max-w-screen-2xl mx-auto px-8 py-5 flex items-center justify-between">
             <div class="flex items-center gap-x-3">
                 <div class="w-9 h-9 bg-emerald-500 rounded-2xl flex items-center justify-center text-2xl shadow-inner">🌿</div>
                 <h1 class="text-3xl font-semibold tracking-[-1px] section-header">HerbalBookForge</h1>
-                <span class="px-3 py-0.5 text-xs font-medium bg-emerald-600/30 text-emerald-300 rounded-3xl border border-emerald-400/30">v0.9.3</span>
+                <span class="px-3 py-0.5 text-xs font-medium bg-emerald-600/30 text-emerald-300 rounded-3xl border border-emerald-400/30">v0.9.5</span>
             </div>
-
             <nav class="flex items-center gap-x-1.5 overflow-x-auto hide-scrollbar">
                 <button onclick="switchTab('setup')" id="tab-setup" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">⚙️ Setup</button>
                 <button onclick="switchTab('goals')" id="tab-goals" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">🎯 Book Goals</button>
@@ -43,7 +63,6 @@
                 <button onclick="switchTab('safety')" id="tab-safety" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">🛡️ Safety</button>
                 <button onclick="switchTab('preview')" id="tab-preview" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">📕 Preview</button>
             </nav>
-
             <div class="flex items-center gap-x-4">
                 <button onclick="exportProject()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm font-medium shadow-inner">↓ Export</button>
                 <label onclick="document.getElementById('import-file').click()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-800 hover:bg-emerald-700 rounded-3xl text-sm font-medium cursor-pointer shadow-inner">↑ Import</label>
@@ -56,8 +75,18 @@
 
     <main class="max-w-screen-2xl mx-auto px-8 py-8">
 
-        <!-- SETUP TAB – API Key now has Show/Hide toggle -->
+        <!-- SETUP TAB -->
         <div id="content-setup" class="tab-content">
+            <!-- HBF.SU1: The Setup Tab SHALL include functionality to input the Grok API key with Show/Hide toggle. -->
+            <!-- HBF.SU2: The Setup Tab SHALL allow selection of any Grok model (default: grok-4.20-0309-reasoning). -->
+            <!-- HBF.SU3: The Setup Tab SHALL have pre-filled Collection ID and web_search toggle. -->
+            <!-- HBF.SU4: All setup changes SHALL auto-save to localStorage with versioned key. -->
+            <!-- HBF.SU5: The Setup Tab SHALL allow editing project title and SHALL display version and last-edited timestamp. -->
+            <!-- HBF.SU6: The app SHALL support export and import of full session state JSON from header controls. -->
+            <!-- HBF.SU7: The app SHALL support one-click backup export of the current HTML document. -->
+            <!-- HBF.SU8: The Setup Tab SHALL display save status and SHALL include a manual force-save action. -->
+            <!-- Implemented: v0.9.3 | Updated: v0.9.5 | Date: 2026-04-17 -->
+
             <div class="max-w-4xl mx-auto">
                 <div class="mb-10">
                     <h2 class="text-4xl font-semibold tracking-tight section-header">Project Setup</h2>
@@ -75,7 +104,7 @@
                                 <div class="grid grid-cols-2 gap-6">
                                     <div>
                                         <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Version</label>
-                                        <div id="project-version-display" class="bg-black/40 border border-emerald-700 rounded-2xl px-6 py-4 font-mono">v0.9.3</div>
+                                        <div id="project-version-display" class="bg-black/40 border border-emerald-700 rounded-2xl px-6 py-4 font-mono">v0.9.5</div>
                                     </div>
                                     <div>
                                         <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Last Edited</label>
@@ -92,8 +121,7 @@
                                     <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Grok API Key</label>
                                     <div class="relative">
                                         <input id="api-key" type="password" class="w-full bg-black/40 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-6 py-4 text-lg" placeholder="gsk_...">
-                                        <button onclick="toggleApiKeyVisibility()" id="api-key-toggle"
-                                                class="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-emerald-300 text-sm font-medium">SHOW</button>
+                                        <button onclick="toggleApiKeyVisibility()" id="api-key-toggle" class="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-emerald-300 text-sm font-medium">SHOW</button>
                                     </div>
                                 </div>
                                 <div>
@@ -136,160 +164,257 @@
             </div>
         </div>
 
-        <!-- BOOK GOALS TAB (Outliner Agent – fully working) -->
-        <div id="content-goals" class="tab-content hidden">
-            <div class="max-w-4xl mx-auto">
-                <div class="mb-8">
-                    <h2 class="text-4xl font-semibold tracking-tight section-header">Book Goals</h2>
-                    <p class="text-emerald-300">Talk to the <strong>Outliner Agent</strong>. It returns structured suggestions with Copy buttons.</p>
-                </div>
+    <!-- BOOK GOALS TAB -->
+    <div id="content-goals" class="tab-content hidden">
+        <!-- HBF.BG.G1: The Book Goals Tab SHALL display and allow editing of Main Goal, Content Types, Tone/Style, Audience, Length. -->
+        <!-- HBF.BG.G2: Accept Goals SHALL generate an initial outline when no outline is currently present. -->
+        <!-- HBF.BG.BGA1: The Book Goals Tab SHALL use the dedicated Book Goals Agent for suggestions. -->
+        <!-- HBF.BG.BGA2: Book Goals Agent SHALL return structured JSON suggestions with Copy buttons for each field. -->
+        <!-- HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LLM/agent. -->
+        <!-- Implemented: v0.9.4 | Updated: v0.9.5 | Date: 2026-04-17 -->
 
-                <div class="grid grid-cols-1 gap-8">
-                    <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
-                        <h3 class="text-emerald-400 text-sm font-medium mb-4">1. Main Goal of the Book</h3>
-                        <textarea id="goal-main" rows="4" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl p-6 text-lg leading-relaxed resize-y"></textarea>
-                    </div>
-
-                    <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
-                        <h3 class="text-emerald-400 text-sm font-medium mb-4">2. Types of Content the Book Should Contain</h3>
-                        <textarea id="goal-content" rows="6" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl p-6 text-lg leading-relaxed resize-y"></textarea>
-                    </div>
-
-                    <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
-                        <h3 class="text-emerald-400 text-sm font-medium mb-4">3. Desired Tone / Style</h3>
-                        <div class="flex flex-wrap gap-3 mb-6" id="tone-chips"></div>
-                        <input id="tone-custom" type="text" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl px-6 py-4 text-lg" placeholder="Or describe your own tone...">
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-8">
-                        <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
-                            <h3 class="text-emerald-400 text-sm font-medium mb-4">Target Audience</h3>
-                            <input id="goal-audience" type="text" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl px-6 py-4 text-lg">
-                        </div>
-                        <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
-                            <h3 class="text-emerald-400 text-sm font-medium mb-4">Desired Book Length</h3>
-                            <select id="goal-length" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl px-6 py-4 text-lg">
-                                <option value="180-220 pages">180–220 pages</option>
-                                <option value="220-280 pages" selected>220–280 pages</option>
-                                <option value="280-350 pages">280–350 pages</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
-                        <h3 class="text-emerald-400 text-sm font-medium mb-4">💬 Talk to the Outliner Agent</h3>
-                        <div id="agent-chat" class="h-96 bg-black/50 border border-emerald-800 rounded-3xl p-6 overflow-y-auto mb-6 text-sm space-y-6"></div>
-                        <div class="flex gap-x-3">
-                            <input id="agent-input" type="text" class="flex-1 bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl px-6 py-4" placeholder="Ask for improvements...">
-                            <button onclick="sendToOutlinerAgent()" id="send-btn" class="px-8 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-medium">Send</button>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center justify-between">
-                        <div id="goals-status" class="flex items-center gap-x-2 text-emerald-400">
-                            <span id="status-text">Ready</span>
-                        </div>
-                        <button onclick="acceptBookGoals()" class="px-10 py-4 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-semibold flex items-center gap-x-3">
-                            ✅ Accept Goals &amp; Generate Initial Outline
-                        </button>
-                    </div>
-                </div>
+        <div class="max-w-4xl mx-auto">
+            <div class="mb-8">
+                <h2 class="text-4xl font-semibold tracking-tight section-header">Book Goals</h2>
+                <p class="text-emerald-300">Talk to the <strong>Book Goals Agent</strong>. It returns structured suggestions with Copy buttons.</p>
             </div>
-        </div>
 
-        <!-- OUTLINE TAB – both chats kept -->
-        <div id="content-outline" class="tab-content hidden">
-            <div class="max-w-4xl mx-auto">
-                <div class="mb-8">
-                    <h2 class="text-4xl font-semibold tracking-tight section-header">Book Outline</h2>
-                    <p class="text-emerald-300">Talk to the Outliner Agent for broad improvements or use the specific chat for targeted questions.</p>
+            <div class="grid grid-cols-1 gap-8">
+                <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
+                    <h3 class="text-emerald-400 text-sm font-medium mb-4">1. Main Goal of the Book</h3>
+                    <textarea id="goal-main" rows="4" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl p-6 text-lg leading-relaxed resize-y"></textarea>
                 </div>
 
                 <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
-                    <textarea id="outline-editor" rows="18" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl p-6 text-lg leading-relaxed resize-y font-mono"></textarea>
+                    <h3 class="text-emerald-400 text-sm font-medium mb-4">2. Types of Content the Book Should Contain</h3>
+                    <textarea id="goal-content" rows="6" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl p-6 text-lg leading-relaxed resize-y"></textarea>
                 </div>
 
-                <div class="mt-6 flex gap-x-4">
-                    <button onclick="sendToOutlinerForOutline()" id="outline-send-btn" class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-medium flex items-center gap-x-2">
-                        💬 Ask Outliner to Improve Full Outline
-                    </button>
-                    <button onclick="acceptOutline()" class="px-8 py-3 bg-emerald-700 hover:bg-emerald-600 rounded-3xl font-medium flex items-center gap-x-2">
-                        ✅ Accept Outline &amp; Generate Chapter Outlines
-                    </button>
-                    <button onclick="saveOutline()" class="px-8 py-3 border border-emerald-600 hover:bg-emerald-900 rounded-3xl font-medium">
-                        Save Current Outline
-                    </button>
+                <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
+                    <h3 class="text-emerald-400 text-sm font-medium mb-4">3. Desired Tone / Style</h3>
+                    <div class="flex flex-wrap gap-3 mb-6" id="tone-chips"></div>
+                    <input id="tone-custom" type="text" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl px-6 py-4 text-lg" placeholder="Or describe your own tone...">
                 </div>
 
-                <div class="mt-12">
-                    <h3 class="text-emerald-400 text-sm font-medium mb-4">💬 Specific Outline Chat</h3>
-                    <div id="outline-specific-chat" class="h-80 bg-black/50 border border-emerald-800 rounded-3xl p-6 overflow-y-auto text-sm space-y-6"></div>
-                    <div class="flex gap-x-3 mt-4">
-                        <input id="outline-specific-input" type="text" class="flex-1 bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl px-6 py-4" placeholder="E.g. Expand Chapter 3 with safety section...">
-                        <button onclick="sendSpecificOutlineQuestion()" class="px-8 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-medium">Send</button>
+                <div class="grid grid-cols-2 gap-8">
+                    <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
+                        <h3 class="text-emerald-400 text-sm font-medium mb-4">Target Audience</h3>
+                        <input id="goal-audience" type="text" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl px-6 py-4 text-lg">
+                    </div>
+                    <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
+                        <h3 class="text-emerald-400 text-sm font-medium mb-4">Desired Book Length</h3>
+                        <select id="goal-length" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl px-6 py-4 text-lg">
+                            <option value="180-220 pages">180–220 pages</option>
+                            <option value="220-280 pages" selected>220–280 pages</option>
+                            <option value="280-350 pages">280–350 pages</option>
+                        </select>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- CHAPTER OUTLINES TAB -->
-        <div id="content-chapters" class="tab-content hidden">
-            <div class="max-w-4xl mx-auto">
-                <div class="mb-8">
-                    <h2 class="text-4xl font-semibold tracking-tight section-header">Chapter Outlines</h2>
-                    <p class="text-emerald-300">Annotated outlines for each chapter (generated by Chapter Annotator Agent).</p>
+                <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
+                    <h3 class="text-emerald-400 text-sm font-medium mb-4">💬 Talk to the Book Goals Agent</h3>
+                    <div id="agent-chat" class="h-96 bg-black/50 border border-emerald-800 rounded-3xl p-6 overflow-y-auto mb-6 text-sm space-y-6"></div>
+                    <div class="flex gap-x-3">
+                        <input id="agent-input" type="text" class="flex-1 bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl px-6 py-4" placeholder="Ask for improvements...">
+                        <button onclick="sendToBookGoalsAgent()" id="send-btn" class="px-8 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-medium">Send</button>
+                    </div>
                 </div>
-                <div id="chapter-list" class="space-y-6"></div>
-            </div>
-        </div>
 
-        <!-- Placeholder tabs -->
-        <div id="content-drafting" class="tab-content hidden">
-            <div class="max-w-4xl mx-auto text-center py-32">
-                <div class="text-8xl mb-8">✍️</div>
-                <h2 class="text-4xl font-semibold mb-4">Drafting</h2>
-                <p class="text-emerald-400">Coming soon</p>
+                <div class="flex items-center justify-between">
+                    <div id="goals-status" class="flex items-center gap-x-2 text-emerald-400">
+                        <span id="status-text">Ready</span>
+                    </div>
+                    <button onclick="acceptBookGoals()" class="px-10 py-4 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-semibold flex items-center gap-x-3">
+                        ✅ Accept Goals &amp; Generate Initial Outline
+                    </button>
+                </div>
             </div>
         </div>
+    </div>
 
-        <div id="content-prompts" class="tab-content hidden">
-            <div class="max-w-5xl mx-auto text-center py-32">
-                <div class="text-8xl mb-8">🧠</div>
-                <h2 class="text-4xl font-semibold mb-4">Prompts Editor</h2>
-                <p class="text-emerald-400">Coming soon – edit all agent prompts here</p>
-            </div>
-        </div>
+    <!-- OUTLINE TAB -->
+    <div id="content-outline" class="tab-content hidden">
+        <!-- HBF.OL1: The Outline Tab SHALL allow editing of the main outline. -->
+        <!-- HBF.OL2: The Outline Tab SHALL have a broad improvement chat using the Outliner Agent. -->
+        <!-- HBF.OL3: The Outline Tab SHALL have a specific multiturn chat for targeted questions. -->
+        <!-- HBF.OL4: Accept Outline SHALL trigger Chapter Annotator Agent. -->
+        <!-- HBF.OL5: Accept Outline chapter generation SHALL show progress status (preparing, per-chapter running, completed or failed). -->
+        <!-- HBF.OL6: Accept Outline SHALL require API key configuration and SHALL redirect to Setup when missing. -->
+        <!-- HBF.OL7: Save Current Outline SHALL persist outline state without advancing workflow tabs. -->
+        <!-- Implemented: v0.9.4 | Updated: v0.9.5 | Date: 2026-04-17 -->
 
-        <div id="content-safety" class="tab-content hidden">
-            <div class="max-w-4xl mx-auto text-center py-32">
-                <div class="text-8xl mb-8">🛡️</div>
-                <h2 class="text-4xl font-semibold mb-4">Safety &amp; Troubleshooting</h2>
-                <p class="text-emerald-400">Coming soon</p>
+        <div class="max-w-4xl mx-auto">
+            <div class="mb-8">
+                <h2 class="text-4xl font-semibold tracking-tight section-header">Book Outline</h2>
+                <p class="text-emerald-300">Talk to the Outliner Agent for broad improvements or use the specific chat for targeted questions.</p>
             </div>
-        </div>
 
-        <div id="content-preview" class="tab-content hidden">
-            <div class="max-w-4xl mx-auto text-center py-32">
-                <div class="text-8xl mb-8">📕</div>
-                <h2 class="text-4xl font-semibold mb-4">Manuscript Preview / Export</h2>
-                <p class="text-emerald-400">Coming soon</p>
+            <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
+                <textarea id="outline-editor" rows="18" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl p-6 text-lg leading-relaxed resize-y font-mono"></textarea>
+            </div>
+
+            <div class="mt-6 flex gap-x-4">
+                <button onclick="sendToOutlinerForOutline()" id="outline-send-btn" class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-medium flex items-center gap-x-2">
+                    💬 Ask Outliner to Improve Full Outline
+                </button>
+                <button onclick="acceptOutline()" id="outline-accept-btn" class="px-8 py-3 bg-emerald-700 hover:bg-emerald-600 rounded-3xl font-medium flex items-center gap-x-2">
+                    ✅ Accept Outline &amp; Generate Chapter Outlines
+                </button>
+                <button onclick="saveOutline()" class="px-8 py-3 border border-emerald-600 hover:bg-emerald-900 rounded-3xl font-medium">
+                    Save Current Outline
+                </button>
+            </div>
+            <div id="outline-generation-status" class="mt-4 hidden text-emerald-300 text-sm"></div>
+
+            <div class="mt-12">
+                <h3 class="text-emerald-400 text-sm font-medium mb-4">💬 Specific Outline Chat</h3>
+                <div id="outline-specific-chat" class="h-80 bg-black/50 border border-emerald-800 rounded-3xl p-6 overflow-y-auto text-sm space-y-6"></div>
+                <div class="flex gap-x-3 mt-4">
+                    <input id="outline-specific-input" type="text" class="flex-1 bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl px-6 py-4" placeholder="E.g. Expand Chapter 3 with safety section...">
+                    <button onclick="sendSpecificOutlineQuestion()" class="px-8 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-medium">Send</button>
+                </div>
             </div>
         </div>
+    </div>
+
+    <!-- CHAPTER OUTLINES TAB -->
+    <div id="content-chapters" class="tab-content hidden">
+        <!-- HBF.CH1: The Chapter Outlines Tab SHALL display one annotated card per chapter. -->
+        <!-- HBF.CH2: Each annotated outline SHALL be generated by the Chapter Annotator Agent with detailed sections, tone, safety, etc. -->
+        <!-- HBF.CH3: User SHALL be able to edit each chapter annotation inline. -->
+        <!-- HBF.CH4: Chapter Outlines SHALL support per-chapter regeneration via Chapter Annotator Agent. -->
+        <!-- HBF.CH5: Chapter Outlines SHALL support explicit per-chapter save of edited title and annotation fields. -->
+        <!-- Implemented: v0.9.4 | Updated: v0.9.5 | Date: 2026-04-17 -->
+
+        <div class="max-w-4xl mx-auto">
+            <div class="mb-8">
+                <h2 class="text-4xl font-semibold tracking-tight section-header">Chapter Outlines</h2>
+                <p class="text-emerald-300">Annotated outlines for each chapter (generated by the Chapter Annotator Agent).</p>
+            </div>
+            <div id="chapter-list" class="space-y-6"></div>
+        </div>
+    </div>
+
+    <!-- DRAFTING TAB – DETAILED TODO -->
+    <div id="content-drafting" class="tab-content hidden">
+        <!-- HBF.DR1: The Drafting Tab SHALL allow drafting of individual chapters using the Drafter Agent in the friendly, practical style of Brigitte Mars. -->
+        <!-- HBF.DR2: The Drafting Tab SHALL load the annotated outline from the Chapter Outlines tab as context for the Drafter Agent. -->
+        <!-- HBF.DR3: The Drafting Tab SHALL support iterative drafting with human-in-the-loop approval of each section. -->
+        <!-- HBF.DR4: The Drafting Tab SHALL include a preview pane showing the current drafted text formatted as book pages. -->
+        <!-- TODO HBF.DR1: Implement chapter selection and Drafter Agent call pipeline for first-pass chapter drafting. -->
+        <!-- TODO HBF.DR1 Status: Not started | Planned: v0.10 -->
+        <!-- TODO HBF.DR2: Load accepted chapter annotation context into drafter requests and draft workspace. -->
+        <!-- TODO HBF.DR2 Status: Not started | Planned: v0.10 -->
+        <!-- TODO HBF.DR3: Add iterative section-level generate/revise/approve controls with explicit human approvals. -->
+        <!-- TODO HBF.DR3 Status: Not started | Planned: v0.10 -->
+        <!-- TODO HBF.DR4: Implement formatted draft preview pane synchronized with current chapter draft state. -->
+        <!-- TODO HBF.DR4 Status: Not started | Planned: v0.10 -->
+
+        <div class="max-w-4xl mx-auto text-center py-32">
+            <div class="text-8xl mb-8">✍️</div>
+            <h2 class="text-4xl font-semibold mb-4">Drafting</h2>
+            <p class="text-emerald-400">Coming soon – full chapter drafting with Drafter Agent</p>
+        </div>
+    </div>
+
+    <!-- PROMPTS EDITOR TAB -->
+    <div id="content-prompts" class="tab-content hidden">
+        <!-- HBF.PE1: The Prompts Editor Tab SHALL display editable textareas for all active agents with defaults. -->
+        <!-- HBF.PE2: Changes to prompts SHALL be saved and used immediately by their respective agents. -->
+        <!-- Implemented: v0.9.4 | Updated: v0.9.5 | Date: 2026-04-17 -->
+
+        <div class="max-w-5xl mx-auto">
+            <h2 class="text-4xl font-semibold tracking-tight section-header">Prompts Editor</h2>
+            <p class="text-emerald-300">Edit the base system prompt for each specialized herbal agent.</p>
+
+            <div class="space-y-8 mt-8">
+                <div>
+                    <label class="block text-emerald-400 text-sm font-medium mb-2">Book Goals Agent Prompt (HBF.BG.BGA1)</label>
+                    <textarea id="prompt-bookgoals" class="w-full h-40 bg-black/60 border border-emerald-700 rounded-3xl p-6"></textarea>
+                </div>
+                <div>
+                    <label class="block text-emerald-400 text-sm font-medium mb-2">Outliner / Structurer Prompt (HBF.OL2)</label>
+                    <textarea id="prompt-outliner" class="w-full h-40 bg-black/60 border border-emerald-700 rounded-3xl p-6"></textarea>
+                </div>
+                <div>
+                    <label class="block text-emerald-400 text-sm font-medium mb-2">Chapter Annotator Prompt (HBF.OL4 / HBF.CH2)</label>
+                    <textarea id="prompt-chapter-annotator" class="w-full h-40 bg-black/60 border border-emerald-700 rounded-3xl p-6"></textarea>
+                </div>
+                <div>
+                    <label class="block text-emerald-400 text-sm font-medium mb-2">Drafter Prompt</label>
+                    <textarea id="prompt-drafter" class="w-full h-40 bg-black/60 border border-emerald-700 rounded-3xl p-6"></textarea>
+                </div>
+                <div>
+                    <label class="block text-emerald-400 text-sm font-medium mb-2">Safety & Accuracy Checker Prompt</label>
+                    <textarea id="prompt-safety" class="w-full h-40 bg-black/60 border border-emerald-700 rounded-3xl p-6"></textarea>
+                </div>
+                <button onclick="saveAllPrompts()" class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-medium">Save All Prompts</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SAFETY TAB – DETAILED TODO -->
+    <div id="content-safety" class="tab-content hidden">
+        <!-- HBF.SA1: The Safety Tab SHALL provide safety checking using the Safety & Accuracy Checker Agent. -->
+        <!-- HBF.SA2: The Safety Tab SHALL scan the entire manuscript or selected chapters for contraindications, dosage issues, extraction risks, and PA content limits (e.g., comfrey). -->
+        <!-- HBF.SA3: The Safety Tab SHALL generate a safety report with flagged items and suggested fixes. -->
+        <!-- HBF.SA4: The Safety Tab SHALL integrate with the Drafter and Chapter Outlines for real-time safety validation. -->
+        <!-- TODO HBF.SA1: Implement Safety Checker Agent call flow and result rendering panel. -->
+        <!-- TODO HBF.SA1 Status: Not started | Planned: v0.10 -->
+        <!-- TODO HBF.SA2: Add selectable scan scope (full manuscript or chapter) and safety-rule scan orchestration. -->
+        <!-- TODO HBF.SA2 Status: Not started | Planned: v0.10 -->
+        <!-- TODO HBF.SA3: Generate structured safety report with flags, severity, and suggested remediation notes. -->
+        <!-- TODO HBF.SA3 Status: Not started | Planned: v0.10 -->
+        <!-- TODO HBF.SA4: Wire safety checks into drafting and chapter-outline edits for re-validation loops. -->
+        <!-- TODO HBF.SA4 Status: Not started | Planned: v0.10 -->
+
+        <div class="max-w-4xl mx-auto text-center py-32">
+            <div class="text-8xl mb-8">🛡️</div>
+            <h2 class="text-4xl font-semibold mb-4">Safety & Troubleshooting</h2>
+            <p class="text-emerald-400">Coming soon – full safety checking with Safety & Accuracy Checker Agent</p>
+        </div>
+    </div>
+
+    <!-- PREVIEW TAB – DETAILED TODO -->
+    <div id="content-preview" class="tab-content hidden">
+        <!-- HBF.PR1: The Preview Tab SHALL allow preview and export of the full manuscript. -->
+        <!-- HBF.PR2: The Preview Tab SHALL render the compiled book with proper formatting, chapter headings, and annotations. -->
+        <!-- HBF.PR3: The Preview Tab SHALL support export to PDF, Markdown, and printable HTML formats. -->
+        <!-- HBF.PR4: The Preview Tab SHALL include version history and change log for the manuscript. -->
+        <!-- TODO HBF.PR1: Implement manuscript assembly pipeline and preview/export controls entry point. -->
+        <!-- TODO HBF.PR1 Status: Not started | Planned: v0.10 -->
+        <!-- TODO HBF.PR2: Render compiled manuscript with chapter headings, sections, and annotation-aware formatting. -->
+        <!-- TODO HBF.PR2 Status: Not started | Planned: v0.10 -->
+        <!-- TODO HBF.PR3: Add export actions for PDF, Markdown, and printable HTML outputs. -->
+        <!-- TODO HBF.PR3 Status: Not started | Planned: v0.10 -->
+        <!-- TODO HBF.PR4: Implement manuscript version history and change-log display and persistence. -->
+        <!-- TODO HBF.PR4 Status: Not started | Planned: v0.10 -->
+
+        <div class="max-w-4xl mx-auto text-center py-32">
+            <div class="text-8xl mb-8">📕</div>
+            <h2 class="text-4xl font-semibold mb-4">Manuscript Preview / Export</h2>
+            <p class="text-emerald-400">Coming soon – full manuscript preview and export</p>
+        </div>
+    </div>
+
     </main>
 
     <footer class="fixed bottom-0 left-0 right-0 bg-black/80 border-t border-emerald-800 py-3 px-8 text-xs font-mono text-emerald-400 flex items-center justify-between z-50">
-        <div>HerbalBookForge v0.9.3 • API key visibility fixed • Book Goals chat stable</div>
+        <div>HerbalBookForge v0.9.5</div>
         <div id="footer-project-name" class="text-emerald-300 font-medium"></div>
-        <div>You = developer only • Internal agents = herbal experts only</div>
+        <div>You = developer only | Internal agents = herbal experts only</div>
     </footer>
 
+    <!-- GENERIC SHARED SCRIPT SECTION (HBF.GEN1) -->
     <script>
-        // =============================================
-        // HERBALBOOKFORGE v0.9.3 – COMPLETE FILE
-        // =============================================
+        // HBF.GEN1: Generic shared script SHALL contain functions used by all tabs.
+        // HBF.GEN2: The app SHALL sanitize user and agent text before rendering into HTML views.
+        // HBF.GEN3: The app SHALL support backward-compatible loading from prior localStorage session keys.
+        // HBF.GEN4: The footer SHALL display and auto-update the current project name.
+        // Version: 0.9.5 | Date: 2026-04-17
 
         let project = {
-            meta: { version: "0.9.3", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
+            meta: { version: "0.9.5", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
             setup: {
                 apiKey: "",
                 collectionIds: ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"],
@@ -297,16 +422,20 @@
                 preferredModel: "grok-4.20-0309-reasoning"
             },
             prompts: {
-                outlinerGoals: `You are the Outliner Agent – expert herbal book architect.
-Given current goals and user request, return ONLY valid JSON with these exact keys:
-{"mainGoal": "...", "contentTypes": "...", "tone": "...", "audience": "...", "length": "...", "explanation": "brief reason"}`,
-
-                outlinerOutline: `You are the Outliner Agent. Create a clean Markdown hierarchical outline (## Chapter, ### Sub-section, - bullets). Respond with clean Markdown only – no JSON.`,
-
+                bookGoalsAgent: `You are the Book Goals Agent – expert herbal book architect focused on helping the user define clear, practical, trustworthy book goals.`,
+                outliner: `You are the Outliner / Structurer Agent – expert herbal book architect.`,
                 chapterAnnotator: `You are the Chapter Annotator Agent – expert herbal book architect.
-For the given chapter title and its concepts from the main outline, produce a rich annotated outline.
-Include: key sections, tone reminders, expected content types, safety notes, suggested sidebars.
-Respond in clean Markdown only.`
+Given chapter title + chapter context from the full outline, return Markdown only with:
+1) Chapter Objective
+2) Core Sections (with subsections)
+3) Key Claims to Verify
+4) Safety and Contraindication Checks
+5) Evidence and Citation Notes
+6) Tone and Reader Guidance
+7) Suggested Sidebars and Tables
+Keep it practical, safety-aware, and specific to herbal medicine.`,
+                drafter: `You are the Drafter Agent – expert writer in the friendly, practical style of Brigitte Mars.`,
+                safety: `You are the Safety & Accuracy Checker Agent – expert in herbal safety, dosages, contraindications, and extraction risks.`
             },
             goals: {
                 mainGoal: "",
@@ -322,9 +451,42 @@ Respond in clean Markdown only.`
             safetyNotes: ""
         };
 
-        const defaultTones = ["Warm & practical like Brigitte Mars", "Encouraging and empowering", "Clear and trustworthy", "Friendly yet precise", "Traditional with modern safety notes"];
+        const defaultTones = [
+            "Warm and practical like Brigitte Mars",
+            "Encouraging and empowering",
+            "Clear and trustworthy",
+            "Friendly yet precise",
+            "Traditional with modern safety notes"
+        ];
 
+        let outlineSpecificHistory = [];
         let apiKeyVisible = false;
+        let setupListenersBound = false;
+        let goalsListenersBound = false;
+
+        function escapeHtml(text) {
+            return String(text)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function buildApiTools() {
+            const tools = [];
+            const ids = (project.setup.collectionIds || []).filter(Boolean);
+            if (ids.length > 0) {
+                tools.push({
+                    type: "collection_search",
+                    collection_ids: ids
+                });
+            }
+            if (project.setup.webSearchEnabled) {
+                tools.push({ type: "web_search" });
+            }
+            return tools;
+        }
 
         function toggleApiKeyVisibility() {
             apiKeyVisible = !apiKeyVisible;
@@ -344,63 +506,257 @@ Respond in clean Markdown only.`
         }
 
         function loadProject() {
-            const saved = localStorage.getItem('herbalBookForgeProject_v0.9.3');
+            const saved = localStorage.getItem('herbalBookForgeProject_v0.9.5') || localStorage.getItem('herbalBookForgeProject_v0.9.3');
             if (saved) {
-                try { project = JSON.parse(saved); } catch(e) {}
+                try {
+                    const parsed = JSON.parse(saved);
+                    project = {
+                        ...project,
+                        ...parsed,
+                        setup: { ...project.setup, ...(parsed.setup || {}) },
+                        prompts: { ...project.prompts, ...(parsed.prompts || {}) },
+                        goals: { ...project.goals, ...(parsed.goals || {}) }
+                    };
+                } catch (e) {}
             }
+
+            project.meta.version = "0.9.5";
+            if (!Array.isArray(project.setup.collectionIds)) {
+                project.setup.collectionIds = ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"];
+            }
+
             renderSetupForm();
             renderGoalsForm();
             renderChatHistory();
-            document.getElementById('outline-editor').value = project.outline || '';
             renderSpecificOutlineChat();
+            document.getElementById('outline-editor').value = project.outline || '';
+            document.getElementById('prompt-bookgoals').value = project.prompts.bookGoalsAgent || '';
+            document.getElementById('prompt-outliner').value = project.prompts.outliner || '';
+            document.getElementById('prompt-chapter-annotator').value = project.prompts.chapterAnnotator || '';
+            document.getElementById('prompt-drafter').value = project.prompts.drafter || '';
+            document.getElementById('prompt-safety').value = project.prompts.safety || '';
             renderChapterList();
             updateFooter();
         }
 
         function saveProject() {
             project.meta.lastEdited = new Date().toISOString();
-            localStorage.setItem('herbalBookForgeProject_v0.9.3', JSON.stringify(project));
-            document.getElementById('save-status').innerHTML = `✅ Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
+            localStorage.setItem('herbalBookForgeProject_v0.9.5', JSON.stringify(project));
+            const status = document.getElementById('save-status');
+            if (status) {
+                status.innerHTML = `Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
+            }
             updateFooter();
         }
 
-        function manualSave() { saveProject(); }
-        function exportProject() { /* unchanged */ }
-        function handleImport(e) { /* unchanged */ }
-        function backupCurrentHTML() { /* unchanged */ }
+        function manualSave() {
+            saveProject();
+        }
+
+        function saveAllPrompts() {
+            project.prompts.bookGoalsAgent = document.getElementById('prompt-bookgoals').value;
+            project.prompts.outliner = document.getElementById('prompt-outliner').value;
+            project.prompts.chapterAnnotator = document.getElementById('prompt-chapter-annotator').value;
+            project.prompts.drafter = document.getElementById('prompt-drafter').value;
+            project.prompts.safety = document.getElementById('prompt-safety').value;
+            saveProject();
+            alert('All agent prompts saved! (HBF.PE2)');
+        }
+
+        function exportProject() {
+            const fileName = `${(project.meta.name || "herbal-book").replace(/[^a-z0-9-_ ]/gi, "").trim() || "herbal-book"}_session.json`;
+            const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function handleImport(event) {
+            const file = event?.target?.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    project = {
+                        ...project,
+                        ...parsed,
+                        setup: { ...project.setup, ...(parsed.setup || {}) },
+                        prompts: { ...project.prompts, ...(parsed.prompts || {}) },
+                        goals: { ...project.goals, ...(parsed.goals || {}) }
+                    };
+                    project.meta.version = "0.9.5";
+                    loadProject();
+                    saveProject();
+                    alert('Project imported successfully.');
+                } catch (err) {
+                    alert(`Import failed: ${err.message}`);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        function backupCurrentHTML() {
+            const html = document.documentElement.outerHTML;
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `HerbalBookForge_backup_${new Date().toISOString().replace(/[:.]/g, '-')}.html`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
 
         function renderSetupForm() {
-            document.getElementById('project-name').value = project.meta.name || '';
-            document.getElementById('api-key').value = project.setup.apiKey || '';
-            document.getElementById('collection-ids').value = project.setup.collectionIds.join(', ');
-            document.getElementById('web-search-toggle').checked = project.setup.webSearchEnabled;
-            document.getElementById('preferred-model').value = project.setup.preferredModel;
-            document.getElementById('project-version-display').textContent = `v${project.meta.version}`;
-            document.getElementById('last-edited-display').innerHTML = new Date(project.meta.lastEdited).toLocaleString();
+            const name = document.getElementById('project-name');
+            const api = document.getElementById('api-key');
+            const collections = document.getElementById('collection-ids');
+            const webToggle = document.getElementById('web-search-toggle');
+            const model = document.getElementById('preferred-model');
+            const version = document.getElementById('project-version-display');
+            const lastEdited = document.getElementById('last-edited-display');
+
+            if (name) name.value = project.meta.name || '';
+            if (api) api.value = project.setup.apiKey || '';
+            if (collections) collections.value = (project.setup.collectionIds || []).join(', ');
+            if (webToggle) webToggle.checked = !!project.setup.webSearchEnabled;
+            if (model) model.value = project.setup.preferredModel || 'grok-4.20-0309-reasoning';
+            if (version) version.textContent = `v${project.meta.version || '0.9.5'}`;
+            if (lastEdited && project.meta.lastEdited) {
+                lastEdited.textContent = new Date(project.meta.lastEdited).toLocaleString();
+            }
         }
 
         function bindSetupListeners() {
-            document.getElementById('project-name').addEventListener('input', e => { project.meta.name = e.target.value; saveProject(); });
-            document.getElementById('api-key').addEventListener('input', e => { project.setup.apiKey = e.target.value; saveProject(); });
-            document.getElementById('collection-ids').addEventListener('input', e => {
-                const ids = e.target.value.split(',').map(i => i.trim()).filter(Boolean);
+            if (setupListenersBound) return;
+            setupListenersBound = true;
+
+            document.getElementById('project-name')?.addEventListener('input', e => {
+                project.meta.name = e.target.value;
+                saveProject();
+            });
+
+            document.getElementById('api-key')?.addEventListener('input', e => {
+                project.setup.apiKey = e.target.value;
+                saveProject();
+            });
+
+            document.getElementById('collection-ids')?.addEventListener('input', e => {
+                const ids = e.target.value
+                    .split(',')
+                    .map(x => x.trim())
+                    .filter(Boolean);
                 project.setup.collectionIds = ids.length ? ids : ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"];
                 saveProject();
             });
-            document.getElementById('web-search-toggle').addEventListener('change', e => { project.setup.webSearchEnabled = e.target.checked; saveProject(); });
-            document.getElementById('preferred-model').addEventListener('change', e => { project.setup.preferredModel = e.target.value; saveProject(); });
+
+            document.getElementById('web-search-toggle')?.addEventListener('change', e => {
+                project.setup.webSearchEnabled = e.target.checked;
+                saveProject();
+            });
+
+            document.getElementById('preferred-model')?.addEventListener('change', e => {
+                project.setup.preferredModel = e.target.value;
+                saveProject();
+            });
         }
 
-        function renderGoalsForm() { /* unchanged */ }
-        function bindGoalsListeners() { /* unchanged */ }
-        function renderChatHistory() { /* unchanged */ }
+        function renderToneChips() {
+            const chips = document.getElementById('tone-chips');
+            if (!chips) return;
+            chips.innerHTML = '';
+            defaultTones.forEach(tone => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'px-4 py-2 text-sm bg-emerald-950 border border-emerald-700 hover:bg-emerald-800 rounded-3xl';
+                btn.textContent = tone;
+                btn.onclick = () => {
+                    const custom = document.getElementById('tone-custom');
+                    if (custom) custom.value = tone;
+                    project.goals.tone = tone;
+                    saveProject();
+                };
+                chips.appendChild(btn);
+            });
+        }
 
-        // Book Goals Chat – Outliner Agent (fixed key reading)
-        async function sendToOutlinerAgent() {
+        function renderGoalsForm() {
+            document.getElementById('goal-main').value = project.goals.mainGoal || '';
+            document.getElementById('goal-content').value = project.goals.contentTypes || '';
+            document.getElementById('tone-custom').value = project.goals.tone || '';
+            document.getElementById('goal-audience').value = project.goals.audience || '';
+            document.getElementById('goal-length').value = project.goals.length || '220-280 pages';
+            renderToneChips();
+        }
+
+        function bindGoalsListeners() {
+            if (goalsListenersBound) return;
+            goalsListenersBound = true;
+
+            document.getElementById('goal-main')?.addEventListener('input', e => {
+                project.goals.mainGoal = e.target.value;
+                saveProject();
+            });
+            document.getElementById('goal-content')?.addEventListener('input', e => {
+                project.goals.contentTypes = e.target.value;
+                saveProject();
+            });
+            document.getElementById('tone-custom')?.addEventListener('input', e => {
+                project.goals.tone = e.target.value;
+                saveProject();
+            });
+            document.getElementById('goal-audience')?.addEventListener('input', e => {
+                project.goals.audience = e.target.value;
+                saveProject();
+            });
+            document.getElementById('goal-length')?.addEventListener('change', e => {
+                project.goals.length = e.target.value;
+                saveProject();
+            });
+
+            const input = document.getElementById('agent-input');
+            if (input) {
+                input.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        sendToBookGoalsAgent();
+                    }
+                });
+            }
+
+            const outlineInput = document.getElementById('outline-specific-input');
+            if (outlineInput) {
+                outlineInput.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        sendSpecificOutlineQuestion();
+                    }
+                });
+            }
+        }
+
+        function renderChatHistory() {
+            const chat = document.getElementById('agent-chat');
+            if (!chat) return;
+            chat.innerHTML = project.goals.chatHistory.map(msg => {
+                if (msg.role === 'user') {
+                    return `<div class="text-right"><div class="inline-block bg-emerald-600 text-white rounded-3xl px-5 py-3 max-w-[75%]">${escapeHtml(msg.content)}</div></div>`;
+                }
+                return `<div class="flex gap-x-3"><div class="text-3xl flex-shrink-0">🌿</div><div class="bg-black/70 rounded-3xl px-5 py-4 flex-1">${msg.content}</div></div>`;
+            }).join('');
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        // Book Goals Agent (HBF.BG.BGA1)
+        async function sendToBookGoalsAgent() {
             const input = document.getElementById('agent-input').value.trim();
             if (!input) return;
 
-            const apiKey = project.setup.apiKey.trim();   // now reads from saved project state
+            const apiKey = project.setup.apiKey.trim();
             if (!apiKey) {
                 alert("Please enter your Grok API key in the Setup tab.");
                 switchTab('setup');
@@ -409,7 +765,7 @@ Respond in clean Markdown only.`
 
             const sendBtn = document.getElementById('send-btn');
             sendBtn.disabled = true;
-            sendBtn.textContent = 'Calling Grok...';
+            sendBtn.textContent = 'Calling Book Goals Agent...';
 
             project.goals.chatHistory.push({ role: 'user', content: input });
             renderChatHistory();
@@ -432,8 +788,9 @@ Respond in clean Markdown only.`
                     },
                     body: JSON.stringify({
                         model: project.setup.preferredModel,
+                        tools: buildApiTools(),
                         messages: [
-                            { role: "system", content: project.prompts.outlinerGoals },
+                            { role: "system", content: project.prompts.bookGoalsAgent },
                             ...project.goals.chatHistory.map(m => ({ role: m.role, content: m.content })),
                             { role: "user", content: `Current state: ${JSON.stringify(currentState, null, 2)}\n\nUser request: ${input}` }
                         ],
@@ -454,10 +811,13 @@ Respond in clean Markdown only.`
                 } catch (e) {}
 
                 let displayHTML = `<div class="bg-black/70 rounded-3xl p-6">`;
-                if (suggestion.mainGoal) displayHTML += `<div class="mb-4"><strong>Main Goal</strong><br><div class="bg-emerald-950 p-4 rounded-2xl mt-2">${suggestion.mainGoal}</div><button onclick="applySuggestion('main','${suggestion.mainGoal.replace(/'/g,"\\'")}')" class="mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl">Copy to Main Goal</button></div>`;
-                if (suggestion.contentTypes) displayHTML += `<div class="mb-4"><strong>Content Types</strong><br><div class="bg-emerald-950 p-4 rounded-2xl mt-2 whitespace-pre-line">${suggestion.contentTypes}</div><button onclick="applySuggestion('content','${suggestion.contentTypes.replace(/'/g,"\\'")}')" class="mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl">Copy to Content Types</button></div>`;
-                if (suggestion.tone) displayHTML += `<div class="mb-4"><strong>Tone / Style</strong><br><div class="bg-emerald-950 p-4 rounded-2xl mt-2">${suggestion.tone}</div><button onclick="applySuggestion('tone','${suggestion.tone.replace(/'/g,"\\'")}')" class="mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl">Copy to Tone</button></div>`;
-                if (suggestion.explanation) displayHTML += `<p class="text-xs text-emerald-400 mt-4">${suggestion.explanation}</p>`;
+                if (suggestion.mainGoal) displayHTML += `<div class="mb-4"><strong>Main Goal</strong><br><div class="bg-emerald-950 p-4 rounded-2xl mt-2">${escapeHtml(suggestion.mainGoal)}</div><button onclick="applySuggestion('main',${JSON.stringify(suggestion.mainGoal)})" class="mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl">Copy to Main Goal</button></div>`;
+                if (suggestion.contentTypes) displayHTML += `<div class="mb-4"><strong>Content Types</strong><br><div class="bg-emerald-950 p-4 rounded-2xl mt-2 whitespace-pre-line">${escapeHtml(suggestion.contentTypes)}</div><button onclick="applySuggestion('content',${JSON.stringify(suggestion.contentTypes)})" class="mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl">Copy to Content Types</button></div>`;
+                if (suggestion.tone) displayHTML += `<div class="mb-4"><strong>Tone / Style</strong><br><div class="bg-emerald-950 p-4 rounded-2xl mt-2">${escapeHtml(suggestion.tone)}</div><button onclick="applySuggestion('tone',${JSON.stringify(suggestion.tone)})" class="mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl">Copy to Tone</button></div>`;
+                if (suggestion.explanation) displayHTML += `<p class="text-xs text-emerald-400 mt-4">${escapeHtml(suggestion.explanation)}</p>`;
+                if (!suggestion.mainGoal && !suggestion.contentTypes && !suggestion.tone) {
+                    displayHTML += `<div class="whitespace-pre-wrap">${escapeHtml(reply)}</div>`;
+                }
                 displayHTML += `</div>`;
 
                 project.goals.chatHistory.push({ role: 'assistant', content: displayHTML });
@@ -480,42 +840,367 @@ Respond in clean Markdown only.`
             saveProject();
         };
 
-        async function acceptBookGoals() { /* unchanged */ }
+        function generateInitialOutlineFromGoals() {
+            const title = project.meta.name || 'Herbal Medicine Book';
+            const audience = project.goals.audience || 'General readers interested in herbal medicine';
+            const tone = project.goals.tone || 'Warm and practical';
+            const length = project.goals.length || '220-280 pages';
+            return `# ${title}\n\n## Vision\n- Audience: ${audience}\n- Tone: ${tone}\n- Length target: ${length}\n\n## Chapter 1 - Foundations and Safety\n- Scope and boundaries\n- Safety-first principles\n\n## Chapter 2 - Materia Medica Essentials\n- Herb profiles\n- Preparation methods\n\n## Chapter 3 - Practical Home Formulations\n- Teas, tinctures, salves\n- Quality and sourcing\n\n## Chapter 4 - Case-Based Applications\n- Everyday scenarios\n- Contraindications and red flags\n\n## Chapter 5 - Advanced Practice and References\n- Protocol planning\n- Citations and appendices\n`;
+        }
 
-        // Outline broad improvement
-        async function sendToOutlinerForOutline() { /* unchanged */ }
+        async function acceptBookGoals() {
+            project.goals.finalized = true;
+            saveProject();
 
-        // Specific Outline Chat
-        let outlineSpecificHistory = [];
+            if (!project.outline || !project.outline.trim()) {
+                project.outline = generateInitialOutlineFromGoals();
+                document.getElementById('outline-editor').value = project.outline;
+                saveProject();
+            }
+
+            switchTab('outline');
+        }
+
+        async function sendToOutlinerForOutline() {
+            const apiKey = (project.setup.apiKey || '').trim();
+            const currentOutline = (document.getElementById('outline-editor').value || '').trim();
+            if (!currentOutline) {
+                alert('Please add an outline first.');
+                return;
+            }
+            if (!apiKey) {
+                alert('Please enter your Grok API key in Setup.');
+                switchTab('setup');
+                return;
+            }
+
+            const btn = document.getElementById('outline-send-btn');
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = 'Improving outline...';
+
+            try {
+                const response = await fetch('https://api.x.ai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: project.setup.preferredModel,
+                        tools: buildApiTools(),
+                        messages: [
+                            { role: 'system', content: project.prompts.outliner },
+                            { role: 'user', content: `Improve this herbal book outline and return improved Markdown only:\n\n${currentOutline}` }
+                        ],
+                        temperature: 0.5,
+                        max_tokens: 1800
+                    })
+                });
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                const improved = data?.choices?.[0]?.message?.content?.trim() || currentOutline;
+                project.outline = improved;
+                document.getElementById('outline-editor').value = improved;
+                saveProject();
+            } catch (err) {
+                alert(`Outline improvement failed: ${err.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = original;
+            }
+        }
+
+        function parseChaptersFromOutline(outlineText) {
+            const lines = (outlineText || '').split(/\r?\n/);
+            const chapterTitles = [];
+            lines.forEach(line => {
+                const trimmed = line.trim();
+                if (/^(##\s*)?chapter\s+\d+\b/i.test(trimmed)) {
+                    chapterTitles.push(trimmed.replace(/^##\s*/i, '').trim());
+                }
+            });
+            return chapterTitles.filter(Boolean);
+        }
+
+        function extractChapterContext(outlineText, chapterTitle) {
+            const text = outlineText || '';
+            const escapedTitle = chapterTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const headingPattern = new RegExp(`^##\\s+${escapedTitle}\\s*$`, 'im');
+            const match = text.match(headingPattern);
+
+            if (!match || typeof match.index !== 'number') {
+                return `Chapter title: ${chapterTitle}\n\nFull outline:\n${text}`;
+            }
+
+            const start = match.index;
+            const afterStart = text.slice(start + match[0].length);
+            const nextHeadingIndex = afterStart.search(/^##\s+/m);
+            if (nextHeadingIndex === -1) {
+                return text.slice(start).trim();
+            }
+            return text.slice(start, start + match[0].length + nextHeadingIndex).trim();
+        }
+
+        async function annotateSingleChapter(chapterTitle, chapterContext) {
+            const apiKey = (project.setup.apiKey || '').trim();
+            if (!apiKey) {
+                throw new Error('Chapter Annotator requires a Grok API key in Setup.');
+            }
+
+            const response = await fetch('https://api.x.ai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: project.setup.preferredModel,
+                    tools: buildApiTools(),
+                    messages: [
+                        { role: 'system', content: project.prompts.chapterAnnotator },
+                        {
+                            role: 'user',
+                            content: `Chapter title: ${chapterTitle}\n\nChapter context from accepted outline:\n${chapterContext}\n\nReturn Markdown only.`
+                        }
+                    ],
+                    temperature: 0.4,
+                    max_tokens: 1600
+                })
+            });
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            return (data?.choices?.[0]?.message?.content || '').trim() || chapterAnnotationTemplate(chapterTitle);
+        }
+
+        function setOutlineGenerationStatus(message, isError = false) {
+            const statusEl = document.getElementById('outline-generation-status');
+            if (!statusEl) return;
+            if (!message) {
+                statusEl.classList.add('hidden');
+                statusEl.textContent = '';
+                statusEl.classList.remove('text-red-300');
+                statusEl.classList.add('text-emerald-300');
+                return;
+            }
+            statusEl.classList.remove('hidden');
+            statusEl.textContent = message;
+            statusEl.classList.toggle('text-red-300', isError);
+            statusEl.classList.toggle('text-emerald-300', !isError);
+        }
+
+        async function generateChapterAnnotations(chapterTitles, outlineText, onProgress) {
+            const annotations = [];
+            for (let i = 0; i < chapterTitles.length; i++) {
+                const title = chapterTitles[i];
+                const context = extractChapterContext(outlineText, title);
+                if (typeof onProgress === 'function') {
+                    onProgress({ index: i, total: chapterTitles.length, title, phase: 'running' });
+                }
+                const annotation = await annotateSingleChapter(title, context);
+                annotations.push({ title, annotation });
+            }
+            return annotations;
+        }
+
+        function chapterAnnotationTemplate(title) {
+            return `### ${title}\n\n- Purpose: Clarify chapter contribution to the full book arc.\n- Core Sections:\n  - Section A\n  - Section B\n  - Section C\n- Safety Focus:\n  - Contraindications\n  - Dosage cautions\n  - Sourcing and quality notes\n- Tone Notes:\n  - Practical and trustworthy\n  - Encourage human-in-the-loop decisions\n- Suggested Sidebars:\n  - Quick reference\n  - Common mistakes\n`;
+        }
+
+        async function acceptOutline() {
+            project.outline = document.getElementById('outline-editor').value;
+            const titles = parseChaptersFromOutline(project.outline);
+            const apiKey = (project.setup.apiKey || '').trim();
+            const acceptBtn = document.getElementById('outline-accept-btn');
+            const originalAcceptText = acceptBtn ? acceptBtn.textContent : '';
+
+            if (!apiKey) {
+                alert('Add your Grok API key in Setup before generating chapter outlines with Chapter Annotator Agent.');
+                switchTab('setup');
+                return;
+            }
+
+            const normalizedTitles = titles.length === 0 ? ['Chapter 1'] : titles;
+            if (acceptBtn) {
+                acceptBtn.disabled = true;
+                acceptBtn.textContent = 'Generating chapter outlines...';
+            }
+            setOutlineGenerationStatus(`Preparing ${normalizedTitles.length} chapter annotation${normalizedTitles.length === 1 ? '' : 's'}...`);
+
+            try {
+                project.chapterOutlines = await generateChapterAnnotations(normalizedTitles, project.outline, ({ index, total, title }) => {
+                    setOutlineGenerationStatus(`Generating chapter ${index + 1} of ${total}: ${title}`);
+                });
+            } catch (err) {
+                setOutlineGenerationStatus(`Generation failed: ${err.message}`, true);
+                alert(`Chapter annotation generation failed: ${err.message}`);
+                return;
+            } finally {
+                if (acceptBtn) {
+                    acceptBtn.disabled = false;
+                    acceptBtn.textContent = originalAcceptText || '✅ Accept Outline & Generate Chapter Outlines';
+                }
+            }
+
+            renderChapterList();
+            saveProject();
+            setOutlineGenerationStatus(`Completed ${normalizedTitles.length} chapter annotation${normalizedTitles.length === 1 ? '' : 's'}.`);
+            switchTab('chapters');
+        }
+
+        function saveOutline() {
+            project.outline = document.getElementById('outline-editor').value || '';
+            saveProject();
+            alert('Outline saved.');
+        }
+
         function renderSpecificOutlineChat() {
             const chat = document.getElementById('outline-specific-chat');
-            chat.innerHTML = outlineSpecificHistory.map(msg =>
-                msg.role === 'user'
-                    ? `<div class="text-right"><div class="inline-block bg-emerald-600 text-white rounded-3xl px-5 py-3 max-w-[75%]">${msg.content}</div></div>`
-                    : `<div class="flex gap-x-3"><div class="text-3xl flex-shrink-0">📋</div><div class="bg-black/70 rounded-3xl px-5 py-4 flex-1">${msg.content}</div></div>`
-            ).join('');
+            if (!chat) return;
+            chat.innerHTML = outlineSpecificHistory.map(msg => {
+                if (msg.role === 'user') {
+                    return `<div class="text-right"><div class="inline-block bg-emerald-600 text-white rounded-3xl px-5 py-3 max-w-[75%]">${escapeHtml(msg.content)}</div></div>`;
+                }
+                return `<div class="flex gap-x-3"><div class="text-3xl flex-shrink-0">📋</div><div class="bg-black/70 rounded-3xl px-5 py-4 flex-1 whitespace-pre-wrap">${escapeHtml(msg.content)}</div></div>`;
+            }).join('');
             chat.scrollTop = chat.scrollHeight;
         }
 
-        async function sendSpecificOutlineQuestion() { /* unchanged from v0.9.2 */ }
+        async function sendSpecificOutlineQuestion() {
+            const inputEl = document.getElementById('outline-specific-input');
+            const question = (inputEl?.value || '').trim();
+            if (!question) return;
 
-        // Accept Outline → Chapter Annotator
-        async function acceptOutline() { /* unchanged */ }
+            outlineSpecificHistory.push({ role: 'user', content: question });
+            renderSpecificOutlineChat();
+            inputEl.value = '';
 
-        function renderChapterList() { /* unchanged */ }
-        function editChapter(index) { /* unchanged */ }
-        function saveOutline() { /* unchanged */ }
+            const apiKey = (project.setup.apiKey || '').trim();
+            if (!apiKey) {
+                outlineSpecificHistory.push({ role: 'assistant', content: 'Add your Grok API key in Setup to use this chat.' });
+                renderSpecificOutlineChat();
+                return;
+            }
+
+            try {
+                const response = await fetch('https://api.x.ai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: project.setup.preferredModel,
+                        tools: buildApiTools(),
+                        messages: [
+                            { role: 'system', content: project.prompts.outliner },
+                            { role: 'user', content: `Current outline:\n\n${project.outline || ''}\n\nQuestion: ${question}` }
+                        ],
+                        temperature: 0.5,
+                        max_tokens: 1200
+                    })
+                });
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                const reply = data?.choices?.[0]?.message?.content?.trim() || 'No response';
+                outlineSpecificHistory.push({ role: 'assistant', content: reply });
+            } catch (err) {
+                outlineSpecificHistory.push({ role: 'assistant', content: `Error: ${err.message}` });
+            }
+
+            renderSpecificOutlineChat();
+        }
+
+        function editChapter(index) {
+            const textarea = document.getElementById(`chapter-annotation-${index}`);
+            if (textarea) textarea.focus();
+        }
+
+        function renderChapterList() {
+            const list = document.getElementById('chapter-list');
+            if (!list) return;
+            const chapters = project.chapterOutlines || [];
+            if (chapters.length === 0) {
+                list.innerHTML = '<div class="text-emerald-300">No chapter outlines yet. Accept an outline to generate chapter cards.</div>';
+                return;
+            }
+
+            list.innerHTML = chapters.map((ch, i) => {
+                return `<div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
+                    <div class="flex items-center justify-between mb-4 gap-4">
+                        <input id="chapter-title-${i}" value="${escapeHtml(ch.title || `Chapter ${i + 1}`)}" class="flex-1 bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-4 py-3 text-lg" />
+                        <button onclick="editChapter(${i})" class="px-4 py-2 border border-emerald-600 hover:bg-emerald-900 rounded-3xl text-sm">Edit</button>
+                        <button onclick="regenerateChapterAnnotation(${i})" class="px-4 py-2 border border-emerald-600 hover:bg-emerald-900 rounded-3xl text-sm">Regenerate</button>
+                        <button onclick="saveChapter(${i})" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm">Save</button>
+                    </div>
+                    <textarea id="chapter-annotation-${i}" rows="10" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl p-5 leading-relaxed resize-y">${escapeHtml(ch.annotation || '')}</textarea>
+                </div>`;
+            }).join('');
+        }
+
+        window.regenerateChapterAnnotation = async function(index) {
+            const title = document.getElementById(`chapter-title-${index}`)?.value || `Chapter ${index + 1}`;
+            const context = extractChapterContext(project.outline || '', title);
+            const textarea = document.getElementById(`chapter-annotation-${index}`);
+            if (!textarea) return;
+            const apiKey = (project.setup.apiKey || '').trim();
+
+            if (!apiKey) {
+                alert('Add your Grok API key in Setup before regenerating with Chapter Annotator Agent.');
+                switchTab('setup');
+                return;
+            }
+
+            const original = textarea.value;
+            textarea.value = 'Generating annotation with Chapter Annotator Agent...';
+            textarea.disabled = true;
+
+            try {
+                const annotation = await annotateSingleChapter(title, context);
+                textarea.value = annotation;
+                if (!project.chapterOutlines[index]) project.chapterOutlines[index] = {};
+                project.chapterOutlines[index].title = title;
+                project.chapterOutlines[index].annotation = annotation;
+                saveProject();
+            } catch (err) {
+                textarea.value = original;
+                alert(`Regeneration failed: ${err.message}`);
+            } finally {
+                textarea.disabled = false;
+            }
+        };
+
+        window.saveChapter = function(index) {
+            const title = document.getElementById(`chapter-title-${index}`)?.value || `Chapter ${index + 1}`;
+            const annotation = document.getElementById(`chapter-annotation-${index}`)?.value || '';
+            if (!project.chapterOutlines[index]) project.chapterOutlines[index] = {};
+            project.chapterOutlines[index].title = title;
+            project.chapterOutlines[index].annotation = annotation;
+            saveProject();
+        };
 
         function updateFooter() {
-            document.getElementById('footer-project-name').textContent = project.meta.name || 'Untitled Herbal Book';
+            const footer = document.getElementById('footer-project-name');
+            if (footer) {
+                footer.textContent = project.meta.name || 'Untitled Herbal Book';
+            }
         }
 
         function showProjectInfo() {
-            alert('HerbalBookForge v0.9.3\nAPI key visibility added + key reading fixed.');
+            alert(
+                `HerbalBookForge v0.9.5\n\n` +
+                `Book Goals: ${project.goals.finalized ? 'Finalized' : 'Draft'}\n` +
+                `Outline: ${project.outline ? 'Present' : 'Missing'}\n` +
+                `Chapter outlines: ${(project.chapterOutlines || []).length}\n` +
+                `Drafting/Safety/Preview: Planned (v0.10)`
+            );
         }
 
         function initializeApp() {
-            console.log('%c🌿 HerbalBookForge v0.9.3 initialized – API key fixed', 'color:#34d399; font-size:16px');
+            console.log('%c🌿 HerbalBookForge v0.9.5 initialized – Full requirements + detailed TODOs added', 'color:#34d399; font-size:16px');
             loadProject();
             bindSetupListeners();
             bindGoalsListeners();

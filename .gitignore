@@ -19,6 +19,18 @@ npm-debug.log*
 dist/
 build/
 
+# Node / Playwright
+node_modules/
+package-lock.json
+playwright-report/
+test-results/
+
+# IDE
+.vs/
+
 # Keep API keys out of version control
 *.key
 *.secret
+
+# Session exports may contain API keys - never commit
+*_session.json
