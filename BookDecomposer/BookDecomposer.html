@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Book Decomposer</title>
+    <title>Book Decomposer v0.2.0</title>
     <style>
         .tabcontent { display: none; padding: 20px; }
         .tabcontent.active { display: block; }
@@ -27,6 +27,17 @@
         <input type="file" id="bookFile" accept=".txt"><br><br>
         <label for="apiKey">API Key:</label><br>
         <input type="text" id="apiKey" name="apiKey" placeholder="Enter your API key"><br><br>
+        <label for="model">Model:</label><br>
+        <select id="model" name="model" onchange="toggleCustomModelInput()">
+            <option value="grok-4.20-0309-reasoning" selected>grok-4.20-0309-reasoning (Recommended)</option>
+            <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
+            <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
+            <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
+            <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
+            <option value="custom">Custom model...</option>
+        </select><br><br>
+        <label for="customModel" id="customModelLabel" style="display:none;">Custom Model Name:</label><br>
+        <input type="text" id="customModel" name="customModel" placeholder="Enter custom model name" style="display:none;"><br><br>
         <button onclick="processBook()">Process Book</button>
         <p id="loading" style="display:none;">Processing...</p>
     </div>

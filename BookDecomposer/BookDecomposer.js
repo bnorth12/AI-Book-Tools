@@ -47,22 +47,71 @@ function safeParse(response, field, defaultValue) {
     }
 }
 
+function parseModelJSONResponse(rawText) {
+    if (typeof rawText !== "string" || !rawText.trim()) {
+        return null;
+    }
+
+    const attempts = [];
+    attempts.push(rawText.trim());
+    attempts.push(rawText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim());
+
+    const firstBrace = rawText.indexOf("{");
+    const lastBrace = rawText.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        attempts.push(rawText.slice(firstBrace, lastBrace + 1).trim());
+    }
+
+    for (const candidate of attempts) {
+        try {
+            return JSON.parse(candidate);
+        } catch (e) {
+            // Try next candidate.
+        }
+    }
+
+    return null;
+}
+
 async function callGrokAPI(messages, maxTokens, isJSON) {
     const apiKey = document.getElementById("apiKey").value.trim();
+    const selectedModel = document.getElementById("model")?.value || "grok-4.20-0309-reasoning";
+    const customModel = document.getElementById("customModel")?.value.trim() || "";
+    const model = selectedModel === "custom" ? customModel : selectedModel;
+    const useResponsesAPI = model.includes("multi-agent");
+
+    if (!model) {
+        throw new Error("Please select a model or enter a custom model name.");
+    }
+
     try {
-        const response = await fetch("https://api.x.ai/v1/chat/completions", {
+        const endpoint = useResponsesAPI
+            ? "https://api.x.ai/v1/responses"
+            : "https://api.x.ai/v1/chat/completions";
+
+        const payload = useResponsesAPI
+            ? {
+                model: model,
+                input: messages.map((m) => `${m.role}: ${m.content}`).join("\n\n"),
+                max_output_tokens: maxTokens,
+                temperature: 0.65,
+                text: isJSON ? { format: { type: "json_object" } } : undefined
+            }
+            : {
+                model: model,
+                messages: messages,
+                max_tokens: maxTokens,
+                temperature: 0.65,
+                response_format: isJSON ? { type: "json_object" } : undefined
+            };
+
+        const response = await fetch(endpoint, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${apiKey}`
             },
-            body: JSON.stringify({
-                model: "grok-4.20-0309-reasoning",
-                messages: messages,
-                max_tokens: maxTokens,
-                temperature: 0.65,
-                response_format: isJSON ? { type: "json_object" } : undefined
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
@@ -71,8 +120,29 @@ async function callGrokAPI(messages, maxTokens, isJSON) {
         }
 
         const data = await response.json();
+        if (useResponsesAPI) {
+            if (typeof data.output_text === "string" && data.output_text.length > 0) {
+                return data.output_text;
+            }
+
+            if (Array.isArray(data.output)) {
+                const extractedText = data.output
+                    .flatMap(item => Array.isArray(item.content) ? item.content : [])
+                    .filter(contentItem => contentItem.type === "output_text" && typeof contentItem.text === "string")
+                    .map(contentItem => contentItem.text)
+                    .join("\n")
+                    .trim();
+
+                if (extractedText) {
+                    return extractedText;
+                }
+            }
+
+            throw new Error("Invalid responses API payload: missing output text.");
+        }
+
         if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-            throw new Error("Invalid API response: missing choices or message.");
+            throw new Error("Invalid chat completions response: missing choices or message.");
         }
         return data.choices[0].message.content;
     } catch (error) {
@@ -186,7 +256,9 @@ window.processBook = async function() {
             content: `I’m loading a book titled '${bookTitle}' with ${bookChunks.length} chunks (chapters or parts). I’ll provide all chunks next. Use ONLY this book’s content (no external references) and build a complete understanding of the narrative. In the final extraction, do not leave core narrative fields empty without an explicit reason. Confirm with: '${bookTitle}'`
         }];
         let response = await callGrokAPI(messages, 200, false);
-        if (!response.includes(bookTitle)) throw new Error("Title not confirmed by API.");
+        if (!response.includes(bookTitle)) {
+            console.warn("Title was not explicitly echoed by model; continuing with chunk loading.");
+        }
         messages.push({ role: "assistant", content: response });
 
         for (let i = 0; i < bookChunks.length; i++) {
@@ -196,7 +268,9 @@ window.processBook = async function() {
             });
             response = await callGrokAPI(messages, 200, false);
             messages.push({ role: "assistant", content: response });
-            if (!response.includes(`Chunk ${i + 1} processed`)) throw new Error(`Chunk ${i + 1} not acknowledged by API.`);
+            if (!response.includes(`Chunk ${i + 1} processed`)) {
+                console.warn(`Chunk ${i + 1} was not explicitly acknowledged; continuing.`);
+            }
             console.log(`Chunk ${i + 1} sent, response: ${response}`);
         }
 
@@ -249,7 +323,10 @@ window.processBook = async function() {
         messages.push({ role: "user", content: masterPrompt });
         const fullResponse = await callGrokAPI(messages, 12000, true);
 
-        const parsed = JSON.parse(fullResponse);
+        const parsed = parseModelJSONResponse(fullResponse);
+        if (!parsed) {
+            throw new Error("Model returned invalid JSON for extraction output.");
+        }
         const parsedNovelData = parsed.novelData && typeof parsed.novelData === "object" ? parsed.novelData : parsed;
         const preservedChapters = [...novelData.chapters];
         const preservedEditedChapters = [...novelData.editedChapters];
@@ -322,7 +399,7 @@ function generateJSON() {
     const payload = {
         schemaVersion: "1.0",
         sourceTool: "BookDecomposer",
-        sourceVersion: "0.X.0",
+        sourceVersion: "0.2.0",
         novelData: novelData
     };
     document.getElementById("jsonOutput").textContent = JSON.stringify(payload, null, 2);
@@ -332,7 +409,7 @@ function buildSchemaPayload() {
     return {
         schemaVersion: "1.0",
         sourceTool: "BookDecomposer",
-        sourceVersion: "0.X.0",
+        sourceVersion: "0.2.0",
         novelData: novelData
     };
 }
@@ -400,3 +477,20 @@ function showTab(tabNumber) {
     document.querySelectorAll(".tabcontent").forEach(tab => tab.classList.remove("active"));
     document.getElementById(`tab${tabNumber}`).classList.add("active");
 }
+
+window.toggleCustomModelInput = function() {
+    const model = document.getElementById("model");
+    const customLabel = document.getElementById("customModelLabel");
+    const customInput = document.getElementById("customModel");
+    const showCustom = model && model.value === "custom";
+
+    if (customLabel) {
+        customLabel.style.display = showCustom ? "block" : "none";
+    }
+    if (customInput) {
+        customInput.style.display = showCustom ? "block" : "none";
+        if (!showCustom) {
+            customInput.value = "";
+        }
+    }
+};

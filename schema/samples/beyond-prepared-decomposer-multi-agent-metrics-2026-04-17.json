@@ -1,0 +1,42 @@
+{
+  "runDate": "2026-04-17",
+  "tool": "BookDecomposer",
+  "title": "Beyond Prepared",
+  "model": "grok-4.20-multi-agent-0309",
+  "apiRouting": {
+    "usedResponses": true,
+    "usedChatCompletions": false,
+    "endpointHits": 36
+  },
+  "output": {
+    "jsonLength": 638892,
+    "numChapters": 17,
+    "chapterOutlinesCount": 17,
+    "chapterArcsCount": 17,
+    "charactersCount": 7,
+    "subplotsCount": 1
+  },
+  "fieldLengths": {
+    "genre": 33,
+    "storyArc": 1177,
+    "generalPlot": 1512,
+    "setting": 1208,
+    "styleGuide": 279
+  },
+  "completeness": {
+    "genre": true,
+    "title": true,
+    "storyArc": true,
+    "generalPlot": true,
+    "setting": true,
+    "authorStyle": true,
+    "styleGuide": true,
+    "chapters": true,
+    "chapterOutlines": true,
+    "chapterArcs": true,
+    "characters": true,
+    "subplots": true
+  },
+  "completenessScore": "12/12",
+  "artifact": "schema/samples/beyond-prepared-decomposer-multi-agent-2026-04-17.json"
+}

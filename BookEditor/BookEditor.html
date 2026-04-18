@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BookEditor V.0.3.0</title>
+    <title>BookEditor V.0.4.0</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         h1 { text-align: center; color: #333; }
@@ -35,7 +35,7 @@
     </style>
 </head>
 <body>
-    <h1>BookEditor V.0.2.0</h1>
+    <h1>BookEditor V.0.4.0</h1>
     <div id="nav">
         <button onclick="showTab(1)" class="active">1. Project Setup</button>
         <button onclick="showTab(2)">2. Book Input</button>
@@ -218,6 +218,7 @@
 		    console.log("Starting API call with messages:", messages.length);
 		    const apiKey = document.getElementById("apiKey").value;
 		    const model = document.getElementById("model").value;
+            const useResponsesAPI = model.includes("multi-agent");
 		    const maxTokens = customMaxTokens || parseInt(document.getElementById("maxTokens").value);
 		    const currentTab = document.querySelector(".tab.active");
 		    const loading = currentTab.querySelector("#loading");
@@ -233,18 +234,25 @@
 		    updatePromptSent(promptText);
 		    if (loading) loading.style.display = "block"; // Check if loading exists
 
-		    const url = "https://api.x.ai/v1/chat/completions";
+            const url = useResponsesAPI ? "https://api.x.ai/v1/responses" : "https://api.x.ai/v1/chat/completions";
 		    const headers = {
 		        "Authorization": `Bearer ${apiKey}`,
 		        "Content-Type": "application/json"
 		    };
-		    const data = {
-		        "model": model,
-		        "messages": messages,
-		        "max_tokens": maxTokens,
-                "temperature": 0.65,
-		        "stream": false
-		    };
+            const data = useResponsesAPI
+                ? {
+                    "model": model,
+                    "input": messages.map(m => `${m.role}: ${m.content}`).join("\n\n"),
+                    "max_output_tokens": maxTokens,
+                    "temperature": 0.65
+                }
+                : {
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": maxTokens,
+                    "temperature": 0.65,
+                    "stream": false
+                };
 
 		    try {
 		        console.log("Sending request to Grok API with max_tokens:", maxTokens);
@@ -259,10 +267,38 @@
 		        }
 		        const result = await response.json();
 		        console.log("API response received:", result);
-		        if (!result.choices || !result.choices[0] || !result.choices[0].message || !result.choices[0].message.content) {
-		            throw new Error("Invalid API response: missing choices or content");
+
+                let content = "";
+                if (useResponsesAPI) {
+                    if (typeof result.output_text === "string" && result.output_text.length > 0) {
+                        content = result.output_text;
+                    } else if (Array.isArray(result.output)) {
+                        content = result.output
+                            .flatMap(item => Array.isArray(item.content) ? item.content : [])
+                            .filter(part => part.type === "output_text" && typeof part.text === "string")
+                            .map(part => part.text)
+                            .join("\n")
+                            .trim();
+                    }
+
+                    if (!content) {
+                        throw new Error("Invalid responses API response: missing output text");
+                    }
+                } else {
+                    if (!result.choices || !result.choices[0] || !result.choices[0].message || !result.choices[0].message.content) {
+                        throw new Error("Invalid API response: missing choices or content");
+                    }
+                    content = result.choices[0].message.content;
 		        }
-		        const usage = result.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { text_tokens: 0, audio_tokens: 0, image_tokens: 0, cached_tokens: 0 } };
+
+                const usage = useResponsesAPI
+                    ? {
+                        prompt_tokens: result.usage?.input_tokens || 0,
+                        completion_tokens: result.usage?.output_tokens || 0,
+                        total_tokens: result.usage?.total_tokens || ((result.usage?.input_tokens || 0) + (result.usage?.output_tokens || 0)),
+                        prompt_tokens_details: { text_tokens: result.usage?.input_tokens || 0, audio_tokens: 0, image_tokens: 0, cached_tokens: 0 }
+                    }
+                    : (result.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { text_tokens: 0, audio_tokens: 0, image_tokens: 0, cached_tokens: 0 } });
 		        totalTokenUsage.prompt_tokens += usage.prompt_tokens;
 		        totalTokenUsage.completion_tokens += usage.completion_tokens;
 		        totalTokenUsage.total_tokens += usage.total_tokens;
@@ -271,10 +307,10 @@
 		        totalTokenUsage.prompt_tokens_details.image_tokens += usage.prompt_tokens_details.image_tokens;
 		        totalTokenUsage.prompt_tokens_details.cached_tokens += usage.prompt_tokens_details.cached_tokens;
 		        updateTokenCounter(usage);
-		        requestLog.push({ prompt: promptText, response: result.choices[0].message.content, usage: usage });
+                requestLog.push({ prompt: promptText, response: content, usage: usage });
 		        currentLogIndex = requestLog.length - 1;
 		        updateRequestLogDisplay();
-		        callback(result.choices[0].message.content);
+                callback(content);
 		        showTab(nextTab);
 		    } catch (error) {
 		        console.error("API Error:", error);
@@ -651,6 +687,7 @@
             const data = {
                 schemaVersion: "1.0",
                 sourceTool: "BookEditor",
+                sourceVersion: "0.4.0",
                 novelData: novelData
             };
 

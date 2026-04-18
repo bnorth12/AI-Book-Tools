@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
   "sourceTool": "BookDecomposer",
-  "sourceVersion": "0.X.0",
+  "sourceVersion": "0.2.0",
   "novelData": {
     "genre": "",
     "title": "Beyond Prepared",

@@ -5,6 +5,7 @@ An AI-powered tool that analyzes existing books and breaks them down into struct
 ## Features
 
 - **Book Input**: Upload text files of complete books or manuscripts
+- **Model Selection**: Choose standard Grok models, multi-agent routing, or provide a custom model name
 - **Chapter Detection**: Automatically identify and extract individual chapters
 - **Element Extraction**: Use AI to analyze and extract key story elements:
   - Genre classification
@@ -16,6 +17,7 @@ An AI-powered tool that analyzes existing books and breaks them down into struct
   - Author style analysis
 - **JSON Output**: Export structured analysis data for further processing
 - **Preview System**: Review extracted chapters and elements before final output
+- **Shared Schema Export**: Emit the wrapper format used by the other novel tools
 
 ## Usage
 
@@ -51,8 +53,10 @@ The tool generates a comprehensive JSON structure containing:
 - Chapter-by-chapter outlines
 - Author style recommendations
 
-This tool will align its JSON export with the shared schema in `schema/novel-schema-1.0.json` to support compatibility with `BookEditor` and `NovelWriter`.
+This tool now exports and imports the shared schema wrapper in `schema/novel-schema-1.0.json`, including `schemaVersion`, `sourceTool`, optional `sourceVersion`, and `novelData`.
+
+Standard Grok models are sent through `https://api.x.ai/v1/chat/completions`. Multi-agent models are sent through `https://api.x.ai/v1/responses`.
 
 ## Version
 
-Current version: 0.X.0
+Current version: 0.2.0

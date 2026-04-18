@@ -5,6 +5,7 @@ An AI-powered book editing and improvement tool that helps refine existing manus
 ## Features
 
 - **Project Setup**: Configure your editing project with genre and style preferences
+- **Model Routing**: Standard models use chat completions, while multi-agent models use the responses API automatically
 - **Book Input**: Upload and analyze your manuscript text
 - **AI Chat Bot**: Interactive AI assistant for editing questions and suggestions
 - **Improvements List**: Generate and track specific improvement suggestions
@@ -33,8 +34,8 @@ An AI-powered book editing and improvement tool that helps refine existing manus
 
 ## Shared Schema
 
-This tool will move toward a shared import/export format using `schema/novel-schema-1.0.json` so it can accept compatible data from `NovelWriter` and `BookDecomposer`.
+This tool now exports and imports the shared wrapper format defined by `schema/novel-schema-1.0.json`, allowing compatible data exchange with `NovelWriter` and `BookDecomposer`.
 
 ## Version
 
-Current version: 0.2.0
+Current version: 0.4.0

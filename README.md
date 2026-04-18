@@ -6,6 +6,8 @@
 
 Static HTML/JavaScript tools for AI-assisted writing and book editing.
 
+Current tool releases: NovelWriter 0.3.3, BookEditor 0.4.0, BookDecomposer 0.2.0, HerbalBookForge 0.9.3.
+
 ## Quick Start
 
 1. **Download**: Clone or download this repository
@@ -125,9 +127,9 @@ Server invite link will be added soon. Check back or create an issue to request 
 
 ### Shared Novel Schema
 
-- [ ] Normalize `NovelWriter`, `BookEditor`, and `BookDecomposer` around a versioned shared schema
-- [ ] Add import/export compatibility for `schema/novel-schema-1.0.json`
-- [ ] Track implementation tasks in `schema/novel-schema-1.0-tasks.md`
+- [x] Normalize `NovelWriter`, `BookEditor`, and `BookDecomposer` around a versioned shared schema
+- [x] Add import/export compatibility for `schema/novel-schema-1.0.json`
+- [x] Track implementation tasks in `schema/novel-schema-1.0-tasks.md`
 
 ### Version 2.0 Goals
 

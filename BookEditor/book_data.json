@@ -1,0 +1,149 @@
+{
+  "schemaVersion": "1.0",
+  "sourceTool": "BookEditor",
+  "sourceVersion": "0.4.0",
+  "novelData": {
+    "genre": "Grounded Science Fiction",
+    "title": "Beyond Prepared",
+    "storyArc": "",
+    "generalPlot": "",
+    "setting": "",
+    "numChapters": 2,
+    "chapterLength": 42,
+    "authorStyle": "",
+    "styleGuide": "",
+    "author": "",
+    "characters": [],
+    "subplots": [],
+    "chapterOutlines": [],
+    "chapterArcs": [],
+    "chapters": [
+      "1. \"Signal Drift\"\nMara detects a narrowband signal buried in reactor noise and argues it is artificial. The station council dismisses her as sleep-deprived. She quietly saves the raw data and asks Jalen for help rebuilding a dead antenna array.",
+      "2. \"Cold Start\"\nDuring a scheduled blackout drill, Mara and Jalen reroute power and reacquire the signal at higher fidelity. The waveform includes prime intervals and timing offsets that imply intent. They must decide whether to report it or verify one more cycle."
+    ],
+    "editedChapters": [
+      "Mara rubbed her tired eyes and focused again.\n1. \"Signal Drift\"\nMara detects a narrowband signal buried in reactor noise and argues it is artificial.\nShe quietly saved the raw data and reached out to Jalen, her trusted colleague, for assistance in rebuilding the defunct antenna array clinging to the station's hull.",
+      null
+    ],
+    "bookText": "1. \"Signal Drift\"\nMara detects a narrowband signal buried in reactor noise and argues it is artificial. The station council dismisses her as sleep-deprived. She quietly saves the raw data and asks Jalen for help rebuilding a dead antenna array.\n\n2. \"Cold Start\"\nDuring a scheduled blackout drill, Mara and Jalen reroute power and reacquire the signal at higher fidelity. The waveform includes prime intervals and timing offsets that imply intent. They must decide whether to report it or verify one more cycle.",
+    "outlineImprovements": "",
+    "bookImprovementsWithStatus": [],
+    "requestLog": [
+      {
+        "prompt": "user: You are an expert book editor.\nAdd Chapter 1 of 2 to your context for analysis.\nDo not respond with suggestions yet—just confirm receipt with 'Received Chapter X of Y'.\nHere is the chapter text:\n1. \"Signal Drift\"\nMara detects a narrowband signal buried in reactor noise and argues it is artificial. The station council dismisses her as sleep-deprived. She quietly saves the raw data and asks Jalen for help rebuilding a dead antenna array.",
+        "response": "Received Chapter 1 of 2",
+        "usage": {
+          "prompt_tokens": 220,
+          "completion_tokens": 7,
+          "total_tokens": 472,
+          "prompt_tokens_details": {
+            "text_tokens": 220,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "cached_tokens": 64
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 245,
+            "audio_tokens": 0,
+            "accepted_prediction_tokens": 0,
+            "rejected_prediction_tokens": 0
+          },
+          "num_sources_used": 0,
+          "cost_in_usd_ticks": 18368000
+        }
+      },
+      {
+        "prompt": "user: You are an expert book editor.\nAdd Chapter 2 of 2 to your context for analysis.\nDo not respond with suggestions yet—just confirm receipt with 'Received Chapter X of Y'.\nHere is the chapter text:\n2. \"Cold Start\"\nDuring a scheduled blackout drill, Mara and Jalen reroute power and reacquire the signal at higher fidelity. The waveform includes prime intervals and timing offsets that imply intent. They must decide whether to report it or verify one more cycle.",
+        "response": "Received Chapter 2 of 2",
+        "usage": {
+          "prompt_tokens": 220,
+          "completion_tokens": 7,
+          "total_tokens": 558,
+          "prompt_tokens_details": {
+            "text_tokens": 220,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "cached_tokens": 64
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 331,
+            "audio_tokens": 0,
+            "accepted_prediction_tokens": 0,
+            "rejected_prediction_tokens": 0
+          },
+          "num_sources_used": 0,
+          "cost_in_usd_ticks": 23528000
+        }
+      },
+      {
+        "prompt": "user: You are an expert book editor.\nUsing the full book context of 17 chapters already provided, analyze this chapter text for improvement opportunities:\n1. \"Signal Drift\"\nMara detects a narrowband signal buried in reactor noise and argues it is artificial. The station council dismisses her as sleep-deprived. She quietly saves the raw data and asks Jalen for help rebuilding a dead antenna array.\nUse this placeholder book summary for initial consistency (refined later):\nA fictional narrative to be summarized dynamically.\nGenre: Grounded Science Fiction\nSuggest ONE comprehensive improvement for Chapter 1 only, covering THREE categories: Additions, Deletions, Edits to Existing Text.\nFor each category, provide:\n1. Action: What to add/delete/edit (e.g., 'Insert X', 'Cut Y', 'Rephrase Z').\n2. Location: Where in the chapter (e.g., 'after first paragraph', 'at chapter end').\n3. Amount: EXACTLY how many characters to add/delete/edit—specify 'exactly X chars' and quote the precise text (e.g., 'exactly 350 chars: \"Text here\"'). Verify character counts match quoted text.\n4. Why: Why this improves the chapter (e.g., '*Why*: Enhances theme Z'), ensuring coherence with the full book context.\nInclude all THREE categories—do not skip any. If no change is needed, state 'None' with a reason (e.g., 'None—pacing already optimal').\nBase suggestions on improving narrative flow, character depth, setting, pacing, or genre alignment—tailor to the provided genre and full book context.\nAdditions must add EXACTLY the specified characters—quote the text to insert.\nDeletions must remove EXACTLY the specified range—quote the precise text to cut.\nEdits must replace text with EQUAL OR GREATER length—quote original and new text—do not truncate beyond specified range.\nReturn as: [Chapter 1]:\nAdditions: [Action] [Location]—exactly X chars: \"[Exact Text]\". *Why*: Why.\nDeletions: [Action] [Location]—exactly X chars: \"[Exact Text]\". *Why*: Why.\nEdits: [Action] [Location]—exactly X chars: \"[Original Text]\" to \"[New Text]\". *Why*: Why.\nUse newlines (\n) to separate each category clearly for readability.",
+        "response": "[Chapter 1]:\nAdditions: Insert new opening text at chapter start—exactly 45 chars: \"Mara rubbed her tired eyes and focused again.\". *Why*: Establishes Mara's expertise and quiet determination early, deepening character resilience against later station crises (chapters 4-9) while aligning with grounded sci-fi's emphasis on human fatigue amid technical realism.\n\nDeletions: Delete council reaction after first sentence—exactly 53 chars: \"The station council dismisses her as sleep-deprived.\". *Why*: Removes premature resolution to tighten pacing and sustain mystery across the book's signal-arc (chapters 3-12), preventing early tonal shift away from isolated discovery central to the narrative flow.\n\nEdits: Rephrase closing sentence at chapter end—exactly 88 chars: \"She quietly saves the raw data and asks Jalen for help rebuilding a dead antenna array.\" to \"She quietly saved the raw data and reached out to Jalen, her trusted colleague, for assistance in rebuilding the defunct antenna array clinging to the station's hull.\". *Why*: Expands character relationship and setting details (exterior hull tech) for greater depth and genre fidelity to realistic orbital engineering, improving narrative flow toward repair sequences in chapters 2 and 5 without truncating scope.",
+        "usage": {
+          "prompt_tokens": 614,
+          "completion_tokens": 260,
+          "total_tokens": 8261,
+          "prompt_tokens_details": {
+            "text_tokens": 614,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "cached_tokens": 64
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 7387,
+            "audio_tokens": 0,
+            "accepted_prediction_tokens": 0,
+            "rejected_prediction_tokens": 0
+          },
+          "num_sources_used": 0,
+          "cost_in_usd_ticks": 469948000
+        }
+      },
+      {
+        "prompt": "user: You are an expert book editor.\nUsing the full book context of 17 chapters already provided, analyze this chapter text for improvement opportunities:\n2. \"Cold Start\"\nDuring a scheduled blackout drill, Mara and Jalen reroute power and reacquire the signal at higher fidelity. The waveform includes prime intervals and timing offsets that imply intent. They must decide whether to report it or verify one more cycle.\nUse this placeholder book summary for initial consistency (refined later):\nA fictional narrative to be summarized dynamically.\nGenre: Grounded Science Fiction\nSuggest ONE comprehensive improvement for Chapter 2 only, covering THREE categories: Additions, Deletions, Edits to Existing Text.\nFor each category, provide:\n1. Action: What to add/delete/edit (e.g., 'Insert X', 'Cut Y', 'Rephrase Z').\n2. Location: Where in the chapter (e.g., 'after first paragraph', 'at chapter end').\n3. Amount: EXACTLY how many characters to add/delete/edit—specify 'exactly X chars' and quote the precise text (e.g., 'exactly 350 chars: \"Text here\"'). Verify character counts match quoted text.\n4. Why: Why this improves the chapter (e.g., '*Why*: Enhances theme Z'), ensuring coherence with the full book context.\nInclude all THREE categories—do not skip any. If no change is needed, state 'None' with a reason (e.g., 'None—pacing already optimal').\nBase suggestions on improving narrative flow, character depth, setting, pacing, or genre alignment—tailor to the provided genre and full book context.\nAdditions must add EXACTLY the specified characters—quote the text to insert.\nDeletions must remove EXACTLY the specified range—quote the precise text to cut.\nEdits must replace text with EQUAL OR GREATER length—quote original and new text—do not truncate beyond specified range.\nReturn as: [Chapter 2]:\nAdditions: [Action] [Location]—exactly X chars: \"[Exact Text]\". *Why*: Why.\nDeletions: [Action] [Location]—exactly X chars: \"[Exact Text]\". *Why*: Why.\nEdits: [Action] [Location]—exactly X chars: \"[Original Text]\" to \"[New Text]\". *Why*: Why.\nUse newlines (\n) to separate each category clearly for readability.",
+        "response": "[Chapter 2]:\nAdditions: Insert scene-setting and character depth after the chapter title—exactly 86 chars: \"Mara's pulse quickened as she typed the override commands. This was no ordinary drill.\". \n*Why*: Grounds the sci-fi in realistic human tension and bunker-like emergency lighting consistent with the book's 17-chapter arc of cautious signal verification amid systemic blackouts, boosting immersion and stakes.\n\nDeletions: Cut overt conflict statement at chapter end—exactly 63 chars: \"They must decide whether to report it or verify one more cycle.\". \n*Why*: Removes telling summary to improve pacing and subtlety, letting readers infer the dilemma naturally and heighten suspense that carries into later chapters' reporting consequences.\n\nEdits: Rephrase waveform description in second sentence—exactly 75 chars: \"The waveform includes prime intervals and timing offsets that imply intent.\" to \"The waveform displayed clear prime-numbered intervals along with exact timing offsets that pointed toward intentional origin from an unknown source.\". \n*Why*: Elevates technical precision and genre alignment for grounded science fiction while expanding character expertise, enhancing narrative flow and credibility with the full book's signal-analysis themes.",
+        "usage": {
+          "prompt_tokens": 614,
+          "completion_tokens": 234,
+          "total_tokens": 7405,
+          "prompt_tokens_details": {
+            "text_tokens": 614,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "cached_tokens": 64
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 6557,
+            "audio_tokens": 0,
+            "accepted_prediction_tokens": 0,
+            "rejected_prediction_tokens": 0
+          },
+          "num_sources_used": 0,
+          "cost_in_usd_ticks": 418588000
+        }
+      },
+      {
+        "prompt": "user: You are an expert book editor.\nUse the full book context already provided.\nEdit Chapter 1 using this improvement:\n[Chapter 1]:\n\nAdditions: Insert new opening text at chapter start—exactly 45 chars: \"Mara rubbed her tired eyes and focused again.\".\n*Why*: Establishes Mara's expertise and quiet determination early, deepening character resilience against later station crises (chapters 4-9) while aligning with grounded sci-fi's emphasis on human fatigue amid technical realism.\n\n\nDeletions: Delete council reaction after first sentence—exactly 53 chars: \"The station council dismisses her as sleep-deprived.\".\n*Why*: Removes premature resolution to tighten pacing and sustain mystery across the book's signal-arc (chapters 3-12), preventing early tonal shift away from isolated discovery central to the narrative flow.\n\n\nEdits: Rephrase closing sentence at chapter end—exactly 88 chars: \"She quietly saves the raw data and asks Jalen for help rebuilding a dead antenna array.\" to \"She quietly saved the raw data and reached out to Jalen, her trusted colleague, for assistance in rebuilding the defunct antenna array clinging to the station's hull.\".\n*Why*: Expands character relationship and setting details (exterior hull tech) for greater depth and genre fidelity to realistic orbital engineering, improving narrative flow toward repair sequences in chapters 2 and 5 without truncating scope.\nPRESERVE FULL CHAPTER TEXT VERBATIM as the baseline—DO NOT summarize, condense, or truncate beyond the EXACT deletions specified in the improvement. Apply Additions EXACTLY as quoted—insert the precise text at the specified location. Replace Edits EXACTLY as quoted with the new text, maintaining or increasing length as specified—DO NOT shorten beyond the original range. Return the ENTIRE edited chapter with ALL line breaks (\n) intact—no exceptions. DO NOT append or repeat the original chapter text beyond the specified edits.\nHere is the original chapter text:\n1. \"Signal Drift\"\nMara detects a narrowband signal buried in reactor noise and argues it is artificial. The station council dismisses her as sleep-deprived. She quietly saves the raw data and asks Jalen for help rebuilding a dead antenna array.",
+        "response": "Mara rubbed her tired eyes and focused again.\n1. \"Signal Drift\"\nMara detects a narrowband signal buried in reactor noise and argues it is artificial.\nShe quietly saved the raw data and reached out to Jalen, her trusted colleague, for assistance in rebuilding the defunct antenna array clinging to the station's hull.",
+        "usage": {
+          "prompt_tokens": 575,
+          "completion_tokens": 66,
+          "total_tokens": 5286,
+          "prompt_tokens_details": {
+            "text_tokens": 575,
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "cached_tokens": 128
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 4645,
+            "audio_tokens": 0,
+            "accepted_prediction_tokens": 0,
+            "rejected_prediction_tokens": 0
+          },
+          "num_sources_used": 0,
+          "cost_in_usd_ticks": 291856000
+        }
+      }
+    ]
+  }
+}
