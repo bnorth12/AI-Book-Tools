@@ -15,4 +15,28 @@ module.exports = defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
+  projects: [
+    {
+      name: 'regression',
+      testMatch: /novelwriter\.regression\.spec\.js|herbalbookforge\.regression\.spec\.js/,
+    },
+    {
+      name: 'smoke',
+      testMatch: /novelwriter\.smoke\.spec\.js/,
+      timeout: 600 * 1000,         // 10 min per test — real LLM calls
+      use: {
+        headless: false,            // visible browser for manual monitoring
+        baseURL: 'http://localhost:8080',
+        screenshot: 'on',
+        video: 'on',
+      },
+    },
+  ],
+  // Python HTTP server for smoke tests (serves the site at localhost:8080)
+  webServer: {
+    command: 'python -m http.server 8080',
+    url: 'http://localhost:8080',
+    reuseExistingServer: true,
+    timeout: 15 * 1000,
+  },
 });

@@ -147,7 +147,7 @@
 	        <h2>Characters</h2>
 	        <div class="note">NOTE: Enter any known character information from Tab 1 here before using AI Suggest to fill in additional details.</div>
 	        <label for="numCharacters">Number of Characters to Generate:</label>
-	        <input type="number" id="numCharacters" min="1" value="3">
+	        <input type="number" id="numCharacters" min="1" value="3" onchange="syncCharacterEntries()">
 	        <div id="characterCounterInfo" class="counter-note">Character entries: 1</div>
 	        <div id="characterList">
 	            <div class="character">
@@ -3315,7 +3315,32 @@
 			const numCharactersInput = document.getElementById('numCharacters');
 			numCharactersInput.value = String((parseInt(numCharactersInput.value || '0', 10) || 0) + 1);
 			updateCharacterCounter();
-}
+		}
+
+		// Sync the number of character entry boxes to match the numCharacters input value
+		function syncCharacterEntries() {
+		    const desired = Math.max(1, parseInt(document.getElementById('numCharacters').value, 10) || 1);
+		    const charList = document.getElementById('characterList');
+		    let entries = charList.querySelectorAll('.character');
+		    // Add entries if needed
+		    while (entries.length < desired) {
+		        const div = document.createElement('div');
+		        div.className = 'character';
+		        div.innerHTML = `
+		            <label>Name:</label><input type="text" class="charName" placeholder="e.g., Character">
+		            <label>Backstory:</label><textarea class="charBackstory" placeholder="e.g., background details"></textarea>
+		            <label>Arc:</label><textarea class="charArc" placeholder="e.g., development path"></textarea>
+		        `;
+		        charList.appendChild(div);
+		        entries = charList.querySelectorAll('.character');
+		    }
+		    // Remove entries from the bottom if needed (only remove blank ones first, then any)
+		    while (entries.length > desired) {
+		        charList.removeChild(charList.lastElementChild);
+		        entries = charList.querySelectorAll('.character');
+		    }
+		    updateCharacterCounter();
+		}
 
 		//addSubplot
 		function addSubplot() {
