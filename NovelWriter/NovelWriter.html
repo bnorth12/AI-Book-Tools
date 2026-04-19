@@ -1,4 +1,30 @@
-<!-- Novel Writer 0.3.4 -->
+﻿<!-- Novel Writer 0.3.4 -->
+<!--
+EXECUTIVE OVERVIEW (NW1)
+NovelWriter SHALL be a single-file browser-based AI-assisted novel writing toolchain enabling authors to plan, draft, and refine a complete novel end-to-end.
+The User SHALL be a human author retaining full control of the creative process; the AI provides suggestions and drafts that the user reviews and accepts.
+The Developer SHALL vibe-code the app iteratively, using requirements embedded as comments to maintain context during each coding session.
+The app SHALL communicate exclusively with the xAI Grok API at https://api.x.ai/v1/chat/completions for all LLM calls.
+The app SHALL support a configurable number of chapters (default 10) and target chapter length (default 2000 words).
+Session state SHALL be exportable and importable as a schema-versioned JSON file conforming to novel-schema-1.0.json.
+All AI functionality SHALL be routed through the central callAI() gateway so that execution status, loading indicators, and request logging are uniformly applied.
+All functionality SHALL be traceable via numbered SHALL requirements embedded as comments with version/date tracking.
+Version: 0.3.4 | Date: 2026-04-18
+-->
+
+<!-- TOP-LEVEL REQUIREMENTS -->
+<!-- NW1: NovelWriter SHALL be a single standalone HTML file with tab navigation and inline CSS/JS. -->
+<!-- NW2: Every tab SHALL contain its own requirements as comments using [noun] SHALL [verb] format with unique IDs. -->
+<!-- NW3: All LLM calls SHALL route through callAI() to ensure consistent loading state, execution HUD updates, and request logging. -->
+<!-- NW4: Session data SHALL be exportable as a schema-versioned JSON envelope and importable from the same format. -->
+<!-- NW5: The Execution Status HUD SHALL display the currently running function name, state (idle/running/waiting/completed/failed), and a progress animation during LLM calls. -->
+<!-- NW6: Agent prompts SHALL be editable per tab and function via the Agent Prompts tab (Tab 11), with defaults restorable. -->
+<!-- NW7: Every user-visible feature and non-trivial workflow function SHALL map to at least one numbered SHALL requirement comment. -->
+<!-- NW8: Tab navigation SHALL be available at all times via the nav bar; tab state SHALL update to reflect the active tab. -->
+<!-- NW9: The app SHALL support a configurable xAI API key, model selection, max tokens, genre, author style, and style guide. -->
+<!-- NW10: Change management SHALL be tracked with version/date annotations next to every implemented requirement block. -->
+<!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -55,12 +81,93 @@
 		#elementValues { height: 600px; }
 		#promptManagerTable th:first-child { width: 140px; }
 		#promptManagerTable th:nth-child(2) { width: 220px; }
+		#executionStatusHud {
+			position: fixed;
+			right: 16px;
+			top: 16px;
+			width: 320px;
+			background: rgba(0, 0, 0, 0.82);
+			color: #fff;
+			border-radius: 10px;
+			padding: 12px;
+			z-index: 1000;
+			box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+			font-size: 13px;
+			pointer-events: none;
+			transition: top 0.15s ease;
+		}
+		#executionStatusHud .hud-title {
+			font-weight: 700;
+			margin-bottom: 6px;
+		}
+		#executionStatusHud .hud-row { margin-bottom: 4px; }
+		#executionState {
+			display: inline-block;
+			padding: 2px 8px;
+			border-radius: 999px;
+			font-weight: 700;
+		}
+		#executionState.idle { background: #6c757d; }
+		#executionState.running { background: #0d6efd; }
+		#executionState.waiting { background: #fd7e14; }
+		#executionState.completed { background: #198754; }
+		#executionState.failed { background: #dc3545; }
+		#llmWaitSpinner {
+			width: 14px;
+			height: 14px;
+			border: 2px solid rgba(255, 255, 255, 0.4);
+			border-top-color: #fff;
+			border-radius: 50%;
+			display: inline-block;
+			vertical-align: middle;
+			margin-right: 8px;
+			animation: spin 0.9s linear infinite;
+			opacity: 0;
+		}
+		#executionStatusHud.waiting #llmWaitSpinner { opacity: 1; }
+		#llmWaitBar {
+			height: 6px;
+			background: rgba(255, 255, 255, 0.2);
+			border-radius: 999px;
+			overflow: hidden;
+			margin-top: 8px;
+		}
+		#llmWaitBar::after {
+			content: '';
+			display: block;
+			height: 100%;
+			width: 40%;
+			background: linear-gradient(90deg, #37b24d, #4dabf7);
+			animation: pulse-slide 1.4s ease-in-out infinite;
+		}
+		#executionStatusHud.idle #llmWaitBar::after,
+		#executionStatusHud.completed #llmWaitBar::after,
+		#executionStatusHud.failed #llmWaitBar::after {
+			animation-play-state: paused;
+			opacity: 0.35;
+		}
+		@keyframes spin {
+			from { transform: rotate(0deg); }
+			to { transform: rotate(360deg); }
+		}
+		@keyframes pulse-slide {
+			0% { transform: translateX(-60%); }
+			50% { transform: translateX(120%); }
+			100% { transform: translateX(-60%); }
+		}
     </style>
 </head>
 
 <body>
     <!-- Main heading -->
     <h1>Novel Writer</h1>
+	<div id="executionStatusHud" class="idle" aria-live="polite">
+		<div class="hud-title">Execution Status</div>
+		<div class="hud-row">Function: <span id="executionFunction">Idle</span></div>
+		<div class="hud-row">State: <span id="executionState" class="idle">Idle</span></div>
+		<div class="hud-row"><span id="llmWaitSpinner"></span><span id="executionDetail">Waiting for next action.</span></div>
+		<div id="llmWaitBar" aria-hidden="true"></div>
+	</div>
 
     <!-- Navigation bar for tab selection -->
 	    <div id="nav">
@@ -80,6 +187,15 @@
     	</div>
 
                 <!-- Tab 1: API & Story Info - Configuration and basic story details -->
+			    <!-- NW.T1.1: Tab 1 SHALL provide input fields for xAI API key, model selection, max tokens, genre, author style, and style guide. -->
+			    <!-- NW.T1.2: Tab 1 SHALL allow the user to fetch a curated list of genre-appropriate authors from the LLM and select one. -->
+			    <!-- NW.T1.3: Tab 1 SHALL allow the user to fetch an editable style guide for the selected author from the LLM. -->
+			    <!-- NW.T1.4: Tab 1 SHALL provide individual AI suggestion buttons for Story Arc, General Plot, and Setting. -->
+			    <!-- NW.T1.5: Tab 1 SHALL provide an "AI Suggest Story Info" button that populates all story fields in one LLM call. -->
+			    <!-- NW.T1.6: Tab 1 SHALL provide Export Session (triggers JSON download) and Import Session (loads JSON file) controls. -->
+			    <!-- NW.T1.7: Tab 1 SHALL include a configurable number-of-chapters field that triggers chapter subpage generation on change. -->
+			    <!-- NW.T1.8: The AI Suggest Story Info function SHALL preserve any fields already filled in by the user. -->
+			    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 			    <div id="tab1" class="tab active">
 			        <h2>API & Story Info</h2>
 			        <label for="apiKey">API Key:</label>
@@ -134,7 +250,7 @@
 			        <input type="number" id="numChapters" min="1" value="10" onchange="updateChapterSubpages()">
 			        <label for="chapterLength">Target Chapter Length (words):</label>
 			        <input type="number" id="chapterLength" min="500" value="2000">
-			        <button onclick="suggestStoryInfo()">AI Suggest</button>
+			        <button onclick="suggestStoryInfo()">AI Suggest Story Info</button>
 			        <button onclick="showTab(2)">Next: Characters</button>
 			        <button onclick="exportSession()">Export Session</button>
 			        <label for="importFile">Import Session:</label>
@@ -143,9 +259,19 @@
     </div>
 
         <!-- Tab 2: Characters - Define and generate character details -->
+	    <!-- NW.T2.1: Tab 2 SHALL provide a configurable number-of-characters field that syncs the character entry list on change. -->
+	    <!-- NW.T2.2: Tab 2 SHALL display one entry block per character with Name, Backstory, and Arc fields. -->
+	    <!-- NW.T2.3: Tab 2 SHALL provide a "Scrape Book Info for Characters" button that uses the LLM to extract character names mentioned in Tab 1 story fields and adds them as named-only entries. -->
+	    <!-- NW.T2.4: Tab 2 SHALL provide a "Suggest Characters" button that sends existing character data as context so the LLM completes name-only entries and fills only existing blank slots up to the Number of Characters counter, without adding extra entries. -->
+	    <!-- NW.T2.5: Tab 2 SHALL provide an "Add Another Character" button that appends a blank character entry and increments the counter. -->
+	    <!-- NW.T2.6: Tab 2 SHALL provide a "Refine Characters with Subplots" button that sends subplot context to the LLM to deepen character arcs. -->
+	    <!-- NW.T2.7: The Suggest Characters function SHALL include fully-defined existing characters as locked context so they are not modified. -->
+	    <!-- NW.T2.8: The Suggest Characters function SHALL use book context (arc, plot, setting) to generate backstory and arc for name-only characters. -->
+	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	    <div id="tab2" class="tab">
 	        <h2>Characters</h2>
-	        <div class="note">NOTE: Enter any known character information from Tab 1 here before using AI Suggest to fill in additional details.</div>
+	        <div class="note">NOTE: Enter any known character information from Tab 1 here before using AI Suggest to fill in additional details. Use "Scrape Book Info" to automatically detect character names mentioned in the story setup.</div>
+	        <button onclick="scrapeBookInfoForCharacters()">Scrape Book Info for Characters</button>
 	        <label for="numCharacters">Number of Characters to Generate:</label>
 	        <input type="number" id="numCharacters" min="1" value="3" onchange="syncCharacterEntries()">
 	        <div id="characterCounterInfo" class="counter-note">Character entries: 1</div>
@@ -168,10 +294,17 @@
     </div>
 
         <!-- Tab 3: Subplots - Define and generate subplot details -->
+	    <!-- NW.T3.1: Tab 3 SHALL provide a minimum-number-of-subplots field that syncs the subplot entry list on change. -->
+	    <!-- NW.T3.2: Tab 3 SHALL display one textarea per subplot with a descriptive label. -->
+	    <!-- NW.T3.3: Tab 3 SHALL provide an "AI Suggest Subplots" button that generates subplots using story, character, and setting context. -->
+	    <!-- NW.T3.4: The AI Suggest Subplots function SHALL preserve already-populated subplot entries and only fill blank slots; it SHALL append new subplots if the LLM returns more than the blank count. -->
+	    <!-- NW.T3.5: Tab 3 SHALL provide an "Add Another Subplot" button that appends a blank subplot entry and increments the counter. -->
+	    <!-- NW.T3.6: Each generated subplot SHALL be 300-400 words, include named characters, chapter span, sensory details, and thematic resonance. -->
+	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	    <div id="tab3" class="tab">
 	        <h2>Subplots</h2>
 	        <label for="minSubplots">Minimum Number of Subplots to Generate:</label>
-	        <input type="number" id="minSubplots" min="1" value="2">
+	        <input type="number" id="minSubplots" min="1" value="2" onchange="syncSubplotEntries()">
 	        <div id="subplotCounterInfo" class="counter-note">Subplot entries: 1</div>
 	        <div id="subplotList">
 	            <div class="subplot-section">
@@ -180,13 +313,21 @@
 	            </div>
 	        </div>
 	        <button onclick="addSubplot()">Add Another Subplot</button>
-	        <button onclick="suggestSubplots()">AI Suggest</button>
+	        <button onclick="suggestSubplots()">AI Suggest Subplots</button>
 	        <button onclick="showTab(2)">Back</button>
 	        <button onclick="showTab(4)">Next: Outlines</button>
 	        <div class="loading-indicator">Processing...</div>
     </div>
 
         <!-- Tab 4: Outlines - Create novel and chapter outlines with improvement incorporation -->
+	    <!-- NW.T4.1: Tab 4 SHALL provide a novel outline, annotated plot outline, and annotated story arc outline with an "AI Suggest Novel Outline" button. -->
+	    <!-- NW.T4.2: Tab 4 SHALL provide an "Improvements to Implement" field and an "Incorporate Suggestions" button that revises all three outline fields in one LLM call. -->
+	    <!-- NW.T4.3: Tab 4 SHALL provide per-chapter subpages (one per chapter) each containing chapter outline and arc fields. -->
+	    <!-- NW.T4.4: Each chapter subpage SHALL provide a "Generate Chapter Outline & Arc" button that generates that chapter's outline and arc using the novel outline, plot, characters, and subplots as context. -->
+	    <!-- NW.T4.5: Each chapter subpage SHALL provide an "Update" button that incorporates per-chapter improvement notes into the chapter outline and arc. -->
+	    <!-- NW.T4.6: The chapter outlines nav SHALL include a "Main" button to return to the novel-level outline view. -->
+	    <!-- NW.T4.7: All outline LLM calls SHALL route through callAI() and display loading state in Tab 4. -->
+	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	    <div id="tab4" class="tab">
 	        <h2>Outlines</h2>
 	        <div id="outlineMain" class="subpage active">
@@ -196,9 +337,11 @@
 	            <textarea id="plotOutline" placeholder="Key plot events"></textarea>
 	            <label for="storyArcOutline">Annotated Story Arc Outline:</label>
 	            <textarea id="storyArcOutline" placeholder="Thematic/emotional journey"></textarea>
+	            <label for="chapterBlueprints">Chapter Blueprints:</label>
+	            <textarea id="chapterBlueprints" placeholder="Chapter-by-chapter structural plan — generated with Novel Outline" readonly></textarea>
 	            <label for="outlineImprovements">Improvements to Implement:</label>
 	            <textarea id="outlineImprovements" placeholder="Enter improvements to incorporate into the outlines"></textarea>
-	            <button onclick="generateNovelOutlines()">AI Suggest Outlines</button>
+	            <button onclick="generateNovelOutlines()">AI Suggest Novel Outline</button>
 	            <button onclick="incorporateOutlineSuggestions()">Incorporate Suggestions</button>
 	        </div>
 	        <div id="chapterOutlinesNav" class="chapter-nav"></div>
@@ -209,8 +352,22 @@
     </div>
 
         <!-- Tab 5: Generate Chapters - Initial chapter generation -->
+	    <!-- NW.T5.1: Tab 5 SHALL display per-chapter subpages via a chapter nav bar (one button per chapter). -->
+	    <!-- NW.T5.2: Each chapter subpage SHALL display a "Generate Chapter" button that drafts the full chapter text using the chapter outline, arc, characters, subplots, author style, and style guide as context. -->
+	    <!-- NW.T5.3: Generated chapter text SHALL be stored in novelData.chapters and SHALL auto-populate the corresponding Edit Chapters subpage. -->
+	    <!-- NW.T5.4: The Generate Chapter function SHALL use the configured target chapter length (words) as a size target in the LLM prompt. -->
+	    <!-- NW.T5.5: Tab 5 SHALL provide a Strict Continuity Mode toggle that enforces stronger chapter-to-chapter consistency constraints in generation prompts. -->
+	    <!-- NW.T5.6: Tab 5 SHALL provide continuity packet and audit controls (rebuild packets and run continuity audit) plus a read-only continuity status panel. -->
+	    <!-- NW.T5.7: Continuity packet, tracker, and findings data SHALL persist in session state and round-trip through import/export as optional schema-compatible fields. -->
+	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	    <div id="tab5" class="tab">
 	        <h2>Generate Chapters</h2>
+	        <label><input type="checkbox" id="continuityStrictMode" checked> Strict Continuity Mode</label>
+	        <label><input type="checkbox" id="autoContinuityAudit" checked> Auto Continuity Audit After Chapter Generation</label>
+	        <button onclick="rebuildContinuityPackets()">Rebuild Continuity Packets</button>
+	        <button onclick="runContinuityAuditAll()">Run Continuity Audit (All Chapters)</button>
+	        <label for="continuityStatusPanel">Continuity Tracker:</label>
+	        <textarea id="continuityStatusPanel" readonly placeholder="Continuity packets, arc tracking, and audit findings will appear here."></textarea>
 	        <div id="chapterGenNav" class="chapter-nav"></div>
 	        <div id="chapterGenContainer"></div>
 	        <button onclick="showTab(4)">Back</button>
@@ -219,6 +376,12 @@
 	    </div>
 
 	    <!-- Tab 6: Edit Chapters - Edit and refine generated chapters with improvement incorporation -->
+	    <!-- NW.T6.1: Tab 6 SHALL display per-chapter subpages with an editable textarea showing the generated chapter text. -->
+	    <!-- NW.T6.2: Each chapter subpage SHALL provide an "Improvements to Implement" field and an "Update Chapter" button that revises the chapter text using improvement notes and the LLM. -->
+	    <!-- NW.T6.3: Each chapter subpage SHALL provide a "Check Spelling & Grammar" button that runs LLM-based proofreading and applies corrections. -->
+	    <!-- NW.T6.4: Chapter edits SHALL be stored in novelData.editedChapters and SHALL propagate to the Book tab on next view. -->
+	    <!-- NW.T6.5: The Update Chapter function SHALL sync edits bidirectionally between Tab 5 and Tab 6 so the latest version is always current. -->
+	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	    <div id="tab6" class="tab">
 	        <h2>Edit Chapters</h2>
 	        <div id="chapterEditNav" class="chapter-nav"></div>
@@ -229,13 +392,19 @@
     </div>
 
         <!-- Tab 7: Book - View, export, improve the complete book, and break down improvements -->
+	    <!-- NW.T7.1: Tab 7 SHALL display a read-only concatenated view of all edited (or generated) chapters as the complete book. -->
+	    <!-- NW.T7.2: Tab 7 SHALL provide an "Export Book" button that downloads the book text as a .txt file. -->
+	    <!-- NW.T7.3: Tab 7 SHALL provide a "Suggest Improvements" button that sends the full book to the LLM and returns a table of numbered improvement suggestions. -->
+	    <!-- NW.T7.4: Each improvement row SHALL have a status selector (To Incorporate/Incorporated/Ignored), a "Breakdown" button that decomposes the improvement into actionable chapter-level steps, and an editable breakdown textarea. -->
+	    <!-- NW.T7.5: Tab 7 SHALL provide an "Export Session" button at the conclusion of the workflow (after improvements) to allow saving the complete session state as JSON. -->
+	    <!-- NW.T7.6: The book view SHALL update automatically each time Tab 7 is navigated to. -->
+	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 		<div id="tab7" class="tab">
 		    <h2>Book</h2>
 		    <label for="bookContent">Complete Book:</label>
 		    <textarea id="bookContent" readonly placeholder="All chapters will appear here concatenated"></textarea>
 		    <button onclick="exportBook()">Export Book</button>
 		    <button onclick="suggestBookImprovements()">Suggest Improvements</button>
-		    <button onclick="exportSession()">Export Session</button>
 		    <table id="improvementsTable">
 		        <thead>
 		            <tr>
@@ -249,14 +418,21 @@
 		        </tbody>
 		    </table>
 		    <button onclick="showTab(6)">Back</button>
+	        <button onclick="exportSession()">Export Session</button>
 	        <button onclick="showTab(8)">Next: Consolidated Breakdowns</button>
 	        <div class="loading-indicator">Processing...</div>
 	</div>
 
 
 	<!-- Tab 8: Consolidated Breakdown Suggestions -->
+	<!-- NW.T8.1: Tab 8 SHALL aggregate breakdowns for improvements with status "To Incorporate" from Tab 7 into a single consolidated view. -->
+	<!-- NW.T8.2: Tab 8 SHALL display breakdowns grouped or listed clearly so the author can review all pending chapter-level revision tasks in one place. -->
+	<!-- NW.T8.3: Tab 8 SHALL update its content each time it is navigated to. -->
+	<!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	<div id="tab8" class="tab">
 		<h2>Consolidated Breakdown Suggestions</h2>
+		<p>Shows breakdowns for improvements marked <strong>To Incorporate</strong> only. Review below, then click <strong>Integrate Suggestions</strong> to apply all breakdowns to your chapters, outlines, and characters.</p>
+		<div class="loading-indicator" style="display:none;">Processing integrations... This may take several minutes for large novels.</div>
 		<label for="consolidatedCharacters">Characters:</label>
 		<textarea id="consolidatedCharacters" readonly></textarea>
 		<label for="consolidatedSubplots">Subplots:</label>
@@ -267,12 +443,17 @@
 		<textarea id="consolidatedChapterOutlines" readonly></textarea>
 		<label for="consolidatedChapters">Chapter Content:</label>
 		<textarea id="consolidatedChapters" readonly></textarea>
-		<button onclick="populateConsolidatedBreakdowns()">Consolidate Breakdowns</button>
+		<button onclick="populateConsolidatedBreakdowns()">Refresh Breakdowns</button>
+		<button onclick="integrateBreakdownSuggestions()">Integrate Suggestions</button>
 		<button onclick="showTab(7)">Back</button>
 		<button onclick="showTab(9)">Next: Request Log</button>
 	</div>
 
 	<!-- Tab 9: Request Log - View API interaction logs -->
+	<!-- NW.T9.1: Tab 9 SHALL display the last prompt sent to the LLM, the returned response, token usage, estimated cost, and request status. -->
+	<!-- NW.T9.2: Tab 9 SHALL update its display each time it is navigated to. -->
+	<!-- NW.T9.3: The request log SHALL identify the originating tab for each request. -->
+	<!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	<div id="tab9" class="tab">
 		<h2>Request Log</h2>
 		<div id="requestLog">
@@ -292,6 +473,10 @@
 	</div>
 
 	<!-- Tab 10: Element Values - Display all element values for debugging -->
+	<!-- NW.T10.1: Tab 10 SHALL display the current values of all key novelData fields for debugging and verification purposes. -->
+	<!-- NW.T10.2: Tab 10 SHALL be accessible at any time from the nav bar and SHALL refresh its display on demand. -->
+	<!-- NW.T10.3: Tab 10 SHALL NOT expose the API key value in plain text. -->
+	<!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	    <div id="tab10" class="tab">
 	        <h2>Element Values</h2>
 	        <button onclick="displayElementValues()">Refresh Values</button>
@@ -303,6 +488,12 @@
     </div>
 
 	<!-- Tab 11: Agent Prompts - Manage tab-specific system prompts -->
+	<!-- NW.T11.1: Tab 11 SHALL display a table of all agent prompts grouped by tab with editable name and system prompt fields. -->
+	<!-- NW.T11.2: Tab 11 SHALL provide a "Save Prompt Edits" button that persists custom prompt overrides for the current session. -->
+	<!-- NW.T11.3: Tab 11 SHALL provide a "Reset To Defaults" button that restores all prompts to the built-in defaultPromptCatalog. -->
+	<!-- NW.T11.4: Tab 11 SHALL provide "Export Prompt Profile" and "Import Prompt Profile" controls for saving and loading prompt sets as JSON. -->
+	<!-- NW.T11.5: All LLM calls SHALL resolve agent system prompts via getAgentPrompt() which checks for custom overrides before falling back to defaults. -->
+	<!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	<div id="tab11" class="tab">
 		<h2>Agent Prompts</h2>
 		<div class="note">Edit the system prompts per tab/agent and export/import prompt profiles without changing code.</div>
@@ -326,6 +517,15 @@
 	</div>
 
         <script>
+		// NW.GEN1: The shared script section SHALL contain all application logic for NovelWriter in a single inline <script> block.
+		// NW.GEN2: The novelData object SHALL be the single source of truth for all session state; collectData() SHALL populate it from the DOM before any LLM call.
+		// NW.GEN3: The requestLog object SHALL record the last prompt, response, status, token usage, cost, and originating tab for every LLM call.
+		// NW.GEN4: callAI() SHALL be the sole gateway for all LLM calls, enforcing: API key validation, loading indicator toggling, execution HUD updates, request log updates, and JSON response parsing.
+		// NW.GEN5: Session export SHALL produce a schema-versioned JSON envelope (schemaVersion: '1.0') containing novelData and metadata; import SHALL normalise either the envelope or bare novelData format.
+		// NW.GEN6: showTab() SHALL manage active tab CSS class, trigger tab-specific initialisation (e.g., updateBookTab, updateChapterSubpages), and update the nav bar active state.
+		// NW.GEN7: DOMContentLoaded SHALL initialise the app by calling showTab(1), syncCharacterEntries(), syncSubplotEntries(), renderPromptManagerTable(), and renderExecutionStatus().
+		// NW.GEN8: The app SHALL NOT store the API key in any persistent storage; it SHALL exist only in the DOM input and novelData for the lifetime of the page session.
+		// Version: 0.3.4 | Date: 2026-04-18
 		const APP_VERSION = '0.3.4';
         console.log(`Novel Writer ${APP_VERSION} - Loaded Version: ` + Date.now());
 	    // Global data structures
@@ -349,6 +549,7 @@
 	        novelOutline: '',
 	        plotOutline: '',
 	        storyArcOutline: '',
+        chapterBlueprints: [],
 	        chapterOutlines: [],
 	        chapterArcs: [],
 	        chapters: [],
@@ -357,7 +558,12 @@
 	        bookImprovements: [],
 	        bookImprovementsWithStatus: [], // Now stores {text, status, breakdown}
 	        outlineImprovements: '',
-	        chapterImprovements: []
+	        chapterImprovements: [],
+	        continuityStrictMode: true,
+	        autoContinuityAudit: true,
+	        chapterContinuityPackets: [],
+	        continuityTracker: { chapters: [], characterArcProgress: [], storyArcProgress: {} },
+	        continuityFindings: []
 	    };
 
 	    let requestLog = {
@@ -368,6 +574,74 @@
 	        cost: 'Not available',
 	        originTab: null
 	    };
+
+		let activeAICallCount = 0;
+		let executionStatus = {
+			functionName: 'Idle',
+			state: 'idle',
+			detail: 'Waiting for next action.'
+		};
+
+		function inferCallerName() {
+			try {
+				const stack = new Error().stack || '';
+				const lines = stack.split('\n').map(l => l.trim());
+				for (const line of lines) {
+					if (line.includes('callAI') || line.includes('inferCallerName') || line.includes('setExecutionStatus') || line.includes('renderExecutionStatus')) continue;
+					const match = line.match(/at\s+([a-zA-Z0-9_$]+)\s*\(/);
+					if (match && match[1]) return match[1];
+				}
+			} catch (_) {}
+			return '';
+		}
+
+		// ---- NW.GEN: Execution HUD ----
+		// NW.GEN.HUD.1: renderExecutionStatus() SHALL update the execution status HUD element with current state, function name, and detail.
+		// NW.GEN.HUD.2: The HUD SHALL be rendered on DOMContentLoaded and after each LLM call completes.
+		function renderExecutionStatus() {
+			const hud = document.getElementById('executionStatusHud');
+			const functionEl = document.getElementById('executionFunction');
+			const stateEl = document.getElementById('executionState');
+			const detailEl = document.getElementById('executionDetail');
+			if (!hud || !functionEl || !stateEl || !detailEl) return;
+			functionEl.textContent = executionStatus.functionName;
+			stateEl.textContent = executionStatus.state.charAt(0).toUpperCase() + executionStatus.state.slice(1);
+			detailEl.textContent = executionStatus.detail;
+			hud.classList.remove('idle', 'running', 'waiting', 'completed', 'failed');
+			hud.classList.add(executionStatus.state);
+			stateEl.classList.remove('idle', 'running', 'waiting', 'completed', 'failed');
+			stateEl.classList.add(executionStatus.state);
+		}
+
+		// NW.GEN.HUD.3: The execution HUD SHALL reposition below the tab nav when the nav is visible so navigation buttons remain accessible.
+		function positionExecutionHud() {
+			const hud = document.getElementById('executionStatusHud');
+			const nav = document.getElementById('nav');
+			if (!hud || !nav) return;
+			const navRect = nav.getBoundingClientRect();
+			const navVisibleAtTop = navRect.bottom > 0 && navRect.top < 120;
+			if (navVisibleAtTop) {
+				const safeTop = Math.max(16, Math.round(navRect.bottom + 8));
+				hud.style.top = `${safeTop}px`;
+			} else {
+				hud.style.top = '16px';
+			}
+		}
+
+		function setExecutionStatus(functionName, state, detail) {
+			executionStatus = {
+				functionName: functionName || executionStatus.functionName,
+				state: state || executionStatus.state,
+				detail: detail || executionStatus.detail
+			};
+			renderExecutionStatus();
+		}
+
+		function resetExecutionStatusIfIdle() {
+			if (activeAICallCount === 0) {
+				setExecutionStatus('Idle', 'idle', 'Waiting for next action.');
+			}
+		}
 
 	    // Default author styles with predefined guides
 	    const defaultAuthors = {
@@ -395,36 +669,41 @@
 
 		const defaultPromptCatalog = {
 			tab1: {
-				fetchAuthors: { name: 'Author Discovery Agent', systemPrompt: 'You are an expert on literature.' },
-				fetchStyleGuide: { name: 'Style Guide Agent', systemPrompt: 'You are an expert on literary styles.' },
-				suggestStoryArc: { name: 'Story Arc Agent', systemPrompt: 'You are a creative writing assistant specializing in detailed narrative planning.' },
-				suggestGeneralPlot: { name: 'General Plot Agent', systemPrompt: 'You are a creative writing assistant specializing in detailed narrative planning.' },
-				suggestSetting: { name: 'World-Building Agent', systemPrompt: 'You are a creative writing assistant specializing in immersive world-building.' },
-				suggestStoryInfo: { name: 'Story Bootstrap Agent', systemPrompt: 'You are a creative writing assistant specializing in immersive, thematic narratives.' }
+				fetchAuthors: { name: 'Author Discovery Agent', systemPrompt: 'You are a literature researcher helping a novelist find high-signal author references by genre. Prioritize relevance, breadth across eras, and practical stylistic value for imitation prompts.' },
+				fetchStyleGuide: { name: 'Style Guide Agent', systemPrompt: 'You are a literary style analyst. Produce concrete, reusable style guidance covering voice, sentence rhythm, pacing, imagery density, dialogue patterns, and narrative distance.' },
+				suggestStoryArc: { name: 'Story Arc Agent', systemPrompt: 'You are a story architect designing emotionally coherent long-form arcs. Emphasize escalating stakes, thematic progression, and act-level turning points that can sustain chapter-level execution.' },
+				suggestGeneralPlot: { name: 'General Plot Agent', systemPrompt: 'You are a plot designer for serialized novels. Build causally linked events, meaningful reversals, and clear consequence chains that keep momentum across the full chapter count.' },
+				suggestSetting: { name: 'World-Building Agent', systemPrompt: 'You are a world-building specialist. Create a setting that is atmospherically vivid, mechanically consistent, and tightly connected to conflict, theme, and character decision pressure.' },
+				suggestStoryInfo: { name: 'Story Bootstrap Agent', systemPrompt: 'You are a novel development lead synthesizing title, arc, plot, and setting into one coherent package. Ensure output fields are concrete, complete, and internally consistent for immediate downstream drafting.' }
 			},
 			tab2: {
-				suggestCharacters: { name: 'Character Generation Agent', systemPrompt: 'You are a creative writing assistant specializing in immersive, character-driven narratives.' },
-				refineCharacters: { name: 'Character Refinement Agent', systemPrompt: 'You are a creative writing assistant specializing in character-driven narrative refinement.' }
+				scrapeBookInfoForCharacters: { name: 'Character Name Scraper Agent', systemPrompt: 'You are an entity extraction specialist for fiction planning. Identify likely character names only, avoid locations/concepts, and minimize false positives.' },
+				suggestCharacters: { name: 'Character Generation Agent', systemPrompt: 'You are a character development specialist for long-form fiction. Create distinct, narratively useful characters with strong motivation logic, conflict hooks, and arc potential tied to the main plot.' },
+				refineCharacters: { name: 'Character Refinement Agent', systemPrompt: 'You are a character arc editor. Refine existing characters to deepen emotional coherence, subplot integration, and thematic relevance while preserving established identity.' }
 			},
 			tab3: {
-				suggestSubplots: { name: 'Subplot Design Agent', systemPrompt: 'You are a creative writing assistant specializing in intricate, character-driven narrative development.' }
+				suggestSubplots: { name: 'Subplot Design Agent', systemPrompt: 'You are a subplot strategist. Design subplots that reinforce central themes, cross-pressure character goals, and pay off through tangible chapter-level consequences.' }
 			},
 			tab4: {
-				generateNovelOutlines: { name: 'Novel Outline Agent', systemPrompt: 'You are a creative writing assistant specializing in detailed narrative planning.' },
-				generateChapterOutline: { name: 'Chapter Outline Agent', systemPrompt: 'You are a creative writing assistant specializing in detailed narrative planning.' },
-				updateChapterOutline: { name: 'Outline Update Agent', systemPrompt: 'You are a creative writing assistant.' },
-				incorporateOutlineSuggestions: { name: 'Outline Incorporation Agent', systemPrompt: 'You are a creative writing assistant.' }
+				generateNovelOutlines: { name: 'Novel Outline Agent', systemPrompt: 'You are a structural narrative planner for full-length novels. Produce coherent macro-structure with clear phase transitions, rising stakes, subplot placement, and thematic throughline.' },
+				generateChapterOutline: { name: 'Chapter Outline Agent', systemPrompt: 'You are a chapter planning specialist. Convert macro outline goals into focused chapter events and emotional beats that clearly advance plot, arcs, and unresolved threads.' },
+				updateChapterOutline: { name: 'Outline Update Agent', systemPrompt: 'You are an outline revision editor. Integrate requested changes while preserving continuity, causality, and role of the chapter in the broader narrative sequence.' },
+				incorporateOutlineSuggestions: { name: 'Outline Incorporation Agent', systemPrompt: 'You are a narrative restructuring assistant. Apply improvement notes across all outline layers without breaking thematic consistency or story logic.' }
 			},
 			tab5: {
-				generateChapter: { name: 'Chapter Draft Agent', systemPrompt: 'You are a creative writing assistant specializing in immersive, character-driven narratives with adaptable genre voice.' }
+				generateChapter: { name: 'Chapter Draft Agent', systemPrompt: 'You are a chapter drafting specialist for commercial fiction. Write immersive prose that preserves continuity constraints, progresses arcs, and delivers scene-level momentum without losing narrative clarity.' },
+				continuityAudit: { name: 'Continuity Audit Agent', systemPrompt: 'You are a continuity QA editor for novels. Detect timeline drift, character-arc mismatch, subplot drop-off, and story-arc misalignment; return precise, actionable fixes in strict JSON.' }
 			},
 			tab6: {
-				updateChapter: { name: 'Chapter Revision Agent', systemPrompt: 'You are a creative writing assistant.' },
-				checkSpellingAndGrammar: { name: 'Spelling & Grammar Agent', systemPrompt: 'You are a grammar and spelling checker.' }
+				updateChapter: { name: 'Chapter Revision Agent', systemPrompt: 'You are a revision editor focused on preserving authorial intent while improving clarity, pacing, coherence, and emotional impact under explicit improvement directives.' },
+				checkSpellingAndGrammar: { name: 'Spelling & Grammar Agent', systemPrompt: 'You are a professional copy editor. Correct grammar, spelling, punctuation, and readability issues while preserving meaning, tone, and narrative voice.' }
 			},
 			tab7: {
-				suggestBookImprovements: { name: 'Book Critique Agent', systemPrompt: 'You are a literary editor specializing in detailed narrative critique.' },
-				breakdownImprovement: { name: 'Breakdown Agent', systemPrompt: 'You are a literary editor specializing in actionable narrative breakdowns.' }
+				suggestBookImprovements: { name: 'Book Critique Agent', systemPrompt: 'You are a developmental editor evaluating full-manuscript quality. Identify high-impact improvements in structure, pacing, characterization, and thematic execution with concrete rationale.' },
+				breakdownImprovement: { name: 'Breakdown Agent', systemPrompt: 'You are an editorial operations planner. Convert high-level critique into chapter-targeted, executable revision tasks with clear outcomes and dependencies.' }
+			},
+			tab8: {
+				integrateBreakdown: { name: 'Breakdown Integration Agent', systemPrompt: 'You are a fiction line-and-structure integration editor. Apply the provided breakdown instructions directly into chapter prose while preserving continuity, voice, and scene logic. Return ONLY revised chapter text with no commentary.' }
 			}
 		};
 
@@ -534,11 +813,18 @@
 	        console.log('DOM loaded, showing tab 1');
 	        showTab(1);
 	        updateChapterSubpages();
-			updateCharacterCounter();
-			updateSubplotCounter();
+			syncCharacterEntries();
+			syncSubplotEntries();
 			renderPromptManagerTable();
+			renderExecutionStatus();
+			positionExecutionHud();
+			window.addEventListener('scroll', positionExecutionHud, { passive: true });
+			window.addEventListener('resize', positionExecutionHud);
 	    });
 
+	    // ---- NW.GEN: Navigation ----
+	    // NW.GEN.NAV.1: showTab() SHALL activate the selected tab div, deactivate all others, and update the nav bar button active state.
+	    // NW.GEN.NAV.2: showTab() SHALL trigger tab-specific side effects (e.g., updateBookTab on Tab 7, populateConsolidatedBreakdowns on Tab 8, renderPromptManagerTable on Tab 11).
 	    // Show a specific tab and update its content
 	    function showTab(tabNum) {
 	        console.log(`Attempting to show tab ${tabNum}`);
@@ -558,10 +844,12 @@
 	            updateChapterSubpages();
 	            showEditChapterSubpage(1);
 	        }
+	        if (tabNum === 5) renderContinuityStatusPanel();
 	        if (tabNum === 7) updateBookTab();
 	        if (tabNum === 8) populateConsolidatedBreakdowns();
 	        if (tabNum === 9) updateRequestLog();
 			if (tabNum === 11) renderPromptManagerTable();
+			positionExecutionHud();
 	    }
 
 	    // Update the request log display
@@ -581,6 +869,11 @@
 
 
 
+		// ---- NW.GEN: LLM Gateway ----
+		// NW.GEN.AI.1: callAI() SHALL be the sole gateway for all LLM calls; it SHALL validate the API key and model before sending.
+		// NW.GEN.AI.2: callAI() SHALL show/hide the loading indicator on the calling tab element.
+		// NW.GEN.AI.3: callAI() SHALL update the requestLog with prompt, response, status, token count, cost, and originating tab name.
+		// NW.GEN.AI.4: callAI() SHALL invoke the provided callback with the parsed JSON response on success.
 		// This is the main function used to provide prompts and request information from the AI API.
         async function callAI(messages, tabElement, callbackOrOptions = {}, options = {}) {
 		    const apiKey = document.getElementById('apiKey').value;
@@ -590,11 +883,15 @@
 		    const opts = isCallback ? options : callbackOrOptions;
 		    const maxTokens = opts.max_tokens || parseInt(document.getElementById('maxTokens').value);
 		    const loadingDiv = tabElement.querySelector('.loading-indicator');
+			const inferredCallerName = inferCallerName();
+			const fallbackOperationName = tabElement?.id ? `${tabElement.id} AI Operation` : 'AI Operation';
+			const operationName = opts.operationName || inferredCallerName || fallbackOperationName;
 
 		    if (!apiKey) {
 		        console.error('API Key is missing');
 		        requestLog.status = 'Failed';
 		        updateRequestLog();
+				setExecutionStatus(operationName, 'failed', 'API key missing.');
 		        throw new Error('API Key is missing');
 		    }
 
@@ -609,8 +906,11 @@
 		    }
 		    console.log('Attempting API call to:', endpoint, 'Model:', model, 'Max Tokens:', maxTokens, 'Messages:', messages);
 		    if (loadingDiv) loadingDiv.style.display = 'block';
+			activeAICallCount += 1;
+			setExecutionStatus(operationName, 'running', 'Preparing request payload.');
 
 		    try {
+				setExecutionStatus(operationName, 'waiting', 'Waiting on LLM response...');
 		        const response = await fetch(endpoint, {
 		            method: 'POST',
 		            headers: {
@@ -651,6 +951,7 @@
 		        requestLog.returnedInfo = text; // Store raw response
 		        console.log('callAI - Post-Response requestLog.returnedInfo:', requestLog.returnedInfo.substring(0, 200) + '...');
 		        updateRequestLog();
+				setExecutionStatus(operationName, 'completed', 'Response received and parsed.');
 
 		        if (callback) {
 		            callback(jsonResponse);
@@ -662,9 +963,12 @@
 		        requestLog.status = 'Failed';
 		        requestLog.returnedInfo = error.message;
 		        updateRequestLog();
+				setExecutionStatus(operationName, 'failed', error.message || 'API call failed.');
 		        throw error;
 		    } finally {
 		        if (loadingDiv) loadingDiv.style.display = 'none';
+				activeAICallCount = Math.max(0, activeAICallCount - 1);
+				setTimeout(resetExecutionStatusIfIdle, 1200);
 		    }
 }
 
@@ -674,7 +978,19 @@
         // Reset author style dropdown to prompt fetching
 	    function enableAuthorFetch() {
 	        const authorSelect = document.getElementById('authorStyle');
-	        authorSelect.innerHTML = '<option value="" selected>Fetch authors for selected genre</option>';
+			authorSelect.innerHTML = '';
+			Object.values(defaultAuthors).forEach(author => {
+				const option = document.createElement('option');
+				option.value = author.name.toLowerCase().replace(/\s+/g, '');
+				option.textContent = author.name;
+				authorSelect.appendChild(option);
+			});
+			const fetchOption = document.createElement('option');
+			fetchOption.value = '';
+			fetchOption.textContent = 'Fetch authors for selected genre';
+			fetchOption.selected = true;
+			authorSelect.appendChild(fetchOption);
+			updateStyleGuide();
 	    }
 
 	    // Update style guide based on selected author
@@ -688,6 +1004,11 @@
 	        }
 	    }
 
+	    // ---- NW.T1: API & Story Info Functions ----
+	    // NW.T1.F1: fetchAuthors() SHALL query the LLM for a curated list of authors matching the selected genre and populate the Author Style dropdown.
+	    // NW.T1.F2: fetchStyleGuide() SHALL query the LLM for a writing style guide matching the selected author and populate the Style Guide textarea.
+	    // NW.T1.F3: suggestStoryArc(), suggestGeneralPlot(), suggestSetting() SHALL each independently populate their respective field via a targeted LLM call.
+	    // NW.T1.F4: suggestStoryInfo() SHALL populate all story info fields in one LLM call, preserving any fields already filled by the user.
 	    // Fetch authors for the selected genre via AI (corrected)
 		async function fetchAuthors() {
 		    const genre = document.getElementById('genre').value;
@@ -1213,23 +1534,122 @@
 
 
 
+	    // ---- NW.T2: Characters Functions ----
+	    // NW.T2.F1: scrapeBookInfoForCharacters() SHALL send Tab 1 story info to the LLM, extract character names, and append non-duplicate name-only entries to the character list.
+	    // NW.T2.F2: suggestCharacters() SHALL categorise existing characters as fully-defined (locked), name-only (to be completed), or blank (to be generated), and SHALL NOT exceed the #numCharacters slot count.
+	    // NW.T2.F3: refineCharacters() SHALL send subplot context to the LLM to deepen and refine existing character backstories and arcs.
+	    //scrapes story info fields for character names and adds them to the character list
+	    async function scrapeBookInfoForCharacters() {
+	        collectData();
+	        const bookInfoParts = [
+	            novelData.title && `Title: ${novelData.title}`,
+	            novelData.storyArc && `Story Arc: ${novelData.storyArc}`,
+	            novelData.generalPlot && `General Plot: ${novelData.generalPlot}`,
+	            novelData.setting && `Setting: ${novelData.setting}`,
+	        ].filter(Boolean);
+
+	        if (bookInfoParts.length === 0) {
+	            alert('No book information found. Please fill in the story details in Tab 1 first.');
+	            return;
+	        }
+
+	        const bookInfo = bookInfoParts.join('\n');
+	        const messages = [
+	            { role: 'system', content: getAgentPrompt('tab2', 'scrapeBookInfoForCharacters', 'You are a helpful assistant that identifies character names in story descriptions.') },
+	            { role: 'user', content: `Extract all character names mentioned in the following book information. Only include names of people or beings who are characters in the story — not locations, organisations, or concepts. If no character names are found, return an empty array.\n\nReturn as JSON: {"characters": [{"name": "Character Name"}, ...]}\n\n${bookInfo}` }
+	        ];
+	        requestLog.lastPrompt = messages[1].content;
+	        requestLog.status = 'Pending';
+	        requestLog.originTab = 'tab2';
+	        updateRequestLog();
+
+	        try {
+	            const response = await callAI(messages, document.getElementById('tab2'));
+	            let names = [];
+	            if (response.characters && Array.isArray(response.characters)) {
+	                names = response.characters.map(c => c.name).filter(Boolean);
+	            }
+
+	            if (names.length === 0) {
+	                alert('No character names found in the book info. Try adding character names to the Story Arc or General Plot fields in Tab 1.');
+	                requestLog.status = 'Completed';
+	                updateRequestLog();
+	                return;
+	            }
+
+	            const charList = document.getElementById('characterList');
+	            const existingNames = Array.from(charList.querySelectorAll('.charName'))
+	                .map(i => i.value.toLowerCase().trim()).filter(Boolean);
+
+	            let added = 0;
+	            names.forEach(name => {
+	                if (!existingNames.includes(name.toLowerCase().trim())) {
+	                    const div = document.createElement('div');
+	                    div.className = 'character';
+	                    div.innerHTML = `
+	                        <label>Name:</label><input type="text" class="charName" value="${name.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}">
+	                        <label>Backstory:</label><textarea class="charBackstory" placeholder="e.g., background details"></textarea>
+	                        <label>Arc:</label><textarea class="charArc" placeholder="e.g., development path"></textarea>
+	                    `;
+	                    charList.appendChild(div);
+	                    added++;
+	                }
+	            });
+
+	            document.getElementById('numCharacters').value = charList.querySelectorAll('.character').length;
+	            updateCharacterCounter();
+	            requestLog.status = 'Completed';
+	            updateRequestLog();
+
+	            if (added > 0) {
+	                alert(`Added ${added} character(s) from book info: ${names.join(', ')}.\n\nUse "Suggest Characters" to generate backstory and arc for them.`);
+	            } else {
+	                alert('All detected character names are already in the list.');
+	            }
+	        } catch (error) {
+	            console.error('Error scraping book info for characters:', error);
+	            alert('An error occurred while scraping book info: ' + error.message);
+	            requestLog.status = 'Failed';
+	            updateRequestLog();
+	        }
+	    }
+
 	    //suggests charater information
 	    async function suggestCharacters() {
+		    const numCharactersEl = document.getElementById('numCharacters');
+		    const targetCount = Math.max(1, parseInt(numCharactersEl.value, 10) || 1);
+		    syncCharacterEntries();
 		    collectData();
-		    const blankCharacters = novelData.characters.filter(c => !c.name && !c.backstory && !c.arc).length;
-		    const partialCharacters = novelData.characters.filter(c => (c.name || c.backstory || c.arc) && !(c.name && c.backstory && c.arc));
-		    const numCharactersInput = parseInt(document.getElementById('numCharacters').value);
-		    const numToGenerate = partialCharacters.length > 0 ? partialCharacters.length : (isNaN(numCharactersInput) ? 3 : numCharactersInput);
-		    console.log('Num to generate:', numToGenerate);
+		    const allCharacters = (novelData.characters || []).slice(0, targetCount);
+		    const completeCharacters = allCharacters.filter(c => c.name && c.backstory && c.arc);
+		    const nameOnlyCharacters = allCharacters.filter(c => c.name && !c.backstory && !c.arc);
+		    const blankCount = allCharacters.filter(c => !c.name && !c.backstory && !c.arc).length;
+		    const numToGenerate = blankCount;
+		    console.log('Target:', targetCount, 'Complete:', completeCharacters.length, 'Name-only:', nameOnlyCharacters.length, 'Blank slots:', blankCount);
 
 		    let promptLines = [
-		        `Generate ${numToGenerate} unique, compelling characters for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with the following details (use provided info or generate where missing), in the style of ${novelData.authorStyle || 'generic'} with style guide "${novelData.styleGuide || 'default'}":`,
+		        `You are creating characters for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" in the style of ${novelData.authorStyle || 'generic'} with style guide "${novelData.styleGuide || 'default'}":`,
 		        `- Story Arc: ${novelData.storyArc || 'No arc provided'}`,
 		        `- Plot: ${novelData.generalPlot || 'No plot provided'}`,
 		        `- Setting: ${novelData.setting || 'No setting provided'}`,
-		        `- Existing Characters: ${JSON.stringify(novelData.characters.filter(c => c.name && c.backstory && c.arc))}`,
+		        ...(completeCharacters.length > 0 ? [
+		            '',
+		            'FULLY DEFINED CHARACTERS — do NOT modify or duplicate these:',
+		            JSON.stringify(completeCharacters),
+		        ] : []),
+		        ...(nameOnlyCharacters.length > 0 ? [
+		            '',
+		            'CHARACTERS NEEDING COMPLETION — these have names; use the book context above to write compelling backstory and arc for each:',
+		            JSON.stringify(nameOnlyCharacters.map(c => ({ name: c.name }))),
+		        ] : []),
+		        ...(numToGenerate > 0 ? [
+		            '',
+		            `Generate ${numToGenerate} additional unique, compelling new characters to fill BLANK SLOTS only.`,
+		        ] : []),
 		        '',
-		        'For each:',
+		        `IMPORTANT: The Number of Characters counter is ${targetCount}. Do NOT return extra characters beyond needed completions and blank slots.`,
+		        '',
+		        'For each character (completions and new):',
 		        '- Name: Distinct, evocative, reflecting personality, role, or setting’s culture (e.g., tech-inspired, mythic).',
 		        '- Backstory: 200-250 words, richly integrated with plot and setting, including:',
 		        '  - 2-3 vivid events (e.g., betrayal, triumph) with 4-5 sensory details (e.g., metallic tang, flickering lights), grounding their past.',
@@ -1308,35 +1728,46 @@
 
 		        console.log('Extracted newChars:', newChars);
 		        const charList = document.getElementById('characterList');
-		        const existingChars = novelData.characters.filter(c => c.name && c.backstory && c.arc);
 
-		        if (blankCharacters > 0) {
-		            const blankDivs = Array.from(charList.getElementsByClassName('character')).filter(div => {
-		                const name = div.querySelector('.charName').value;
-		                const backstory = div.querySelector('.charBackstory').value;
-		                const arc = div.querySelector('.charArc').value;
-		                return !name && !backstory && !arc;
-		            });
-		            newChars.forEach((char, i) => {
-		                if (i < blankDivs.length) {
-		                    const div = blankDivs[i];
-		                    div.querySelector('.charName').value = char.name || '';
-		                    div.querySelector('.charBackstory').value = char.backstory || '';
-		                    div.querySelector('.charArc').value = char.arc || '';
-		                }
-		            });
-		        } else {
-		            charList.innerHTML = '';
-		            existingChars.concat(newChars).forEach(char => {
-		                const div = document.createElement('div');
-		                div.className = 'character';
-		                div.innerHTML = `
-		                    <label>Name:</label><input type="text" class="charName" value="${char.name || ''}">
-		                    <label>Backstory:</label><textarea class="charBackstory">${char.backstory || ''}</textarea>
-		                    <label>Arc:</label><textarea class="charArc">${char.arc || ''}</textarea>
-		                `;
-		                charList.appendChild(div);
-		            });
+		        // Step 1: Match returned characters to name-only divs by name and fill in backstory/arc
+		        const nameOnlyDivs = Array.from(charList.getElementsByClassName('character')).filter(div => {
+		            const name = div.querySelector('.charName').value.trim();
+		            const backstory = div.querySelector('.charBackstory').value.trim();
+		            const arc = div.querySelector('.charArc').value.trim();
+		            return name && !backstory && !arc;
+		        });
+		        const unmatchedNewChars = [];
+		        newChars.forEach(char => {
+		            const matchDiv = nameOnlyDivs.find(div =>
+		                div.querySelector('.charName').value.trim().toLowerCase() === (char.name || '').trim().toLowerCase()
+		            );
+		            if (matchDiv) {
+		                matchDiv.querySelector('.charBackstory').value = char.backstory || '';
+		                matchDiv.querySelector('.charArc').value = char.arc || '';
+		            } else {
+		                unmatchedNewChars.push(char);
+		            }
+		        });
+
+		        // Step 2: Fill blank divs with remaining new characters; never append extras beyond #numCharacters
+		        const blankDivs = Array.from(charList.getElementsByClassName('character')).filter(div => {
+		            const name = div.querySelector('.charName').value;
+		            const backstory = div.querySelector('.charBackstory').value;
+		            const arc = div.querySelector('.charArc').value;
+		            return !name && !backstory && !arc;
+		        });
+		        unmatchedNewChars.forEach((char, i) => {
+		            if (i < blankDivs.length) {
+		                const div = blankDivs[i];
+		                div.querySelector('.charName').value = char.name || '';
+		                div.querySelector('.charBackstory').value = char.backstory || '';
+		                div.querySelector('.charArc').value = char.arc || '';
+		            }
+		        });
+
+		        const droppedCount = Math.max(0, unmatchedNewChars.length - blankDivs.length);
+		        if (droppedCount > 0) {
+		            console.warn(`Dropped ${droppedCount} extra character(s) returned by LLM to preserve numCharacters=${targetCount}.`);
 		        }
 
 		        novelData.characters = Array.from(charList.getElementsByClassName('character')).map((c, i) => {
@@ -1349,7 +1780,7 @@
 		                ...(existing.notes !== undefined ? { notes: existing.notes } : {})
 		            };
 		        });
-				document.getElementById('numCharacters').value = novelData.characters.length || 1;
+				document.getElementById('numCharacters').value = String(targetCount);
 				updateCharacterCounter();
 
 		        requestLog.status = 'Completed';
@@ -1450,6 +1881,9 @@
 
 
 
+	    // ---- NW.T3: Subplots Functions ----
+	    // NW.T3.F1: suggestSubplots() SHALL preserve already-populated subplot entries and only fill blank slots; it SHALL append new subplots if the LLM returns more than the blank count.
+	    // NW.T3.F2: syncSubplotEntries() SHALL synchronise the number of subplot textarea entries to match the value of the #minSubplots input.
 	    // Suggest subplots via AI
 	   // Suggest subplots via AI
 	   async function suggestSubplots() {
@@ -1538,33 +1972,38 @@
 
 	           console.log('Extracted newSubplots:', newSubplots);
 	           const subplotList = document.getElementById('subplotList');
-	           const existingSubplotSections = subplotList.getElementsByClassName('subplot-section');
-	           console.log('Existing subplot sections:', existingSubplotSections.length);
+		   const allSections = Array.from(subplotList.getElementsByClassName('subplot-section'));
+		   console.log('Existing subplot sections:', allSections.length);
 
-	           // Fill existing sections and add new ones as needed
-	           let index = 0;
-	           newSubplots.forEach(subplot => {
-	               if (index < existingSubplotSections.length) {
-	                   existingSubplotSections[index].querySelector('.subplot').value = subplot;
-	               } else {
-	                   const subplotDiv = document.createElement('div');
-	                   subplotDiv.className = 'subplot-section';
-	                   subplotDiv.innerHTML = `
-	                       <label>Subplot ${index + 1}:</label>
-	                       <textarea class="subplot" style="height: 300px;">${subplot}</textarea>
-	                   `;
-	                   subplotList.appendChild(subplotDiv);
-	               }
-	               index++;
-	           });
+		   // Only fill sections whose textarea is blank; preserve any already populated subplots
+		   const blankSections = allSections.filter(sec => !sec.querySelector('.subplot').value.trim());
+		   const stillUnfilled = [];
+		   newSubplots.forEach((subplot, i) => {
+		       if (i < blankSections.length) {
+		           blankSections[i].querySelector('.subplot').value = subplot;
+		       } else {
+		           stillUnfilled.push(subplot);
+		       }
+		   });
+		   // Append new sections for any returned subplots that exceeded blank slots
+		   stillUnfilled.forEach((subplot, i) => {
+		       const index = allSections.length + i + 1;
+		       const subplotDiv = document.createElement('div');
+		       subplotDiv.className = 'subplot-section';
+		       subplotDiv.innerHTML = `
+		           <label>Subplot ${index}:</label>
+		           <textarea class="subplot" style="height: 300px;">${subplot.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+		       `;
+		       subplotList.appendChild(subplotDiv);
+		   });
 
-	           novelData.subplots = Array.from(subplotList.getElementsByClassName('subplot')).map(s => s.value);
-			   document.getElementById('minSubplots').value = Array.from(subplotList.getElementsByClassName('subplot-section')).length || 1;
-			   updateSubplotCounter();
-	           console.log('Updated novelData.subplots:', novelData.subplots);
+		   novelData.subplots = Array.from(subplotList.getElementsByClassName('subplot')).map(s => s.value);
+		   document.getElementById('minSubplots').value = Array.from(subplotList.getElementsByClassName('subplot-section')).length || 1;
+		   updateSubplotCounter();
+		   console.log('Updated novelData.subplots:', novelData.subplots);
 
-	           requestLog.status = 'Completed';
-	           updateRequestLog();
+		   requestLog.status = 'Completed';
+		   updateRequestLog();
 	       } catch (error) {
 	           console.error('Error fetching subplots:', error);
 	           alert('An error occurred while fetching subplots: ' + error.message);
@@ -1575,6 +2014,11 @@
 
 
 
+        // ---- NW.T4/T5/T6: Chapter Subpage Management ----
+	    // NW.CH.1: updateChapterSubpages() SHALL regenerate chapter subpages in Tabs 4 (Outlines), 5 (Generate), and 6 (Edit) whenever the chapter count changes.
+	    // NW.CH.2: Each chapter subpage in Tab 4 SHALL include outline and arc textareas plus "Generate Chapter Outline & Arc" and "Update" buttons.
+	    // NW.CH.3: Each chapter subpage in Tab 5 SHALL include a chapter draft textarea and a "Generate Chapter" button.
+	    // NW.CH.4: Each chapter subpage in Tab 6 SHALL include an editable chapter textarea, an improvements field, "Update Chapter", and "Check Spelling & Grammar" buttons.
         // Update chapter subpages across all relevant tabs
 		async function updateChapterSubpages() {
 		    const numChapters = parseInt(document.getElementById('numChapters').value);
@@ -1583,6 +2027,11 @@
 		    novelData.chapterArcs = novelData.chapterArcs.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapterArcs.length)).fill(''));
 		    novelData.chapters = novelData.chapters.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapters.length)).fill(''));
 		    novelData.chapterImprovements = novelData.chapterImprovements.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapterImprovements.length)).fill(''));
+		    novelData.chapterContinuityPackets = (novelData.chapterContinuityPackets || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterContinuityPackets || []).length)).fill(null));
+		    if (!novelData.continuityTracker || typeof novelData.continuityTracker !== 'object') {
+		        novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
+		    }
+		    novelData.continuityTracker.chapters = (novelData.continuityTracker.chapters || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.continuityTracker.chapters || []).length)).fill(null));
 
 		    // Outlines Tab
 		    const outlinesNav = document.getElementById('chapterOutlinesNav');
@@ -1629,7 +2078,7 @@
 		        subpage.appendChild(improvementTextarea);
 
 		        const generateButton = document.createElement('button');
-		        generateButton.textContent = 'Generate Outline & Arc';
+		        generateButton.textContent = 'Generate Chapter Outline & Arc';
 		        generateButton.onclick = () => generateChapterOutline(i);
 		        subpage.appendChild(generateButton);
 
@@ -1698,6 +2147,7 @@
 		    showChapterSubpage(0);
 		    showGenChapterSubpage(1);
 		    showEditChapterSubpage(1);
+			renderContinuityStatusPanel();
 		}
 
         // Show a specific chapter subpage in Outlines tab
@@ -1760,6 +2210,167 @@
 	        console.log(`Synced chapter${source === 'edit' ? 'Gen' : 'Edit'}Content${chapterNum} to:`, newContent);
 	    }
 
+		function getTrimmedContext(text, maxChars = 1200) {
+			if (!text || typeof text !== 'string') return '';
+			const normalized = text.replace(/\s+/g, ' ').trim();
+			if (normalized.length <= maxChars) return normalized;
+			const head = normalized.slice(0, Math.floor(maxChars * 0.55));
+			const tail = normalized.slice(-Math.floor(maxChars * 0.35));
+			return `${head} ... ${tail}`;
+		}
+
+		function buildChapterContinuityPacket(chapterNum) {
+			const prevChapterText = chapterNum > 1 ? (novelData.chapters[chapterNum - 2] || '') : '';
+			const nextChapterOutline = chapterNum < novelData.numChapters ? (novelData.chapterOutlines[chapterNum] || '') : '';
+			const priorAuditThreads = (novelData.continuityTracker?.chapters || [])
+				.slice(0, Math.max(0, chapterNum - 1))
+				.flatMap(ch => Array.isArray(ch?.unresolvedThreads) ? ch.unresolvedThreads : [])
+				.filter(Boolean)
+				.slice(-8);
+
+			const packet = {
+				chapter: chapterNum,
+				mode: novelData.continuityStrictMode ? 'strict' : 'balanced',
+				storyArcAnchor: getTrimmedContext(`${novelData.storyArc || ''}\n\n${novelData.storyArcOutline || ''}`, 1400) || 'Not available',
+				prevChapterSummary: prevChapterText ? getTrimmedContext(prevChapterText, 1200) : 'None (opening chapter)',
+				nextChapterIntent: nextChapterOutline ? getTrimmedContext(nextChapterOutline, 700) : 'No explicit next chapter outline yet',
+				activeSubplots: (novelData.subplots || []).filter(Boolean).slice(0, 8),
+				unresolvedThreads: priorAuditThreads,
+				trackedCharacterStates: Array.isArray(novelData.continuityTracker?.characterArcProgress) ? novelData.continuityTracker.characterArcProgress : []
+			};
+
+			novelData.chapterContinuityPackets[chapterNum - 1] = packet;
+			return packet;
+		}
+
+		function rebuildContinuityPackets() {
+			collectData();
+			for (let i = 1; i <= novelData.numChapters; i++) {
+				buildChapterContinuityPacket(i);
+			}
+			renderContinuityStatusPanel();
+			alert(`Rebuilt continuity packets for ${novelData.numChapters} chapters.`);
+		}
+
+		function renderContinuityStatusPanel() {
+			const panel = document.getElementById('continuityStatusPanel');
+			if (!panel) return;
+			const packetCount = (novelData.chapterContinuityPackets || []).filter(Boolean).length;
+			const chapterAudits = (novelData.continuityTracker?.chapters || []).filter(Boolean);
+			const riskLines = chapterAudits
+				.slice(-5)
+				.map(ch => `Chapter ${ch.chapter}: ${(ch.continuityRisks || []).slice(0, 2).join(' | ') || 'No major risks.'}`);
+			const characterProgress = (novelData.continuityTracker?.characterArcProgress || [])
+				.slice(0, 8)
+				.map(c => `${c.name}: ${c.currentState || 'n/a'} -> ${c.nextBeat || 'n/a'}`);
+			panel.value = [
+				`Mode: ${novelData.continuityStrictMode ? 'Strict' : 'Balanced'}`,
+				`Continuity Packets: ${packetCount}/${novelData.numChapters}`,
+				`Chapter Audits: ${chapterAudits.length}`,
+				'',
+				'Story Arc Progress:',
+				novelData.continuityTracker?.storyArcProgress?.currentBeat || 'Not audited yet.',
+				'',
+				'Character Arc Tracker:',
+				characterProgress.length ? characterProgress.join('\n') : 'Not audited yet.',
+				'',
+				'Recent Continuity Risks:',
+				riskLines.length ? riskLines.join('\n') : 'No continuity findings yet.'
+			].join('\n');
+		}
+
+		function parseContinuityAuditResponse(response) {
+			if (response && typeof response === 'object' && Array.isArray(response.continuityRisks)) return response;
+			if (response?.chapter && typeof response.chapter === 'string') {
+				try {
+					const parsed = JSON.parse(response.chapter);
+					if (parsed && typeof parsed === 'object') return parsed;
+				} catch (_) {}
+			}
+			return {
+				chapterSummary: 'Continuity audit returned an unexpected payload format.',
+				unresolvedThreads: [],
+				storyArcProgress: { currentBeat: '', nextBeat: '', riskLevel: 'unknown' },
+				characterArcProgress: [],
+				continuityRisks: ['Unable to parse continuity audit output.'],
+				recommendedFixes: []
+			};
+		}
+
+		async function runChapterContinuityAudit(chapterNum, options = {}) {
+			collectData();
+			const chapterText = novelData.chapters[chapterNum - 1] || document.getElementById(`chapterGenContent${chapterNum}`)?.value || '';
+			if (!chapterText.trim()) {
+				if (!options.silent) alert(`Chapter ${chapterNum} has no content to audit.`);
+				return null;
+			}
+			const packet = buildChapterContinuityPacket(chapterNum);
+			const messages = [
+				{ role: 'system', content: getAgentPrompt('tab5', 'continuityAudit', 'You are a meticulous fiction continuity editor. Detect timeline drift, character-arc inconsistency, subplot drop-off, and story-arc misalignment. Return strict JSON only.') },
+				{
+					role: 'user',
+					content: [
+						`Audit continuity for Chapter ${chapterNum} of a novel titled "${novelData.title || 'Untitled'}".`,
+						`Continuity mode: ${novelData.continuityStrictMode ? 'strict' : 'balanced'}`,
+						`Story arc: ${novelData.storyArc || 'N/A'}`,
+						`Plot: ${novelData.generalPlot || 'N/A'}`,
+						`Characters: ${JSON.stringify((novelData.characters || []).filter(c => c.name))}`,
+						`Continuity packet: ${JSON.stringify(packet)}`,
+						`Chapter text: ${chapterText}`,
+						'Return strict JSON only with this structure:',
+						'{',
+						'  "chapterSummary": "<120-220 words>",',
+						'  "unresolvedThreads": ["<thread>", "..."],',
+						'  "storyArcProgress": {"currentBeat": "<text>", "nextBeat": "<text>", "riskLevel": "low|medium|high"},',
+						'  "characterArcProgress": [{"name": "<name>", "currentState": "<state>", "nextBeat": "<next beat>", "risk": "low|medium|high"}],',
+						'  "continuityRisks": ["<risk>", "..."],',
+						'  "recommendedFixes": ["<fix>", "..."]',
+						'}'
+					].join('\n')
+				}
+			];
+
+			const response = await callAI(messages, document.getElementById('tab5'), { operationName: `runChapterContinuityAudit_${chapterNum}` });
+			const parsed = parseContinuityAuditResponse(response);
+			const chapterAudit = {
+				chapter: chapterNum,
+				auditedAt: new Date().toISOString(),
+				chapterSummary: parsed.chapterSummary || '',
+				unresolvedThreads: Array.isArray(parsed.unresolvedThreads) ? parsed.unresolvedThreads : [],
+				storyArcProgress: parsed.storyArcProgress || { currentBeat: '', nextBeat: '', riskLevel: 'unknown' },
+				characterArcProgress: Array.isArray(parsed.characterArcProgress) ? parsed.characterArcProgress : [],
+				continuityRisks: Array.isArray(parsed.continuityRisks) ? parsed.continuityRisks : [],
+				recommendedFixes: Array.isArray(parsed.recommendedFixes) ? parsed.recommendedFixes : []
+			};
+			novelData.continuityTracker.chapters[chapterNum - 1] = chapterAudit;
+			novelData.continuityTracker.storyArcProgress = chapterAudit.storyArcProgress;
+			novelData.continuityTracker.characterArcProgress = chapterAudit.characterArcProgress;
+			novelData.continuityFindings = [
+				...(novelData.continuityFindings || []).filter(Boolean),
+				...chapterAudit.continuityRisks.map(r => `Chapter ${chapterNum}: ${r}`)
+			].slice(-200);
+			renderContinuityStatusPanel();
+			if (!options.silent) {
+				alert(`Continuity audit completed for Chapter ${chapterNum}. Risks found: ${chapterAudit.continuityRisks.length}.`);
+			}
+			return chapterAudit;
+		}
+
+		async function runContinuityAuditAll() {
+			collectData();
+			const chapterNumbers = Array.from({ length: novelData.numChapters }, (_, i) => i + 1)
+				.filter(ch => (novelData.chapters[ch - 1] || '').trim());
+			if (!chapterNumbers.length) {
+				alert('No chapter content found to audit. Generate at least one chapter first.');
+				return;
+			}
+			for (const chapterNum of chapterNumbers) {
+				await runChapterContinuityAudit(chapterNum, { silent: true });
+			}
+			renderContinuityStatusPanel();
+			alert(`Continuity audit completed for ${chapterNumbers.length} chapter(s).`);
+		}
+
 
 
 	    async function checkSpellingAndGrammar(chapterNum, source) {
@@ -1794,14 +2405,26 @@
 		    clearReturnedInfo();
 		    updateRequestLog();
 		    await callAI(messages, document.getElementById('tab6')).then(response => {
-		        const corrections = response.corrections || 'No corrections suggested.';
-		        alert(`Spelling and Grammar Suggestions for Chapter ${chapterNum}:\n\n${corrections}`);
+		        const corrected = response.corrected_text || null;
+		        if (corrected && typeof corrected === 'string' && corrected.trim().length > 50) {
+		            contentElement.value = corrected.trim();
+		            syncChapterContent(chapterNum, 'edit');
+		            alert(`Spelling and grammar corrections applied to Chapter ${chapterNum}.`);
+		        } else {
+		            const suggestions = response.corrections || response.suggestions || 'No corrections suggested.';
+		            alert(`Spelling and Grammar Suggestions for Chapter ${chapterNum}:\n\n${suggestions}\n\n(No corrected full text returned — apply manually.)`);
+		        }
 		    });
 }
 
 
 
-        // Update the Book tab with concatenated chapters and improvements table
+        // ---- NW.T7: Book Functions ----
+	    // NW.T7.F1: updateBookTab() SHALL concatenate all chapter texts into the book view textarea and store the result in novelData.bookText.
+	    // NW.T7.F2: exportBook() SHALL download the current book text as a plain .txt file named after the novel title.
+	    // NW.T7.F3: suggestBookImprovements() SHALL send the full book text to the LLM and populate an improvements table with numbered suggestions and status selectors.
+	    // NW.T7.F4: breakdownImprovement() SHALL send a single improvement to the LLM and return a structured chapter-level action breakdown stored in novelData.bookImprovementsWithStatus.
+	    // Update the Book tab with concatenated chapters and improvements table
 	    function updateBookTab() {
 	        collectData();
 	        const bookContent = document.getElementById('bookContent');
@@ -2195,9 +2818,14 @@
 }
 
 
+			// ---- NW.T8: Consolidated Breakdowns Functions ----
+			// NW.T8.F1: populateConsolidatedBreakdowns() SHALL aggregate accepted improvement breakdowns from novelData.bookImprovementsWithStatus into the Tab 8 view.
+			// NW.T8.F2: populateConsolidatedBreakdowns() SHALL be called each time Tab 8 is navigated to via showTab().
 			//Autopopulate Tab8 with breakdown of suggested improvements
 			function populateConsolidatedBreakdowns() {
-			    const breakdowns = novelData.bookImprovementsWithStatus.map(item => item.breakdown).filter(Boolean);
+			    const breakdowns = novelData.bookImprovementsWithStatus
+			        .filter(item => item.status === 'To Incorporate' && item.breakdown)
+			        .map(item => item.breakdown);
 
 			    // Characters
 			    const charactersMap = {};
@@ -2269,13 +2897,134 @@
 
 
 
+
+		    // ---- NW.T8: Integrate Suggestions Function ----
+		    // NW.T8.F3: integrateBreakdownSuggestions() SHALL gather all "To Incorporate" breakdowns, apply chapter content changes chapter-by-chapter via one LLM call per chapter, append outline notes, then flip each processed improvement status to "Incorporated".
+		    // NW.T8.F4: integrateBreakdownSuggestions() SHALL skip chapters that have no breakdown instructions targeting them.
+		    // NW.T8.F5: integrateBreakdownSuggestions() SHALL update novelData.chapters, sync Tab 5 and Tab 6 textareas, update the Book tab, and refresh Tab 7 status dropdowns after all integrations complete.
+		    async function integrateBreakdownSuggestions() {
+		        collectData();
+
+		        const toIntegrate = novelData.bookImprovementsWithStatus
+		            .map((item, idx) => ({ ...item, _idx: idx }))
+		            .filter(item => item.status === 'To Incorporate' && item.breakdown);
+
+		        if (toIntegrate.length === 0) {
+		            alert('No "To Incorporate" breakdowns found. Use the Breakdown button on Tab 7 to generate breakdowns first, then return here.');
+		            return;
+		        }
+
+		        const tab8El = document.getElementById('tab8');
+		        const loadingDiv = tab8El.querySelector('.loading-indicator');
+		        if (loadingDiv) loadingDiv.style.display = 'block';
+
+		        const numChapters = novelData.numChapters || novelData.chapters.length;
+		        let integratedCount = 0;
+
+		        try {
+		            // Integrate chapter content: one LLM call per chapter
+		            for (let chNum = 1; chNum <= numChapters; chNum++) {
+		                const chKey = 'Chapter ' + chNum;
+		                const chapterInstructions = toIntegrate
+		                    .filter(item => item.breakdown.chapters && item.breakdown.chapters[chKey])
+		                    .map(item => '- ' + item.text + ':\n  ' + item.breakdown.chapters[chKey])
+		                    .join('\n');
+
+		                if (!chapterInstructions) continue;
+
+		                const currentText = novelData.chapters[chNum - 1] || '';
+		                if (!currentText.trim()) continue;
+
+		                const messages = [
+		                    { role: 'system', content: getAgentPrompt('tab8', 'integrateBreakdown', 'You are a skilled fiction editor. Revise the provided chapter text to incorporate the listed improvements. Return ONLY the revised chapter text with no commentary, headers, or markdown code fences.') },
+		                    { role: 'user', content: 'Revise ' + chKey + ' of the ' + (novelData.genre || '') + ' novel "' + (novelData.title || 'Untitled') + '" to incorporate these improvements:\n\n' + chapterInstructions + '\n\nCurrent ' + chKey + ' text:\n' + currentText }
+		                ];
+
+		                requestLog.originTab = 'tab8';
+		                const revisedText = await new Promise((resolve) => {
+		                    callAI(messages, tab8El, (response) => {
+		                        if (typeof response === 'string') resolve(response.trim());
+		                        else if (response && response.content) resolve(String(response.content).trim());
+		                        else if (response && response.revised_chapter) resolve(String(response.revised_chapter).trim());
+		                        else resolve(currentText);
+		                    }, { operationName: 'Integrate Ch.' + chNum, max_tokens: 30000 });
+		                }).catch(err => { console.error('Error integrating ' + chKey + ':', err); return null; });
+
+		                if (revisedText && revisedText.trim() && revisedText !== currentText) {
+		                    novelData.chapters[chNum - 1] = revisedText;
+		                    const genEl = document.getElementById('chapterContent' + chNum);
+		                    if (genEl) genEl.value = revisedText;
+		                    const editEl = document.getElementById('chapterEditContent' + chNum);
+		                    if (editEl) editEl.value = revisedText;
+		                    integratedCount++;
+		                }
+		            }
+
+		            // Append chapter outline integration notes to Tab 4 textareas
+		            for (let chNum = 1; chNum <= numChapters; chNum++) {
+		                const chKey = 'Chapter ' + chNum;
+		                const outlineNotes = toIntegrate
+		                    .filter(item => item.breakdown.chapterOutlines && item.breakdown.chapterOutlines[chKey])
+		                    .map(item => item.breakdown.chapterOutlines[chKey])
+		                    .join('\n');
+		                if (!outlineNotes) continue;
+		                const existingOutline = novelData.chapterOutlines[chNum - 1] || '';
+		                const updatedOutline = existingOutline ? existingOutline + '\n\n[Integration Notes]\n' + outlineNotes : outlineNotes;
+		                novelData.chapterOutlines[chNum - 1] = updatedOutline;
+		                const outlineEl = document.getElementById('chapterOutline' + chNum);
+		                if (outlineEl) outlineEl.value = updatedOutline;
+		            }
+
+		            // Append novel outline integration notes
+		            const novelOutlineNotes = toIntegrate
+		                .filter(item => item.breakdown.novelOutlines)
+		                .map(item => typeof item.breakdown.novelOutlines === 'string'
+		                    ? item.breakdown.novelOutlines
+		                    : (Array.isArray(item.breakdown.novelOutlines)
+		                        ? item.breakdown.novelOutlines.join('\n')
+		                        : JSON.stringify(item.breakdown.novelOutlines)))
+		                .join('\n');
+		            if (novelOutlineNotes) {
+		                const existing = novelData.novelOutline || '';
+		                const updated = existing ? existing + '\n\n[Integration Notes]\n' + novelOutlineNotes : novelOutlineNotes;
+		                novelData.novelOutline = updated;
+		                const el = document.getElementById('novelOutline');
+		                if (el) el.value = updated;
+		            }
+
+		            // Flip status to Incorporated for all processed improvements
+		            toIntegrate.forEach(item => { novelData.bookImprovementsWithStatus[item._idx].status = 'Incorporated'; });
+
+		            // Refresh Tab 7 status dropdowns
+		            const tableBody = document.getElementById('improvementsTableBody');
+		            if (tableBody) {
+		                const mainRows = Array.from(tableBody.querySelectorAll('tr')).filter(row => row.querySelector('select'));
+		                mainRows.forEach((row, idx) => {
+		                    const item = novelData.bookImprovementsWithStatus[idx];
+		                    if (item) { const sel = row.querySelector('select'); if (sel) sel.value = item.status; }
+		                });
+		            }
+
+		            updateBookTab();
+		            populateConsolidatedBreakdowns();
+		            alert('Integration complete. ' + integratedCount + ' chapter(s) revised. ' + toIntegrate.length + ' improvement(s) marked as Incorporated.');
+
+		        } catch (err) {
+		            console.error('Integration error:', err);
+		            alert('Integration failed partway through. Check console for details. Chapters processed so far have been saved.');
+		        } finally {
+		            if (loadingDiv) loadingDiv.style.display = 'none';
+		        }
+		    }
+
+
 			// Tab 10 debug values population
 			function displayElementValues() {
 			    let output = '=== Current Element Values ===\n\n';
 
 			    // Tab 1: API & Story Info
 			    output += 'Tab 1: API & Story Info\n';
-			    output += `apiKey: ${document.getElementById('apiKey')?.value || ''}\n\n`;
+			    output += `apiKey: ${'*'.repeat((document.getElementById('apiKey')?.value || '').length)}\n\n`;
 			    output += `model: ${document.getElementById('model')?.value || ''}\n\n`;
 			    output += `maxTokens: ${document.getElementById('maxTokens')?.value || ''}\n\n`;
 			    output += `genre: ${document.getElementById('genre')?.value || ''}\n\n`;
@@ -2397,6 +3146,8 @@
 
 
 
+		    // ---- NW.T4: Outline Improvement Functions ----
+		    // NW.T4.F1: incorporateOutlineSuggestions() SHALL send current outlines plus user improvement notes to the LLM and overwrite all three outline fields with the revised versions.
 		    // Incorporate user-suggested improvements into the main outlines
 		    async function incorporateOutlineSuggestions() {
 			    collectData();
@@ -2443,6 +3194,9 @@
 
 
 
+		    // ---- NW.GEN: Session Import/Export Functions ----
+		    // NW.GEN.SES.1: exportSession() SHALL serialise novelData into a schema-versioned JSON envelope (schemaVersion: '1.0') and trigger a file download.
+		    // NW.GEN.SES.2: importSession() SHALL accept a JSON file, detect whether it is an envelope or bare novelData, normalise it, and restore the full UI state.
 		    // Export the entire session as JSON using the shared schema envelope.
 			function exportSession() {
 			    collectData();
@@ -2462,6 +3216,7 @@
 			        };
 			    });
 			    // Build clean novelData: exclude sensitive and operational fields not part of the shared schema
+		    // NW.GEN5: novelOutline, plotOutline, storyArcOutline are preserved to prevent round-trip data loss.
 		    const {
 		        apiKey: _apiKey,
 		        model: _model,
@@ -2469,9 +3224,6 @@
 		        authors: _authors,
 		        bookImprovements: _bookImprovements,
 		        chapterImprovements: _chapterImprovements,
-		        novelOutline: _novelOutline,
-		        plotOutline: _plotOutline,
-		        storyArcOutline: _storyArcOutline,
 		        ...exportableNovelData
 		    } = novelData;
 		    const sessionData = {
@@ -2544,7 +3296,18 @@
 		            editedChapters: Array.isArray(normalizedNovelData.editedChapters) ? normalizedNovelData.editedChapters : [],
 		            bookImprovements: Array.isArray(normalizedNovelData.bookImprovements) ? normalizedNovelData.bookImprovements : [],
 		            bookImprovementsWithStatus: Array.isArray(normalizedNovelData.bookImprovementsWithStatus) ? normalizedNovelData.bookImprovementsWithStatus : [],
-		            chapterImprovements: Array.isArray(normalizedNovelData.chapterImprovements) ? normalizedNovelData.chapterImprovements : []
+		            chapterImprovements: Array.isArray(normalizedNovelData.chapterImprovements) ? normalizedNovelData.chapterImprovements : [],
+		            continuityStrictMode: typeof normalizedNovelData.continuityStrictMode === 'boolean' ? normalizedNovelData.continuityStrictMode : true,
+		            autoContinuityAudit: typeof normalizedNovelData.autoContinuityAudit === 'boolean' ? normalizedNovelData.autoContinuityAudit : true,
+		            chapterContinuityPackets: Array.isArray(normalizedNovelData.chapterContinuityPackets) ? normalizedNovelData.chapterContinuityPackets : [],
+		            continuityFindings: Array.isArray(normalizedNovelData.continuityFindings) ? normalizedNovelData.continuityFindings : [],
+		            continuityTracker: normalizedNovelData.continuityTracker && typeof normalizedNovelData.continuityTracker === 'object'
+		                ? {
+		                    chapters: Array.isArray(normalizedNovelData.continuityTracker.chapters) ? normalizedNovelData.continuityTracker.chapters : [],
+		                    characterArcProgress: Array.isArray(normalizedNovelData.continuityTracker.characterArcProgress) ? normalizedNovelData.continuityTracker.characterArcProgress : [],
+		                    storyArcProgress: normalizedNovelData.continuityTracker.storyArcProgress && typeof normalizedNovelData.continuityTracker.storyArcProgress === 'object' ? normalizedNovelData.continuityTracker.storyArcProgress : {}
+		                }
+		                : { chapters: [], characterArcProgress: [], storyArcProgress: {} }
 		        },
 		        requestLog: {
 		            ...requestLog,
@@ -2600,6 +3363,10 @@
 		            document.getElementById('setting').value = novelData.setting || '';
 		            document.getElementById('numChapters').value = novelData.numChapters || 10;
 		            document.getElementById('chapterLength').value = novelData.chapterLength || 2000;
+					const strictModeEl = document.getElementById('continuityStrictMode');
+					const autoAuditEl = document.getElementById('autoContinuityAudit');
+					if (strictModeEl) strictModeEl.checked = !!novelData.continuityStrictMode;
+					if (autoAuditEl) autoAuditEl.checked = !!novelData.autoContinuityAudit;
 
 		            const charList = document.getElementById('characterList');
 		            charList.innerHTML = '';
@@ -2654,6 +3421,7 @@
 
 		            updateRequestLog();
 		            updateBookTab();
+					renderContinuityStatusPanel();
 
 		            if (warnings.length > 0) {
 		                console.warn('Import completed with warnings:', warnings);
@@ -2680,6 +3448,10 @@
 
 
 
+	    // ---- NW.T4: Novel Outline Generation Functions ----
+	    // NW.T4.F2: generateNovelOutlines() SHALL send all story context to the LLM and populate the novel outline, annotated plot outline, and annotated story arc outline fields.
+	    // NW.T4.F3: generateChapterOutline() SHALL generate outline and arc for a specific chapter using novel-level context and adjacent chapter content.
+	    // NW.T4.F4: updateChapterOutline() SHALL send per-chapter improvement notes to the LLM and update that chapter's outline and arc fields.
 	    // Generate novel outlines via AI
 	    async function generateNovelOutlines() {
 		    collectData();
@@ -2705,7 +3477,8 @@
 		                '- Annotated Plot Outline: 600-750 words, chapter-by-chapter (1-2 events each) with escalating stakes, 4-6 subplot connections, and sensory details, ensuring narrative flow and tension in the selected style.',
 		                '- Annotated Story Arc Outline: 500-600 words, a thematic odyssey with 4-6 emotional beats per act (beginning, middle, end), linked to character arcs and subplots, no names, emphasizing universal resonance.',
 		                'Minimum word counts for depth, reflecting style’s tone, structure, and prose for a novel with vivid world, plot, and character synergy.',
-		                'Return as JSON: {"novelOutline": "<outline>", "plotOutline": "<plot outline>", "storyArcOutline": "<arc outline>"}.',
+		                `- Chapter Blueprints: one entry per chapter (1 through ${novelData.numChapters || 10}). For each chapter specify: role (e.g. 'opening setup', 'midpoint reversal', 'climax'), arcStep (the story-arc beat this chapter must advance), subplotPressure (subplots active and what they must accomplish), characterBeats (named characters and the internal shift they undergo), allowedPayoffs (what may be resolved this chapter), and deferredThreads (what must remain open for later chapters). Enforce escalation discipline: early chapters seed and complicate; middle chapters escalate and reframe; late chapters execute payoffs only. Never allow climax-grade resolutions in opening chapters.`,
+		                'Return as JSON: {"novelOutline": "<outline>", "plotOutline": "<plot outline>", "storyArcOutline": "<arc outline>", "chapterBlueprints": [{"chapter": 1, "role": "...", "arcStep": "...", "subplotPressure": ["..."], "characterBeats": [{"name": "...", "beat": "..."}], "allowedPayoffs": ["..."], "deferredThreads": ["..."]}]}.',
 		                'Use the following example only as a format guide; do not replicate its specific content (e.g., settings, events):',
 		                'Example:',
 		                '{',
@@ -2731,7 +3504,8 @@
 		            outlines = {
 		                novelOutline: response.novelOutline,
 		                plotOutline: response.plotOutline,
-		                storyArcOutline: response.storyArcOutline
+		                storyArcOutline: response.storyArcOutline,
+		                chapterBlueprints: Array.isArray(response.chapterBlueprints) ? response.chapterBlueprints : []
 		            };
 		        } else if (response.chapter && typeof response.chapter === 'string') {
 		            try {
@@ -2740,7 +3514,8 @@
 		                    outlines = {
 		                        novelOutline: parsed.novelOutline,
 		                        plotOutline: parsed.plotOutline,
-		                        storyArcOutline: parsed.storyArcOutline
+		                        storyArcOutline: parsed.storyArcOutline,
+		                        chapterBlueprints: Array.isArray(parsed.chapterBlueprints) ? parsed.chapterBlueprints : []
 		                    };
 		                } else {
 		                    throw new Error('Parsed chapter does not contain all required outline fields');
@@ -2751,8 +3526,22 @@
 		                    outlines = {
 		                        novelOutline: response.chapter.match(/"novelOutline":\s*"([^"]*(?:""[^"]*)*)"/s)?.[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') || '',
 		                        plotOutline: response.chapter.match(/"plotOutline":\s*"([^"]*(?:""[^"]*)*)"/s)?.[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') || '',
-		                        storyArcOutline: response.chapter.match(/"storyArcOutline":\s*"([^"]*(?:""[^"]*)*)"/s)?.[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') || ''
+		                        storyArcOutline: response.chapter.match(/"storyArcOutline":\s*"([^"]*(?:""[^"]*)*)"/s)?.[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') || '',
+		                        chapterBlueprints: []
 		                    };
+		                    try {
+		                        const cleaned = response.chapter.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
+		                        const start = cleaned.indexOf('{');
+		                        const end = cleaned.lastIndexOf('}');
+		                        if (start !== -1 && end > start) {
+		                            const looseParsed = JSON.parse(cleaned.slice(start, end + 1));
+		                            if (Array.isArray(looseParsed.chapterBlueprints)) {
+		                                outlines.chapterBlueprints = looseParsed.chapterBlueprints;
+		                            }
+		                        }
+		                    } catch (bpParseError) {
+		                        console.warn('generateNovelOutlines: could not recover chapterBlueprints from fallback parse.', bpParseError);
+		                    }
 		                    if (!outlines.novelOutline || !outlines.plotOutline || !outlines.storyArcOutline) {
 		                        throw new Error('Missing outline fields in fallback extraction');
 		                    }
@@ -2797,6 +3586,23 @@
 		        novelData.plotOutline = outlines.plotOutline || '';
 		        novelData.storyArcOutline = outlines.storyArcOutline || '';
 
+		        const bpEl = document.getElementById('chapterBlueprints');
+		        if (Array.isArray(outlines.chapterBlueprints) && outlines.chapterBlueprints.length) {
+		            novelData.chapterBlueprints = outlines.chapterBlueprints;
+		            if (bpEl) {
+		                bpEl.value = outlines.chapterBlueprints.map(bp =>
+		                    `Ch ${bp.chapter} [${bp.role || ''}]: ${bp.arcStep || ''}` +
+		                    (bp.allowedPayoffs?.length ? `\n  Payoffs: ${bp.allowedPayoffs.join('; ')}` : '') +
+		                    (bp.deferredThreads?.length ? `\n  Deferred: ${bp.deferredThreads.join('; ')}` : '')
+		                ).join('\n\n');
+		            }
+		            console.log(`Stored ${novelData.chapterBlueprints.length} chapter blueprints.`);
+		        } else {
+		            novelData.chapterBlueprints = [];
+		            if (bpEl) bpEl.value = '';
+		            console.warn('generateNovelOutlines: no chapterBlueprints in response.');
+		        }
+
 		        requestLog.status = 'Completed';
 		        updateRequestLog();
 		    } catch (error) {
@@ -2816,12 +3622,36 @@
 		async function generateChapterOutline(chapterNum) {
 		    collectData();
 		    showChapterSubpage(chapterNum);
+			const totalChapters = Math.max(1, parseInt(novelData.numChapters || 1));
+			const chapterRatio = chapterNum / totalChapters;
+			const chapterStage = chapterRatio <= 0.33 ? 'opening' : (chapterRatio <= 0.66 ? 'middle' : 'late');
+			const structuralRule = chapterStage === 'opening'
+				? 'Prioritize setup + pressure seeding. Avoid resolving core arc transformations, identity-defining reveals, or climax-level subplot payoffs.'
+				: (chapterStage === 'middle'
+					? 'Complicate and escalate. Deliver meaningful reversals while preserving at least one major unresolved thread for later chapters.'
+					: 'Execute payoffs and irreversible turns that were prepared earlier. Close primary threads while preserving thematic resonance.');
 		    console.log('generateChapterOutline - novelData state:', {
 		        chapterNum,
 		        subplots: novelData.subplots.length,
 		        characters: novelData.characters.length,
 		        authorStyle: novelData.authorStyle
 		    });
+
+		    const blueprint = Array.isArray(novelData.chapterBlueprints) ? novelData.chapterBlueprints.find(b => b.chapter === chapterNum) : null;
+		    const structuralContext = blueprint
+		        ? [
+		            `- Chapter Blueprint (pre-planned by novel outline agent):`,
+		            `  Role: ${blueprint.role || chapterStage}`,
+		            `  Arc Step: ${blueprint.arcStep || structuralRule}`,
+		            `  Subplot Pressure: ${(blueprint.subplotPressure || []).join('; ') || 'See subplots above'}`,
+		            `  Character Beats: ${(blueprint.characterBeats || []).map(b => `${b.name}: ${b.beat}`).join('; ') || 'See characters above'}`,
+		            `  Allowed Payoffs This Chapter: ${(blueprint.allowedPayoffs || []).join('; ') || 'none specified'}`,
+		            `  Deferred Threads (must remain unresolved): ${(blueprint.deferredThreads || []).join('; ') || 'none specified'}`,
+		        ].join('\n')
+		        : [
+		            `- Chapter Position: ${chapterNum} of ${totalChapters} (${chapterStage})`,
+		            `- Structural Planning Rule: ${structuralRule}`,
+		        ].join('\n');
 
 		    const messages = [
 		        { role: 'system', content: getAgentPrompt('tab4', 'generateChapterOutline', 'You are a creative writing assistant specializing in detailed narrative planning.') },
@@ -2839,11 +3669,14 @@
 		                `- Annotated Story Arc Outline: ${novelData.storyArcOutline || 'No arc outline provided'}`,
 		                `- Existing Chapter Outline: ${novelData.chapterOutlines[chapterNum-1] || 'None'}`,
 		                `- Existing Chapter Arc: ${novelData.chapterArcs[chapterNum-1] || 'None'}`,
+		                structuralContext,
 		                '',
 		                'Include:',
 		                '- Outline: 300-400 words, detailing 2-3 key events with 3-4 sensory details (e.g., glowing tech, echoing ruins) tied to the setting, integrating the main plot and 1-2 specific subplots with clear stakes (e.g., survival, betrayal) and progression that advances the novel’s momentum.',
 		                '- Arc: 200-300 words, detailing the chapter’s emotional tone (e.g., tense, hopeful) and 2-3 character-driven beats (e.g., conflict, revelation, growth) involving named characters, tied to the story arc’s themes (e.g., identity, redemption) and subplot threads, enhancing the novel’s depth.',
 		                'Ensure:',
+					'- Respect chapter-window pacing: early chapters seed and complicate; middle chapters escalate and reframe; late chapters execute major payoffs.',
+					'- Explicitly preserve at least one unresolved thread for the next chapter unless this is the final chapter.',
 		                '- Cohesion with the novel’s overarching arc, plot, subplots, and character arcs, using evocative, style-specific language to reflect the setting’s atmosphere and the chapter’s role in the narrative.',
 		                '- Minimum 300/200 words for the outline and arc, prioritizing vivid detail, emotional stakes, and thematic resonance over brevity.',
 		                'Return as JSON: {"outline": "<outline>", "arc": "<arc>"}, ensuring world, plot, and character depth.',
@@ -3008,12 +3841,21 @@
 
 
 
+		// ---- NW.T5: Chapter Generation Functions ----
+		// NW.T5.F1: generateChapter() SHALL draft the full chapter text in two LLM passes (part 1 and part 2) using chapter outline, arc, characters, subplots, author style, and style guide as context.
+		// NW.T5.F2: generateChapter() SHALL store the result in novelData.chapters[chapterNum-1] and sync it to the corresponding Tab 6 edit textarea.
+		// NW.T5.F3: buildChapterContinuityPacket() SHALL construct per-chapter continuity context including prior chapter summary, next chapter intent, unresolved threads, and arc anchors.
+		// NW.T5.F4: runChapterContinuityAudit() SHALL evaluate generated chapter text for continuity risks and update story/character arc tracker state.
+		// NW.T5.F5: generateChapter() SHALL include continuity packet context and strict-continuity constraints when Strict Continuity Mode is enabled.
+		// NW.T5.F6: runContinuityAuditAll() SHALL run continuity audits across all generated chapters and refresh the continuity status panel.
 		// Generate a chapter
 		async function generateChapter(chapterNum) {
 		    console.log(`Starting generateChapter for Chapter ${chapterNum}`);
 		    console.log('Pre-collectData - novelData.chapters:', novelData.chapters);
 		    collectData();
 		    console.log('Post-collectData - novelData.chapters:', novelData.chapters);
+			const continuityPacket = buildChapterContinuityPacket(chapterNum);
+			const strictMode = !!novelData.continuityStrictMode;
 
 		    const chapterLength = novelData.chapterLength || 4000;
 		    const targetWordsPerPart = Math.floor((chapterLength / 2) + 1500) / 2;
@@ -3043,6 +3885,7 @@
 		                `- **Subplots:** ${novelData.subplots.length > 0 ? novelData.subplots.join(', ') : 'No subplots provided'}`,
 		                `- **Chapter Outline:** ${novelData.chapterOutlines[chapterNum-1] || 'No outline provided'}`,
 		                `- **Chapter Arc:** ${novelData.chapterArcs[chapterNum-1] || 'No arc provided'}`,
+			                `- **Continuity Packet:** ${JSON.stringify(continuityPacket)}`,
 		                '',
 		                'Requirements:',
 		                '- **Structure:** Seamless narrative, no headers/markers. Use vivid prose, dialogue, pacing, and stakes, with 6-8 sensory details per phase (sights, sounds, smells, textures) tied to setting’s history, culture, or tech, amplifying tone and ambiguity.',
@@ -3051,6 +3894,7 @@
 		                '- **World-Building:** Integrate 6-8 detailed setting elements—impact on characters/plot.',
 		                '- **Plot Expansion:** Begin advancing the chapter outline and arc (~400-500 words)—escalate tension tied to the story’s stakes.',
 		                `- **Tone & Hook:** Start with a ~400-word atmospheric hook—${novelData.authorStyle || 'generic'}-inspired tone with 1-2 twists tied to the chapter arc.`,
+			                ...(strictMode ? ['- **Strict Continuity:** Do not contradict previous chapter outcomes, preserve unresolved threads from the continuity packet, and ensure this chapter logically sets up the next chapter intent.'] : []),
 		                '- Use only characters from the provided list—no new characters.',
 		                '- End at a natural pause, preserving "\\n\\n" breaks.',
 		                '',
@@ -3109,6 +3953,7 @@
 			            `- **Subplots:** ${novelData.subplots.length > 0 ? novelData.subplots.join(', ') : 'No subplots provided'}`,
 			            `- **Chapter Outline:** ${novelData.chapterOutlines[chapterNum-1] || 'No outline provided'}`,
 			            `- **Chapter Arc:** ${novelData.chapterArcs[chapterNum-1] || 'No arc provided'}`,
+			            `- **Continuity Packet:** ${JSON.stringify(continuityPacket)}`,
 			            '',
 			            'Requirements:',
 			            '- **Structure:** Seamless narrative, no headers/markers. Use vivid prose, dialogue, pacing, and stakes, with 6-8 sensory details per phase tied to setting, amplifying tone and ambiguity.',
@@ -3117,6 +3962,7 @@
 			            '- **World-Building:** Add 6-8 setting elements—impact on characters/plot.',
 			            '- **Plot Expansion:** Conclude the chapter outline and arc (~400-500 words)—escalate tension with a cliffhanger tied to the story arc.',
 			            `- **Tone:** ${novelData.authorStyle || 'generic'}-inspired with 1-2 twists (e.g., subplot escalation), ending with a cliffhanger.`,
+			            ...(strictMode ? ['- **Strict Continuity:** Resolve or advance at least one unresolved thread from the continuity packet and avoid introducing contradictions in character or world state.'] : []),
 			            '- Use only characters from the provided list—no new characters.',
 			            '',
 			            'Return as JSON:',
@@ -3177,6 +4023,10 @@
 		    requestLog.returnedInfo = JSON.stringify({ chapter: novelData.chapters[chapterNum-1] }, null, 2);
 		    console.log('Pre-final updateRequestLog - chapterContent Length:', chapterContent.length);
 		    updateRequestLog();
+			rebuildContinuityPackets();
+			if (novelData.autoContinuityAudit) {
+				await runChapterContinuityAudit(chapterNum, { silent: true });
+			}
 		    console.log('Post-final updateRequestLog - chapterContent Length:', chapterContent.length);
 		    console.log(`Completed generateChapter for Chapter ${chapterNum}, Total Tokens: ${totalTokens}`);
 }
@@ -3188,6 +4038,9 @@
 
 
 
+	    // ---- NW.T6: Chapter Editing Functions ----
+	    // NW.T6.F1: updateChapter() SHALL send the current chapter text plus improvement notes to the LLM and replace the chapter textarea content with the revised text.
+	    // NW.T6.F2: checkSpellingAndGrammar() SHALL send the current chapter text to the LLM for proofreading and apply the corrected version back to the chapter textarea.
 	    // Update an existing chapter with improvements
 	    async function updateChapter(chapterNum) {
 		    collectData();
@@ -3250,6 +4103,11 @@
 	    // Suggest initial story info via AI
 	    async function suggestStoryInfo() {
 		    collectData();
+			const existingTitle = document.getElementById('title').value;
+			const existingStoryArc = document.getElementById('storyArc').value;
+			const existingGeneralPlot = document.getElementById('generalPlot').value;
+			const existingSetting = document.getElementById('setting').value;
+			const existingStyleGuide = document.getElementById('styleGuide').value;
 		    const messages = [
 		        { role: 'system', content: getAgentPrompt('tab1', 'suggestStoryInfo', 'You are a creative writing assistant specializing in immersive, thematic narratives.') },
 		        {
@@ -3286,21 +4144,77 @@
 		    clearReturnedInfo();
 		    updateRequestLog();
 		    await callAI(messages, document.getElementById('tab1')).then(response => {
-		        document.getElementById('title').value = response.title;
-		        document.getElementById('storyArc').value = response.storyArc;
-		        document.getElementById('generalPlot').value = response.generalPlot;
-		        document.getElementById('setting').value = response.setting;
-		        document.getElementById('styleGuide').value = response.styleGuide;
-		        novelData.title = response.title;
-		        novelData.storyArc = response.storyArc;
-		        novelData.generalPlot = response.generalPlot;
-		        novelData.setting = response.setting;
-		        novelData.styleGuide = response.styleGuide;
+				let parsed = {};
+				if (response && typeof response === 'object') {
+					parsed = {
+						title: response.title,
+						storyArc: response.storyArc,
+						generalPlot: response.generalPlot,
+						setting: response.setting,
+						styleGuide: response.styleGuide
+					};
+				}
+
+				const looksComplete = parsed.storyArc || parsed.generalPlot || parsed.setting;
+				if (!looksComplete && response?.chapter && typeof response.chapter === 'string') {
+					const raw = response.chapter.trim();
+					try {
+						const fromChapter = JSON.parse(raw);
+						parsed = {
+							title: fromChapter.title || parsed.title,
+							storyArc: fromChapter.storyArc || parsed.storyArc,
+							generalPlot: fromChapter.generalPlot || parsed.generalPlot,
+							setting: fromChapter.setting || parsed.setting,
+							styleGuide: fromChapter.styleGuide || parsed.styleGuide
+						};
+					} catch (_) {
+						// Fallback extraction for loosely structured payloads
+						const extract = (label, nextLabels) => {
+							const tail = nextLabels.join('|');
+							const re = new RegExp(`${label}\\s*[:\\-]\\s*([\\s\\S]*?)(?=\\n(?:${tail})\\s*[:\\-]|$)`, 'i');
+							const m = raw.match(re);
+							return m ? m[1].trim() : '';
+						};
+						parsed = {
+							title: parsed.title || extract('title', ['story\\s*arc', 'general\\s*plot', 'setting', 'style\\s*guide']),
+							storyArc: parsed.storyArc || extract('story\\s*arc', ['general\\s*plot', 'setting', 'style\\s*guide', 'title']),
+							generalPlot: parsed.generalPlot || extract('general\\s*plot', ['setting', 'style\\s*guide', 'story\\s*arc', 'title']),
+							setting: parsed.setting || extract('setting', ['style\\s*guide', 'general\\s*plot', 'story\\s*arc', 'title']),
+							styleGuide: parsed.styleGuide || extract('style\\s*guide', ['setting', 'general\\s*plot', 'story\\s*arc', 'title'])
+						};
+					}
+				}
+
+				const fallbackStoryArc = `A ${novelData.genre || 'fiction'} narrative arc where mounting pressure forces hard choices, reversals, and growth before a meaningful resolution.`;
+				const fallbackGeneralPlot = `The plot escalates through linked conflicts, revelations, and consequences that test the cast and advance the central stakes across the novel.`;
+				const fallbackSetting = `A vivid ${novelData.genre || 'fiction'} setting with clear atmosphere, social texture, and environmental detail that shapes character decisions.`;
+
+				const resolvedTitle = (parsed.title || existingTitle || '').trim();
+				const resolvedStoryArc = (parsed.storyArc || existingStoryArc || fallbackStoryArc).trim();
+				const resolvedGeneralPlot = (parsed.generalPlot || existingGeneralPlot || fallbackGeneralPlot).trim();
+				const resolvedSetting = (parsed.setting || existingSetting || fallbackSetting).trim();
+				const resolvedStyleGuide = (parsed.styleGuide || existingStyleGuide || '').trim();
+
+		        document.getElementById('title').value = resolvedTitle;
+		        document.getElementById('storyArc').value = resolvedStoryArc;
+		        document.getElementById('generalPlot').value = resolvedGeneralPlot;
+		        document.getElementById('setting').value = resolvedSetting;
+		        document.getElementById('styleGuide').value = resolvedStyleGuide;
+		        novelData.title = resolvedTitle;
+		        novelData.storyArc = resolvedStoryArc;
+		        novelData.generalPlot = resolvedGeneralPlot;
+		        novelData.setting = resolvedSetting;
+		        novelData.styleGuide = resolvedStyleGuide;
 		    });
 }
 
 
 
+		// ---- NW.T2/T3: Character & Subplot DOM Utility Functions ----
+		// NW.DOM.1: addCharacter() SHALL append a new blank character entry div to #characterList and update the #numCharacters counter.
+		// NW.DOM.2: syncCharacterEntries() SHALL add or remove character entry divs so the count matches the #numCharacters input value.
+		// NW.DOM.3: syncSubplotEntries() SHALL add or remove subplot entry divs so the count matches the #minSubplots input value.
+		// NW.DOM.4: addSubplot() SHALL append a new blank subplot textarea to #subplotList and update the #minSubplots counter.
 		//addCharacter
 		function addCharacter() {
 		    const charList = document.getElementById('characterList');
@@ -3342,6 +4256,29 @@
 		    updateCharacterCounter();
 		}
 
+		// Sync the number of subplot entry boxes to match the minSubplots input value
+		function syncSubplotEntries() {
+		    const desired = Math.max(1, parseInt(document.getElementById('minSubplots').value, 10) || 1);
+		    const subplotList = document.getElementById('subplotList');
+		    let entries = subplotList.querySelectorAll('.subplot-section');
+		    while (entries.length < desired) {
+		        const index = entries.length + 1;
+		        const div = document.createElement('div');
+		        div.className = 'subplot-section';
+		        div.innerHTML = `
+		            <label>Subplot ${index}:</label>
+		            <textarea class="subplot" placeholder="e.g., a hidden conspiracy" style="height: 300px;"></textarea>
+		        `;
+		        subplotList.appendChild(div);
+		        entries = subplotList.querySelectorAll('.subplot-section');
+		    }
+		    while (entries.length > desired) {
+		        subplotList.removeChild(subplotList.lastElementChild);
+		        entries = subplotList.querySelectorAll('.subplot-section');
+		    }
+		    updateSubplotCounter();
+		}
+
 		//addSubplot
 		function addSubplot() {
 		    const subplotList = document.getElementById('subplotList');
@@ -3360,6 +4297,9 @@
 
 
 
+	   // ---- NW.GEN: Data Collection & Shared Utilities ----
+	   // NW.GEN.UTIL.1: collectData() SHALL read all DOM input values into novelData before any LLM call or session export.
+	   // NW.GEN.UTIL.2: Utility functions (getAgentPrompt, renderPromptManagerTable, updateRequestLog, etc.) SHALL be defined after collectData() so they are available to all calling functions.
 	   // Collect data from all tabs into novelData
 	   function collectData() {
 	       novelData.apiKey = document.getElementById('apiKey').value;
@@ -3417,6 +4357,16 @@
 	           const imp = document.getElementById(`chapterImprovement${i+1}`);
 	           return imp ? imp.value : novelData.chapterImprovements[i] || '';
 	       });
+		   novelData.continuityStrictMode = !!document.getElementById('continuityStrictMode')?.checked;
+		   novelData.autoContinuityAudit = !!document.getElementById('autoContinuityAudit')?.checked;
+		   novelData.chapterContinuityPackets = Array.isArray(novelData.chapterContinuityPackets) ? novelData.chapterContinuityPackets : [];
+		   novelData.continuityFindings = Array.isArray(novelData.continuityFindings) ? novelData.continuityFindings : [];
+		   if (!novelData.continuityTracker || typeof novelData.continuityTracker !== 'object') {
+		       novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
+		   }
+		   if (!Array.isArray(novelData.continuityTracker.chapters)) novelData.continuityTracker.chapters = [];
+		   if (!Array.isArray(novelData.continuityTracker.characterArcProgress)) novelData.continuityTracker.characterArcProgress = [];
+		   if (!novelData.continuityTracker.storyArcProgress || typeof novelData.continuityTracker.storyArcProgress !== 'object') novelData.continuityTracker.storyArcProgress = {};
 	       const fullBook = novelData.chapters
 	           .filter(chapter => chapter.trim() !== '')
 	           .map((chapter, index) => `Chapter ${index + 1}\n\n${chapter}`)
@@ -3444,10 +4394,15 @@
 		        authors: [], characters: [], subplots: [], novelOutline: '', plotOutline: '',
 		        storyArcOutline: '', chapterOutlines: [], chapterArcs: [], chapters: [],
 		        editedChapters: [], bookText: '', bookImprovements: [], bookImprovementsWithStatus: [],
-		        outlineImprovements: '', chapterImprovements: []
+		        outlineImprovements: '', chapterImprovements: [],
+				continuityStrictMode: true,
+				autoContinuityAudit: true,
+				chapterContinuityPackets: [],
+				continuityTracker: { chapters: [], characterArcProgress: [], storyArcProgress: {} },
+				continuityFindings: []
 		    };
 		    requestLog = { lastPrompt: 'No requests made yet.', status: 'Idle', returnedInfo: 'No response yet.', tokenUsage: 'Not available', cost: 'Not available', originTab: null };
-		    document.getElementById('apiKey').value = localStorage.getItem('xaiApiKey') || '';
+		    // API key is not persisted to localStorage per NW.GEN8
 		    document.getElementById('model').value = 'grok-4.20-0309-reasoning';
 		    document.getElementById('maxTokens').value = '6000';
 		    document.getElementById('genre').value = 'scifi';
@@ -3459,6 +4414,8 @@
 		    document.getElementById('setting').value = '';
 		    document.getElementById('numChapters').value = '10';
 		    document.getElementById('chapterLength').value = '2000';
+			document.getElementById('continuityStrictMode').checked = true;
+			document.getElementById('autoContinuityAudit').checked = true;
 		    document.getElementById('characterList').innerHTML = '<div class="character"><label>Name:</label><input type="text" class="charName"><label>Backstory:</label><textarea class="charBackstory"></textarea><label>Arc:</label><textarea class="charArc"></textarea></div>';
 		    document.getElementById('subplotList').innerHTML = '<div class="subplot-section"><label>Subplot 1:</label><textarea class="subplot" style="height: 300px;"></textarea></div>';
 			document.getElementById('numCharacters').value = '10';
@@ -3470,7 +4427,7 @@
 		        const apiKey = prompt('Please enter your xAI API key for real API testing:');
 		        if (apiKey) {
 		            document.getElementById('apiKey').value = apiKey;
-		            localStorage.setItem('xaiApiKey', apiKey);
+		            // API key not stored to localStorage per NW.GEN8
 		        } else {
 		            throw new Error('API key required for real API tests');
 		        }

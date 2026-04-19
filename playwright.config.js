@@ -8,7 +8,7 @@ module.exports = defineConfig({
   },
   fullyParallel: false,
   workers: 1,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  reporter: [['list', { printSteps: true }], ['html', { open: 'never' }]],
   use: {
     headless: true,
     trace: 'on-first-retry',
@@ -22,8 +22,21 @@ module.exports = defineConfig({
     },
     {
       name: 'smoke',
+      testMatch: /novelwriter\.smoke\.quick\.spec\.js/,
+      timeout: 480 * 1000,         // 8 min per test — endpoint sanity pass
+      retries: 1,
+      use: {
+        headless: false,            // visible browser for manual monitoring
+        baseURL: 'http://localhost:8080',
+        screenshot: 'on',
+        video: 'on',
+      },
+    },
+    {
+      name: 'smoke-full',
       testMatch: /novelwriter\.smoke\.spec\.js/,
-      timeout: 600 * 1000,         // 10 min per test — real LLM calls
+      timeout: 3600 * 1000,        // 60 min per test — additive end-to-end with real LLM calls
+      retries: 1,
       use: {
         headless: false,            // visible browser for manual monitoring
         baseURL: 'http://localhost:8080',

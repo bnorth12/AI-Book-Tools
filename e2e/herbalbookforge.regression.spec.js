@@ -1,3 +1,14 @@
+/**
+ * HerbalBookForge Regression Suite
+ *
+ * Purpose:
+ * - Validate setup, outline, chapter, and prompt persistence workflows.
+ * - Keep deterministic behavior by mocking xAI responses for AI-driven steps.
+ *
+ * Notes for manual editors:
+ * - Keep `REG-*` IDs stable to preserve issue/release traceability.
+ * - Expand mocked branches in `mockXaiEndpoints` when adding new AI paths.
+ */
 const { test, expect } = require('@playwright/test');
 const { pathToFileURL } = require('url');
 const path = require('path');
@@ -23,6 +34,7 @@ async function openOutline(page) {
 }
 
 function mockXaiEndpoints(page) {
+  // Centralized API mock to keep outline/chapter generation assertions deterministic.
   return page.route('https://api.x.ai/v1/chat/completions', async route => {
     const req = route.request();
     const body = req.postDataJSON();
@@ -59,6 +71,7 @@ function mockXaiEndpoints(page) {
   });
 }
 
+// --- Setup tab checks ---
 test('REG-SU-01 HBF.SU1 toggles API key visibility', async ({ page }) => {
   await gotoApp(page);
   await page.click('#tab-setup');
@@ -80,6 +93,7 @@ test('REG-SU-02 HBF.SU2 preferred model persists after reload', async ({ page })
   await expect(page.locator('#preferred-model')).toHaveValue('grok-4-1-fast-reasoning');
 });
 
+// --- Goal and outline bootstrap flows ---
 test('REG-BG-04 HBF.BG.G2 accept goals generates initial outline if empty', async ({ page }) => {
   await gotoApp(page);
   await page.click('#tab-goals');
@@ -139,6 +153,7 @@ test('REG-OL-06 parse only chapter headings into chapter cards', async ({ page }
   await expect(chapterTitles).toHaveCount(2);
 });
 
+// --- Chapter editing flows ---
 test('REG-CH-02 HBF.CH3 HBF.CH5 chapter save persists edits', async ({ page }) => {
   await mockXaiEndpoints(page);
   await gotoApp(page);
@@ -170,6 +185,7 @@ test('REG-CH-03 HBF.CH4 chapter regenerate updates content', async ({ page }) =>
   await expect(page.locator('#chapter-annotation-0')).toContainText('Chapter Objective');
 });
 
+// --- Prompt editor persistence ---
 test('REG-PE-01 HBF.PE1 HBF.PE2 prompt edits persist across reload', async ({ page }) => {
   await gotoApp(page);
   await page.click('#tab-prompts');
@@ -193,6 +209,7 @@ test('REG-PE-01 HBF.PE1 HBF.PE2 prompt edits persist across reload', async ({ pa
   await expect(page.locator('#prompt-chapter-annotator')).toHaveValue('Chapter annotator prompt test');
 });
 
+// --- Session export path ---
 test('REG-SU-06 HBF.SU6 export session initiates download', async ({ page }) => {
   await gotoApp(page);
   await page.click('#tab-setup');

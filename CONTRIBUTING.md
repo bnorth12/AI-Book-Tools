@@ -46,6 +46,7 @@ Thank you for your interest in contributing to AI Book Tools! This document prov
    - Test all tools in multiple browsers
    - Verify API key functionality
    - Check responsive design on different screen sizes
+   - For manual Playwright execution and failure triage, follow [TESTING_MANUAL_RUNBOOK.md](TESTING_MANUAL_RUNBOOK.md)
 
 ## Code Style Guidelines
 
@@ -95,6 +96,24 @@ We use [Semantic Versioning](https://semver.org/):
 - MAJOR: Breaking changes
 - MINOR: New features, backward compatible
 - PATCH: Bug fixes, backward compatible
+
+## Release Provenance Policy
+
+For official releases, the repository MUST tag the exact commit that passed the final required test suites.
+
+1. Run required suites and collect evidence (logs/report/artifacts).
+2. Freeze code at the tested commit (no additional code changes).
+3. Bump versions/changelog as needed and re-run required checks if those edits change release content.
+4. Create an annotated release tag for that exact commit.
+5. Publish release notes that reference the tag and test evidence.
+
+Release policy rules:
+
+- Do not tag a commit that was not the one validated by the final release test pass.
+- If any commit is added after final test pass, run release validation again before tagging.
+- Keep issue/PR links and test evidence in the release PR to maintain traceability.
+
+For end-to-end feature release process requirements (create/design/implement/test/close) including configuration and data management controls, use [FEATURE_RELEASE_SSDL_CHECKLIST.md](FEATURE_RELEASE_SSDL_CHECKLIST.md).
 
 ## License
 

@@ -1,3 +1,14 @@
+/**
+ * NovelWriter Regression Suite
+ *
+ * Purpose:
+ * - Validate stable UI behavior and import/export flows.
+ * - Validate key AI-dependent paths using mocked xAI responses.
+ *
+ * Notes for manual editors:
+ * - Keep test IDs (`NW-REG-xx`) stable for triage history.
+ * - Prefer adjusting mock payloads over loosening assertions when behavior changes.
+ */
 const { test, expect } = require('@playwright/test');
 const { pathToFileURL } = require('url');
 const path = require('path');
@@ -11,6 +22,7 @@ async function gotoApp(page) {
 }
 
 function mockXaiEndpoint(page) {
+  // Route all xAI calls through deterministic fixtures so regressions are reproducible.
   return page.route('https://api.x.ai/v1/chat/completions', async route => {
     const req = route.request();
     const body = req.postDataJSON() || {};
@@ -80,6 +92,7 @@ function mockXaiEndpoint(page) {
   });
 }
 
+// --- Navigation and core shell behavior ---
 test('NW-REG-01 loads and navigates primary tabs', async ({ page }) => {
   await gotoApp(page);
 
@@ -93,13 +106,14 @@ test('NW-REG-01 loads and navigates primary tabs', async ({ page }) => {
   await expect(page.locator('#tab11')).toHaveClass(/active/);
 });
 
+// --- Story setup AI flows ---
 test('NW-REG-02 AI Suggest populates story fields with mocked API', async ({ page }) => {
   await mockXaiEndpoint(page);
   await gotoApp(page);
 
   await page.fill('#apiKey', 'gsk_test_key');
   await page.fill('#title', 'Temp');
-  await page.click('button:has-text("AI Suggest")');
+  await page.click('button:has-text("AI Suggest Story Info")');
 
   await expect(page.locator('#title')).toHaveValue('Smoke Test Novel');
   await expect(page.locator('#storyArc')).toHaveValue(/fragmented coalition/);
@@ -119,13 +133,14 @@ test('NW-REG-03 Generate Novel Outlines populates all outline fields', async ({ 
   await page.fill('#setting', 'Test habitat cluster');
 
   await page.click('#nav button:has-text("4. Outlines")');
-  await page.click('button:has-text("AI Suggest Outlines")');
+  await page.click('button:has-text("AI Suggest Novel Outline")');
 
   await expect(page.locator('#novelOutline')).toHaveValue(/Act I/);
   await expect(page.locator('#plotOutline')).toHaveValue(/Chapter beats/);
   await expect(page.locator('#storyArcOutline')).toHaveValue(/Leadership evolves/);
 });
 
+// --- Session import/export integrity ---
 test('NW-REG-04 Export Session triggers downloadable artifact', async ({ page }) => {
   await gotoApp(page);
 
@@ -189,6 +204,7 @@ test('NW-REG-05 Session import populates story fields from schema envelope', asy
   await expect(page.locator('#plotOutline')).toHaveValue(/climactic containment vote/);
 });
 
+// --- Chapter generation and edit paths ---
 test('NW-REG-06 Generate Chapter populates chapter content via mocked API', async ({ page }) => {
   await mockXaiEndpoint(page);
   await gotoApp(page);
@@ -239,6 +255,7 @@ test('NW-REG-07 Update Chapter revises chapter content via mocked API', async ({
   expect(edited).toContain('Revised');
 });
 
+// --- Schema and privacy checks for exported payloads ---
 test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive fields', async ({ page }) => {
   await gotoApp(page);
 
@@ -289,11 +306,54 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
   expect(parsed.novelData).not.toHaveProperty('maxTokens');
   expect(parsed.novelData).not.toHaveProperty('chapterImprovements');
   expect(parsed.novelData).not.toHaveProperty('bookImprovements');
-  expect(parsed.novelData).not.toHaveProperty('novelOutline');
-  expect(parsed.novelData).not.toHaveProperty('plotOutline');
-  expect(parsed.novelData).not.toHaveProperty('storyArcOutline');
   expect(parsed.novelData).not.toHaveProperty('authors');
+  // Outline fields ARE preserved in export to prevent round-trip data loss (V9 fix)
+  expect(parsed.novelData).toHaveProperty('novelOutline');
+  expect(parsed.novelData).toHaveProperty('plotOutline');
+  expect(parsed.novelData).toHaveProperty('storyArcOutline');
 
   // requestLog must NOT be duplicated at root level
   expect(parsed).not.toHaveProperty('requestLog');
+});
+
+// --- Execution HUD state transitions ---
+test('NW-REG-09 Execution HUD shows waiting and completion states during AI call', async ({ page }) => {
+  await page.route('https://api.x.ai/v1/chat/completions', async route => {
+    const payload = JSON.stringify({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              storyArc: 'A fractured alliance learns trust while containing a cascading stellar anomaly.'
+            })
+          }
+        }
+      ]
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 900));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: payload });
+  });
+
+  await gotoApp(page);
+  await page.fill('#apiKey', 'gsk_test_key');
+  await page.fill('#title', 'HUD Regression Novel');
+  await page.fill('#generalPlot', 'Regression test baseline plot.');
+  await page.fill('#setting', 'Regression habitat setting.');
+
+  const state = page.locator('#executionState');
+  const fnLabel = page.locator('#executionFunction');
+  const detail = page.locator('#executionDetail');
+
+  await expect(state).toHaveText('Idle');
+  await expect(fnLabel).toHaveText('Idle');
+
+  await page.click('button:has-text("Suggest Story Arc")');
+
+  await expect(state).toHaveText(/Running|Waiting/);
+  await expect(fnLabel).not.toHaveText('Idle');
+  await expect(detail).toContainText(/request|LLM|response/i);
+
+  await expect(state).toHaveText(/Completed|Idle/, { timeout: 7000 });
+  await expect(page.locator('#storyArc')).toHaveValue(/fractured alliance/i);
 });

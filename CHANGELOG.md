@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Suite Version Track (Current Cycle)
+
+- Active suite baseline is `V0.5.0` during in-progress capability work.
+- On final closeout/check-in of this feature cycle, suite version advances to `V0.6.0`.
+- `V0.6.0` will be composed of component versions finalized at feature closeout.
+
 ### NovelWriter (In Progress)
 
 - Started NovelWriter stabilization work on `feature/novelwriter-schema-stabilization`.
