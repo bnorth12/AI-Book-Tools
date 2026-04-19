@@ -50,6 +50,33 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "chapterBlueprints": {
+          "type": "array",
+          "description": "Structural plan produced by the novel outline agent: one entry per chapter specifying role, arc step, subplot pressure, character beats, allowed payoffs, and deferred threads. Consumed by the chapter outline agent to enforce pacing discipline.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "chapter": { "type": "integer", "minimum": 1 },
+              "role": { "type": "string", "description": "High-level role of this chapter, e.g. 'opening setup', 'midpoint reversal', 'climax'." },
+              "arcStep": { "type": "string", "description": "The story-arc beat this chapter must advance." },
+              "subplotPressure": { "type": "array", "items": { "type": "string" }, "description": "Subplots active in this chapter and what they must accomplish." },
+              "characterBeats": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "beat": { "type": "string" }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "allowedPayoffs": { "type": "array", "items": { "type": "string" }, "description": "Threads that may be resolved in this chapter." },
+              "deferredThreads": { "type": "array", "items": { "type": "string" }, "description": "Threads that must remain unresolved and carry forward." }
+            },
+            "additionalProperties": true
+          }
+        },
         "chapterOutlines": {
           "type": "array",
           "items": { "type": "string" }

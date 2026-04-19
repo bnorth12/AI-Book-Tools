@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Suite Version Track (Current Cycle)
+
+- Active suite baseline is `V0.5.0` during in-progress capability work.
+- On final closeout/check-in of this feature cycle, suite version advances to `V0.6.0`.
+- `V0.6.0` will be composed of component versions finalized at feature closeout.
+
+### NovelWriter (In Progress)
+
+- Started NovelWriter stabilization work on `feature/novelwriter-schema-stabilization`.
+- Fixed invalid HTML body structure and duplicate loading indicator IDs in NovelWriter.
+- Added missing improvement status handler and corrected tab navigation label/state behavior for request log and consolidated breakdowns.
+- Added schema-aligned session export metadata (`schemaVersion`, `sourceTool`, `sourceVersion`, `exportedAt`) in NovelWriter exports.
+- Added hybrid import handling in NovelWriter: strict shared-schema support plus legacy NovelWriter migration path with warnings.
+- Added Tab 11 Agent Prompts manager with editable per-tab/per-agent system prompts and dedicated prompt profile import/export.
+- Added character and subplot counter synchronization for add-actions, AI generation, import, and data collection.
+- Updated regression workflow to include advanced non-default complexity testing, fetched-author usage, refinement flow, mixed improvement statuses, and end-of-run session roundtrip coverage.
 
 ## [1.1.0] - 2026-04-17
 

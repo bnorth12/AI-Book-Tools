@@ -94,3 +94,43 @@ NovelWriter is the most mature tool, but it does not currently carry an explicit
 - NovelWriter export JSON is explicitly tagged with the schema version
 - `novelData` includes the shared field set
 - Schema reference is documented in repo docs
+
+---
+
+## Top-Level Repo Todo (Separate Scope, Not Today's Work)
+
+### Continuity Analytics Parity Backlog
+
+- [ ] BookEditor: Add continuity analysis view that reports story arc progression, plot/subplot thread status, and per-character arc state based on imported chapter text.
+- [ ] BookEditor: Add optional continuity audit action that flags chapter-to-chapter contradictions and recommends targeted edits without mutating source content automatically.
+- [ ] BookEditor: Support optional shared-schema continuity fields (`chapterContinuityPackets`, `continuityTracker`, `continuityFindings`) during import/export.
+- [ ] BookDecomposer: Add decomposition-time continuity tracker output for story arc, subplot lifecycle, and character arc transitions per chapter.
+- [ ] BookDecomposer: Add explicit unresolved-thread extraction and chapter risk scoring in analysis output.
+- [ ] BookDecomposer: Emit continuity analytics in shared-schema-compatible optional fields to interoperate with NovelWriter and BookEditor.
+- [ ] Repo-level: Define which continuity fields are canonical in shared schema vs tool-specific optional extensions and document this boundary in schema docs.
+
+### Release Closeout Checklist (Execute After Clean Test Pass)
+
+- [ ] Use `CURRENT_RELEASE_SSDL_STATUS.md` as the active backfilled SSDLC tracker for this release and close any open gap items before final tagging.
+
+- [ ] Confirm clean pass evidence for required suites and archive links/artifacts (terminal output summary, `playwright-report/`, and key `test-results/` folders).
+- [ ] Move version up one minor release for impacted tool(s) and repo-facing version references.
+- [ ] For this cycle specifically, promote suite version from `V0.5.0` to `V0.6.0` at release closeout.
+- [ ] Freeze and record final component version numbers included in suite `V0.6.0`.
+- [ ] Update release notes/changelog entries from Unreleased to the new version section.
+- [ ] Review open issues and close the ones fully addressed by merged code.
+- [ ] Create new issues for completed-but-not-tracked work so history remains auditable.
+- [ ] Ensure each addressed issue is linked to an active PR (open a new PR or update an existing PR).
+- [ ] Confirm each PR description includes issue links, test evidence, and a concise change summary.
+- [ ] Close PRs that are superseded/obsolete and keep one canonical PR path per issue.
+- [ ] Merge all approved feature branch PRs into trunk in dependency-safe order.
+- [ ] Run a final post-merge smoke/regression verification on trunk.
+- [ ] Tag the release using the exact commit that passed the final required test suites.
+- [ ] If any commit is added after final test pass, rerun required release validation before tagging.
+- [ ] Publish release notes linked to the release tag and test evidence.
+- [ ] Close the release milestone and clean up fully merged feature branches.
+
+### Next Minor Capability Release Planning
+
+- [ ] Execute the dedicated next-release UI unification plan in `NEXT_MINOR_RELEASE_UI_UNIFICATION_TODO.md` after the current release is fully closed and pushed to GitHub.
+- [ ] After UI unification closes, execute the post-UI novel quality capability plan in `NEXT_CAPABILITY_RELEASE_NOVEL_QUALITY_TODO.md`.

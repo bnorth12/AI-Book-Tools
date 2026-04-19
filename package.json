@@ -9,6 +9,12 @@
     "lint": "htmlhint \"**/*.html\" || true",
     "lint:js": "echo 'JavaScript linting not configured yet'",
     "test": "npm run lint && npm run validate-json",
+    "test:governance": "node scripts/check-requirements-governance.js",
+    "test:e2e": "playwright test",
+    "test:e2e:novelwriter": "playwright test e2e/novelwriter.regression.spec.js",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:install": "playwright install chromium",
+    "test:regression": "npm run test:governance && npm run test:e2e",
     "validate-json": "for file in $(find . -name \"*.json\" -not -path \"./node_modules/*\"); do jq empty \"$file\" || exit 1; done && echo 'All JSON valid'",
     "build": "echo 'No build step required - static files only'",
     "preview": "echo 'Open index.html in browser to preview'"
@@ -36,6 +42,7 @@
     "node": ">=14.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.53.0",
     "htmlhint": "^1.1.4"
   },
   "browserslist": [

@@ -1,0 +1,10 @@
+{
+  "css.lint.validProperties": [],
+  "edge-devtools.webhint": true,
+  "webhint.ignoredConnectors": [],
+  "files.exclude": {
+    "playwright-report/": true,
+    "test-results/": true,
+    "node_modules/": true
+  }
+}

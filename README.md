@@ -76,6 +76,10 @@ This repository uses GitHub Actions for automated testing:
 
 Tests run automatically on every push and pull request.
 
+For manual, human-operated Playwright execution and live failure analysis, see [TESTING_MANUAL_RUNBOOK.md](TESTING_MANUAL_RUNBOOK.md).
+
+For secure feature release lifecycle policy (planning through closeout), see [FEATURE_RELEASE_SSDL_CHECKLIST.md](FEATURE_RELEASE_SSDL_CHECKLIST.md).
+
 ### Security Updates
 
 Dependabot automatically creates pull requests to update dependencies and GitHub Actions, keeping the project secure and up-to-date.
