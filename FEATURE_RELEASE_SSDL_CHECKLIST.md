@@ -59,6 +59,10 @@ Use this checklist for any feature/capability release that changes code, configu
 - [ ] Tag the exact commit that passed final required tests.
 - [ ] If any commit is added after final pass, rerun required validation before tagging.
 - [ ] Publish release notes with links to tag, key PRs/issues, and evidence.
+- [ ] Run documentation/version alignment audit before tagging:
+	- Verify top-level docs (`README.md`, `CHANGELOG.md`, launcher labels) match current tool versions.
+	- Verify closeout trackers reflect actual GitHub issue/PR closure state.
+	- Verify suite version metadata (`package.json` and changelog release section) are synchronized.
 - [ ] Merge approved branches to trunk in dependency-safe order.
 - [ ] Run post-merge verification on trunk.
 - [ ] Close milestone, close addressed issues, and clean up merged branches.
@@ -80,3 +84,4 @@ Use this checklist for any feature/capability release that changes code, configu
 - Evidence locations (logs/reports/artifacts):
 - Security/config/data checks performed:
 - Open risks and mitigations:
+- Documentation/version alignment checks completed (README/changelog/launcher/closeout docs):

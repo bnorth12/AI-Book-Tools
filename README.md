@@ -6,7 +6,7 @@
 
 Static HTML/JavaScript tools for AI-assisted writing and book editing.
 
-Current tool releases: NovelWriter 0.3.3, BookEditor 0.4.0, BookDecomposer 0.2.0, HerbalBookForge 0.9.3.
+Current tool releases: NovelWriter 0.3.4, BookEditor 0.4.0, BookDecomposer 0.2.0, HerbalBookForge 0.9.5.
 
 ## Quick Start
 
