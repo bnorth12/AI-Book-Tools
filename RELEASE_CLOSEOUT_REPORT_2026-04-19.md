@@ -25,30 +25,24 @@ Close out the current NovelWriter/schema stabilization capability cycle by mergi
 - Main branch push result: successful
 - Remote feature branch delete result: successful
 
-## Open GitHub Items Checked
+## GitHub Items Closure Snapshot
 
-- Open PRs:
-  - #1 `ci(deps): bump actions/setup-node from 4 to 6`
-  - #2 `ci(deps): bump actions/checkout from 4 to 6`
-- Open issue:
-  - #3 `Define and implement shared versioned novel schema`
+- Issue #3 `Define and implement shared versioned novel schema`: CLOSED
+- PR #1 `ci(deps): bump actions/setup-node from 4 to 6`: CLOSED (superseded by direct trunk update)
+- PR #2 `ci(deps): bump actions/checkout from 4 to 6`: CLOSED (superseded by direct trunk update)
 
 ## Blockers Encountered
 
-- GitHub CLI token does not have permissions to close issues in this repository:
-  - `Resource not accessible by personal access token (closeIssue)`
 - Final post-merge trunk smoke/regression run was not executable in this environment because `XAI_API_KEY` is not set.
 
 ## Required Manual Follow-Up
 
 1. Set `XAI_API_KEY` in the release runner environment and execute final required post-merge suites on `main`.
-2. Close issue #3 if validation confirms all acceptance criteria are met.
-3. Triage/open dependency PRs #1 and #2 as separate maintenance work (not part of this capability release scope).
-4. Perform final version cut/tag/release publication once required suite pass is recorded.
+2. Perform final version cut/tag/release publication once required suite pass is recorded.
 
 ## Current Closeout State
 
 - Branch merge and trunk publication: complete.
 - Documentation and release governance capture: complete.
-- Issue closure in GitHub UI/API: pending permissions.
+- Issue and administrative PR closure: complete.
 - Final release tag and publication: pending final required test execution.

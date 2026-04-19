@@ -42,7 +42,7 @@ A specialized AI-powered book creation tool designed for crafting herbal medicin
 
 ## Version
 
-Current version: 0.9.3
+Current version: 0.9.5
 
 ## Important Notes
 

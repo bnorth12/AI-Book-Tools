@@ -7,15 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Suite Version Track (Current Cycle)
+### Changed
 
-- Active suite baseline is `V0.5.0` during in-progress capability work.
-- On final closeout/check-in of this feature cycle, suite version advances to `V0.6.0`.
-- `V0.6.0` will be composed of component versions finalized at feature closeout.
+- Post-release follow-up items only.
 
-### NovelWriter (In Progress)
+## [1.2.0] - 2026-04-19
 
-- Started NovelWriter stabilization work on `feature/novelwriter-schema-stabilization`.
+### Added
+
+- Administrative closeout alignment for release/checklist documentation and version metadata consistency checks.
+
+### Changed
+
+- Finalized NovelWriter stabilization release as `v0.3.4`.
+- Aligned HerbalBookForge release references to `v0.9.5`.
+- Bumped GitHub Actions workflow dependencies to `actions/checkout@v6` and `actions/setup-node@v6`.
+- Updated release closeout documentation to reflect current GitHub issue/PR state.
+
+### Fixed
+
 - Fixed invalid HTML body structure and duplicate loading indicator IDs in NovelWriter.
 - Added missing improvement status handler and corrected tab navigation label/state behavior for request log and consolidated breakdowns.
 - Added schema-aligned session export metadata (`schemaVersion`, `sourceTool`, `sourceVersion`, `exportedAt`) in NovelWriter exports.
@@ -64,7 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### NovelWriter
 
-- **v0.3.3** - Latest stable release with full feature set
+- **v0.3.4** - Latest stable release with schema-aligned export/import hardening and workflow fixes
+- **v0.3.3** - Prior stable release
 - **v0.3.0** - Added chapter editing capabilities
 - **v0.2.0** - Added subplot management
 - **v0.1.0** - Initial character development features
@@ -83,7 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### HerbalBookForge
 
-- **v0.9.3** - Latest stable release
+- **v0.9.5** - Latest stable release
+- **v0.9.3** - Prior stable release
 - **v0.9.0** - Added safety guidelines
 - **v0.8.0** - Enhanced herbal expertise prompts
 
