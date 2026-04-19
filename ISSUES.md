@@ -111,7 +111,7 @@ NovelWriter is the most mature tool, but it does not currently carry an explicit
 
 ### Release Closeout Checklist (Execute After Clean Test Pass)
 
-- [ ] Use `CURRENT_RELEASE_SSDL_STATUS.md` as the active backfilled SSDLC tracker for this release and close any open gap items before final tagging.
+- [x] Use `CURRENT_RELEASE_SSDL_STATUS.md` as the active backfilled SSDLC tracker for this release and close any open gap items before final tagging.
 
 - [ ] Confirm clean pass evidence for required suites and archive links/artifacts (terminal output summary, `playwright-report/`, and key `test-results/` folders).
 - [ ] Move version up one minor release for impacted tool(s) and repo-facing version references.
@@ -123,12 +123,14 @@ NovelWriter is the most mature tool, but it does not currently carry an explicit
 - [ ] Ensure each addressed issue is linked to an active PR (open a new PR or update an existing PR).
 - [ ] Confirm each PR description includes issue links, test evidence, and a concise change summary.
 - [ ] Close PRs that are superseded/obsolete and keep one canonical PR path per issue.
-- [ ] Merge all approved feature branch PRs into trunk in dependency-safe order.
+- [x] Merge all approved feature branch PRs into trunk in dependency-safe order.
 - [ ] Run a final post-merge smoke/regression verification on trunk.
 - [ ] Tag the release using the exact commit that passed the final required test suites.
 - [ ] If any commit is added after final test pass, rerun required release validation before tagging.
 - [ ] Publish release notes linked to the release tag and test evidence.
 - [ ] Close the release milestone and clean up fully merged feature branches.
+
+Closeout note (2026-04-19): `feature/novelwriter-schema-stabilization` was merged into `main` and deleted from origin. Remaining open closeout items are blocked on GitHub token permissions (issue closure/milestone ops) and missing local `XAI_API_KEY` for final trunk smoke/regression execution.
 
 ### Next Minor Capability Release Planning
 

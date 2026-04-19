@@ -5,7 +5,7 @@ This file backfills the Secure SDLC checklist for the current capability release
 ## Release Snapshot
 
 - Release scope (current): NovelWriter stabilization, shared-schema alignment updates, smoke/regression harness hardening, and release-process documentation hardening.
-- Status: In progress (not yet closed/tagged).
+- Status: Closeout in progress (feature merged to `main`; final tag and GitHub governance closure still pending).
 - Baseline policy template: `FEATURE_RELEASE_SSDL_CHECKLIST.md`
 - Suite version baseline for this active cycle: `V0.5.0`.
 - Suite version target at final closeout/check-in: `V0.6.0`.
@@ -29,8 +29,8 @@ This file backfills the Secure SDLC checklist for the current capability release
   - Partial: Functional acceptance criteria are present; security/privacy acceptance criteria need explicit release-level signoff checklist.
 - [ ] Define requirement IDs and requirement-to-test traceability method.
   - Partial: Inline requirement references exist in places; full traceability matrix for this release is incomplete.
-- [ ] Define branch strategy and merge order for dependent work.
-  - Gap: Work was executed iteratively; explicit merge-order plan needs final documentation.
+- [x] Define branch strategy and merge order for dependent work.
+  - Note: Final closeout merged `feature/novelwriter-schema-stabilization` into `main` and cleaned up the remote feature branch.
 
 ## 2) Design and Threat Modeling
 
@@ -102,12 +102,12 @@ This file backfills the Secure SDLC checklist for the current capability release
   - Pending: Policy now documented; execute during closeout.
 - [ ] Publish release notes with links to tag, key PRs/issues, and evidence.
   - Pending closeout.
-- [ ] Merge approved branches to trunk in dependency-safe order.
-  - Pending closeout.
+- [x] Merge approved branches to trunk in dependency-safe order.
+  - Note: Completed via merge commit `ebc44e6` on `main`.
 - [ ] Run post-merge verification on trunk.
   - Pending closeout.
 - [ ] Close milestone, close addressed issues, and clean up merged branches.
-  - Pending closeout.
+  - Partial: Merged feature branch was cleaned up; issue/milestone closure is pending GitHub token permissions.
 
 ## 7) Post-Release Governance
 
@@ -130,3 +130,11 @@ This file backfills the Secure SDLC checklist for the current capability release
 - Evidence locations (logs/reports/artifacts): terminal run history, `playwright-report/`, `test-results/`
 - Security/config/data checks performed: API-key handling checks, env-var workflow documentation, import/export/schema validations
 - Open risks and mitigations: closeout gaps listed above; complete in final release closure pass
+
+## Closeout Execution Notes (2026-04-19)
+
+- Merged branch `feature/novelwriter-schema-stabilization` into `main` and pushed to origin.
+- Deleted remote branch `feature/novelwriter-schema-stabilization`.
+- Sanitized local workflow/task configuration to remove hardcoded API key usage.
+- Could not execute final trunk validation suites in this environment because `XAI_API_KEY` is not set.
+- Could not close GitHub issue #3 from CLI due token permission (`Resource not accessible by personal access token`).
