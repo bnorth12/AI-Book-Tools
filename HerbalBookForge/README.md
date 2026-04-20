@@ -46,4 +46,6 @@ Current version: 0.9.5
 
 ## Important Notes
 
-This tool is designed for educational and informational purposes. Always consult qualified herbalists, physicians, or botanists for medical advice. The AI-generated content should be reviewed by subject matter experts before publication.
+This tool is designed for educational and informational purposes.
+Always consult qualified herbalists, physicians, or botanists for medical advice.
+The AI-generated content should be reviewed by subject matter experts before publication.

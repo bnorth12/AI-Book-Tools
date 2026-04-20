@@ -3,6 +3,7 @@
 ## Current BookEditor Fields (by Tab)
 
 ### Tab 1: Project Setup
+
 - `apiKey` ✓ (Tool-specific, not in shared schema)
 - `model` ✓ (Tool-specific, not in shared schema)
 - `maxTokens` ✓ (Tool-specific, not in shared schema)
@@ -10,6 +11,7 @@
 - Export/Import buttons
 
 ### Tab 2: Book Input
+
 - `bookText` ✓ (In shared schema)
 - `bookURL` ✗ (Not in shared schema, tool-specific)
 - `inputMethod` ✗ (Not in shared schema, tool-specific)
@@ -17,16 +19,20 @@
 - `editedChapters` (internal array) ✓
 
 ### Tab 3: Chat Bot
+
 - `chatQuestion` ✗ (Not in shared schema)
 - `chatResponse` ✗ (Not in shared schema)
 
 ### Tab 4: Improvements List
+
 - `improvements` array → should map to `bookImprovementsWithStatus` ✓
 
 ### Tab 5: Edited Output
+
 - `editedChapters` ✓ (In shared schema)
 
 ### Tab 6: Request Log
+
 - `requestLog` ✓ (In shared schema)
 
 ---
@@ -34,7 +40,7 @@
 ## Missing from BookEditor (shared schema fields)
 
 | Field | Shared Schema | Current BookEditor | Status |
-|-------|---------------|------------------|--------|
+| ----- | ------------- | ------------------ | ------ |
 | title | Required | ✗ Missing | ADD |
 | storyArc | Required | ✗ Missing | ADD |
 | generalPlot | Required | ✗ Missing | ADD |
@@ -56,12 +62,13 @@
 ## Recommendations
 
 ### Priority 1: Minimal Changes (for import/export compatibility)
+
 1. Add story metadata tab or section:
    - `title`
    - `storyArc`
    - `generalPlot`
    - `setting`
-   
+
 2. Enhance improvements structure:
    - Change from simple string array
    - Use: `{ text: "", status: "", breakdown: null }` format
@@ -71,11 +78,13 @@
    - These would be populated if importing from NovelWriter or BookDecomposer
 
 ### Priority 2: UI Enhancements
+
 - Add a "Story Metadata" tab to capture/display story info
 - Display imported character and subplot data in a collapsible view
 - Map improvements status column to BookEditor's workflow
 
 ### Priority 3: Long-term
+
 - Integrate character/subplot display in the main UI
 - Allow BookEditor to edit more story elements, not just chapters
 

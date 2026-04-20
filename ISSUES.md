@@ -130,7 +130,10 @@ NovelWriter is the most mature tool, but it does not currently carry an explicit
 - [ ] Publish release notes linked to the release tag and test evidence.
 - [ ] Close the release milestone and clean up fully merged feature branches.
 
-Closeout note (2026-04-19): `feature/novelwriter-schema-stabilization` was merged into `main` and deleted from origin. Remaining open closeout items are blocked on GitHub token permissions (issue closure/milestone ops) and missing local `XAI_API_KEY` for final trunk smoke/regression execution.
+Closeout note (2026-04-19): `feature/novelwriter-schema-stabilization` was
+merged into `main` and deleted from origin. Remaining open closeout items are
+blocked on GitHub token permissions (issue closure/milestone ops) and missing
+local `XAI_API_KEY` for final trunk smoke/regression execution.
 
 ### Next Minor Capability Release Planning
 

@@ -5,6 +5,7 @@ This guide explains how to set up a Discord server for the AI Book Tools communi
 ## Why Discord?
 
 Discord provides:
+
 - Real-time chat for quick questions
 - Voice channels for discussions and collaboration
 - Organized channels by topic
@@ -15,6 +16,7 @@ Discord provides:
 ## Server Setup Steps
 
 ### 1. Create Discord Server
+
 1. Go to [Discord.com](https://discord.com)
 2. Sign in or create account
 3. Click "+" to create server
@@ -27,32 +29,38 @@ Discord provides:
 
 Create these text channels (use 📝 emojis for organization):
 
-**📢 Announcements**
+#### 📢 Announcements
+
 - #announcements - Official updates and releases
 - #changelog - Version updates and changes
 
-**💬 General Discussion**
+#### 💬 General Discussion
+
 - #general - Main chat for all topics
 - #random - Off-topic discussions
 - #showcase - Share your writing projects
 
-**🆘 Help & Support**
+#### 🆘 Help & Support
+
 - #help - Get help with tools
 - #bug-reports - Report bugs (link to GitHub issues)
 - #feature-requests - Suggest new features
 
-**🛠️ Development**
+#### 🛠️ Development
+
 - #development - Technical discussions
 - #contributing - How to contribute
 - #github-updates - GitHub activity notifications
 
-**🎯 Tool-Specific**
+#### 🎯 Tool-Specific
+
 - #novel-writer - NovelWriter discussions
 - #book-editor - BookEditor discussions
 - #book-decomposer - BookDecomposer discussions
 - #herbal-book-forge - HerbalBookForge discussions
 
-**🎤 Voice Channels**
+#### 🎤 Voice Channels
+
 - General Voice
 - Writing Sessions
 - Development Calls
@@ -60,6 +68,7 @@ Create these text channels (use 📝 emojis for organization):
 ### 3. Role Setup
 
 Create roles for organization:
+
 - **Admin** - Server management
 - **Moderator** - Community management
 - **Contributor** - Code contributors
@@ -69,6 +78,7 @@ Create roles for organization:
 ### 4. Bot Integration
 
 #### GitHub Integration
+
 1. Add GitHub bot to server
 2. Connect repository: `bnorth12/AI-Book-Tools`
 3. Configure notifications for:
@@ -78,6 +88,7 @@ Create roles for organization:
    - Commits to main branch
 
 #### Useful Bots
+
 - **GitHub** - Repository notifications
 - **Helper Bot** - Welcome messages and moderation
 - **Music Bot** - Background music for writing sessions (optional)
@@ -91,32 +102,37 @@ Create a #rules channel with:
 **📖 Our Mission**
 Help writers and creators leverage AI for better storytelling and book creation.
 
-**🤝 Community Rules**
+#### 🤝 Community Rules
+
 1. Be respectful and supportive
 2. No spam or self-promotion
 3. Keep discussions on-topic in specialized channels
 4. Help others when you can
 5. Share your work and get feedback
 
-**🛠️ Tool Usage**
+#### 🛠️ Tool Usage
+
 - Test tools before asking for help
 - Check existing issues on GitHub
 - Provide detailed bug reports
 - Respect API rate limits
 
-**💡 Getting Help**
+#### 💡 Getting Help
+
 - Use appropriate channels for questions
 - Include error messages and steps to reproduce
 - Be patient - community is volunteer-based
 
 ### 6. Moderation Setup
 
-**Auto-Moderation Rules**
+#### Auto-Moderation Rules
+
 - Block common spam phrases
 - Warn for excessive caps/emoji
 - Filter inappropriate content
 
-**Moderator Guidelines**
+#### Moderator Guidelines
+
 - Welcome new members
 - Direct questions to appropriate channels
 - Encourage positive interactions
@@ -124,13 +140,15 @@ Help writers and creators leverage AI for better storytelling and book creation.
 
 ### 7. Growth Strategies
 
-**Attracting Members**
+#### Attracting Members
+
 - Post in writing communities (Reddit, Discord servers)
 - Share on social media
 - Collaborate with other AI/writing projects
 - Create valuable content (tutorials, showcases)
 
-**Engagement Ideas**
+#### Engagement Ideas
+
 - Weekly writing prompts
 - Tool update announcements
 - Community writing challenges
@@ -139,14 +157,16 @@ Help writers and creators leverage AI for better storytelling and book creation.
 
 ### 8. Maintenance
 
-**Regular Tasks**
+#### Regular Tasks
+
 - Review and update rules
 - Clean up inactive channels
 - Archive old discussions
 - Update member roles
 - Monitor bot performance
 
-**Metrics to Track**
+#### Metrics to Track
+
 - Active member count
 - Messages per week
 - Popular channels
@@ -156,6 +176,7 @@ Help writers and creators leverage AI for better storytelling and book creation.
 ## Getting the Invite Link
 
 Once server is set up:
+
 1. Right-click server name
 2. Select "Invite People"
 3. Create permanent invite link
@@ -164,6 +185,7 @@ Once server is set up:
 ## Support
 
 Need help setting up Discord?
+
 - Check Discord's official documentation
 - Ask in existing writing/tech communities
 - Create GitHub issue for specific questions
