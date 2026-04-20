@@ -5,7 +5,7 @@ This file backfills the Secure SDLC checklist for the current capability release
 ## Release Snapshot
 
 - Release scope (current): NovelWriter stabilization, shared-schema alignment updates, smoke/regression harness hardening, and release-process documentation hardening.
-- Status: Closeout documentation aligned on `main`; final release tag and post-merge validation evidence are pending.
+- Status: Release validation complete on `main`; tag/release publication finalized.
 - Baseline policy template: `FEATURE_RELEASE_SSDL_CHECKLIST.md`
 - Suite version baseline for this active cycle: `V0.5.0`.
 - Suite version target at final closeout/check-in: `V0.6.0`.
@@ -81,55 +81,55 @@ This file backfills the Secure SDLC checklist for the current capability release
 
 ## 5) Release Candidate Review
 
-- [ ] Confirm all linked issues/requirements are implemented or explicitly deferred.
-  - Gap: Requires final triage/closure pass.
-- [ ] Confirm PRs include requirement links, risk notes, and test evidence.
-  - Gap: Requires PR-by-PR audit before release close.
-- [ ] Confirm changelog and version updates are complete.
-  - Partial: `CHANGELOG.md` updated in Unreleased; final version cut pending.
-- [ ] Confirm no unresolved high-severity security/privacy findings remain.
-  - Gap: No explicit release security signoff record yet.
-- [ ] Confirm rollback/recovery approach for critical regressions.
-  - Gap: Not yet documented as a release artifact.
+- [x] Confirm all linked issues/requirements are implemented or explicitly deferred.
+  - Note: Implementation and administrative follow-up issues were closed after merge validation.
+- [x] Confirm PRs include requirement links, risk notes, and test evidence.
+  - Note: Final administrative PR `#5` includes issue linkage and release-alignment notes.
+- [x] Confirm changelog and version updates are complete.
+  - Note: Version and closeout references were aligned in `CHANGELOG.md`, `README.md`, launcher labels, and tool docs.
+- [x] Confirm no unresolved high-severity security/privacy findings remain.
+  - Note: Secret handling and configuration controls were validated; no open blocking security issues remain.
+- [x] Confirm rollback/recovery approach for critical regressions.
+  - Note: Recovery path remains a hard reset to the previous release commit/tag with rerun of required smoke gates.
 
 ## 6) Close and Release
 
-- [ ] Run final required suite pass on release candidate commit.
-  - Gap: Still in-progress/iterative state.
-- [ ] Tag the exact commit that passed final required tests.
-  - Gap: Not yet at release closeout.
-- [ ] If any commit is added after final pass, rerun required validation before tagging.
-  - Pending: Policy now documented; execute during closeout.
-- [ ] Publish release notes with links to tag, key PRs/issues, and evidence.
-  - Pending closeout.
+- [x] Run final required suite pass on release candidate commit.
+  - Note: `smoke` and `smoke-full` both passed on `main` with HTML reports generated (`--reporter=line,html`).
+- [x] Tag the exact commit that passed final required tests.
+  - Note: Release tag created from validated `main` head.
+- [x] If any commit is added after final pass, rerun required validation before tagging.
+  - Note: No additional commits were added between final pass and tag creation.
+- [x] Publish release notes with links to tag, key PRs/issues, and evidence.
+  - Note: GitHub release was published from the validated tag.
 - [x] Merge approved branches to trunk in dependency-safe order.
   - Note: Completed via merge commit `ebc44e6` on `main`.
-- [ ] Run post-merge verification on trunk.
-  - Pending closeout.
-- [ ] Close milestone, close addressed issues, and clean up merged branches.
-  - Partial: Addressed issue and administrative PR cleanup are complete; milestone/tag publication remains pending.
+- [x] Run post-merge verification on trunk.
+  - Note: Completed via final smoke and smoke-full executions on `main`.
+- [x] Close milestone, close addressed issues, and clean up merged branches.
+  - Note: No open issues/PRs remain; feature/admin branches were cleaned after merge.
 
 ## 7) Post-Release Governance
 
-- [ ] Capture lessons learned and known follow-ups.
-  - Pending post-release retrospective.
-- [ ] Create issues for deferred or discovered follow-up work.
-  - Partial: Some follow-up planning issues/todos already captured.
+- [x] Capture lessons learned and known follow-ups.
+  - Note: Added mandatory documentation/version alignment gate to closeout checklist for future cycles.
+- [x] Create issues for deferred or discovered follow-up work.
+  - Note: Administrative closeout alignment was tracked and completed via issue `#4`.
 - [x] Update runbooks/process docs if release exposed workflow gaps.
   - Note: Process docs were significantly expanded during this release.
-- [ ] Confirm provenance trail is complete (requirements -> commits/PRs -> tests -> tag/release).
-  - Pending release completion.
+- [x] Confirm provenance trail is complete (requirements -> commits/PRs -> tests -> tag/release).
+  - Note: Feature and admin issues/PRs, test evidence, and release tag are now linked and closed.
 
 ## Evidence Template (Current Release Draft)
 
-- Release name/version: Current capability release (version pending final bump)
+- Release name/version: `1.2.0` capability closeout release (`V0.6.0` suite track)
 - Scope summary: NovelWriter stabilization + schema alignment + smoke/regression/process hardening
-- Final tested commit: Not yet fixed
-- Release tag: Not yet created
-- Required suites executed: `smoke` (multiple), `smoke-full` (iterative), regression updates prepared
+- Final tested commit: `0b992cf`
+- Release tag: `v1.2.0`
+- Required suites executed: `smoke` (pass), `smoke-full` (pass)
 - Evidence locations (logs/reports/artifacts): terminal run history, `playwright-report/`, `test-results/`
 - Security/config/data checks performed: API-key handling checks, env-var workflow documentation, import/export/schema validations
-- Open risks and mitigations: closeout gaps listed above; complete in final release closure pass
+- Open risks and mitigations: smoke-full runtime remains lengthy; continue using manual runbook and preserve HTML artifacts per release.
 
 ## Closeout Execution Notes (2026-04-19)
 
@@ -140,3 +140,5 @@ This file backfills the Secure SDLC checklist for the current capability release
 - Issue #3 was closed from GitHub UI after implementation validation.
 - Dependabot PRs #1 and #2 were superseded by commit `2266939` and closed with comments.
 - Added explicit closeout policy note to keep documentation and version metadata aligned during feature-branch closeout.
+- Final post-merge validation completed on `main` with passing `smoke` and `smoke-full` suites.
+- Release tag and publication completed for `v1.2.0`.
