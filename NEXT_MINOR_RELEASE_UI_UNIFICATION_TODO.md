@@ -23,6 +23,17 @@ Out of scope:
 - [ ] Requirements are incorporated inline in each tool and validated by tests/review.
 - [ ] Accessibility and responsive behavior are at least equal to current behavior.
 
+## Phase 0: Baseline Discovery and Gap Analysis (Do First)
+
+- [ ] Create a baseline gap-analysis issue and link all discovery tasks to it.
+- [ ] Inventory current CSS/layout/component patterns in NovelWriter, BookEditor, and BookDecomposer.
+- [ ] Inventory current smoke/regression selectors and identify brittle selectors likely to break during UI refactor.
+- [ ] Define requirement ID scheme for this release (example: `UIU.NW.*`, `UIU.BE.*`, `UIU.BD.*`, `UIU.X.*`).
+- [ ] Draft initial requirement set for UI parity, responsiveness, accessibility, and workflow preservation.
+- [ ] Produce requirement-to-test mapping baseline before first implementation PR.
+- [ ] Capture before screenshots and interaction notes for key flows in all three tools.
+- [ ] Publish a short gap-analysis summary in repo docs and link it from the umbrella issue.
+
 ## Administrative and Planning Setup
 
 - [ ] Create a dedicated milestone for this minor release.
@@ -40,6 +51,14 @@ Out of scope:
 - [ ] Update or create requirement-to-test mapping notes.
 - [ ] Add/adjust automated checks for requirement governance if needed.
 - [ ] Validate that each requirement change has explicit test evidence before merge.
+
+## Secure SDLC Alignment (Required)
+
+- [ ] Run Feature SSDLC checklist for this release and track completion in `FEATURE_RELEASE_SSDL_CHECKLIST.md`.
+- [ ] Document affected trust boundaries and perform lightweight threat modeling for changed UI/data flows.
+- [ ] Confirm secrets/config/data handling expectations for any changed import/export/logging behavior.
+- [ ] Record security/config/data verification evidence in PRs and release closeout notes.
+- [ ] Ensure rollback approach is documented for high-impact regressions introduced by UI refactor.
 
 ## Design System Extraction and Decisions
 
@@ -92,6 +111,13 @@ Out of scope:
 - [ ] Ensure each PR includes: scope, requirement IDs, test evidence, screenshots.
 - [ ] Close addressed issues only after merge + verification evidence.
 - [ ] Close superseded PRs and keep one canonical PR thread per issue.
+
+## Traceability Artifacts (Must Exist Before Release Close)
+
+- [ ] Requirement index document with final IDs and descriptions.
+- [ ] Requirement-to-test evidence matrix (test ID/command -> pass/fail evidence link).
+- [ ] Per-tool migration notes (what changed, what stayed compatible, known limits).
+- [ ] Release evidence bundle links (screenshots, logs, reports, and final verification commands).
 
 ## Release Closeout (After Clean Pass)
 
