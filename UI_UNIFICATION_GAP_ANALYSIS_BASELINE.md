@@ -131,3 +131,11 @@ High-risk selector categories during refactor:
 2. Land NovelWriter visual shell migration first with selector stabilization strategy.
 3. Add BookEditor smoke/regression coverage before heavy DOM refactor.
 4. Add BookDecomposer smoke coverage before visual/layout rewrite.
+
+## Execution Update (2026-04-19)
+
+- Task 1 started: shared token scaffold added at shared/ui-unification-tokens.css.
+- Task 2 started: NovelWriter shell migration initiated with stable data-testid hooks while preserving existing IDs.
+- Task 3 started: baseline BookEditor smoke suite added at e2e/bookeditor.smoke.spec.js.
+- Task 4 started: baseline BookDecomposer smoke suite added at e2e/bookdecomposer.smoke.spec.js.
+- Risk/test controls documented at UI_UNIFICATION_EXECUTION_TEST_PLAN.md.

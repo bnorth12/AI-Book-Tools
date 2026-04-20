@@ -25,8 +25,8 @@ This matrix will be expanded as implementation PRs are opened.
 | UIU.X.2 | Cross-tool regression safety | NovelWriter smoke/regression, HerbalBookForge regression | No BookEditor/BookDecomposer automated regression | Playwright smoke additions + existing suite reruns |
 | UIU.X.3 | Cross-tool accessibility/responsive parity | None explicit | No automated a11y checks, no responsive assertions | Keyboard walkthrough notes + viewport checks + PR evidence |
 | UIU.NW.1 | NovelWriter migration | e2e/novelwriter.smoke.spec.js, e2e/novelwriter.regression.spec.js, e2e/novelwriter.smoke.quick.spec.js | Selector brittleness expected during refactor | Selector stabilization + rerun smoke/regression outputs |
-| UIU.BE.1 | BookEditor migration | None | No BookEditor Playwright suite | Add BookEditor smoke path and capture pass logs |
-| UIU.BD.1 | BookDecomposer migration | None | No BookDecomposer Playwright suite | Add BookDecomposer smoke path and capture pass logs |
+| UIU.BE.1 | BookEditor migration | e2e/bookeditor.smoke.spec.js | Workflow-level coverage still missing | Add workflow smoke/regression after shell migration |
+| UIU.BD.1 | BookDecomposer migration | e2e/bookdecomposer.smoke.spec.js | Workflow-level coverage still missing | Add workflow smoke/regression after shell migration |
 
 ## Baseline Test Inventory
 
@@ -36,11 +36,12 @@ Existing suites:
 - e2e/novelwriter.smoke.quick.spec.js
 - e2e/novelwriter.regression.spec.js
 - e2e/herbalbookforge.regression.spec.js
-
-Missing suites to create for this release:
-
 - e2e/bookeditor.smoke.spec.js
 - e2e/bookdecomposer.smoke.spec.js
+
+Execution artifact:
+
+- UI_UNIFICATION_EXECUTION_TEST_PLAN.md
 
 ## Governance Notes
 

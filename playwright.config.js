@@ -44,6 +44,16 @@ module.exports = defineConfig({
         video: 'on',
       },
     },
+    {
+      name: 'smoke-ui-shell',
+      testMatch: /bookeditor\.smoke\.spec\.js|bookdecomposer\.smoke\.spec\.js/,
+      timeout: 120 * 1000,
+      retries: 0,
+      use: {
+        headless: true,
+        baseURL: 'http://localhost:8080',
+      },
+    },
   ],
   // Python HTTP server for smoke tests (serves the site at localhost:8080)
   webServer: {

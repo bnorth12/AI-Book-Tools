@@ -31,11 +31,27 @@ Version: 0.3.4 | Date: 2026-04-18
     <!-- Metadata for character encoding and responsive viewport -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="../shared/ui-unification-tokens.css">
 	<title>Novel Writer 0.3.4</title>
     <!-- Inline CSS for layout and styling -->
     <style>
-        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 20px auto; padding: 0 20px; }
-        .tab { display: none; }
+        body {
+			max-width: 1200px;
+			margin: 0 auto;
+			padding: 16px 20px 28px;
+		}
+        .tab {
+			display: none;
+			background: var(--uiu-surface-0);
+			border: 1px solid var(--uiu-border);
+			border-radius: var(--uiu-radius-lg);
+			box-shadow: var(--uiu-shadow-1);
+			padding: 18px;
+			margin-top: 18px;
+		}
         .tab.active { display: block; }
         .subpage { display: none; }
         .subpage.active { display: block; }
@@ -46,12 +62,20 @@ Version: 0.3.4 | Date: 2026-04-18
         #chapterOutlines textarea, #chapterGenContainer textarea, #chapterEditContainer textarea { height: 300px; }
         #bookContent { height: 500px; }
         #improvementsTable textarea { height: 150px; }
-        button { background-color: #007bff; color: white; padding: 10px 20px; border: none; cursor: pointer; margin: 5px; }
-        button:hover { background-color: #0056b3; }
+		button {
+			background-color: var(--uiu-primary);
+			color: #022112;
+			padding: 10px 18px;
+			border: none;
+			cursor: pointer;
+			margin: 5px;
+			font-weight: 600;
+		}
+		button:hover { background-color: var(--uiu-primary-2); }
 		.loading-indicator { display: none; color: #555; margin-top: 10px; }
-        #nav { margin-bottom: 20px; }
-        #nav button { background-color: #f8f9fa; color: #333; }
-        #nav button.active { background-color: #007bff; color: white; }
+		#nav { margin-bottom: 20px; }
+		#nav button { background-color: transparent; color: var(--uiu-text-1); }
+		#nav button.active { background: linear-gradient(90deg, var(--uiu-primary), var(--uiu-primary-2)); color: var(--uiu-primary-ink); }
         #requestLog pre { white-space: pre-wrap; border: 1px solid #ddd; padding: 10px; }
         #lastPrompt { height: 150px; }
         .note { font-size: 18px; color: #d9534f; font-weight: bold; margin-bottom: 20px; }
@@ -158,9 +182,10 @@ Version: 0.3.4 | Date: 2026-04-18
     </style>
 </head>
 
-<body>
-    <!-- Main heading -->
-    <h1>Novel Writer</h1>
+
+<body class="ui-shell">
+	<!-- Main heading -->
+	<h1 class="ui-title" data-testid="nw-title">Novel Writer</h1>
 	<div id="executionStatusHud" class="idle" aria-live="polite">
 		<div class="hud-title">Execution Status</div>
 		<div class="hud-row">Function: <span id="executionFunction">Idle</span></div>
@@ -170,19 +195,19 @@ Version: 0.3.4 | Date: 2026-04-18
 	</div>
 
     <!-- Navigation bar for tab selection -->
-	    <div id="nav">
-	        <button onclick="showTab(1)" class="active">1. API & Story Info</button>
-	        <button onclick="showTab(2)">2. Characters</button>
-	        <button onclick="showTab(3)">3. Subplots</button>
-	        <button onclick="showTab(4)">4. Outlines</button>
-	        <button onclick="showTab(5)">5. Generate Chapters</button>
-	        <button onclick="showTab(6)">6. Edit Chapters</button>
-	        <button onclick="showTab(7)">7. Book</button>
-	        <button onclick="showTab(8)">8. Consolidated Breakdowns</button>
-	        <button onclick="showTab(9)">9. Request Log</button>
-	        <button onclick="showTab(10)">10. Element Values</button>
-	        <button onclick="showTab(11)">11. Agent Prompts</button>
-	        <button onclick="window.open('user_guide.html', '_blank')">Help</button>
+	    <div id="nav" class="ui-nav" data-testid="nw-nav">
+	        <button class="ui-tab-btn active" data-testid="nw-nav-tab1" onclick="showTab(1)">1. API & Story Info</button>
+	        <button class="ui-tab-btn" data-testid="nw-nav-tab2" onclick="showTab(2)">2. Characters</button>
+	        <button class="ui-tab-btn" data-testid="nw-nav-tab3" onclick="showTab(3)">3. Subplots</button>
+	        <button class="ui-tab-btn" data-testid="nw-nav-tab4" onclick="showTab(4)">4. Outlines</button>
+	        <button class="ui-tab-btn" data-testid="nw-nav-tab5" onclick="showTab(5)">5. Generate Chapters</button>
+	        <button class="ui-tab-btn" data-testid="nw-nav-tab6" onclick="showTab(6)">6. Edit Chapters</button>
+	        <button class="ui-tab-btn" data-testid="nw-nav-tab7" onclick="showTab(7)">7. Book</button>
+	        <button class="ui-tab-btn" data-testid="nw-nav-tab8" onclick="showTab(8)">8. Consolidated Breakdowns</button>
+	        <button class="ui-tab-btn" data-testid="nw-nav-tab9" onclick="showTab(9)">9. Request Log</button>
+	        <button class="ui-tab-btn" data-testid="nw-nav-tab10" onclick="showTab(10)">10. Element Values</button>
+	        <button class="ui-tab-btn" data-testid="nw-nav-tab11" onclick="showTab(11)">11. Agent Prompts</button>
+	        <button class="ui-tab-btn" data-testid="nw-nav-help" onclick="window.open('user_guide.html', '_blank')">Help</button>
 	        <!-- Updated -->
     	</div>
 
@@ -196,7 +221,7 @@ Version: 0.3.4 | Date: 2026-04-18
 			    <!-- NW.T1.7: Tab 1 SHALL include a configurable number-of-chapters field that triggers chapter subpage generation on change. -->
 			    <!-- NW.T1.8: The AI Suggest Story Info function SHALL preserve any fields already filled in by the user. -->
 			    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
-			    <div id="tab1" class="tab active">
+			    <div id="tab1" class="tab active ui-panel" data-testid="nw-tab1">
 			        <h2>API & Story Info</h2>
 			        <label for="apiKey">API Key:</label>
 			        <input type="text" id="apiKey" placeholder="Enter your xAI API key">
