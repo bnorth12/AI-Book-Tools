@@ -26,13 +26,13 @@ Out of scope:
 ## Phase 0: Baseline Discovery and Gap Analysis (Do First)
 
 - [ ] Create a baseline gap-analysis issue and link all discovery tasks to it.
-- [ ] Inventory current CSS/layout/component patterns in NovelWriter, BookEditor, and BookDecomposer.
-- [ ] Inventory current smoke/regression selectors and identify brittle selectors likely to break during UI refactor.
-- [ ] Define requirement ID scheme for this release (example: `UIU.NW.*`, `UIU.BE.*`, `UIU.BD.*`, `UIU.X.*`).
-- [ ] Draft initial requirement set for UI parity, responsiveness, accessibility, and workflow preservation.
-- [ ] Produce requirement-to-test mapping baseline before first implementation PR.
+- [x] Inventory current CSS/layout/component patterns in NovelWriter, BookEditor, and BookDecomposer.
+- [x] Inventory current smoke/regression selectors and identify brittle selectors likely to break during UI refactor.
+- [x] Define requirement ID scheme for this release (example: `UIU.NW.*`, `UIU.BE.*`, `UIU.BD.*`, `UIU.X.*`).
+- [x] Draft initial requirement set for UI parity, responsiveness, accessibility, and workflow preservation.
+- [x] Produce requirement-to-test mapping baseline before first implementation PR.
 - [ ] Capture before screenshots and interaction notes for key flows in all three tools.
-- [ ] Publish a short gap-analysis summary in repo docs and link it from the umbrella issue.
+- [x] Publish a short gap-analysis summary in repo docs and link it from the umbrella issue.
 
 ## Administrative and Planning Setup
 
@@ -115,7 +115,7 @@ Out of scope:
 ## Traceability Artifacts (Must Exist Before Release Close)
 
 - [ ] Requirement index document with final IDs and descriptions.
-- [ ] Requirement-to-test evidence matrix (test ID/command -> pass/fail evidence link).
+- [x] Requirement-to-test evidence matrix (test ID/command -> pass/fail evidence link).
 - [ ] Per-tool migration notes (what changed, what stayed compatible, known limits).
 - [ ] Release evidence bundle links (screenshots, logs, reports, and final verification commands).
 
