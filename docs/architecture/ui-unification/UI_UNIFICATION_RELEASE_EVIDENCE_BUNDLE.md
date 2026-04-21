@@ -37,6 +37,8 @@ Central index of release evidence artifacts for UI unification.
   - `docs/architecture/ui-unification/UI_UNIFICATION_ACCESSIBILITY_RESPONSIVE_CHECKLIST.md`
 - Visual consistency checklist:
   - `docs/architecture/ui-unification/UI_UNIFICATION_VISUAL_CONSISTENCY_CHECKLIST.md`
+- Screenshot interaction notes:
+  - `docs/releases/evidence/screenshots/SCREENSHOT_INTERACTION_NOTES_2026-04-20.md`
 
 ## Screenshot Evidence Standard
 
@@ -49,6 +51,20 @@ Central index of release evidence artifacts for UI unification.
   - Example: `novelwriter-shell-after-2026-04-20.png`
 - Storage location:
   - `docs/releases/evidence/screenshots/`
+- Captured artifacts:
+  - `docs/releases/evidence/screenshots/novelwriter-shell-before-2026-04-20.png`
+  - `docs/releases/evidence/screenshots/novelwriter-shell-after-2026-04-20.png`
+  - `docs/releases/evidence/screenshots/novelwriter-generate-panel-after-2026-04-20.png`
+  - `docs/releases/evidence/screenshots/bookeditor-shell-before-2026-04-20.png`
+  - `docs/releases/evidence/screenshots/bookeditor-shell-after-2026-04-20.png`
+  - `docs/releases/evidence/screenshots/bookeditor-improvements-panel-after-2026-04-20.png`
+  - `docs/releases/evidence/screenshots/bookdecomposer-shell-before-2026-04-20.png`
+  - `docs/releases/evidence/screenshots/bookdecomposer-shell-after-2026-04-20.png`
+  - `docs/releases/evidence/screenshots/bookdecomposer-output-panel-after-2026-04-20.png`
+- Historical sources used for `before` captures:
+  - `a839b93:NovelWriter/NovelWriter.html`
+  - `29effc7:BookEditor/BookEditor.html`
+  - `29effc7:BookDecomposer/BookDecomposer.html`
 
 ## Release Snapshot Evidence
 

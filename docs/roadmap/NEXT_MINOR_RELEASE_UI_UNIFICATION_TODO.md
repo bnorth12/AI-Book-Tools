@@ -31,7 +31,7 @@ Out of scope:
 - [x] Define requirement ID scheme for this release (example: `UIU.NW.*`, `UIU.BE.*`, `UIU.BD.*`, `UIU.X.*`).
 - [x] Draft initial requirement set for UI parity, responsiveness, accessibility, and workflow preservation.
 - [x] Produce requirement-to-test mapping baseline before first implementation PR.
-- [ ] Capture before screenshots and interaction notes for key flows in all three tools.
+- [x] Capture before screenshots and interaction notes for key flows in all three tools.
 - [x] Publish a short gap-analysis summary in repo docs and link it from the umbrella issue.
 
 ## Administrative and Planning Setup
@@ -149,12 +149,13 @@ Evidence references:
 
 - `docs/architecture/ui-unification/UI_UNIFICATION_ACCESSIBILITY_RESPONSIVE_CHECKLIST.md`.
 - `docs/architecture/ui-unification/UI_UNIFICATION_RELEASE_EVIDENCE_BUNDLE.md`.
+- `docs/releases/evidence/screenshots/SCREENSHOT_INTERACTION_NOTES_2026-04-20.md`.
 
 ## Documentation and Communication
 
 - [x] Update tool README files with new UI conventions where relevant.
 - [x] Add a short "shared design system" section to repo docs.
-- [ ] Capture before/after screenshots for release notes and PR context.
+- [x] Capture before/after screenshots for release notes and PR context.
 - [ ] Keep changelog entries in Unreleased during implementation.
 
 ## PR and Issue Execution Flow

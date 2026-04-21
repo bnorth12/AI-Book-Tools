@@ -57,16 +57,21 @@ Primary source: docs/roadmap/NEXT_MINOR_RELEASE_UI_UNIFICATION_TODO.md
    - Status: Done
    - Evidence: docs/architecture/ui-unification/UI_UNIFICATION_ACCESSIBILITY_RESPONSIVE_CHECKLIST.md.
 10. Capture before/after screenshots and interaction notes for release evidence.
-      - Status: In Progress
-      - Decision resolved: screenshot scope and naming standard approved.
-      - Scope standard:
-         - Per tool, capture shell `before` and `after` screenshots for the primary nav/tab container.
-         - Per tool, capture one key workflow panel `after` screenshot.
-         - Record one short interaction note per tool describing what changed and what remained compatible.
-      - Naming standard: `<tool>-<surface>-<state>-<yyyy-mm-dd>.png`
-         - Example: `novelwriter-shell-after-2026-04-20.png`
-      - Storage standard: `docs/releases/evidence/screenshots/`
-      - Remaining execution step: capture files and link them in the release evidence bundle.
+      - Status: Done
+      - Evidence:
+         - `docs/releases/evidence/screenshots/SCREENSHOT_INTERACTION_NOTES_2026-04-20.md`
+         - `docs/releases/evidence/screenshots/novelwriter-shell-before-2026-04-20.png`
+         - `docs/releases/evidence/screenshots/novelwriter-shell-after-2026-04-20.png`
+         - `docs/releases/evidence/screenshots/novelwriter-generate-panel-after-2026-04-20.png`
+         - `docs/releases/evidence/screenshots/bookeditor-shell-before-2026-04-20.png`
+         - `docs/releases/evidence/screenshots/bookeditor-shell-after-2026-04-20.png`
+         - `docs/releases/evidence/screenshots/bookeditor-improvements-panel-after-2026-04-20.png`
+         - `docs/releases/evidence/screenshots/bookdecomposer-shell-before-2026-04-20.png`
+         - `docs/releases/evidence/screenshots/bookdecomposer-shell-after-2026-04-20.png`
+         - `docs/releases/evidence/screenshots/bookdecomposer-output-panel-after-2026-04-20.png`
+      - Notes:
+         - Historical `before` captures sourced from pre-unification commits documented in the interaction notes artifact.
+         - Release evidence bundle updated with screenshot inventory and note linkage.
 11. Execute final required release suites and archive evidence.
       - Status: In Progress
 
