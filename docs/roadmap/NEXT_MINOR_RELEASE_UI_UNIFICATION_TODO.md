@@ -37,8 +37,8 @@ Out of scope:
 ## Administrative and Planning Setup
 
 - [ ] Create a dedicated milestone for this minor release.
-- [ ] Create an umbrella tracking issue for "UI/CSS Unification Capability Release".
-- [ ] Create child issues per tool and per cross-cutting concern.
+- [x] Create an umbrella tracking issue for "UI/CSS Unification Capability Release".
+- [x] Create child issues per tool and per cross-cutting concern.
 - [x] Define branch strategy (`feature/ui-unification-*`) and merge order.
 - [x] Define Definition of Done (DoD) for each tool and for release-level signoff.
 - [x] Define requirements traceability method (issue ID -> file/section -> test evidence).
@@ -59,6 +59,21 @@ Administrative decisions update (2026-04-20):
 - Umbrella issue owner: `Brian North`.
 - Umbrella issue statement: the four AI Book Tools currently have unique visual appearance and navigation techniques and need synchronization to the HerbalBookForge style baseline.
 - Child issue pack prepared: `docs/roadmap/UI_UNIFICATION_ISSUE_PACK.md`.
+
+GitHub execution status (2026-04-20):
+
+- Umbrella issue: <https://github.com/bnorth12/AI-Book-Tools/issues/8>.
+- Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/9>.
+- Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/10>.
+- Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/11>.
+- Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/12>.
+- Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/13>.
+- Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/14>.
+- Milestone creation blocked by token permissions (`HTTP 403`, `Resource not accessible by personal access token`).
+- Assignment/edit operations blocked by token permissions (`replaceActorsForAssignable`, `updateIssue`).
+- Duplicate umbrella issues were created during retries and need cleanup after permission elevation:
+  - <https://github.com/bnorth12/AI-Book-Tools/issues/6>
+  - <https://github.com/bnorth12/AI-Book-Tools/issues/7>
 
 ## Requirements Governance (Inline + Tested)
 

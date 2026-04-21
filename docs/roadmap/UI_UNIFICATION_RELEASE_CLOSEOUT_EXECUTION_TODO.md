@@ -19,8 +19,19 @@ Primary source: docs/roadmap/NEXT_MINOR_RELEASE_UI_UNIFICATION_TODO.md
      - Milestone due date: `2026-04-20`
      - Umbrella issue owner: `Brian North`
      - Umbrella issue summary: synchronize visual appearance and navigation techniques across AI Book Tools to the HerbalBookForge style baseline.
-   - Evidence: `docs/roadmap/UI_UNIFICATION_ISSUE_PACK.md`
-   - Remaining execution step: create milestone/umbrella/child issues in GitHub and backfill links.
+   - Evidence:
+       - `docs/roadmap/UI_UNIFICATION_ISSUE_PACK.md`
+       - Umbrella issue: <https://github.com/bnorth12/AI-Book-Tools/issues/8>
+       - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/9>
+       - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/10>
+       - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/11>
+       - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/12>
+       - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/13>
+       - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/14>
+   - Blockers:
+       - Milestone creation in GitHub is blocked by token permissions (`HTTP 403`, `Resource not accessible by personal access token`).
+       - Issue assignment/edit operations are blocked by token permissions (`replaceActorsForAssignable`, `updateIssue`).
+   - Remaining execution step: create milestone, assign issues to Brian, and close duplicate umbrella issues (#6, #7) once token permissions are elevated.
 2. Define branch strategy and merge order for remaining work.
    - Status: Done
    - Evidence: docs/roadmap/NEXT_MINOR_RELEASE_UI_UNIFICATION_TODO.md (Administrative definitions section).

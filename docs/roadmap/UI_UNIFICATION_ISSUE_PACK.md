@@ -155,7 +155,18 @@ Use this section to quickly close child-issue subtasks that are already complete
 ## Execution Notes
 
 - This issue pack prepares content and structure.
-- GitHub milestone/issue creation is an execution step outside this markdown artifact and should be completed in the repository issue tracker.
+- GitHub issue creation executed on 2026-04-20:
+  - Umbrella: <https://github.com/bnorth12/AI-Book-Tools/issues/8>
+  - Child: <https://github.com/bnorth12/AI-Book-Tools/issues/9>
+  - Child: <https://github.com/bnorth12/AI-Book-Tools/issues/10>
+  - Child: <https://github.com/bnorth12/AI-Book-Tools/issues/11>
+  - Child: <https://github.com/bnorth12/AI-Book-Tools/issues/12>
+  - Child: <https://github.com/bnorth12/AI-Book-Tools/issues/13>
+  - Child: <https://github.com/bnorth12/AI-Book-Tools/issues/14>
+- GitHub milestone creation and issue assignment/editing are currently blocked by token permissions (`HTTP 403` / `Resource not accessible by personal access token`).
+- Duplicate umbrella issues were created during retry attempts and should be closed once permissions are elevated:
+  - <https://github.com/bnorth12/AI-Book-Tools/issues/6>
+  - <https://github.com/bnorth12/AI-Book-Tools/issues/7>
 
 ## Approved Screenshot Policy
 
