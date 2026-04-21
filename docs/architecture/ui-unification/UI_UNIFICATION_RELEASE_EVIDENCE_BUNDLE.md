@@ -1,13 +1,18 @@
 # UI Unification Release Evidence Bundle
 
-Date: 2026-04-20
-Branch: feature/ui-unification-foundation
+Date: 2026-04-21
+Branch: main
 
 ## Purpose
 
 Central index of release evidence artifacts for UI unification.
 
 ## Test Evidence
+
+- Final tested release-candidate commit:
+  - `93bed58606e796ab5f5dc734f22d65d30b2aa76d`
+- Published release tag:
+  - `v1.2.0`
 
 - NovelWriter smoke pass with HTML evidence:
   - Command: `npx playwright test --project=smoke --reporter=line,html`
@@ -23,6 +28,9 @@ Central index of release evidence artifacts for UI unification.
 - Historical shell smoke references:
   - `tests/e2e/bookeditor.smoke.spec.js`
   - `tests/e2e/bookdecomposer.smoke.spec.js`
+- Post-merge verification on `main`:
+  - `npx playwright test --project=smoke --reporter=line,html` (pass)
+  - `npx playwright test --project=smoke-ui-shell --reporter=line,html` (pass)
 
 ## Governance and Security Evidence
 
@@ -73,7 +81,11 @@ Central index of release evidence artifacts for UI unification.
 - Snapshot artifact inventory location pattern:
   - `releases/AI Book Tools <version>/Release Test Artifacts/FINAL_TEST_ARTIFACTS.md`
 
-## Remaining Final-Closeout Evidence (Deferred)
+## Release Completion Evidence
 
-- Final rerun of required suites on release-candidate commit and linkage to that exact commit.
-- Final tag/release-note linkage evidence.
+- GitHub release:
+  - `v1.2.0`
+- Milestone:
+  - `Unify Visual Layout`
+- Main branch promoted to release commit:
+  - `93bed58606e796ab5f5dc734f22d65d30b2aa76d`

@@ -115,9 +115,15 @@ Completed now:
   - `npx playwright test --project=smoke-full --reporter=line,html`
   - `playwright-report-smoke-full/index.html`
   - archived: `docs/releases/evidence/playwright-report-smoke-full-2026-04-19.html`
+- [x] Final required suites rerun on release-candidate commit `93bed58` with HTML evidence recorded:
+  - `npx playwright test --project=smoke --reporter=line,html`
+  - `npx playwright test --project=smoke-ui-shell --reporter=line,html`
+  - `npx playwright test --project=smoke-full --reporter=line,html`
+- [x] Release tag `v1.2.0` now points to validated commit `93bed58`.
+- [x] Feature branch merged to `main` and post-merge verification completed.
 
-Still required before release close:
+Release close status:
 
-- [ ] Create/confirm milestone, umbrella issue, and child issue closure mapping.
-- [ ] Rerun final required suites on release-candidate commit and tag that exact commit.
-- [ ] Complete release closeout items (release notes, merge order, post-merge trunk verification).
+- [x] Create/confirm milestone, umbrella issue, and child issue closure mapping.
+- [x] Rerun final required suites on release-candidate commit and tag that exact commit.
+- [x] Complete release closeout items (release notes, merge order, post-merge trunk verification).

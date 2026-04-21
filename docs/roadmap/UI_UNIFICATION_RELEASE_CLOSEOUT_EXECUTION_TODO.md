@@ -13,7 +13,7 @@ Primary source: docs/roadmap/NEXT_MINOR_RELEASE_UI_UNIFICATION_TODO.md
 ## Ordered Closeout Queue
 
 1. Create release milestone and map umbrella/child issue structure.
-   - Status: In Progress
+   - Status: Done
    - Decision inputs resolved:
      - Milestone name: `Unify Visual Layout`
      - Milestone due date: `2026-04-20`
@@ -28,10 +28,10 @@ Primary source: docs/roadmap/NEXT_MINOR_RELEASE_UI_UNIFICATION_TODO.md
        - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/12>
        - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/13>
        - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/14>
-   - Blockers:
-       - Milestone creation in GitHub is blocked by token permissions (`HTTP 403`, `Resource not accessible by personal access token`).
-       - Issue assignment/edit operations are blocked by token permissions (`replaceActorsForAssignable`, `updateIssue`).
-   - Remaining execution step: create milestone, assign issues to Brian, and close duplicate umbrella issues (#6, #7) once token permissions are elevated.
+   - Completion notes:
+         - Milestone created: `Unify Visual Layout` (`milestone #1`).
+         - Umbrella/child issues `#8`-`#14` mapped to the milestone.
+         - Duplicate umbrella issues `#6` and `#7` closed during release cleanup.
 2. Define branch strategy and merge order for remaining work.
    - Status: Done
    - Evidence: docs/roadmap/NEXT_MINOR_RELEASE_UI_UNIFICATION_TODO.md (Administrative definitions section).
@@ -73,18 +73,25 @@ Primary source: docs/roadmap/NEXT_MINOR_RELEASE_UI_UNIFICATION_TODO.md
          - Historical `before` captures sourced from pre-unification commits documented in the interaction notes artifact.
          - Release evidence bundle updated with screenshot inventory and note linkage.
 11. Execute final required release suites and archive evidence.
-      - Status: In Progress
+      - Status: Done
 
-      - Evidence (current branch dry-run):
-         - `npx playwright test --project=smoke --reporter=line,html` (pass)
-         - `npx playwright test --project=smoke-ui-shell --reporter=line,html` (pass)
-         - `npx playwright test --project=smoke-full --reporter=line,html` (pass)
+      - Evidence:
+         - Final tested commit: `93bed58606e796ab5f5dc734f22d65d30b2aa76d`
+         - Release tag candidate and final tag: `v1.2.0`
+         - `npx playwright test --project=smoke --reporter=line,html` on `93bed58` (pass)
+         - `npx playwright test --project=smoke-ui-shell --reporter=line,html` on `93bed58` (pass)
+         - `npx playwright test --project=smoke-full --reporter=line,html` on `93bed58` (pass)
+         - Post-merge verification on `main`:
+           - `npx playwright test --project=smoke --reporter=line,html` (pass)
+           - `npx playwright test --project=smoke-ui-shell --reporter=line,html` (pass)
          - `playwright-report-smoke/index.html`
          - `playwright-report-ui-shell/index.html`
          - `playwright-report-smoke-full/index.html`
          - `docs/releases/evidence/playwright-report-smoke-full-2026-04-19.html`
-
-      - Remaining gate: rerun required suites on the release-candidate commit before tag.
 12. Final release closeout actions (version bump, changelog finalize, tag, release notes, branch cleanup).
-    - Status: Deferred
-    - Why deferred: End-of-cycle activities after all implementation/testing gates pass.
+      - Status: Done
+      - Evidence:
+         - Tag published: `v1.2.0` -> `93bed58606e796ab5f5dc734f22d65d30b2aa76d`
+         - GitHub release published for `v1.2.0`
+         - `main` fast-forward merged to `93bed58`
+         - Post-merge verification completed on `main`

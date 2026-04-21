@@ -36,7 +36,7 @@ Out of scope:
 
 ## Administrative and Planning Setup
 
-- [ ] Create a dedicated milestone for this minor release.
+- [x] Create a dedicated milestone for this minor release.
 - [x] Create an umbrella tracking issue for "UI/CSS Unification Capability Release".
 - [x] Create child issues per tool and per cross-cutting concern.
 - [x] Define branch strategy (`feature/ui-unification-*`) and merge order.
@@ -69,11 +69,10 @@ GitHub execution status (2026-04-20):
 - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/12>.
 - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/13>.
 - Child issue: <https://github.com/bnorth12/AI-Book-Tools/issues/14>.
-- Milestone creation blocked by token permissions (`HTTP 403`, `Resource not accessible by personal access token`).
-- Assignment/edit operations blocked by token permissions (`replaceActorsForAssignable`, `updateIssue`).
-- Duplicate umbrella issues were created during retries and need cleanup after permission elevation:
-  - <https://github.com/bnorth12/AI-Book-Tools/issues/6>
-  - <https://github.com/bnorth12/AI-Book-Tools/issues/7>
+- Milestone created: `Unify Visual Layout` (`milestone #1`).
+- Duplicate umbrella issues closed: <https://github.com/bnorth12/AI-Book-Tools/issues/6> and <https://github.com/bnorth12/AI-Book-Tools/issues/7>.
+- Final validated release tag: `v1.2.0` -> `93bed58606e796ab5f5dc734f22d65d30b2aa76d`.
+- `main` fast-forward merged to the validated release commit and post-merge verification passed.
 
 ## Requirements Governance (Inline + Tested)
 
@@ -174,13 +173,13 @@ Evidence references:
 
 ## Release Closeout (After Clean Pass)
 
-- [ ] Execute full clean test pass across required suites.
-- [ ] Move version by one minor release and update version references.
-- [ ] Finalize changelog from Unreleased to versioned release section.
-- [ ] Merge approved feature branches to trunk in dependency-safe order.
-- [ ] Run post-merge verification on trunk.
-- [ ] Push all finalized release files to GitHub.
-- [ ] Create release tag and publish release notes.
+- [x] Execute full clean test pass across required suites.
+- [x] Move version by one minor release and update version references.
+- [x] Finalize changelog from Unreleased to versioned release section.
+- [x] Merge approved feature branches to trunk in dependency-safe order.
+- [x] Run post-merge verification on trunk.
+- [x] Push all finalized release files to GitHub.
+- [x] Create release tag and publish release notes.
 - [ ] Close milestone and clean up merged branches.
 
 ## Risks and Mitigations
