@@ -95,3 +95,6 @@ Primary source: docs/roadmap/NEXT_MINOR_RELEASE_UI_UNIFICATION_TODO.md
          - GitHub release published for `v1.2.0`
          - `main` fast-forward merged to `93bed58`
          - Post-merge verification completed on `main`
+   - Milestone `Unify Visual Layout` closed
+   - Issues `#8`-`#14` closed
+   - Remote/local branch `feature/ui-unification-foundation` deleted

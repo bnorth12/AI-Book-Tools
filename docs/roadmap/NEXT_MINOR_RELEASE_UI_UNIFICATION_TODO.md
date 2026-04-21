@@ -73,6 +73,7 @@ GitHub execution status (2026-04-20):
 - Duplicate umbrella issues closed: <https://github.com/bnorth12/AI-Book-Tools/issues/6> and <https://github.com/bnorth12/AI-Book-Tools/issues/7>.
 - Final validated release tag: `v1.2.0` -> `93bed58606e796ab5f5dc734f22d65d30b2aa76d`.
 - `main` fast-forward merged to the validated release commit and post-merge verification passed.
+- Milestone `Unify Visual Layout` closed and release issues `#8`-`#14` closed.
 
 ## Requirements Governance (Inline + Tested)
 
@@ -180,7 +181,7 @@ Evidence references:
 - [x] Run post-merge verification on trunk.
 - [x] Push all finalized release files to GitHub.
 - [x] Create release tag and publish release notes.
-- [ ] Close milestone and clean up merged branches.
+- [x] Close milestone and clean up merged branches.
 
 ## Risks and Mitigations
 

@@ -121,6 +121,7 @@ Completed now:
   - `npx playwright test --project=smoke-full --reporter=line,html`
 - [x] Release tag `v1.2.0` now points to validated commit `93bed58`.
 - [x] Feature branch merged to `main` and post-merge verification completed.
+- [x] Milestone closed, umbrella/child issues closed, and merged feature branch deleted.
 
 Release close status:
 
