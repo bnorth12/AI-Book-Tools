@@ -112,6 +112,108 @@
   border-radius: var(--uiu-radius-xl);
 }
 
+.ui-shell button:focus-visible,
+.ui-shell input:focus-visible,
+.ui-shell textarea:focus-visible,
+.ui-shell select:focus-visible {
+  outline: 2px solid var(--uiu-primary-2);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px rgba(3, 18, 12, 0.75);
+}
+
+.ui-shell .tab h2 {
+  font-family: var(--uiu-font-display);
+  font-size: 2rem;
+  line-height: 1.1;
+  margin: 0 0 var(--uiu-space-4);
+  color: var(--uiu-text-0);
+}
+
+.ui-note {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  border-left: 4px solid var(--uiu-primary);
+  border-radius: var(--uiu-radius-md);
+  color: var(--uiu-text-1);
+  padding: var(--uiu-space-3) var(--uiu-space-4);
+  margin-bottom: var(--uiu-space-4);
+}
+
+.ui-subpanel {
+  background: var(--uiu-surface-1);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  border-radius: var(--uiu-radius-lg);
+  padding: var(--uiu-space-4);
+  margin-bottom: var(--uiu-space-4);
+}
+
+.ui-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--uiu-space-2);
+  align-items: center;
+  margin-top: var(--uiu-space-3);
+  margin-bottom: var(--uiu-space-3);
+}
+
+.ui-shell .counter-note {
+  color: var(--uiu-text-2);
+  font-size: 13px;
+  margin: 4px 0 14px;
+}
+
+.ui-shell .chapter-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--uiu-space-2);
+  margin: var(--uiu-space-4) 0;
+}
+
+.ui-shell .chapter-nav button {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--uiu-text-1);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.ui-shell .chapter-nav button.active {
+  background: linear-gradient(90deg, var(--uiu-primary), var(--uiu-primary-2));
+  color: var(--uiu-primary-ink);
+}
+
+.ui-shell .character,
+.ui-shell .subplot-section,
+.ui-shell #outlineMain,
+.ui-shell #chapterOutlines > div,
+.ui-shell #chapterGenContainer > div,
+.ui-shell #chapterEditContainer > div {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(52, 211, 153, 0.18);
+  border-radius: var(--uiu-radius-lg);
+  padding: var(--uiu-space-4);
+  margin-bottom: var(--uiu-space-4);
+}
+
+.ui-shell #improvementsTable,
+.ui-shell #promptManagerTable {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ui-shell #improvementsTable th,
+.ui-shell #improvementsTable td,
+.ui-shell #promptManagerTable th,
+.ui-shell #promptManagerTable td {
+  border-color: rgba(52, 211, 153, 0.18);
+}
+
+.ui-shell #improvementsTable th,
+.ui-shell #promptManagerTable th {
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.ui-shell .loading-indicator {
+  color: var(--uiu-text-2);
+}
+
 @media (max-width: 900px) {
   .ui-nav {
     padding: var(--uiu-space-1);
@@ -120,5 +222,9 @@
   .ui-tab-btn {
     padding: 7px 10px;
     font-size: 12px;
+  }
+
+  .ui-shell .tab h2 {
+    font-size: 1.5rem;
   }
 }

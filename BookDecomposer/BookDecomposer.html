@@ -1,61 +1,110 @@
 <!DOCTYPE html>
+<!--
+EXECUTIVE SUMMARY (UIU.BD.EXEC)
+BookDecomposer SHALL parse source book text into structured chapter and element outputs while preserving existing tab/showTab workflow semantics and export capability.
+Source of truth: BookDecomposer/REQUIREMENTS.md
+Functional IDs: UIU.BD.F1, UIU.BD.F2, UIU.BD.F3, UIU.BD.F4, UIU.BD.F5
+Nonfunctional IDs: UIU.BD.NF1, UIU.BD.NF2, UIU.BD.NF3, UIU.BD.NF4
+Synced: 2026-04-19
+-->
+<!-- UIU.BD.NF1: Shell styling SHALL use shared token variables/classes without changing parsing behavior. -->
+<!-- UIU.BD.NF2: The .tab wrapper and .tabcontent classes SHALL remain stable for smoke selectors and JS compatibility. -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Book Decomposer v0.2.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../shared/ui-unification-tokens.css">
     <style>
         .tabcontent { display: none; padding: 20px; }
         .tabcontent.active { display: block; }
         table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid black; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
+        th, td { border: 1px solid var(--uiu-border); padding: 8px; text-align: left; }
+        th { background-color: var(--uiu-surface-1); color: var(--uiu-text-primary); }
+        label { font-weight: 500; color: var(--uiu-text-secondary); }
+        input[type="text"], input[type="file"], select {
+            width: 100%; max-width: 480px;
+            padding: 6px 10px;
+            border: 1px solid var(--uiu-border);
+            border-radius: var(--uiu-radius-sm);
+            background: var(--uiu-surface-0);
+            color: var(--uiu-text-primary);
+            font-family: inherit;
+        }
+        #loading { color: var(--uiu-text-secondary); font-style: italic; }
+        pre#jsonOutput {
+            background: var(--uiu-surface-1);
+            border: 1px solid var(--uiu-border);
+            border-radius: var(--uiu-radius-md);
+            padding: 16px;
+            overflow-x: auto;
+            font-size: 0.85rem;
+        }
     </style>
 </head>
-<body>
-    <div class="tab">
-        <button onclick="showTab(1)">Input Book</button>
-        <button onclick="showTab(2)">Chapters Preview</button>
-        <button onclick="showTab(3)">Extracted Elements</button>
-        <button onclick="showTab(4)">Output JSON</button>
+<body class="ui-shell">
+    <h1 data-testid="bd-title">Book Decomposer</h1>
+
+    <div class="tab ui-nav" data-testid="bd-nav">
+        <!-- UIU.BD.F1: Navigation SHALL provide four stable tabs and labels for the decomposition workflow. -->
+        <button class="ui-tab-btn" onclick="showTab(1)" data-testid="bd-nav-tab1">Input Book</button>
+        <button class="ui-tab-btn" onclick="showTab(2)" data-testid="bd-nav-tab2">Chapters Preview</button>
+        <button class="ui-tab-btn" onclick="showTab(3)" data-testid="bd-nav-tab3">Extracted Elements</button>
+        <button class="ui-tab-btn" onclick="showTab(4)" data-testid="bd-nav-tab4">Output JSON</button>
     </div>
 
-    <div id="tab1" class="tabcontent active">
+    <div id="tab1" class="tabcontent active ui-panel" data-testid="bd-tab1">
+        <!-- UIU.BD.F2: Input tab SHALL capture title, file, API settings, and model selection before processing. -->
         <h2>Input Book</h2>
-        <label for="title">Book Title:</label><br>
-        <input type="text" id="title" name="title" placeholder="Enter book title"><br><br>
-        <label for="bookFile">Upload Book Text File (.txt):</label><br>
-        <input type="file" id="bookFile" accept=".txt"><br><br>
-        <label for="apiKey">API Key:</label><br>
-        <input type="text" id="apiKey" name="apiKey" placeholder="Enter your API key"><br><br>
-        <label for="model">Model:</label><br>
-        <select id="model" name="model" onchange="toggleCustomModelInput()">
-            <option value="grok-4.20-0309-reasoning" selected>grok-4.20-0309-reasoning (Recommended)</option>
-            <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
-            <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
-            <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
-            <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
-            <option value="custom">Custom model...</option>
-        </select><br><br>
-        <label for="customModel" id="customModelLabel" style="display:none;">Custom Model Name:</label><br>
-        <input type="text" id="customModel" name="customModel" placeholder="Enter custom model name" style="display:none;"><br><br>
-        <button onclick="processBook()">Process Book</button>
+        <div class="stack-card">
+            <label for="title">Book Title:</label><br>
+            <input type="text" id="title" name="title" placeholder="Enter book title"><br><br>
+            <label for="bookFile">Upload Book Text File (.txt):</label><br>
+            <input type="file" id="bookFile" accept=".txt"><br><br>
+            <label for="apiKey">API Key:</label><br>
+            <input type="text" id="apiKey" name="apiKey" placeholder="Enter your API key"><br><br>
+            <label for="model">Model:</label><br>
+            <select id="model" name="model" onchange="toggleCustomModelInput()">
+                <option value="grok-4.20-0309-reasoning" selected>grok-4.20-0309-reasoning (Recommended)</option>
+                <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
+                <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
+                <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
+                <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
+                <option value="custom">Custom model...</option>
+            </select><br><br>
+            <label for="customModel" id="customModelLabel" style="display:none;">Custom Model Name:</label><br>
+            <input type="text" id="customModel" name="customModel" placeholder="Enter custom model name" style="display:none;"><br><br>
+        </div>
+        <div class="button-row">
+            <button onclick="processBook()">Process Book</button>
+        </div>
         <p id="loading" style="display:none;">Processing...</p>
     </div>
 
-    <div id="tab2" class="tabcontent">
+    <div id="tab2" class="tabcontent ui-panel" data-testid="bd-tab2">
+        <!-- UIU.BD.F3: Chapters preview tab SHALL render extracted chapter snippets in table form. -->
         <h2>Chapters Preview</h2>
         <table id="chaptersTable"><tr><th>Chapter</th><th>Preview</th></tr></table>
     </div>
 
-    <div id="tab3" class="tabcontent">
+    <div id="tab3" class="tabcontent ui-panel" data-testid="bd-tab3">
+        <!-- UIU.BD.F4: Extracted elements tab SHALL render structured field/value outputs in table form. -->
         <h2>Extracted Elements</h2>
         <table id="elementsTable"><tr><th>Field</th><th>Value</th></tr></table>
     </div>
 
-    <div id="tab4" class="tabcontent">
+    <div id="tab4" class="tabcontent ui-panel" data-testid="bd-tab4">
+        <!-- UIU.BD.F5: Output tab SHALL support export/import JSON operations for decomposition state. -->
+        <!-- UIU.BD.NF3: Output presentation SHALL remain readable with wrapped panel and scroll-safe pre block. -->
+        <!-- UIU.BD.NF4: Data-testid hooks SHALL remain stable for smoke selector hardening. -->
         <h2>Output JSON</h2>
-        <button onclick="exportJSON()">Export JSON</button>
-        <button onclick="importJSON()">Import JSON</button>
+        <div class="button-row">
+            <button onclick="exportJSON()">Export JSON</button>
+            <button onclick="importJSON()">Import JSON</button>
+        </div>
         <pre id="jsonOutput"></pre>
     </div>
 

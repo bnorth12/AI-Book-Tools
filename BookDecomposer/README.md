@@ -57,6 +57,16 @@ This tool now exports and imports the shared schema wrapper in `schema/novel-sch
 
 Standard Grok models are sent through `https://api.x.ai/v1/chat/completions`. Multi-agent models are sent through `https://api.x.ai/v1/responses`.
 
+## UI Unification Conventions
+
+- Uses shared shell token classes (`ui-shell`, `ui-nav`, `ui-tab-btn`, `ui-panel`) for cross-tool consistency.
+- Preserves `.tab` wrapper and `.tabcontent` classes for JS/test compatibility.
+- Maintains stable selectors (`data-testid`) for smoke/regression automation.
+- UI unification references:
+  - `docs/architecture/ui-unification/UI_UNIFICATION_REQUIREMENT_INDEX.md`
+  - `docs/architecture/ui-unification/UI_UNIFICATION_MIGRATION_NOTES.md`
+  - `docs/architecture/ui-unification/UI_UNIFICATION_VISUAL_CONSISTENCY_CHECKLIST.md`
+
 ## Version
 
 Current version: 0.2.0

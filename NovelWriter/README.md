@@ -39,6 +39,16 @@ Use the advanced workflow regression path for realistic smoke testing:
 7. Exercise element values
 8. Export/import session only near the end of the run
 
+## UI Unification Conventions
+
+- Uses shared shell token classes (`ui-shell`, `ui-nav`, `ui-tab-btn`, `ui-panel`) for cross-tool consistency.
+- Preserves existing tab labels/IDs and `showTab` semantics for compatibility.
+- Maintains stable selectors (`data-testid`) for smoke/regression automation.
+- UI unification references:
+	- `docs/architecture/ui-unification/UI_UNIFICATION_REQUIREMENT_INDEX.md`
+	- `docs/architecture/ui-unification/UI_UNIFICATION_MIGRATION_NOTES.md`
+	- `docs/architecture/ui-unification/UI_UNIFICATION_VISUAL_CONSISTENCY_CHECKLIST.md`
+
 ## Requirements
 
 - Modern web browser with JavaScript enabled

@@ -25,6 +25,22 @@ Version: 0.3.4 | Date: 2026-04-18
 <!-- NW10: Change management SHALL be tracked with version/date annotations next to every implemented requirement block. -->
 <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 
+<!--
+UI UNIFICATION REQUIREMENT SYNC (UIU.NW)
+Executive Summary:
+NovelWriter SHALL provide an end-to-end authoring workflow with stable tab semantics while adopting shared shell styling and accessibility/responsive parity controls.
+Source of truth: NovelWriter/REQUIREMENTS.md
+Functional IDs: UIU.NW.F1, UIU.NW.F2, UIU.NW.F3, UIU.NW.F4, UIU.NW.F5
+Nonfunctional IDs: UIU.NW.NF1, UIU.NW.NF2, UIU.NW.NF3, UIU.NW.NF4
+Synced: 2026-04-19
+-->
+
+<!-- UIU.NW.F1: Nav buttons SHALL preserve existing tab labels and stable showTab behavior. -->
+<!-- UIU.NW.F2: Session import/export SHALL preserve schema envelope compatibility with novel-schema-1.0. -->
+<!-- UIU.NW.F3: LLM calls SHALL continue routing through the central callAI gateway. -->
+<!-- UIU.NW.NF1: Shell styling SHALL be token-driven through shared/ui-unification-tokens.css. -->
+<!-- UIU.NW.NF2: UI SHALL retain responsive viewport metadata and keyboard-visible focus states via shared tab/button patterns. -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -293,15 +309,15 @@ Version: 0.3.4 | Date: 2026-04-18
 	    <!-- NW.T2.7: The Suggest Characters function SHALL include fully-defined existing characters as locked context so they are not modified. -->
 	    <!-- NW.T2.8: The Suggest Characters function SHALL use book context (arc, plot, setting) to generate backstory and arc for name-only characters. -->
 	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
-	    <div id="tab2" class="tab">
+	    <div id="tab2" class="tab ui-panel" data-testid="nw-tab2">
 	        <h2>Characters</h2>
-	        <div class="note">NOTE: Enter any known character information from Tab 1 here before using AI Suggest to fill in additional details. Use "Scrape Book Info" to automatically detect character names mentioned in the story setup.</div>
+	        <div class="note ui-note">NOTE: Enter any known character information from Tab 1 here before using AI Suggest to fill in additional details. Use "Scrape Book Info" to automatically detect character names mentioned in the story setup.</div>
 	        <button onclick="scrapeBookInfoForCharacters()">Scrape Book Info for Characters</button>
 	        <label for="numCharacters">Number of Characters to Generate:</label>
 	        <input type="number" id="numCharacters" min="1" value="3" onchange="syncCharacterEntries()">
 	        <div id="characterCounterInfo" class="counter-note">Character entries: 1</div>
-	        <div id="characterList">
-	            <div class="character">
+	        <div id="characterList" data-testid="nw-character-list">
+	            <div class="character ui-subpanel" data-testid="nw-character-card">
 	                <label>Name:</label>
 	                <input type="text" class="charName" placeholder="e.g., Character 1">
 	                <label>Backstory:</label>
@@ -326,13 +342,13 @@ Version: 0.3.4 | Date: 2026-04-18
 	    <!-- NW.T3.5: Tab 3 SHALL provide an "Add Another Subplot" button that appends a blank subplot entry and increments the counter. -->
 	    <!-- NW.T3.6: Each generated subplot SHALL be 300-400 words, include named characters, chapter span, sensory details, and thematic resonance. -->
 	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
-	    <div id="tab3" class="tab">
+	    <div id="tab3" class="tab ui-panel" data-testid="nw-tab3">
 	        <h2>Subplots</h2>
 	        <label for="minSubplots">Minimum Number of Subplots to Generate:</label>
 	        <input type="number" id="minSubplots" min="1" value="2" onchange="syncSubplotEntries()">
 	        <div id="subplotCounterInfo" class="counter-note">Subplot entries: 1</div>
-	        <div id="subplotList">
-	            <div class="subplot-section">
+	        <div id="subplotList" data-testid="nw-subplot-list">
+	            <div class="subplot-section ui-subpanel" data-testid="nw-subplot-card">
 	                <label>Subplot 1:</label>
 	                <textarea class="subplot" placeholder="e.g., a hidden conspiracy"></textarea>
 	            </div>
@@ -353,9 +369,9 @@ Version: 0.3.4 | Date: 2026-04-18
 	    <!-- NW.T4.6: The chapter outlines nav SHALL include a "Main" button to return to the novel-level outline view. -->
 	    <!-- NW.T4.7: All outline LLM calls SHALL route through callAI() and display loading state in Tab 4. -->
 	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
-	    <div id="tab4" class="tab">
+	    <div id="tab4" class="tab ui-panel" data-testid="nw-tab4">
 	        <h2>Outlines</h2>
-	        <div id="outlineMain" class="subpage active">
+	        <div id="outlineMain" class="subpage active ui-subpanel" data-testid="nw-outline-main">
 	            <label for="novelOutline">Novel Outline:</label>
 	            <textarea id="novelOutline" placeholder="Generated or manual novel outline"></textarea>
 	            <label for="plotOutline">Annotated Plot Outline:</label>
@@ -369,8 +385,8 @@ Version: 0.3.4 | Date: 2026-04-18
 	            <button onclick="generateNovelOutlines()">AI Suggest Novel Outline</button>
 	            <button onclick="incorporateOutlineSuggestions()">Incorporate Suggestions</button>
 	        </div>
-	        <div id="chapterOutlinesNav" class="chapter-nav"></div>
-	        <div id="chapterOutlines"></div>
+	        <div id="chapterOutlinesNav" class="chapter-nav" data-testid="nw-outline-nav"></div>
+	        <div id="chapterOutlines" data-testid="nw-outline-chapters"></div>
 	        <button onclick="showTab(3)">Back</button>
 	        <button onclick="showTab(5)">Next: Generate Chapters</button>
 	        <div class="loading-indicator">Processing...</div>

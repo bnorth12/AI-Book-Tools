@@ -19,23 +19,40 @@ Current tool releases: NovelWriter 0.3.4, BookEditor 0.4.0, BookDecomposer 0.2.0
 
 ```text
 AI-Book-Tools/
-├── index.html                 # Main launcher page
-├── README.md                  # This file
-├── CONTRIBUTING.md           # Contribution guidelines
-├── CHANGELOG.md              # Version history
-├── LICENSE                   # MIT License
-├── package.json              # Project metadata
-├── .editorconfig             # Code style consistency
-├── .gitignore                # Git ignore rules
-├── .github/                  # GitHub configuration
-│   └── ISSUE_TEMPLATE/       # Issue templates
-├── NovelWriter/              # Novel creation tool
-├── BookEditor/               # Book editing tool
-├── BookDecomposer/           # Book analysis tool
-└── HerbalBookForge/          # Herbal book creation tool
+├── index.html                               # Main launcher page
+├── README.md                                # This file
+├── CONTRIBUTING.md                          # Contribution guidelines
+├── CHANGELOG.md                             # Version history
+├── LICENSE                                  # MIT License
+├── package.json                             # Project metadata
+├── playwright.config.js                     # Playwright configuration
+├── web.config                               # IIS/local static server config
+├── NovelWriter/                             # App: Novel creation tool (IIS-served)
+├── BookEditor/                              # App: Book editing tool (IIS-served)
+├── BookDecomposer/                          # App: Book analysis tool (IIS-served)
+├── HerbalBookForge/                         # App: Herbal workflow tool (IIS-served)
+├── shared/                                  # Shared UI tokens/assets
+├── schema/                                  # Shared schema + samples
+├── tests/
+│   └── e2e/                                 # Playwright specs
+├── scripts/
+│   └── governance/                          # Governance validation scripts
+├── releases/                                # Versioned release snapshot packages
+├── docs/
+│   ├── governance/                          # SSDLC policies/status
+│   ├── runbooks/                            # Manual testing runbooks
+│   ├── releases/                            # Release closeout reports
+│   ├── roadmap/                             # Planning and roadmap docs
+│   ├── architecture/ui-unification/         # UI unification analysis and evidence
+│   ├── system-security-analysis/             # Threat model and cyber threat analysis artifacts
+│   ├── integration/                         # Cross-tool integration issue docs
+│   └── community/                           # Community setup docs
+└── .github/                                 # GitHub configuration and templates
 ```
 
 ## Development
+
+Documentation index: [docs/README.md](docs/README.md)
 
 ### Prerequisites
 
@@ -76,9 +93,25 @@ This repository uses GitHub Actions for automated testing:
 
 Tests run automatically on every push and pull request.
 
-For manual, human-operated Playwright execution and live failure analysis, see [TESTING_MANUAL_RUNBOOK.md](TESTING_MANUAL_RUNBOOK.md).
+For manual, human-operated Playwright execution and live failure analysis, see [docs/runbooks/TESTING_MANUAL_RUNBOOK.md](docs/runbooks/TESTING_MANUAL_RUNBOOK.md).
 
-For secure feature release lifecycle policy (planning through closeout), see [FEATURE_RELEASE_SSDL_CHECKLIST.md](FEATURE_RELEASE_SSDL_CHECKLIST.md).
+For secure feature release lifecycle policy (planning through closeout), see [docs/governance/FEATURE_RELEASE_SSDL_CHECKLIST.md](docs/governance/FEATURE_RELEASE_SSDL_CHECKLIST.md).
+
+For canonical threat model and cyber threat analysis artifacts, see [docs/system-security-analysis/README.md](docs/system-security-analysis/README.md).
+
+For release snapshot packaging policy and folder requirements, see [docs/governance/RELEASE_PACKAGE_POLICY.md](docs/governance/RELEASE_PACKAGE_POLICY.md).
+
+### Shared Design System
+
+UI unification artifacts and standards are documented under:
+
+- `docs/architecture/ui-unification/UI_UNIFICATION_REQUIREMENT_INDEX.md`
+- `docs/architecture/ui-unification/UI_UNIFICATION_MIGRATION_NOTES.md`
+- `docs/architecture/ui-unification/UI_UNIFICATION_VISUAL_CONSISTENCY_CHECKLIST.md`
+- `docs/architecture/ui-unification/UI_UNIFICATION_RELEASE_EVIDENCE_BUNDLE.md`
+
+These documents define tokenized shell conventions, migration compatibility rules,
+visual consistency checks, and evidence expectations for release closeout.
 
 ### Security Updates
 

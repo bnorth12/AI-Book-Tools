@@ -36,6 +36,16 @@ An AI-powered book editing and improvement tool that helps refine existing manus
 
 This tool now exports and imports the shared wrapper format defined by `schema/novel-schema-1.0.json`, allowing compatible data exchange with `NovelWriter` and `BookDecomposer`.
 
+## UI Unification Conventions
+
+- Uses shared shell token classes (`ui-shell`, `ui-nav`, `ui-tab-btn`, `ui-panel`) for cross-tool consistency.
+- Preserves existing tab labels/IDs and workflow sequencing to avoid functional drift.
+- Maintains stable selectors (`data-testid`) for smoke/regression automation.
+- UI unification references:
+	- `docs/architecture/ui-unification/UI_UNIFICATION_REQUIREMENT_INDEX.md`
+	- `docs/architecture/ui-unification/UI_UNIFICATION_MIGRATION_NOTES.md`
+	- `docs/architecture/ui-unification/UI_UNIFICATION_VISUAL_CONSISTENCY_CHECKLIST.md`
+
 ## Version
 
 Current version: 0.4.0

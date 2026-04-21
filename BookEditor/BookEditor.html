@@ -1,52 +1,147 @@
 <!DOCTYPE html>
+<!--
+EXECUTIVE SUMMARY (UIU.BE.EXEC)
+BookEditor SHALL provide a human-in-the-loop editing workflow that imports, improves, and exports book content while preserving existing tab behavior and IDs.
+Source of truth: BookEditor/REQUIREMENTS.md
+Functional IDs: UIU.BE.F1, UIU.BE.F2, UIU.BE.F3, UIU.BE.F4, UIU.BE.F5
+Nonfunctional IDs: UIU.BE.NF1, UIU.BE.NF2, UIU.BE.NF3, UIU.BE.NF4
+Synced: 2026-04-19
+-->
+<!-- UIU.BE.NF1: Styling SHALL use shared token variables and shell classes. -->
+<!-- UIU.BE.NF2: The layout SHALL remain responsive at <=900px using current media query rules. -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../shared/ui-unification-tokens.css">
     <title>BookEditor V.0.4.0</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h1 { text-align: center; color: #333; }
-        #nav { overflow: hidden; border-bottom: 1px solid #ccc; margin-bottom: 20px; }
-        #nav button { background-color: #0078d4; color: white; border: none; padding: 10px 20px; float: left; cursor: pointer; }
-        #nav button:hover { background-color: #005ea2; }
-        #nav button.active { background-color: #004d8c; }
-        .tab { display: none; }
+        body {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px 20px 28px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 18px;
+        }
+        #nav {
+            margin-bottom: 20px;
+        }
+        #nav button {
+            margin-right: 0;
+        }
+        .tab {
+            display: none;
+            background: var(--uiu-surface-0);
+            border: 1px solid var(--uiu-border);
+            border-radius: var(--uiu-radius-lg);
+            box-shadow: var(--uiu-shadow-1);
+            padding: 18px;
+            margin-top: 18px;
+        }
         .tab.active { display: block; }
+        h2 {
+            font-family: var(--uiu-font-display);
+            font-size: 2rem;
+            line-height: 1.1;
+            margin: 0 0 var(--uiu-space-4);
+            color: var(--uiu-text-0);
+        }
         label { display: block; margin: 10px 0 5px; }
         input[type="text"], input[type="number"], select, textarea { width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box; }
         #genre { height: 30px; }
         #bookText, #chatQuestion, #chatResponse { height: 600px; resize: vertical; }
         #lastPrompt, #returnedInfo { height: 200px; resize: vertical; }
-        button { background-color: #0078d4; color: white; border: none; padding: 10px 20px; cursor: pointer; margin-right: 10px; }
-        button:hover { background-color: #005ea2; }
+        button {
+            background-color: var(--uiu-primary);
+            color: var(--uiu-primary-ink);
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin-right: 10px;
+            font-weight: 600;
+        }
+        button:hover { background-color: var(--uiu-primary-2); }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
+        th, td { border: 1px solid rgba(52, 211, 153, 0.18); padding: 8px; text-align: left; }
+        th { background-color: rgba(16, 185, 129, 0.12); }
         th.incorporate, td.incorporate { width: 110px; }
-        #tokenCounter, #requestLogTokens { margin-top: 20px; font-size: 14px; }
-        #loading { display: none; color: #0078d4; margin-top: 10px; }
-        #logCounter { margin-left: 10px; }
+        #tokenCounter, #requestLogTokens {
+            margin-top: 20px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(52, 211, 153, 0.18);
+            border-radius: var(--uiu-radius-md);
+            padding: 12px 14px;
+        }
+        #loading {
+            display: none;
+            color: var(--uiu-text-2);
+            margin-top: 10px;
+        }
+        #logCounter { margin-left: 10px; color: var(--uiu-text-2); }
         #editedOutputContainer textarea {
 		    height: 200px; /* Increase textarea height */
 		    width: 100%;   /* Ensure full width */
 		    resize: vertical; /* Allow vertical resizing */
 		}
+        .tab .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--uiu-space-2);
+            margin-bottom: var(--uiu-space-3);
+        }
+        .tab .button-row button {
+            margin-right: 0;
+        }
+        .tab .input-method-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            align-items: center;
+            margin-bottom: 10px;
+            color: var(--uiu-text-1);
+        }
+        .tab .input-method-row input[type="radio"] {
+            width: auto;
+            margin: 0 6px 0 0;
+        }
+        .tab .stack-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(52, 211, 153, 0.18);
+            border-radius: var(--uiu-radius-lg);
+            padding: var(--uiu-space-4);
+            margin-bottom: var(--uiu-space-4);
+        }
+        @media (max-width: 900px) {
+            body {
+                padding: 14px 14px 24px;
+            }
+            h2 {
+                font-size: 1.5rem;
+            }
+        }
     </style>
 </head>
-<body>
-    <h1>BookEditor V.0.4.0</h1>
-    <div id="nav">
-        <button onclick="showTab(1)" class="active">1. Project Setup</button>
-        <button onclick="showTab(2)">2. Book Input</button>
-        <button onclick="showTab(3)">3. Chat Bot</button>
-        <button onclick="showTab(4)">4. Improvements List</button>
-        <button onclick="showTab(5)">5. Edited Output</button>
-        <button onclick="showTab(6)">6. Request Log</button>
+<body class="ui-shell">
+    <h1 class="ui-title" data-testid="be-title">BookEditor V.0.4.0</h1>
+    <div id="nav" class="ui-nav" data-testid="be-nav">
+        <!-- UIU.BE.F1: Nav SHALL expose six stable workflow tabs with unchanged visible labels and IDs. -->
+        <button onclick="showTab(1)" class="ui-tab-btn active" data-testid="be-nav-tab1">1. Project Setup</button>
+        <button onclick="showTab(2)" class="ui-tab-btn" data-testid="be-nav-tab2">2. Book Input</button>
+        <button onclick="showTab(3)" class="ui-tab-btn" data-testid="be-nav-tab3">3. Chat Bot</button>
+        <button onclick="showTab(4)" class="ui-tab-btn" data-testid="be-nav-tab4">4. Improvements List</button>
+        <button onclick="showTab(5)" class="ui-tab-btn" data-testid="be-nav-tab5">5. Edited Output</button>
+        <button onclick="showTab(6)" class="ui-tab-btn" data-testid="be-nav-tab6">6. Request Log</button>
     </div>
 
     <!-- Tab 1: Project Setup -->
-    <div id="tab1" class="tab active">
+    <!-- UIU.BE.F2: Tab 1 SHALL collect API/model/token configuration and support session import/export. -->
+    <div id="tab1" class="tab active ui-panel" data-testid="be-tab1">
         <h2>Project Setup</h2>
         <label for="apiKey">API Key:</label>
         <input type="text" id="apiKey" placeholder="Enter your xAI API key">
@@ -69,75 +164,98 @@
             <p>Tokens Used on Last Operation: <span id="lastTokens">0 (Text: 0, Audio: 0, Image: 0, Cached: 0, Completion: 0)</span></p>
             <p>Total Tokens Used: <span id="totalTokens">0 (Text: 0, Audio: 0, Image: 0, Cached: 0, Completion: 0)</span></p>
         </div>
-        <button onclick="showTab(2)">Next: Book Input</button>
-        <div id="loading">Processing...</div>
+        <div class="button-row">
+			<button onclick="showTab(2)">Next: Book Input</button>
+		</div>
+        <div id="loading" class="loading loading-indicator">Processing...</div>
     </div>
 
     <!-- Tab 2: Book Input -->
-    <div id="tab2" class="tab">
+    <!-- UIU.BE.F3: Tab 2 SHALL support text or URL input and trigger AI improvement suggestions. -->
+    <div id="tab2" class="tab ui-panel" data-testid="be-tab2">
         <h2>Book Input</h2>
-        <button onclick="suggestImprovements()">Suggest Improvements</button>
-        <button onclick="showTab(1)">Back</button>
-        <button onclick="showTab(3)">Next: Chat Bot</button>
+        <div class="button-row">
+			<button onclick="suggestImprovements()">Suggest Improvements</button>
+			<button onclick="showTab(1)">Back</button>
+			<button onclick="showTab(3)">Next: Chat Bot</button>
+		</div>
         <label>Input Method:</label>
-        <div style="margin-bottom: 10px;">
-            <input type="radio" id="inputText" name="inputMethod" value="text" checked onchange="toggleInputFields()"> Enter Text
-            <input type="radio" id="inputURL" name="inputMethod" value="url" style="margin-left: 20px;" onchange="toggleInputFields()"> Provide URL
+        <div class="input-method-row">
+			<label style="margin:0;color:var(--uiu-text-1);font-size:14px;font-weight:500;letter-spacing:0;text-transform:none;"><input type="radio" id="inputText" name="inputMethod" value="text" checked onchange="toggleInputFields()"> Enter Text</label>
+			<label style="margin:0;color:var(--uiu-text-1);font-size:14px;font-weight:500;letter-spacing:0;text-transform:none;"><input type="radio" id="inputURL" name="inputMethod" value="url" onchange="toggleInputFields()"> Provide URL</label>
         </div>
-        <div id="textInput" style="display: block;">
+        <div id="textInput" class="stack-card" style="display: block;">
             <label for="bookText">Full Book Text:</label>
             <textarea id="bookText" placeholder="Paste the full contents of your book here"></textarea>
         </div>
-        <div id="urlInput" style="display: none;">
+        <div id="urlInput" class="stack-card" style="display: none;">
             <label for="bookURL">Book URL:</label>
             <input type="text" id="bookURL" placeholder="Paste the URL to your book (e.g., Google Drive link)">
         </div>
-        <div id="loading">Processing...</div>
+        <div id="loading" class="loading loading-indicator">Processing...</div>
     </div>
 
     <!-- Tab 3: Chat Bot -->
-    <div id="tab3" class="tab">
+    <!-- UIU.BE.F4: Tab 3 SHALL provide question/answer chat grounded in the current book state. -->
+    <div id="tab3" class="tab ui-panel" data-testid="be-tab3">
         <h2>Chat Bot</h2>
         <label for="chatQuestion">Ask a Question About the Book:</label>
         <textarea id="chatQuestion" placeholder="Type your question here (e.g., 'Who are the main characters?')"></textarea>
-        <button onclick="submitChatQuestion()">Submit Question</button>
+        <div class="button-row">
+			<button onclick="submitChatQuestion()">Submit Question</button>
+		</div>
         <label for="chatResponse">Response:</label>
         <textarea id="chatResponse" readonly placeholder="Response will appear here"></textarea>
-        <button onclick="showTab(2)">Back</button>
-        <button onclick="showTab(4)">Next: Improvements List</button>
-        <div id="loading">Processing...</div>
+        <div class="button-row">
+			<button onclick="showTab(2)">Back</button>
+			<button onclick="showTab(4)">Next: Improvements List</button>
+		</div>
+        <div id="loading" class="loading loading-indicator">Processing...</div>
     </div>
 
     <!-- Tab 4: Improvements List -->
-	<div id="tab4" class="tab">
-	    <button onclick="addImprovement()">Add Improvement</button>
-	    <button onclick="editSelected()">Edit Selected</button>
-	    <button onclick="deleteSelected()">Delete Selected</button>
+    <!-- UIU.BE.F5: Tab 4 SHALL allow manage/select improvement items feeding edited output generation. -->
+    <div id="tab4" class="tab ui-panel" data-testid="be-tab4">
+        <h2>Improvements List</h2>
+        <div class="button-row">
+            <button onclick="addImprovement()">Add Improvement</button>
+            <button onclick="editSelected()">Edit Selected</button>
+            <button onclick="deleteSelected()">Delete Selected</button>
+        </div>
 	    <table id="improvementsTable">
 	        <thead><tr><th>Incorporate</th><th>Suggested Improvement</th><th>Selected</th></tr></thead>
 	        <tbody id="improvementsTableBody"></tbody>
 	    </table>
-	    <button onclick="showTab(3)">Back</button>
-	    <button onclick="showTab(5)">Next: Edited Output</button>
-	    <div id="loading">Processing...</div> <!-- Added -->
+        <div class="button-row">
+            <button onclick="showTab(3)">Back</button>
+            <button onclick="showTab(5)">Next: Edited Output</button>
+        </div>
+        <div id="loading" class="loading loading-indicator">Processing...</div> <!-- Added -->
 	</div>
 
     <!-- Tab 5: Edited Output -->
-    <div id="tab5" class="tab">
+    <div id="tab5" class="tab ui-panel" data-testid="be-tab5">
+        <h2>Edited Output</h2>
         <div id="editedOutputContainer"></div>
-        <button onclick="importBook()">Import Book</button>
-        <button onclick="recalculateChapterLength()">Recalculate Chapter Length</button>
-        <button onclick="exportBook()">Export Book</button>
-        <button onclick="showTab(4)">Back</button>
-        <button onclick="showTab(6)">Next: Request Log</button>
+        <div class="button-row">
+			<button onclick="importBook()">Import Book</button>
+			<button onclick="recalculateChapterLength()">Recalculate Chapter Length</button>
+			<button onclick="exportBook()">Export Book</button>
+			<button onclick="showTab(4)">Back</button>
+			<button onclick="showTab(6)">Next: Request Log</button>
+		</div>
     </div>
 
     <!-- Tab 6: Request Log -->
-    <div id="tab6" class="tab">
+    <!-- UIU.BE.NF3: Request logging SHALL preserve traceability without changing existing request payload behavior. -->
+    <!-- UIU.BE.NF4: Data-testid hooks SHALL remain stable for smoke selector hardening. -->
+    <div id="tab6" class="tab ui-panel" data-testid="be-tab6">
         <h2>Request Log</h2>
-        <button onclick="prevLog()">Previous</button>
-        <button onclick="nextLog()">Next</button>
-        <span id="logCounter">0 of 0</span>
+        <div class="button-row">
+			<button onclick="prevLog()">Previous</button>
+			<button onclick="nextLog()">Next</button>
+			<span id="logCounter">0 of 0</span>
+		</div>
         <label for="lastPrompt">Last Prompt Sent:</label>
         <textarea id="lastPrompt" readonly>No requests made yet.</textarea>
         <label for="returnedInfo">Raw Information Returned:</label>
@@ -145,8 +263,10 @@
         <div id="requestLogTokens">
             <p>Tokens Used: <span id="requestTokens">0 (Text: 0, Audio: 0, Image: 0, Cached: 0, Completion: 0)</span></p>
         </div>
-        <button onclick="showTab(5)">Back</button>
-        <div id="loading">Processing...</div>
+        <div class="button-row">
+			<button onclick="showTab(5)">Back</button>
+		</div>
+        <div id="loading" class="loading loading-indicator">Processing...</div>
     </div>
 
     <script>

@@ -46,7 +46,7 @@ Thank you for your interest in contributing to AI Book Tools! This document prov
    - Test all tools in multiple browsers
    - Verify API key functionality
    - Check responsive design on different screen sizes
-   - For manual Playwright execution and failure triage, follow [TESTING_MANUAL_RUNBOOK.md](TESTING_MANUAL_RUNBOOK.md)
+   - For manual Playwright execution and failure triage, follow [docs/runbooks/TESTING_MANUAL_RUNBOOK.md](docs/runbooks/TESTING_MANUAL_RUNBOOK.md)
 
 ## Code Style Guidelines
 
@@ -112,8 +112,16 @@ Release policy rules:
 - Do not tag a commit that was not the one validated by the final release test pass.
 - If any commit is added after final test pass, run release validation again before tagging.
 - Keep issue/PR links and test evidence in the release PR to maintain traceability.
+- Final Playwright release-validation runs that override reporter settings must use `--reporter=line,html` so HTML artifacts are preserved.
+- Create a versioned release snapshot folder at
+   `releases/AI Book Tools <version>/` containing a copy of `index.html`, app
+   subfolders (`NovelWriter/`, `BookEditor/`, `BookDecomposer/`,
+   `HerbalBookForge/`) with only required HTML files, and a
+   `Release Test Artifacts/` folder containing `FINAL_TEST_ARTIFACTS.md` plus
+   the HTML Playwright report used for release evidence.
 
-For end-to-end feature release process requirements (create/design/implement/test/close) including configuration and data management controls, use [FEATURE_RELEASE_SSDL_CHECKLIST.md](FEATURE_RELEASE_SSDL_CHECKLIST.md).
+For end-to-end feature release process requirements (create/design/implement/test/close) including configuration and data management controls, use [docs/governance/FEATURE_RELEASE_SSDL_CHECKLIST.md](docs/governance/FEATURE_RELEASE_SSDL_CHECKLIST.md).
+For release snapshot packaging policy details, use [docs/governance/RELEASE_PACKAGE_POLICY.md](docs/governance/RELEASE_PACKAGE_POLICY.md).
 
 ## License
 

@@ -51,12 +51,37 @@
 			"args": [
 				"playwright",
 				"test",
-				"e2e/novelwriter.regression.spec.js",
+				"tests/e2e/novelwriter.regression.spec.js",
 				"-g",
 				"NW-REG-09",
 				"--reporter=list"
 			],
 			"isBackground": false
+		},
+		{
+			"label": "uiu-doc-lint-help-refresh",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"lint:md"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "be-shell-smoke",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"playwright",
+				"test",
+				"tests/e2e/bookeditor.smoke.spec.js",
+				"--project=smoke-ui-shell",
+				"--reporter=line"
+			],
+			"isBackground": false,
+			"group": "test"
 		}
 	]
 }
