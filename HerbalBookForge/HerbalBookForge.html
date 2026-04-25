@@ -1134,6 +1134,17 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
             if (textarea) textarea.focus();
         }
 
+        /**
+         * Chapter Outlines Tab UI Structure (HBF.CHO6)
+         * - Displays one annotated card per chapter.
+         * - Each card includes:
+         *   - Editable chapter title (input)
+         *   - Editable annotation (textarea)
+         *   - Edit, Regenerate, and Save buttons
+         * - Cards are rendered in a vertical list (space-y-6)
+         * - All actions are per-chapter and update the project state
+         * - UI is consistent with requirements and documented here
+         */
         function renderChapterList() {
             const list = document.getElementById('chapter-list');
             if (!list) return;
