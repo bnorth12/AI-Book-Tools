@@ -122,7 +122,7 @@ Running 3 tests using 1 worker
 
 ## 5. Previously Tracked Issues Resolved
 
-The following bugs were identified and resolved during the sprint (documented in `issues/herbalbookforge-issues.md`):
+The following bugs were identified and resolved during the sprint (documented in `HerbalBookForge/ISSUES.md`):
 
 | Bug | Root Cause | Resolution |
 |---|---|---|

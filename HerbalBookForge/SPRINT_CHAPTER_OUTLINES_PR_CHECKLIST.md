@@ -19,7 +19,7 @@ Legend: READY = completed and verified in repo evidence; NOT READY = incomplete 
 | Sprint Closeout | All issues and PR are closed | PARTIAL | Issues #16–#25 open on GitHub; require manual closure. Work is merged to main. |
 | Sprint Closeout | User documentation updated and published | READY | REQUIREMENTS.md, CHAPTER_OUTLINES_FEATURES.md, TESTING.md, and integration test guide updated locally. Published on merge. |
 | Sprint Closeout | Requirements doc and code comments are in sync | READY | Chapter Outlines requirement IDs align between docs and code comments. |
-| Sprint Closeout | Sprint results reviewed and lessons learned captured | READY | Bugs resolved and documented in `issues/herbalbookforge-issues.md`; test evidence in `docs/releases/evidence/`. |
+| Sprint Closeout | Sprint results reviewed and lessons learned captured | READY | Bugs resolved and documented in `HerbalBookForge/ISSUES.md`; test evidence in `docs/releases/evidence/`. |
 
 ## PR Creation
 
@@ -40,7 +40,7 @@ Legend: READY = completed and verified in repo evidence; NOT READY = incomplete 
 - [ ] All issues and the PR are closed. (Status: PENDING — requires GitHub PR merge)
 - [x] User documentation is updated and published. (Status: READY locally; publishes on merge)
 - [x] Requirements doc and code comments are in sync. (Status: READY)
-- [x] Sprint results are reviewed and lessons learned are captured. (Status: READY — bugs documented in issues/herbalbookforge-issues.md)
+- [x] Sprint results are reviewed and lessons learned are captured. (Status: READY — bugs documented in HerbalBookForge/ISSUES.md)
 
 ---
 
