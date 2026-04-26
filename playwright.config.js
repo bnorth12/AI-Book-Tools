@@ -54,6 +54,42 @@ module.exports = defineConfig({
         baseURL: 'http://localhost:8080',
       },
     },
+    {
+      name: 'herbalbookforge-smoke',
+      testMatch: /herbalbookforge\.smoke\.spec\.js/,
+      timeout: 480 * 1000,
+      retries: 1,
+      use: {
+        headless: true,
+        screenshot: 'on',
+        video: 'on',
+        baseURL: 'http://localhost:8080',
+      },
+    },
+    {
+      name: 'herbalbookforge-smoke-real',
+      testMatch: /herbalbookforge\.smoke\.real\.spec\.js/,
+      timeout: 480 * 1000,
+      retries: 0,
+      use: {
+        headless: false,
+        baseURL: 'http://localhost:8080',
+        screenshot: 'on',
+        video: 'on',
+      },
+    },
+    {
+      name: 'herbalbookforge-integration',
+      testMatch: /herbalbookforge\.integration\.spec\.js/,
+      timeout: 600 * 1000,          // 10 min timeout for LLM API calls with waits
+      retries: 0,
+      use: {
+        headless: false,            // visible browser for monitoring LLM responses
+        baseURL: 'http://localhost:8080',
+        screenshot: 'on',
+        video: 'on',
+      },
+    },
   ],
   // Python HTTP server for smoke tests (serves the site at localhost:8080)
   webServer: {

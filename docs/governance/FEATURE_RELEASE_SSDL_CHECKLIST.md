@@ -1,5 +1,30 @@
 # Feature Release Secure SDLC Checklist
 
+## Current Status Snapshot (HerbalBookForge Chapter Outlines, 2026-04-25)
+
+Legend: READY = verified in current workspace evidence; NOT READY = missing completion evidence or incomplete.
+
+### Ready/Not-Ready Matrix
+
+| Checklist Section | Item | Status | Evidence/Notes |
+|---|---|---|---|
+| 1) Create and Plan | Scope/objective/out-of-scope defined | READY | Sprint plan and issue breakdown docs exist under HerbalBookForge sprint docs. |
+| 1) Create and Plan | Milestone/umbrella/child issues created | NOT READY | GitHub artifact creation/closure is not verifiable from local workspace. |
+| 1) Create and Plan | Requirement IDs and traceability method defined | READY | HBF.CHO1-HBF.CHO6 are documented and referenced in code/docs. |
+| 2) Design and Threat Modeling | Architecture/trust boundaries and threat model documented | NOT READY | No sprint-specific threat model artifact was verified for this sprint. |
+| 3) Implement Securely | Feature implemented with requirement IDs inline | READY | Chapter Outlines requirements are present inline in HerbalBookForge.html. |
+| 3) Implement Securely | Secrets kept out of source | READY | API key workflow is environment/local setup based and .env usage documented. |
+| 3) Implement Securely | Inputs/outputs sanitized and defensive errors | READY | escapeHtml and defensive parsing/fallback patterns are implemented. |
+| 4) Test and Verify | Functional tests run | READY | Smoke and integration runs were executed; core chapter generation completed successfully. |
+| 4) Test and Verify | Regression suites for impacted tools | NOT READY | Full regression signoff for sprint closeout was not verified. |
+| 4) Test and Verify | Security-focused checks formalized | NOT READY | No dedicated security test report artifact verified for this sprint. |
+| 4) Test and Verify | Test evidence recorded | READY | Playwright HTML report/video/screenshot artifacts were generated. |
+| 5) Release Candidate Review | PR includes requirements, risks, test evidence | NOT READY | No finalized sprint PR evidence is available in workspace. |
+| 6) Close and Release | Final required suite pass on release candidate commit | NOT READY | Smoke and herbalbookforge-integration are now passing locally with HTML evidence; release-candidate commit pin/tag and PR evidence gate remain open. |
+| 6) Close and Release | Tag validated commit and publish notes | NOT READY | No sprint-specific tag/release publication evidence verified for this work. |
+| 6) Close and Release | Merge approved branch to trunk | NOT READY | Work is currently in local uncommitted state on main. |
+| 7) Post-Release Governance | Lessons learned and follow-up issues captured | NOT READY | No sprint-specific retrospective artifact verified as complete. |
+
 Use this checklist for any feature/capability release that changes code, configuration, data handling, or external integrations.
 
 ## Policy Intent

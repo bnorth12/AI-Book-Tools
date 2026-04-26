@@ -13,7 +13,7 @@ const { test, expect } = require('@playwright/test');
 const { pathToFileURL } = require('url');
 const path = require('path');
 
-const APP_PATH = path.resolve(__dirname, '..', 'NovelWriter', 'NovelWriter.html');
+const APP_PATH = path.resolve(__dirname, '..', '..', 'NovelWriter', 'NovelWriter.html');
 const APP_URL = pathToFileURL(APP_PATH).toString();
 
 async function gotoApp(page) {

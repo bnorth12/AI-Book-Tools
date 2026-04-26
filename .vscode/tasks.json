@@ -1,63 +1,38 @@
-{
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "run smoke quick analysis",
-			"type": "shell",
-			"command": "powershell",
-			"args": [
-				"-NoProfile",
-				"-Command",
-				"if (-not $env:XAI_API_KEY) { Write-Host 'XAI_API_KEY is not set'; exit 1 }; npx playwright test --project=smoke --reporter=list 2>&1"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "run smoke quick analysis with key",
-			"type": "shell",
-			"command": "powershell",
-			"args": [
-				"-NoProfile",
-				"-Command",
-				"if (-not $env:XAI_API_KEY) { Write-Host 'XAI_API_KEY is not set'; exit 1 }; npx playwright test --project=smoke --reporter=list 2>&1"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "run smoke quick analysis with key fixed",
-			"type": "shell",
-			"command": "powershell",
-			"args": [
-				"-NoProfile",
-				"-Command",
-				"if (-not $env:XAI_API_KEY) { Write-Host 'XAI_API_KEY is not set'; exit 1 }; npx playwright test --project=smoke --reporter=list 2>&1"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "run smoke quick analysis via cmd env",
-			"type": "shell",
-			"command": "cmd",
-			"args": [
-				"/c",
-				"if not defined XAI_API_KEY (echo XAI_API_KEY is not set && exit /b 1) && npx playwright test --project=smoke --reporter=list"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "run NW-REG-09",
+			"label": "Run HerbalBookForge Playwright Tests",
 			"type": "shell",
 			"command": "npx",
 			"args": [
+				"dotenv-cli",
+				"--",
 				"playwright",
 				"test",
-				"tests/e2e/novelwriter.regression.spec.js",
-				"-g",
-				"NW-REG-09",
+				"--project=${input:herbalbookforgeTestType}",
 				"--reporter=list"
 			],
-			"isBackground": false
-		},
+			"isBackground": false,
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		}
+	],
+	"inputs": [
+		{
+			"id": "herbalbookforgeTestType",
+			"type": "pickString",
+			"description": "Select HerbalBookForge test type to run",
+			"options": [
+				"herbalbookforge-smoke",
+				"herbalbookforge-smoke-real",
+				"herbalbookforge-regression"
+			],
+			"default": "herbalbookforge-smoke"
+		}
+	]
 		{
 			"label": "uiu-doc-lint-help-refresh",
 			"type": "shell",

@@ -6,5 +6,8 @@
     "playwright-report/": true,
     "test-results/": true,
     "node_modules/": true
+  },
+  "chat.tools.terminal.autoApprove": {
+    "npx playwright": true
   }
 }

@@ -31,4 +31,18 @@
 
 ---
 
-_Last updated: 2026-04-24_
+### Last updated: 2026-04-25
+
+## Integration Testing
+
+Full end-to-end integration tests are now available in `tests/e2e/herbalbookforge.integration.spec.js`:
+
+- Tests real LLM API calls with proper timeout handling
+- Validates complete workflow from Book Goals through Chapter Outline generation
+- Tests project state persistence across page reloads
+- Handles API delays and LLM response waits (60+ second timeouts)
+
+Run with:
+```bash
+npx playwright test --project=herbalbookforge-integration
+```

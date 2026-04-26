@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv()
+import os
+
+api_key = os.getenv("XAI_API_KEY")
 """
 Patch script for NovelWriter.html:
 1. Add Integrate Suggestions button + loading div to Tab 8 HTML

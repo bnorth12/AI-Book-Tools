@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv()
+import os
+
+api_key = os.getenv("XAI_API_KEY")
 import re
 content = open('c:/NovelWriterSite/NovelWriter/NovelWriter.html', encoding='utf-8').read()
 

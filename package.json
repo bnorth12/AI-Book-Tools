@@ -51,5 +51,8 @@
     "last 2 versions",
     "> 1%",
     "not dead"
-  ]
+  ],
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
 }

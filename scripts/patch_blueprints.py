@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv()
+import os
+
+api_key = os.getenv("XAI_API_KEY")
 """Apply remaining chapterBlueprints patches to NovelWriter.html"""
 
 file_path = 'c:/NovelWriterSite/NovelWriter/NovelWriter.html'

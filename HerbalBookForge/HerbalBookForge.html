@@ -36,6 +36,11 @@
     -->
 
     <!-- TOP-LEVEL REQUIREMENTS -->
+    <!-- HBF.UNI1: All LLM API calls SHALL be routed through a single unified function (callLlmAgent) that takes agent, context, userPrompt, and response parser as arguments. -->
+    <!-- HBF.UNI2: Each tab SHALL prepare its own context and parse the LLM response as needed, but SHALL always update the central project JSON state and re-render the UI from this state. -->
+    <!-- HBF.UNI3: The UI SHALL always render from the central project JSON state after any LLM call or user edit. -->
+    <!-- HBF.UNI4: Every LLM API call SHALL use the system prompt (agent prompt) corresponding to the function/agent being exercised (Book Goals Agent, Outliner, Chapter Annotator, Drafter, Safety, etc.). -->
+    <!-- HBF.UNI4.1: All agent prompts (Book Goals, Outliner, Chapter Annotator, Safety) SHALL require strict JSON output for all fields that need to be parsed. All response parsing logic SHALL expect and validate this format, with fallback/error handling for malformed responses. -->
     <!-- HBF1: HerbalBookForge SHALL be a single standalone HTML file with Tailwind dark herbal theme and tab navigation. -->
     <!-- HBF2: The app SHALL enforce strict separation: Developer = vibe-coder; Internal agents = strictly herbal experts only. -->
     <!-- HBF3: Every tab SHALL contain its own requirements as comments using [noun] SHALL [verb] format with unique IDs. -->
@@ -91,14 +96,27 @@
 
         <!-- SETUP TAB -->
         <div id="content-setup" class="tab-content">
-            <!-- HBF.SU1: The Setup Tab SHALL include functionality to input the Grok API key with Show/Hide toggle. -->
-            <!-- HBF.SU2: The Setup Tab SHALL allow selection of any Grok model (default: grok-4.20-0309-reasoning). -->
-            <!-- HBF.SU3: The Setup Tab SHALL have pre-filled Collection ID and web_search toggle. -->
-            <!-- HBF.SU4: All setup changes SHALL auto-save to localStorage with versioned key. -->
-            <!-- HBF.SU5: The Setup Tab SHALL allow editing project title and SHALL display version and last-edited timestamp. -->
-            <!-- HBF.SU6: The app SHALL support export and import of full session state JSON from header controls. -->
-            <!-- HBF.SU7: The app SHALL support one-click backup export of the current HTML document. -->
-            <!-- HBF.SU8: The Setup Tab SHALL display save status and SHALL include a manual force-save action. -->
+            <!--
+            SETUP TAB – API HOST/ENDPOINT/MODEL SELECTION (HBF.SU-API)
+            Documentation:
+            - The Setup Tab now supports selection of API host (e.g., xapi, eapi), endpoint, and model.
+            - API host selection dynamically updates available endpoints and models.
+            - Each API host may have its own endpoint(s) and model list.
+            - Initial implementation supports only xapi and its endpoints/models.
+            - Requirements below are versioned and traceable.
+            -->
+            <!-- HBF.SU1: The Setup Tab SHALL include functionality to input the API key with Show/Hide toggle. -->
+            <!-- HBF.SU2: The Setup Tab SHALL allow selection of API host (e.g., xapi, eapi) and dynamically update available endpoints and models per host. -->
+            <!-- HBF.SU3: The Setup Tab SHALL allow selection of any model for the selected API host (default: xapi/grok-4.20-0309-reasoning). -->
+            <!-- HBF.SU4: The Setup Tab SHALL allow selection of API endpoint for the selected host (default: xapi/chat/completions). -->
+            <!-- HBF.SU5: The Setup Tab SHALL have pre-filled Collection ID and web_search toggle. -->
+            <!-- HBF.SU6: All setup changes SHALL auto-save to localStorage with versioned key. -->
+            <!-- HBF.SU7: The Setup Tab SHALL allow editing project title and SHALL display version and last-edited timestamp. -->
+            <!-- HBF.SU8: The app SHALL support export and import of full session state JSON from header controls. -->
+            <!-- HBF.SU9: The app SHALL support one-click backup export of the current HTML document. -->
+            <!-- HBF.SU10: The Setup Tab SHALL display save status and SHALL include a manual force-save action. -->
+            <!-- HBF.SU11: HerbalBookForge SHALL support alternate LLM API hosts and endpoints, with user-selectable API host, endpoint URL, and API key in Setup. Initial implementation SHALL use xapi, with planned support for eapi and others. -->
+            <!-- HBF.SU12: The Setup Tab requirements and documentation SHALL be updated to reflect API host/endpoint/model selection features. -->
             <!-- Implemented: v0.9.3 | Updated: v0.9.5 | Date: 2026-04-17 -->
 
             <div class="max-w-4xl mx-auto">
@@ -129,17 +147,30 @@
                         </div>
 
                         <div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
-                            <h3 class="uppercase text-emerald-400 text-sm font-medium mb-5 tracking-widest">Grok API Configuration</h3>
+                            <h3 class="uppercase text-emerald-400 text-sm font-medium mb-5 tracking-widest">LLM API Configuration</h3>
                             <div class="space-y-6">
                                 <div>
-                                    <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Grok API Key</label>
+                                    <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">API Host</label>
+                                    <select id="api-host" class="w-full bg-black/40 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-6 py-4 text-lg">
+                                        <option value="xapi" selected>X.AI (xapi)</option>
+                                        <!-- Future: <option value="eapi">EAPI (future)</option> -->
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">API Endpoint</label>
+                                    <select id="api-endpoint" class="w-full bg-black/40 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-6 py-4 text-lg">
+                                        <option value="https://api.x.ai/v1/chat/completions" selected>https://api.x.ai/v1/chat/completions</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">API Key</label>
                                     <div class="relative">
                                         <input id="api-key" type="password" class="w-full bg-black/40 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-6 py-4 text-lg" placeholder="gsk_...">
                                         <button onclick="toggleApiKeyVisibility()" id="api-key-toggle" class="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-emerald-300 text-sm font-medium">SHOW</button>
                                     </div>
                                 </div>
                                 <div>
-                                    <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Preferred Model</label>
+                                    <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Model</label>
                                     <select id="preferred-model" class="w-full bg-black/40 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-6 py-4 text-lg">
                                         <option value="grok-4.20-0309-reasoning" selected>grok-4.20-0309-reasoning (Recommended)</option>
                                         <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
@@ -235,10 +266,8 @@
                 </div>
 
                 <div class="flex items-center justify-between">
-                    <div id="goals-status" class="flex items-center gap-x-2 text-emerald-400">
-                        <span id="status-text">Ready</span>
-                    </div>
-                    <button onclick="acceptBookGoals()" class="px-10 py-4 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-semibold flex items-center gap-x-3">
+                    <div id="goals-status" class="flex items-center gap-x-2 text-emerald-400 text-sm font-medium min-h-[1.5em]"></div>
+                    <button onclick="acceptBookGoals()" id="accept-goals-btn" class="px-10 py-4 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-semibold flex items-center gap-x-3">
                         ✅ Accept Goals &amp; Generate Initial Outline
                     </button>
                 </div>
@@ -293,12 +322,12 @@
 
     <!-- CHAPTER OUTLINES TAB -->
     <div id="content-chapter-outlines" class="tab-content hidden">
-        <!-- HBF.CHO1: The Chapter Outlines Tab SHALL display one annotated card or sub-tab per chapter, each representing a chapter outline. -->
+        <!-- HBF.CHO1: The Chapter Outlines Tab SHALL provide a dropdown to select and edit a single chapter/section at a time. Only the selected chapter’s annotation and title are shown at once. -->
         <!-- HBF.CHO2: Each chapter outline SHALL be generated by the Chapter Annotator Agent using the book outline as context. -->
         <!-- HBF.CHO3: User SHALL be able to edit each chapter outline inline and explicitly save changes. -->
         <!-- HBF.CHO4: Chapter Outlines Tab SHALL support per-chapter regeneration via the Chapter Annotator Agent. -->
         <!-- HBF.CHO5: When the last chapter outline is created, the app SHALL resubmit all chapter outlines to the Chapter Annotator Agent for a second-pass consistency-editing step, harmonizing style, structure, and cross-references across chapters. -->
-        <!-- HBF.CHO6: The UI structure (cards or sub-tabs) SHALL be clearly documented and implemented consistently. -->
+        <!-- HBF.CHO6: The UI structure (dropdown and single-card view) SHALL be clearly documented and implemented consistently. The dropdown SHALL be present and populated with all chapter titles, and only the selected chapter’s annotation and title SHALL be visible and editable at a time. -->
         <!-- Implemented: v0.9.4 | Updated: v0.9.6 | Date: 2026-04-24 -->
 
         <div class="max-w-4xl mx-auto">
@@ -307,48 +336,11 @@
                 <p class="text-emerald-300">Annotated outlines for each chapter (generated by the Chapter Annotator Agent, with a second-pass consistency edit after all are created).</p>
             </div>
             <div id="chapter-list" class="space-y-6"></div>
-                <div class="mt-8 flex justify-end">
-                    <button id="consistency-edit-btn" onclick="consistencyEditAllChapters()" class="px-8 py-3 bg-emerald-700 hover:bg-emerald-600 rounded-3xl font-medium flex items-center gap-x-2">
-                        ♻️ Consistency Edit All Outlines
-                    </button>
-                </div>
-                window.consistencyEditAllChapters = async function() {
-                    const apiKey = (project.setup.apiKey || '').trim();
-                    if (!apiKey) {
-                        alert('Add your Grok API key in Setup before running consistency edit.');
-                        switchTab('setup');
-                        return;
-                    }
-                    if (!Array.isArray(project.chapterOutlines) || project.chapterOutlines.length === 0) {
-                        alert('No chapter outlines to edit.');
-                        return;
-                    }
-                    const btn = document.getElementById('consistency-edit-btn');
-                    const original = btn ? btn.textContent : '';
-                    if (btn) {
-                        btn.disabled = true;
-                        btn.textContent = 'Running consistency edit...';
-                    }
-                    try {
-                        for (let i = 0; i < project.chapterOutlines.length; i++) {
-                            const ch = project.chapterOutlines[i];
-                            const context = project.chapterOutlines.map((c, idx) => `Chapter ${idx + 1}: ${c.title}\n${c.annotation}`).join('\n\n');
-                            const prompt = `All chapter outlines so far:\n${context}\n\nEdit Chapter ${i + 1} for consistency in style, structure, and cross-references with the rest. Return Markdown only.`;
-                            const annotation = await annotateSingleChapter(ch.title, prompt);
-                            project.chapterOutlines[i].annotation = annotation;
-                        }
-                        saveProject();
-                        renderChapterList();
-                        alert('Consistency edit complete. All outlines harmonized.');
-                    } catch (err) {
-                        alert(`Consistency edit failed: ${err.message}`);
-                    } finally {
-                        if (btn) {
-                            btn.disabled = false;
-                            btn.textContent = original || '♻️ Consistency Edit All Outlines';
-                        }
-                    }
-                };
+            <div class="mt-8 flex justify-end">
+                <button id="consistency-edit-btn" onclick="consistencyEditAllChapters()" class="px-8 py-3 bg-emerald-700 hover:bg-emerald-600 rounded-3xl font-medium flex items-center gap-x-2">
+                    ♻️ Consistency Edit All Outlines
+                </button>
+            </div>
         </div>
     </div>
 
@@ -361,6 +353,12 @@
         <!-- TODO HBF.DR1: Implement chapter selection and Drafter Agent call pipeline for first-pass chapter drafting. -->
         <!-- TODO HBF.DR1 Status: Not started | Planned: v0.10 -->
         <!-- TODO HBF.DR2: Load accepted chapter annotation context into drafter requests and draft workspace. -->
+            <!-- HBF.CH1: The Chapter Outlines Tab SHALL display one annotated card per chapter, each representing a chapter outline. -->
+            <!-- HBF.CH2: Each chapter outline SHALL be generated by the Chapter Annotator Agent using the book outline as context. -->
+            <!-- HBF.CH3: User SHALL be able to edit each chapter outline inline and explicitly save changes. -->
+            <!-- HBF.CH4: Chapter Outlines Tab SHALL support per-chapter regeneration via the Chapter Annotator Agent. -->
+            <!-- HBF.CH5: When the last chapter outline is created, the app SHALL resubmit all chapter outlines to the Chapter Annotator Agent for a second-pass consistency-editing step, harmonizing style, structure, and cross-references across chapters. -->
+            <!-- HBF.CH6: The UI structure (cards or sub-tabs) SHALL be clearly documented and implemented consistently. -->
         <!-- TODO HBF.DR2 Status: Not started | Planned: v0.10 -->
         <!-- TODO HBF.DR3: Add iterative section-level generate/revise/approve controls with explicit human approvals. -->
         <!-- TODO HBF.DR3 Status: Not started | Planned: v0.10 -->
@@ -454,6 +452,7 @@
         </div>
     </div>
 
+
     </main>
 
     <footer class="fixed bottom-0 left-0 right-0 bg-black/80 border-t border-emerald-800 py-3 px-8 text-xs font-mono text-emerald-400 flex items-center justify-between z-50">
@@ -479,20 +478,11 @@
                 preferredModel: "grok-4.20-0309-reasoning"
             },
             prompts: {
-                bookGoalsAgent: `You are the Book Goals Agent – expert herbal book architect focused on helping the user define clear, practical, trustworthy book goals.`,
-                outliner: `You are the Outliner / Structurer Agent – expert herbal book architect.`,
-                chapterAnnotator: `You are the Chapter Annotator Agent – expert herbal book architect.
-Given chapter title + chapter context from the full outline, return Markdown only with:
-1) Chapter Objective
-2) Core Sections (with subsections)
-3) Key Claims to Verify
-4) Safety and Contraindication Checks
-5) Evidence and Citation Notes
-6) Tone and Reader Guidance
-7) Suggested Sidebars and Tables
-Keep it practical, safety-aware, and specific to herbal medicine.`,
+                bookGoalsAgent: `You are the Book Goals Agent – expert herbal book architect focused on helping the user define clear, practical, trustworthy book goals.\n\nWhen responding, always return ONLY the following fields in strict JSON format:\n{\n  \"mainGoal\": \"...\",\n  \"contentTypes\": \"...\",\n  \"tone\": \"...\",\n  \"audience\": \"...\",\n  \"length\": \"...\"\n}\nIf you cannot determine a value, leave it blank. Do not include any explanation or extra text.`,
+                outliner: `You are the Outliner / Structurer Agent – expert herbal book architect.\n\nWhen responding, always return ONLY the following fields in strict JSON format:\n{\n  \"outline\": \"...\"\n}\nThe 'outline' field must contain the full Markdown outline as a string. Do not include any explanation or extra text.\n\nEach chapter must be a Markdown heading in the format: ### Chapter N: Title\n\nExample:\n### Chapter 1: Introduction\n- Topic A\n- Topic B\n\n### Chapter 2: Herbal History\n- Topic C\n- Topic D`,
+                chapterAnnotator: `You are the Chapter Annotator Agent – expert herbal book architect.\nGiven chapter title + chapter context from the full outline, always return ONLY the following fields in strict JSON format:\n{\n  \"title\": \"...\",\n  \"annotation\": \"...\"\n}\nThe 'annotation' field must contain the full Markdown annotation for the chapter. Do not include any explanation or extra text.`,
                 drafter: `You are the Drafter Agent – expert writer in the friendly, practical style of Brigitte Mars.`,
-                safety: `You are the Safety & Accuracy Checker Agent – expert in herbal safety, dosages, contraindications, and extraction risks.`
+                safety: `You are the Safety & Accuracy Checker Agent – expert in herbal safety, dosages, contraindications, and extraction risks.\n\nWhen responding, always return ONLY the following fields in strict JSON format:\n{\n  \"flags\": [ ... ],\n  \"summary\": \"...\"\n}\nThe 'flags' field must be an array of flagged issues, and 'summary' is a string. Do not include any explanation or extra text.`
             },
             goals: {
                 mainGoal: "",
@@ -554,12 +544,21 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
         }
 
         function switchTab(tabId) {
+            console.log('[DEBUG] switchTab called with:', tabId);
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
             const target = document.getElementById(`content-${tabId}`);
-            if (target) target.classList.remove('hidden');
+            if (!target) {
+                console.warn(`[DEBUG] switchTab: No content div found for content-${tabId}`);
+            } else {
+                target.classList.remove('hidden');
+            }
             document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
             const btn = document.getElementById(`tab-${tabId}`);
-            if (btn) btn.classList.add('active');
+            if (!btn) {
+                console.warn(`[DEBUG] switchTab: No button found for tab-${tabId}`);
+            } else {
+                btn.classList.add('active');
+            }
         }
 
         function loadProject() {
@@ -800,34 +799,127 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
             const chat = document.getElementById('agent-chat');
             if (!chat) return;
             chat.innerHTML = project.goals.chatHistory.map(msg => {
-                if (msg.role === 'user') {
-                    return `<div class="text-right"><div class="inline-block bg-emerald-600 text-white rounded-3xl px-5 py-3 max-w-[75%]">${escapeHtml(msg.content)}</div></div>`;
+                let parsed;
+                let isJson = false;
+                try {
+                    parsed = JSON.parse(msg.content);
+                    isJson = typeof parsed === 'object' && parsed !== null;
+                } catch (e) {
+                    parsed = msg.content;
                 }
-                return `<div class="flex gap-x-3"><div class="text-3xl flex-shrink-0">🌿</div><div class="bg-black/70 rounded-3xl px-5 py-4 flex-1">${msg.content}</div></div>`;
+                if (msg.role === 'user') {
+                    return `<div class="text-right"><div class="inline-block bg-emerald-600 text-white rounded-3xl px-5 py-3 max-w-[75%]">${isJson ? `<pre class='text-xs'>${escapeHtml(JSON.stringify(parsed, null, 2))}</pre>` : escapeHtml(parsed)}</div></div>`;
+                }
+                // Assistant: render JSON nicely if possible, and show Copy to buttons if fields exist
+                if (isJson && (parsed.mainGoal || parsed.contentTypes || parsed.tone)) {
+                    let displayHTML = `<div class='bg-black/70 rounded-3xl p-6'>`;
+                    if (parsed.mainGoal) displayHTML += `<div class='mb-4'><strong>Main Goal</strong><br><div class='bg-emerald-950 p-4 rounded-2xl mt-2'>${escapeHtml(parsed.mainGoal)}</div><button type="button" class='mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl copy-to-btn' data-field="main" data-value="${escapeHtml(JSON.stringify(parsed.mainGoal))}">Copy to Main Goal</button></div>`;
+                    if (parsed.contentTypes) displayHTML += `<div class='mb-4'><strong>Content Types</strong><br><div class='bg-emerald-950 p-4 rounded-2xl mt-2 whitespace-pre-line'>${escapeHtml(parsed.contentTypes)}</div><button type="button" class='mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl copy-to-btn' data-field="content" data-value="${escapeHtml(JSON.stringify(parsed.contentTypes))}">Copy to Content Types</button></div>`;
+                    if (parsed.tone) displayHTML += `<div class='mb-4'><strong>Tone / Style</strong><br><div class='bg-emerald-950 p-4 rounded-2xl mt-2'>${escapeHtml(parsed.tone)}</div><button type="button" class='mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl copy-to-btn' data-field="tone" data-value="${escapeHtml(JSON.stringify(parsed.tone))}">Copy to Tone</button></div>`;
+                    displayHTML += `</div>`;
+                    return `<div class='flex gap-x-3'><div class='text-3xl flex-shrink-0'>🌿</div><div class='flex-1'>${displayHTML}</div></div>`;
+                }
+                // Fallback: render as before
+                return `<div class="flex gap-x-3"><div class="text-3xl flex-shrink-0">🌿</div><div class="bg-black/70 rounded-3xl px-5 py-4 flex-1">${isJson ? `<pre class='text-xs text-green-200'>${escapeHtml(JSON.stringify(parsed, null, 2))}</pre>` : escapeHtml(parsed)}</div></div>`;
             }).join('');
             chat.scrollTop = chat.scrollHeight;
         }
 
-        // Book Goals Agent (HBF.BG.BGA1)
+
+        // HBF.UNI1: Unified LLM API call function
+        async function callLlmAgent({
+            agent, // string: 'bookGoals', 'outliner', 'chapterAnnotator', etc.
+            context, // string: context to send to LLM
+            userPrompt, // string: user prompt or question
+            parseResponse, // function: (rawLLMResponse) => parsed
+            onStart, // optional: function to call before sending
+            onFinish, // optional: function to call after response
+            temperature = 0.7,
+            max_tokens = 1200
+        }) {
+            const apiKey = (project.setup.apiKey || '').trim();
+            if (!apiKey) throw new Error('Please enter your Grok API key in the Setup tab.');
+            if (typeof onStart === 'function') onStart();
+            // AGENT-TO-PROMPT MAPPING ENFORCEMENT (HBF.UNI4)
+            // Each agent must use its corresponding system prompt for every LLM call.
+            let systemPrompt = '';
+            switch (agent) {
+                case 'bookGoals':
+                    systemPrompt = project.prompts.bookGoalsAgent;
+                    break;
+                case 'outliner':
+                    systemPrompt = project.prompts.outliner;
+                    // Fallback to default Outliner prompt if missing
+                    if (!systemPrompt || !systemPrompt.trim()) {
+                        systemPrompt = `You are the Outliner / Structurer Agent – expert herbal book architect. Your job is to design a detailed, practical, and trustworthy book outline based on the user's goals. Always return a Markdown outline with clear chapter and section structure, and ensure the outline is suitable for a 200–300 page herbal book.`;
+                    }
+                    break;
+                case 'chapterAnnotator':
+                    systemPrompt = project.prompts.chapterAnnotator;
+                    break;
+                case 'drafter':
+                    systemPrompt = project.prompts.drafter;
+                    break;
+                case 'safety':
+                    systemPrompt = project.prompts.safety;
+                    break;
+                default:
+                    throw new Error(`Unknown agent type '${agent}' in callLlmAgent. Each LLM call must use a valid agent prompt.`);
+            }
+            // Log system prompt for debugging
+            console.log(`[DEBUG] LLM system prompt for agent '${agent}':`, systemPrompt);
+            // Defensive: ensure context and userPrompt are always strings
+            const safeContext = typeof context === 'string' ? context : '';
+            const safeUserPrompt = typeof userPrompt === 'string' ? userPrompt : '';
+            // If context is 'specificQA' (Outline tab chat), do NOT prepend it to the user message
+            const userContent = (agent === 'outliner' && context === 'specificQA')
+                ? safeUserPrompt
+                : (safeContext ? `${safeContext}\n\n${safeUserPrompt}` : safeUserPrompt);
+            const messages = [
+                { role: 'system', content: String(systemPrompt || '') },
+                { role: 'user', content: String(userContent || '') }
+            ];
+            const payload = {
+                model: project.setup.preferredModel,
+                messages,
+                temperature,
+                max_tokens
+            };
+            // REMOVE tools for all Outline Q&A chat requests (context: 'specificQA')
+            // Do not add tools to the payload for outline chat
+            // Debug: log payload for troubleshooting 422 errors
+            try {
+                console.log('[DEBUG] LLM API payload:', JSON.stringify(payload, null, 2));
+            } catch (e) {
+                console.log('[DEBUG] LLM API payload: [unserializable]', payload);
+            }
+            const endpoint = project.setup.apiEndpoint || 'https://api.x.ai/v1/chat/completions';
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(payload)
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            const rawReply = data?.choices?.[0]?.message?.content || '';
+            let parsed = rawReply;
+            if (typeof parseResponse === 'function') {
+                try { parsed = parseResponse(rawReply); } catch (e) { parsed = rawReply; }
+            }
+            if (typeof onFinish === 'function') onFinish(parsed, rawReply);
+            return parsed;
+        }
+
+        // Refactored Book Goals Agent (HBF.BG.BGA1, HBF.UNI1)
         async function sendToBookGoalsAgent() {
             const input = document.getElementById('agent-input').value.trim();
             if (!input) return;
-
-            const apiKey = project.setup.apiKey.trim();
-            if (!apiKey) {
-                alert("Please enter your Grok API key in the Setup tab.");
-                switchTab('setup');
-                return;
-            }
-
             const sendBtn = document.getElementById('send-btn');
             sendBtn.disabled = true;
-            sendBtn.textContent = 'Calling Book Goals Agent...';
-
-            project.goals.chatHistory.push({ role: 'user', content: input });
-            renderChatHistory();
-            document.getElementById('agent-input').value = '';
-
+            sendBtn.textContent = 'Sending...';
             try {
                 const currentState = {
                     mainGoal: document.getElementById('goal-main').value.trim(),
@@ -836,66 +928,67 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
                     audience: document.getElementById('goal-audience').value.trim(),
                     length: document.getElementById('goal-length').value
                 };
-
-                const response = await fetch("https://api.x.ai/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${apiKey}`
+                const userMessage = { request: input, state: currentState };
+                project.goals.chatHistory.push({ role: 'user', content: input, raw: userMessage });
+                const contextString =
+                    `Main Goal: ${currentState.mainGoal}\n` +
+                    `Content Types: ${currentState.contentTypes}\n` +
+                    `Tone/Style: ${currentState.tone}\n` +
+                    `Audience: ${currentState.audience}\n` +
+                    `Length: ${currentState.length}`;
+                const reply = await callLlmAgent({
+                    agent: 'bookGoals',
+                    context: contextString,
+                    userPrompt: `User request: ${input}`,
+                    parseResponse: (raw) => {
+                        try {
+                            return JSON.parse(raw);
+                        } catch (e) {
+                            return { error: 'Malformed JSON', raw };
+                        }
                     },
-                    body: JSON.stringify({
-                        model: project.setup.preferredModel,
-                        tools: buildApiTools(),
-                        messages: [
-                            { role: "system", content: project.prompts.bookGoalsAgent },
-                            ...project.goals.chatHistory.map(m => ({ role: m.role, content: m.content })),
-                            { role: "user", content: `Current state: ${JSON.stringify(currentState, null, 2)}\n\nUser request: ${input}` }
-                        ],
-                        temperature: 0.7,
-                        max_tokens: 1200
-                    })
+                    onStart: null,
+                    onFinish: (parsed, raw) => {
+                        project.goals.chatHistory.push({ role: 'assistant', content: JSON.stringify(parsed) });
+                        renderChatHistory();
+                        saveProject();
+                        document.getElementById('agent-input').focus();
+                    },
+                    temperature: 0.7,
+                    max_tokens: 1200
                 });
-
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-                const data = await response.json();
-                let reply = data.choices[0].message.content;
-
-                let suggestion = {};
-                try {
-                    const jsonMatch = reply.match(/\{[\s\S]*\}/);
-                    if (jsonMatch) suggestion = JSON.parse(jsonMatch[0]);
-                } catch (e) {}
-
-                let displayHTML = `<div class="bg-black/70 rounded-3xl p-6">`;
-                if (suggestion.mainGoal) displayHTML += `<div class="mb-4"><strong>Main Goal</strong><br><div class="bg-emerald-950 p-4 rounded-2xl mt-2">${escapeHtml(suggestion.mainGoal)}</div><button onclick="applySuggestion('main',${JSON.stringify(suggestion.mainGoal)})" class="mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl">Copy to Main Goal</button></div>`;
-                if (suggestion.contentTypes) displayHTML += `<div class="mb-4"><strong>Content Types</strong><br><div class="bg-emerald-950 p-4 rounded-2xl mt-2 whitespace-pre-line">${escapeHtml(suggestion.contentTypes)}</div><button onclick="applySuggestion('content',${JSON.stringify(suggestion.contentTypes)})" class="mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl">Copy to Content Types</button></div>`;
-                if (suggestion.tone) displayHTML += `<div class="mb-4"><strong>Tone / Style</strong><br><div class="bg-emerald-950 p-4 rounded-2xl mt-2">${escapeHtml(suggestion.tone)}</div><button onclick="applySuggestion('tone',${JSON.stringify(suggestion.tone)})" class="mt-2 text-xs bg-emerald-700 px-4 py-1 rounded-3xl">Copy to Tone</button></div>`;
-                if (suggestion.explanation) displayHTML += `<p class="text-xs text-emerald-400 mt-4">${escapeHtml(suggestion.explanation)}</p>`;
-                if (!suggestion.mainGoal && !suggestion.contentTypes && !suggestion.tone) {
-                    displayHTML += `<div class="whitespace-pre-wrap">${escapeHtml(reply)}</div>`;
-                }
-                displayHTML += `</div>`;
-
-                project.goals.chatHistory.push({ role: 'assistant', content: displayHTML });
-                renderChatHistory();
-                saveProject();
-
             } catch (err) {
-                project.goals.chatHistory.push({ role: 'assistant', content: `Error: ${err.message}` });
-                renderChatHistory();
+                alert(`Book Goals Agent failed: ${err.message}`);
             } finally {
                 sendBtn.disabled = false;
                 sendBtn.textContent = 'Send';
             }
         }
 
-        window.applySuggestion = function(field, text) {
-            if (field === 'main') { document.getElementById('goal-main').value = text; project.goals.mainGoal = text; }
-            else if (field === 'content') { document.getElementById('goal-content').value = text; project.goals.contentTypes = text; }
-            else if (field === 'tone') { document.getElementById('tone-custom').value = text; project.goals.tone = text; }
-            saveProject();
-        };
+        // Use event delegation for Copy To buttons to avoid JS errors with special characters
+        document.addEventListener('click', function(e) {
+            if (e.target && e.target.classList.contains('copy-to-btn')) {
+                const field = e.target.getAttribute('data-field');
+                let value = e.target.getAttribute('data-value');
+                try {
+                    value = JSON.parse(value);
+                } catch (err) {
+                    // fallback: use as-is
+                }
+                if (field === 'main') {
+                    document.getElementById('goal-main').value = value;
+                    project.goals.mainGoal = value;
+                } else if (field === 'content') {
+                    document.getElementById('goal-content').value = value;
+                    project.goals.contentTypes = value;
+                } else if (field === 'tone') {
+                    document.getElementById('tone-custom').value = value;
+                    project.goals.tone = value;
+                }
+                saveProject();
+                renderGoalsForm();
+            }
+        });
 
         function generateInitialOutlineFromGoals() {
             const title = project.meta.name || 'Herbal Medicine Book';
@@ -906,61 +999,109 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
         }
 
         async function acceptBookGoals() {
+            // HBF.BG.G2: Accept Goals SHALL generate an initial outline using the LLM, never static.
             project.goals.finalized = true;
             saveProject();
 
-            if (!project.outline || !project.outline.trim()) {
-                project.outline = generateInitialOutlineFromGoals();
-                document.getElementById('outline-editor').value = project.outline;
+            // Use goals-status for progress and error messages
+            const statusEl = document.getElementById('goals-status');
+            const acceptBtn = document.getElementById('accept-goals-btn');
+            if (statusEl) {
+                statusEl.textContent = 'Generating outline from LLM...';
+                statusEl.classList.remove('text-red-300');
+                statusEl.classList.add('text-emerald-300');
+            }
+            if (acceptBtn) acceptBtn.disabled = true;
+
+            let outlineError = null;
+            const contextString =
+                `Main Goal: ${project.goals.mainGoal}\n` +
+                `Content Types: ${project.goals.contentTypes}\n` +
+                `Tone/Style: ${project.goals.tone}\n` +
+                `Audience: ${project.goals.audience}\n` +
+                `Length: ${project.goals.length}`;
+            try {
+                console.log('[DEBUG] Calling LLM for outline with context:', contextString);
+                const result = await callLlmAgent({
+                    agent: 'outliner',
+                    context: contextString,
+                    userPrompt: 'Generate a detailed book outline in Markdown based on these goals. Return only the outline in strict JSON as { "outline": "..." }',
+                    parseResponse: (raw) => {
+                        try {
+                            return JSON.parse(raw);
+                        } catch (e) {
+                            return { error: 'Malformed JSON', raw };
+                        }
+                    },
+                    temperature: 0.5,
+                    max_tokens: 1800
+                });
+                let outline = result && result.outline ? result.outline : (result.raw || '');
+                console.log('[DEBUG] LLM outline response:', outline);
+                project.outline = outline;
+                document.getElementById('outline-editor').value = outline;
                 saveProject();
+                renderGoalsForm();
+                renderChapterList();
+                if (statusEl) {
+                    statusEl.textContent = 'Outline generated!';
+                    statusEl.classList.remove('text-red-300');
+                    statusEl.classList.add('text-emerald-300');
+                }
+            } catch (err) {
+                outlineError = err;
+                if (statusEl) {
+                    statusEl.textContent = 'Outline generation failed: ' + err.message;
+                    statusEl.classList.add('text-red-300');
+                    statusEl.classList.remove('text-emerald-300');
+                }
+                console.error('[ERROR] LLM outline generation failed:', err);
+                alert('Outline generation failed: ' + err.message);
+            } finally {
+                setTimeout(() => {
+                    if (statusEl) {
+                        statusEl.textContent = '';
+                        statusEl.classList.remove('text-red-300');
+                        statusEl.classList.add('text-emerald-300');
+                    }
+                    if (acceptBtn) acceptBtn.disabled = false;
+                }, 2000);
             }
 
             switchTab('outline');
         }
 
         async function sendToOutlinerForOutline() {
-            const apiKey = (project.setup.apiKey || '').trim();
             const currentOutline = (document.getElementById('outline-editor').value || '').trim();
             if (!currentOutline) {
                 alert('Please add an outline first.');
                 return;
             }
-            if (!apiKey) {
-                alert('Please enter your Grok API key in Setup.');
-                switchTab('setup');
-                return;
-            }
-
             const btn = document.getElementById('outline-send-btn');
             btn.disabled = true;
             const original = btn.textContent;
             btn.textContent = 'Improving outline...';
-
             try {
-                const response = await fetch('https://api.x.ai/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`
+                const improvedResult = await callLlmAgent({
+                    agent: 'outliner',
+                    context: '',
+                    userPrompt: `Improve this herbal book outline and return improved Markdown only in strict JSON as { "outline": "..." }\n\n${currentOutline}`,
+                    parseResponse: (raw) => {
+                        try {
+                            return JSON.parse(raw);
+                        } catch (e) {
+                            return { error: 'Malformed JSON', raw };
+                        }
                     },
-                    body: JSON.stringify({
-                        model: project.setup.preferredModel,
-                        tools: buildApiTools(),
-                        messages: [
-                            { role: 'system', content: project.prompts.outliner },
-                            { role: 'user', content: `Improve this herbal book outline and return improved Markdown only:\n\n${currentOutline}` }
-                        ],
-                        temperature: 0.5,
-                        max_tokens: 1800
-                    })
+                    onFinish: (parsed) => {
+                        let outline = parsed && parsed.outline ? parsed.outline : (parsed.raw || currentOutline);
+                        project.outline = outline;
+                        document.getElementById('outline-editor').value = outline;
+                        saveProject();
+                    },
+                    temperature: 0.5,
+                    max_tokens: 1800
                 });
-
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const data = await response.json();
-                const improved = data?.choices?.[0]?.message?.content?.trim() || currentOutline;
-                project.outline = improved;
-                document.getElementById('outline-editor').value = improved;
-                saveProject();
             } catch (err) {
                 alert(`Outline improvement failed: ${err.message}`);
             } finally {
@@ -970,15 +1111,25 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
         }
 
         function parseChaptersFromOutline(outlineText) {
+            // Extract all chapter headings (e.g., '## Chapter 1 - Title' or 'Chapter 1 - Title')
             const lines = (outlineText || '').split(/\r?\n/);
             const chapterTitles = [];
+            // Robust regex: matches '## Chapter 1: Title', '## Chapter 1 - Title', '## Chapter 1 – Title', etc.
+            const chapterRegex = /^#+\s*Chapter\s+\d+\s*[:\-–—]?\s*(.*)$/i;
+            const fallbackRegex = /^Chapter\s+\d+\s*[:\-–—]?\s*(.*)$/i;
             lines.forEach(line => {
-                const trimmed = line.trim();
-                if (/^(##\s*)?chapter\s+\d+\b/i.test(trimmed)) {
-                    chapterTitles.push(trimmed.replace(/^##\s*/i, '').trim());
+                let match = line.match(chapterRegex);
+                if (match) {
+                    chapterTitles.push(line.replace(/^#+\s*/, '').trim());
+                } else {
+                    match = line.match(fallbackRegex);
+                    if (match) {
+                        chapterTitles.push(line.trim());
+                    }
                 }
             });
-            return chapterTitles.filter(Boolean);
+            // Fallback: if no chapters found, return ['Chapter 1']
+            return chapterTitles.length > 0 ? chapterTitles : ['Chapter 1'];
         }
 
         function extractChapterContext(outlineText, chapterTitle) {
@@ -1001,35 +1152,20 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
         }
 
         async function annotateSingleChapter(chapterTitle, chapterContext) {
-            const apiKey = (project.setup.apiKey || '').trim();
-            if (!apiKey) {
-                throw new Error('Chapter Annotator requires a Grok API key in Setup.');
-            }
-
-            const response = await fetch('https://api.x.ai/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
+            return await callLlmAgent({
+                agent: 'chapterAnnotator',
+                context: '',
+                userPrompt: `Chapter title: ${String(chapterTitle)}\n\nChapter context from accepted outline:\n${typeof chapterContext === 'string' ? chapterContext : JSON.stringify(chapterContext, null, 2)}\n\nReturn only strict JSON as { "title": "...", "annotation": "..." }`,
+                parseResponse: (raw) => {
+                    try {
+                        return JSON.parse(raw);
+                    } catch (e) {
+                        return { error: 'Malformed JSON', raw };
+                    }
                 },
-                body: JSON.stringify({
-                    model: project.setup.preferredModel,
-                    tools: buildApiTools(),
-                    messages: [
-                        { role: 'system', content: project.prompts.chapterAnnotator },
-                        {
-                            role: 'user',
-                            content: `Chapter title: ${chapterTitle}\n\nChapter context from accepted outline:\n${chapterContext}\n\nReturn Markdown only.`
-                        }
-                    ],
-                    temperature: 0.4,
-                    max_tokens: 1600
-                })
+                temperature: 0.4,
+                max_tokens: 1600
             });
-
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
-            return (data?.choices?.[0]?.message?.content || '').trim() || chapterAnnotationTemplate(chapterTitle);
         }
 
         function setOutlineGenerationStatus(message, isError = false) {
@@ -1056,8 +1192,17 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
                 if (typeof onProgress === 'function') {
                     onProgress({ index: i, total: chapterTitles.length, title, phase: 'running' });
                 }
-                const annotation = await annotateSingleChapter(title, context);
-                annotations.push({ title, annotation });
+                const result = await annotateSingleChapter(title, context);
+                // Always store annotation as a string
+                if (result && typeof result === 'object' && result.title && result.annotation) {
+                    annotations.push({ title: result.title, annotation: result.annotation });
+                } else if (result && typeof result === 'object' && result.raw) {
+                    annotations.push({ title, annotation: result.raw });
+                } else if (typeof result === 'string') {
+                    annotations.push({ title, annotation: result });
+                } else {
+                    annotations.push({ title, annotation: chapterAnnotationTemplate(title) });
+                }
             }
             return annotations;
         }
@@ -1104,7 +1249,7 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
             renderChapterList();
             saveProject();
             setOutlineGenerationStatus(`Completed ${normalizedTitles.length} chapter annotation${normalizedTitles.length === 1 ? '' : 's'}.`);
-            switchTab('chapters');
+            switchTab('chapter-outlines');
         }
 
         function saveOutline() {
@@ -1114,6 +1259,17 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
         }
 
         function renderSpecificOutlineChat() {
+                    // Add a toggle for full outline Q&A mode (shown above chat)
+                    const chatContainer = document.getElementById('outline-specific-chat-container');
+                    if (chatContainer && !document.getElementById('full-outline-toggle')) {
+                        const toggleDiv = document.createElement('div');
+                        toggleDiv.className = 'mb-4 flex items-center gap-3';
+                        toggleDiv.innerHTML = `
+                            <input type="checkbox" id="full-outline-toggle" class="mr-2" />
+                            <label for="full-outline-toggle" class="text-emerald-300">Send full outline in chat (may cause API errors)</label>
+                        `;
+                        chatContainer.parentNode.insertBefore(toggleDiv, chatContainer);
+                    }
             const chat = document.getElementById('outline-specific-chat');
             if (!chat) return;
             chat.innerHTML = outlineSpecificHistory.map(msg => {
@@ -1127,48 +1283,87 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
 
         async function sendSpecificOutlineQuestion() {
             const inputEl = document.getElementById('outline-specific-input');
-            const question = (inputEl?.value || '').trim();
+            let question = (inputEl?.value || '').trim();
             if (!question) return;
+
+            // Defensive: ensure outline is a string
+            let outlineText = typeof project.outline === 'string' ? project.outline : '';
+            // Remove triple backticks and 'markdown' language tag if present
+            outlineText = outlineText.replace(/```markdown[\r\n]+/gi, '').replace(/```/g, '');
+            // Defensive: if outline is empty, send a placeholder
+            if (!outlineText) outlineText = '[No outline present]';
+
+            // Check if full outline Q&A mode is enabled
+            const useFullOutline = document.getElementById('full-outline-toggle')?.checked;
+            let outlineContext = '';
+            let callLlmAgentArgs;
+            if (useFullOutline) {
+                // Send like 'improve outline' flow: no tools, no 'specificQA' context
+                outlineContext = '';
+                callLlmAgentArgs = {
+                    agent: 'outliner',
+                    context: '',
+                    userPrompt: `Outline context:\n\n${outlineText}\n\nQuestion: ${question}`,
+                    parseResponse: (raw) => raw.trim() || 'No response',
+                    temperature: 0.5,
+                    max_tokens: 1200,
+                    onFinish: (parsed) => {
+                        outlineSpecificHistory.push({ role: 'assistant', content: parsed });
+                        renderSpecificOutlineChat();
+                    }
+                };
+            } else {
+                // Try to extract only the relevant chapter or summary for the LLM payload
+                const chapterMatch = question.match(/chapter\s*(\d+)/i);
+                if (chapterMatch) {
+                    const chapterNum = parseInt(chapterMatch[1], 10);
+                    // Find all chapter headings
+                    const lines = outlineText.split(/\r?\n/);
+                    const chapterRegex = new RegExp(`^#+\s*Chapter\s+${chapterNum}[^\n]*$`, 'i');
+                    let startIdx = -1, endIdx = lines.length;
+                    for (let i = 0; i < lines.length; i++) {
+                        if (chapterRegex.test(lines[i])) {
+                            startIdx = i;
+                            break;
+                        }
+                    }
+                    if (startIdx !== -1) {
+                        // Find the next chapter heading
+                        for (let j = startIdx + 1; j < lines.length; j++) {
+                            if (/^#+\s*Chapter\s+\d+/i.test(lines[j])) {/* Lines 1300-1302 omitted */}
+                        }
+                        outlineContext = lines.slice(startIdx, endIdx).join('\n');
+                    }
+                }
+                // If not found, or no chapter mentioned, send only the table of contents (chapter titles)
+                if (!outlineContext) {
+                    // Extract all chapter headings
+                    const chapterLines = (outlineText.match(/^#+\s*Chapter\s+\d+[^\n]*$/gim) || []).join('\n');
+                    outlineContext = chapterLines || '[No chapter headings found]';
+                }
+                callLlmAgentArgs = {
+                    agent: 'outliner',
+                    context: 'specificQA', // triggers tools in callLlmAgent
+                    userPrompt: `Outline context:\n\n${outlineContext}\n\nQuestion: ${question}`,
+                    parseResponse: (raw) => raw.trim() || 'No response',
+                    temperature: 0.5,
+                    max_tokens: 1200,
+                    onFinish: (parsed) => {
+                        outlineSpecificHistory.push({ role: 'assistant', content: parsed });
+                        renderSpecificOutlineChat();
+                    }
+                };
+            }
 
             outlineSpecificHistory.push({ role: 'user', content: question });
             renderSpecificOutlineChat();
             inputEl.value = '';
-
-            const apiKey = (project.setup.apiKey || '').trim();
-            if (!apiKey) {
-                outlineSpecificHistory.push({ role: 'assistant', content: 'Add your Grok API key in Setup to use this chat.' });
-                renderSpecificOutlineChat();
-                return;
-            }
-
             try {
-                const response = await fetch('https://api.x.ai/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`
-                    },
-                    body: JSON.stringify({
-                        model: project.setup.preferredModel,
-                        tools: buildApiTools(),
-                        messages: [
-                            { role: 'system', content: project.prompts.outliner },
-                            { role: 'user', content: `Current outline:\n\n${project.outline || ''}\n\nQuestion: ${question}` }
-                        ],
-                        temperature: 0.5,
-                        max_tokens: 1200
-                    })
-                });
-
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const data = await response.json();
-                const reply = data?.choices?.[0]?.message?.content?.trim() || 'No response';
-                outlineSpecificHistory.push({ role: 'assistant', content: reply });
+                const reply = await callLlmAgent(callLlmAgentArgs);
             } catch (err) {
                 outlineSpecificHistory.push({ role: 'assistant', content: `Error: ${err.message}` });
+                renderSpecificOutlineChat();
             }
-
-            renderSpecificOutlineChat();
         }
 
         function editChapter(index) {
@@ -1178,15 +1373,17 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
 
         /**
          * Chapter Outlines Tab UI Structure (HBF.CHO6)
-         * - Displays one annotated card per chapter.
+         * - Displays a dropdown to select a single chapter/section at a time.
+         * - Only the selected chapter’s annotation and title are shown and editable at once.
+         * - The dropdown is always present and populated with all chapter titles.
          * - Each card includes:
          *   - Editable chapter title (input)
          *   - Editable annotation (textarea)
          *   - Edit, Regenerate, and Save buttons
-         * - Cards are rendered in a vertical list (space-y-6)
          * - All actions are per-chapter and update the project state
          * - UI is consistent with requirements and documented here
          */
+        // Dropdown-based chapter navigation and single-chapter editing
         function renderChapterList() {
             const list = document.getElementById('chapter-list');
             if (!list) return;
@@ -1196,17 +1393,44 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
                 return;
             }
 
-            list.innerHTML = chapters.map((ch, i) => {
-                return `<div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
-                    <div class="flex items-center justify-between mb-4 gap-4">
-                        <input id="chapter-title-${i}" value="${escapeHtml(ch.title || `Chapter ${i + 1}`)}" class="flex-1 bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-4 py-3 text-lg" />
-                        <button onclick="editChapter(${i})" class="px-4 py-2 border border-emerald-600 hover:bg-emerald-900 rounded-3xl text-sm">Edit</button>
-                        <button onclick="regenerateChapterAnnotation(${i})" class="px-4 py-2 border border-emerald-600 hover:bg-emerald-900 rounded-3xl text-sm">Regenerate</button>
-                        <button onclick="saveChapter(${i})" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm">Save</button>
-                    </div>
-                    <textarea id="chapter-annotation-${i}" rows="10" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl p-5 leading-relaxed resize-y">${escapeHtml(ch.annotation || '')}</textarea>
-                </div>`;
-            }).join('');
+            // Track selected chapter index in project state (persisted)
+            if (typeof project.selectedChapterIndex !== 'number' || project.selectedChapterIndex < 0 || project.selectedChapterIndex >= chapters.length) {
+                project.selectedChapterIndex = 0;
+            }
+
+            // Dropdown for chapter selection
+            let dropdown = `<div class="mb-6 flex items-center gap-4">
+                <label for="chapter-select" class="text-emerald-300 font-medium">Select Chapter:</label>
+                <select id="chapter-select" class="bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-4 py-3 text-lg">
+                    ${chapters.map((ch, i) => `<option value="${i}" ${i === project.selectedChapterIndex ? 'selected' : ''}>${escapeHtml(ch.title || `Chapter ${i + 1}`)}</option>`).join('')}
+                </select>
+            </div>`;
+
+            // Only show the selected chapter's card
+            const i = project.selectedChapterIndex;
+            const ch = chapters[i];
+            let annotationText = typeof ch.annotation === 'string' ? ch.annotation : JSON.stringify(ch.annotation, null, 2);
+            let card = `<div class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-8">
+                <div class="flex items-center justify-between mb-4 gap-4">
+                    <input id="chapter-title-${i}" value="${escapeHtml(ch.title || `Chapter ${i + 1}`)}" class="flex-1 bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-4 py-3 text-lg" />
+                    <button onclick="editChapter(${i})" class="px-4 py-2 border border-emerald-600 hover:bg-emerald-900 rounded-3xl text-sm">Edit</button>
+                    <button onclick="regenerateChapterAnnotation(${i})" class="px-4 py-2 border border-emerald-600 hover:bg-emerald-900 rounded-3xl text-sm">Regenerate</button>
+                    <button onclick="saveChapter(${i})" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm">Save</button>
+                </div>
+                <textarea id="chapter-annotation-${i}" rows="10" class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl p-5 leading-relaxed resize-y">${escapeHtml(annotationText || '')}</textarea>
+            </div>`;
+
+            list.innerHTML = dropdown + card;
+
+            // Bind dropdown change event
+            const select = document.getElementById('chapter-select');
+            if (select) {
+                select.onchange = function(e) {
+                    project.selectedChapterIndex = parseInt(e.target.value, 10);
+                    saveProject();
+                    renderChapterList();
+                };
+            }
         }
 
         window.regenerateChapterAnnotation = async function(index) {
@@ -1228,10 +1452,12 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
 
             try {
                 const annotation = await annotateSingleChapter(title, context);
-                textarea.value = annotation;
+                // If annotation is an object (from parseResponse), extract .annotation, else use as string
+                let annotationText = annotation && typeof annotation === 'object' && annotation.annotation ? annotation.annotation : annotation;
+                textarea.value = annotationText;
                 if (!project.chapterOutlines[index]) project.chapterOutlines[index] = {};
                 project.chapterOutlines[index].title = title;
-                project.chapterOutlines[index].annotation = annotation;
+                project.chapterOutlines[index].annotation = annotationText;
                 saveProject();
             } catch (err) {
                 textarea.value = original;
@@ -1243,11 +1469,55 @@ Keep it practical, safety-aware, and specific to herbal medicine.`,
 
         window.saveChapter = function(index) {
             const title = document.getElementById(`chapter-title-${index}`)?.value || `Chapter ${index + 1}`;
-            const annotation = document.getElementById(`chapter-annotation-${index}`)?.value || '';
+            let annotation = document.getElementById(`chapter-annotation-${index}`)?.value || '';
+            // Defensive: if annotation is an object, convert to string
+            if (typeof annotation !== 'string') {
+                annotation = JSON.stringify(annotation, null, 2);
+            }
             if (!project.chapterOutlines[index]) project.chapterOutlines[index] = {};
             project.chapterOutlines[index].title = title;
             project.chapterOutlines[index].annotation = annotation;
             saveProject();
+            renderChapterList();
+        };
+
+        window.consistencyEditAllChapters = async function() {
+            const apiKey = (project.setup.apiKey || '').trim();
+            if (!apiKey) {
+                alert('Add your Grok API key in Setup before running consistency edit.');
+                switchTab('setup');
+                return;
+            }
+            if (!Array.isArray(project.chapterOutlines) || project.chapterOutlines.length === 0) {
+                alert('No chapter outlines to edit.');
+                return;
+            }
+            const btn = document.getElementById('consistency-edit-btn');
+            const original = btn ? btn.textContent : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Running consistency edit...';
+            }
+            try {
+                for (let i = 0; i < project.chapterOutlines.length; i++) {
+                    const ch = project.chapterOutlines[i];
+                    // Ensure annotation is always a string for context
+                    const context = project.chapterOutlines.map((c, idx) => `Chapter ${idx + 1}: ${c.title}\n${typeof c.annotation === 'string' ? c.annotation : JSON.stringify(c.annotation, null, 2)}`).join('\n\n');
+                    const prompt = `All chapter outlines so far:\n${context}\n\nEdit Chapter ${i + 1} for consistency in style, structure, and cross-references with the rest. Return Markdown only.`;
+                    const annotation = await annotateSingleChapter(ch.title, prompt);
+                    project.chapterOutlines[i].annotation = annotation;
+                }
+                saveProject();
+                renderChapterList();
+                alert('Consistency edit complete. All outlines harmonized.');
+            } catch (err) {
+                alert(`Consistency edit failed: ${err.message}`);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = original || '♻️ Consistency Edit All Outlines';
+                }
+            }
         };
 
         function updateFooter() {

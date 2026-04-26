@@ -40,9 +40,29 @@ A specialized AI-powered book creation tool designed for crafting herbal medicin
 
 - `HerbalBookForge.html` - Complete herbal book creation interface
 
+## Testing
+
+HerbalBookForge includes comprehensive test coverage:
+
+- **Smoke Tests**: Quick validation of tab loading and UI structure (`herbalbookforge.smoke.spec.js`)
+- **Integration Tests**: End-to-end workflows with real LLM API calls including:
+  - Book Goals Agent interaction
+  - Outline generation
+  - Chapter outline creation with Chapter Annotator Agent
+  - Project state persistence
+
+To run tests:
+```bash
+npx playwright test --project=herbalbookforge-smoke
+npx playwright test --project=herbalbookforge-integration
+```
+
+Integration tests require `GROK_API_KEY` configured in `.env` file.
+
 ## Version
 
-Current version: 0.9.5
+Current version: 0.9.5 (Latest stable)
+Planned: 0.9.6 with Drafting and Safety features
 
 ## Important Notes
 
