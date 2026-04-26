@@ -8,6 +8,8 @@
     "node_modules/": true
   },
   "chat.tools.terminal.autoApprove": {
-    "npx playwright": true
+    "npx playwright": true,
+    "gh": true,
+    "16..25": true
   }
 }
