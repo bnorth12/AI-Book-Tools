@@ -567,3 +567,228 @@ test.describe('HerbalBookForge Drafting Integration Tests (HBFIT.9–13)', () =>
     console.log('✅ [HBFIT.13] Draft content reflects book goals context — HBFIT.13 PASSED');
   });
 });
+
+// ============================================================
+// HBFIT.14–17: Safety tab integration tests (Sprint 3)
+// Uses localStorage injection to pre-load project state with a
+// chapter draft so the Safety tab scan controls are visible.
+// HBFIT.14 and HBFIT.17 require a real API call; HBFIT.15/16 are
+// UI/persistence tests that can run with injected mock report data.
+// ============================================================
+
+// Shared factory: project state with one chapter draft + optional safetyReport
+function makeSafetyProjectState({ apiKey = '', withReport = false } = {}) {
+  const draft = {
+    chapterId: 0,
+    chapterTitle: 'Chapter 1: Introduction to Medicinal Herbs',
+    outlineContext: 'Overview of key medicinal herbs including elderberry and comfrey.',
+    draftText: 'Comfrey (Symphytum officinale) is a traditional wound-healing herb. However, comfrey contains pyrrolizidine alkaloids (PAs) that may cause hepatotoxicity with internal use. Always use topically only and avoid use during pregnancy. Elderberry syrup is safe for most adults at 1 tablespoon daily; avoid higher doses without medical guidance.',
+    qualityFlags: [],
+    validation: null,
+    revisionHistory: [],
+    lastUpdated: new Date().toISOString()
+  };
+  const safetyReport = withReport ? {
+    scanScope: 'full',
+    scanTimestamp: new Date().toISOString(),
+    summary: 'Two issues found: PA content risk from comfrey, and a dosage note for elderberry.',
+    flags: [
+      {
+        chapterId: '0',
+        chapterTitle: 'Chapter 1: Introduction to Medicinal Herbs',
+        flagType: 'PA_CONTENT',
+        flaggedText: 'comfrey contains pyrrolizidine alkaloids (PAs)',
+        suggestion: 'Add explicit internal-use contraindication and recommend topical use only.'
+      },
+      {
+        chapterId: '0',
+        chapterTitle: 'Chapter 1: Introduction to Medicinal Herbs',
+        flagType: 'DOSAGE',
+        flaggedText: '1 tablespoon daily',
+        suggestion: 'Specify that dosage recommendations vary by age/weight and cite a reference.'
+      }
+    ],
+    lastUpdated: new Date().toISOString()
+  } : null;
+  return {
+    meta: { version: '0.11.0' },
+    setup: {
+      apiKey,
+      apiEndpoint: 'https://api.x.ai/v1/chat/completions',
+      preferredModel: 'grok-4.20-0309-reasoning',
+      projectName: 'Safety Integration Test Book'
+    },
+    goals: {
+      mainGoal: 'A guide to medicinal herbs',
+      tone: 'Friendly, practical',
+      audience: 'Adult beginners',
+      contentTypes: 'Herb profiles, safety guidelines',
+      chatHistory: []
+    },
+    outline: { text: '## Chapter 1: Introduction to Medicinal Herbs', accepted: true },
+    chapterOutlines: [{ id: 0, title: 'Chapter 1: Introduction to Medicinal Herbs', annotation: 'Comfrey and elderberry safety notes.' }],
+    drafts: [draft],
+    safetyReport,
+    prompts: { bookGoalsAgent: '', outliner: '', chapterAnnotator: '', drafter: '', safety: '' }
+  };
+}
+
+test.describe('HerbalBookForge Safety Integration Tests (HBFIT.14–17)', () => {
+  test.beforeEach(async ({ page }) => {
+    test.skip(!GROK_API_KEY || GROK_API_KEY === 'your_grok_api_key_here', 'GROK_API_KEY not configured in .env');
+  });
+
+  // HBFIT.14: Full-manuscript safety scan via Safety Agent
+  test('HBFIT.14 — Full-manuscript safety scan returns valid { flags[], summary } structure', async ({ page }) => {
+    const state = makeSafetyProjectState({ apiKey: GROK_API_KEY });
+
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+    await page.evaluate((s) => {
+      localStorage.setItem('herbalBookForgeProject_v0.11.0', JSON.stringify(s));
+    }, state);
+    await page.reload();
+    await page.waitForSelector('button#tab-safety', { timeout: 5000 });
+
+    // Navigate to Safety tab
+    await page.click('button#tab-safety');
+    await page.waitForSelector('#content-safety:not(.hidden)', { timeout: 5000 });
+
+    // Scan controls should be visible (draft exists)
+    await expect(page.locator('[data-testid="safety-scope-select"]')).toBeVisible();
+    await expect(page.locator('[data-testid="safety-scan-btn"]')).toBeVisible();
+
+    // Verify empty state is hidden (draft exists)
+    const emptyState = page.locator('[data-testid="safety-empty-state"]');
+    await expect(emptyState).toBeHidden();
+
+    console.log('📤 [HBFIT.14] Triggering full-manuscript safety scan...');
+    await page.click('[data-testid="safety-scan-btn"]');
+
+    // Wait for scan to complete — report panel becomes visible
+    await page.waitForSelector('[data-testid="safety-report"]:not(.hidden)', { timeout: 120000 });
+
+    console.log('✅ [HBFIT.14] Safety report panel visible after scan');
+
+    // Verify summary is populated
+    const summary = await page.locator('[data-testid="safety-summary"]').textContent();
+    expect(summary.trim().length).toBeGreaterThan(10);
+    console.log(`✅ [HBFIT.14] Summary: "${summary.trim().substring(0, 80)}..."`);
+
+    // Verify flags were saved to localStorage with valid structure
+    const saved = await page.evaluate(() => {
+      const raw = localStorage.getItem('herbalBookForgeProject_v0.11.0');
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (!p.safetyReport) return null;
+      return {
+        hasFlags: Array.isArray(p.safetyReport.flags),
+        hasSummary: typeof p.safetyReport.summary === 'string' && p.safetyReport.summary.length > 0,
+        hasTimestamp: typeof p.safetyReport.scanTimestamp === 'string',
+        scanScope: p.safetyReport.scanScope
+      };
+    });
+    expect(saved).not.toBeNull();
+    expect(saved.hasFlags).toBe(true);
+    expect(saved.hasSummary).toBe(true);
+    expect(saved.hasTimestamp).toBe(true);
+    expect(saved.scanScope).toBe('full');
+    console.log('✅ [HBFIT.14] Safety report JSON structure validated in localStorage — HBFIT.14 PASSED');
+  });
+
+  // HBFIT.15: Safety report flags are rendered in the Safety tab UI
+  test('HBFIT.15 — Safety report flags render in Safety tab UI after scan completes', async ({ page }) => {
+    // Inject pre-built state with a stored safety report (no API call needed)
+    const state = makeSafetyProjectState({ apiKey: GROK_API_KEY, withReport: true });
+
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+    await page.evaluate((s) => {
+      localStorage.setItem('herbalBookForgeProject_v0.11.0', JSON.stringify(s));
+    }, state);
+    await page.reload();
+    await page.waitForSelector('button#tab-safety', { timeout: 5000 });
+
+    await page.click('button#tab-safety');
+    await page.waitForSelector('#content-safety:not(.hidden)', { timeout: 5000 });
+
+    // Report should render immediately from stored state
+    await expect(page.locator('[data-testid="safety-report"]')).not.toHaveClass(/hidden/);
+
+    // Verify summary is rendered
+    const summary = await page.locator('[data-testid="safety-summary"]').textContent();
+    expect(summary).toContain('PA content risk');
+    console.log('✅ [HBFIT.15] Summary rendered from stored report');
+
+    // Verify flags are rendered in the list
+    const flagItems = page.locator('[data-testid="safety-flags-list"] li');
+    const flagCount = await flagItems.count();
+    expect(flagCount).toBe(2);
+    console.log(`✅ [HBFIT.15] ${flagCount} flag(s) rendered in flags list`);
+
+    // Verify flag type badge text is visible
+    const firstFlagText = await flagItems.first().textContent();
+    expect(firstFlagText).toMatch(/PA_CONTENT|pyrrolizidine/i);
+    console.log('✅ [HBFIT.15] Flag type badge and content rendered — HBFIT.15 PASSED');
+  });
+
+  // HBFIT.16: Safety report persists across page reload (localStorage round-trip)
+  test('HBFIT.16 — Safety report persists across full page reload', async ({ page }) => {
+    const state = makeSafetyProjectState({ apiKey: GROK_API_KEY, withReport: true });
+
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+    await page.evaluate((s) => {
+      localStorage.setItem('herbalBookForgeProject_v0.11.0', JSON.stringify(s));
+    }, state);
+    await page.reload();
+    await page.waitForSelector('button#tab-safety', { timeout: 5000 });
+
+    // First load — verify report renders
+    await page.click('button#tab-safety');
+    await page.waitForSelector('#content-safety:not(.hidden)', { timeout: 5000 });
+    await expect(page.locator('[data-testid="safety-report"]')).not.toHaveClass(/hidden/);
+    const flagCountBefore = await page.locator('[data-testid="safety-flags-list"] li').count();
+    expect(flagCountBefore).toBe(2);
+    console.log('✅ [HBFIT.16] Safety report visible on first load');
+
+    // Reload page
+    await page.reload();
+    await page.waitForSelector('button#tab-safety', { timeout: 5000 });
+    await page.click('button#tab-safety');
+    await page.waitForSelector('#content-safety:not(.hidden)', { timeout: 5000 });
+
+    // Report should still render after reload
+    await expect(page.locator('[data-testid="safety-report"]')).not.toHaveClass(/hidden/);
+    const flagCountAfter = await page.locator('[data-testid="safety-flags-list"] li').count();
+    expect(flagCountAfter).toBe(2);
+    console.log(`✅ [HBFIT.16] ${flagCountAfter} flag(s) still rendered after reload — HBFIT.16 PASSED`);
+  });
+
+  // HBFIT.17: Navigate-to-draft action switches to Drafting tab and selects correct chapter
+  test('HBFIT.17 — Flag navigate-to-draft switches to Drafting tab and selects referenced chapter', async ({ page }) => {
+    const state = makeSafetyProjectState({ apiKey: GROK_API_KEY, withReport: true });
+
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+    await page.evaluate((s) => {
+      localStorage.setItem('herbalBookForgeProject_v0.11.0', JSON.stringify(s));
+    }, state);
+    await page.reload();
+    await page.waitForSelector('button#tab-safety', { timeout: 5000 });
+
+    await page.click('button#tab-safety');
+    await page.waitForSelector('#content-safety:not(.hidden)', { timeout: 5000 });
+    await expect(page.locator('[data-testid="safety-report"]')).not.toHaveClass(/hidden/);
+
+    // Click the navigate-to-draft button on the first flag
+    const navBtn = page.locator('[data-testid="safety-flags-list"] li').first().locator('button');
+    await expect(navBtn).toBeVisible();
+    await navBtn.click();
+
+    // Verify Drafting tab is now active
+    await page.waitForSelector('#content-drafting:not(.hidden)', { timeout: 5000 });
+    console.log('✅ [HBFIT.17] Switched to Drafting tab');
+
+    // Verify chapter 0 is selected in the draft chapter select
+    const selectValue = await page.locator('[data-testid="draft-chapter-select"]').inputValue();
+    expect(selectValue).toBe('0');
+    console.log(`✅ [HBFIT.17] Draft chapter selector shows chapter 0 — HBFIT.17 PASSED`);
+  });
+});

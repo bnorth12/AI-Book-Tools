@@ -491,25 +491,69 @@
         </div>
     </div>
 
-    <!-- SAFETY TAB – DETAILED TODO -->
+    <!-- SAFETY TAB – Sprint 3 (v0.11.0) -->
     <div id="content-safety" class="tab-content hidden">
         <!-- HBF.SA1: The Safety Tab SHALL provide safety checking using the Safety & Accuracy Checker Agent. -->
-        <!-- HBF.SA2: The Safety Tab SHALL scan the entire manuscript or selected chapters for contraindications, dosage issues, extraction risks, and PA content limits (e.g., comfrey). -->
-        <!-- HBF.SA3: The Safety Tab SHALL generate a safety report with flagged items and suggested fixes. -->
-        <!-- HBF.SA4: The Safety Tab SHALL integrate with the Drafter and Chapter Outlines for real-time safety validation. -->
-        <!-- TODO HBF.SA1: Implement Safety Checker Agent call flow and result rendering panel. -->
-        <!-- TODO HBF.SA1 Status: Not started | Planned: v0.10 -->
-        <!-- TODO HBF.SA2: Add selectable scan scope (full manuscript or chapter) and safety-rule scan orchestration. -->
-        <!-- TODO HBF.SA2 Status: Not started | Planned: v0.10 -->
-        <!-- TODO HBF.SA3: Generate structured safety report with flags, severity, and suggested remediation notes. -->
-        <!-- TODO HBF.SA3 Status: Not started | Planned: v0.10 -->
-        <!-- TODO HBF.SA4: Wire safety checks into drafting and chapter-outline edits for re-validation loops. -->
-        <!-- TODO HBF.SA4 Status: Not started | Planned: v0.10 -->
+        <!-- HBF.SA2: The Safety Tab SHALL scan the full manuscript or selected chapters for contraindications, dosage issues, extraction risks, and PA content limits (e.g., comfrey). The scan SHALL send all available chapter draft texts as context to the Safety agent. -->
+        <!-- HBF.SA3: The Safety Tab SHALL generate a structured safety report. Each flag SHALL include: chapterId, chapterTitle, flagType (CONTRAINDICATION|DOSAGE|PA_CONTENT|EXTRACTION_RISK|GENERAL_SAFETY), flaggedText, suggestion. Strict JSON: { "flags": [...], "summary": "..." }. -->
+        <!-- HBF.SA4: The Safety Tab SHALL integrate with the Drafting tab — each flag SHALL provide a navigate-to-draft action that switches the active tab to Drafting and selects the referenced chapter. -->
+        <!-- HBF.SA5: Safety report SHALL persist in project.safetyReport with fields: scanScope, scanTimestamp, flags[], summary, lastUpdated. -->
+        <!-- HBF.SA6: All Safety tab controls SHALL use stable id and data-testid attributes. -->
+        <!-- Sprint 3 Status: In progress | Target: v0.11.0 -->
+        <div class="max-w-5xl mx-auto">
+            <h2 class="text-4xl font-semibold tracking-tight section-header">Safety &amp; Accuracy</h2>
+            <p class="text-emerald-300">Run a safety audit across your manuscript using the Safety &amp; Accuracy Checker Agent. Review contraindications, dosage concerns, PA content limits, and extraction risks.</p>
 
-        <div class="max-w-4xl mx-auto text-center py-32">
-            <div class="text-8xl mb-8">🛡️</div>
-            <h2 class="text-4xl font-semibold mb-4">Safety & Troubleshooting</h2>
-            <p class="text-emerald-400">Coming soon – full safety checking with Safety & Accuracy Checker Agent</p>
+            <!-- Empty state — shown when no chapter drafts exist (HBF.SA6) -->
+            <div id="safety-empty-state" data-testid="safety-empty-state" class="hidden mt-12 text-center py-16 border border-emerald-800 rounded-3xl">
+                <div class="text-6xl mb-4">🛡️</div>
+                <h3 class="text-2xl font-semibold text-emerald-300 mb-2">No chapter drafts available</h3>
+                <p class="text-emerald-500">Generate at least one chapter draft in the Drafting tab before running a safety scan.</p>
+            </div>
+
+            <!-- Scan controls — shown when drafts exist (HBF.SA2, HBF.SA6) -->
+            <div id="safety-scan-controls" class="mt-8 flex flex-wrap items-center gap-4">
+                <label for="safety-scope-select" class="text-emerald-300 font-medium">Scan scope:</label>
+                <select id="safety-scope-select" data-testid="safety-scope-select"
+                    class="bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-4 py-3 text-lg min-w-64">
+                    <option value="full">Full manuscript</option>
+                </select>
+                <button id="safety-scan-btn" data-testid="safety-scan-btn"
+                    onclick="runSafetyCheck()"
+                    class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-medium flex items-center gap-x-2">
+                    🛡️ Run Safety Scan
+                </button>
+            </div>
+
+            <!-- Status message (HBF.SA6) -->
+            <div id="safety-status" data-testid="safety-status" class="mt-4 text-emerald-300 hidden"></div>
+
+            <!-- Safety report panel — shown after scan completes (HBF.SA3, HBF.SA5, HBF.SA6) -->
+            <div id="safety-report" data-testid="safety-report" class="mt-6 hidden">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                    <h3 class="text-2xl font-semibold text-emerald-200">Safety Report</h3>
+                    <span id="safety-scan-meta" class="text-sm text-emerald-500"></span>
+                </div>
+
+                <!-- Summary (HBF.SA3) -->
+                <div class="mb-6 p-5 bg-black/40 border border-emerald-800 rounded-2xl">
+                    <h4 class="text-emerald-400 font-medium mb-2">Overall Summary</h4>
+                    <p id="safety-summary" data-testid="safety-summary" class="text-emerald-200 leading-relaxed"></p>
+                </div>
+
+                <!-- Flag count badge -->
+                <div class="mb-4 flex items-center gap-3">
+                    <span id="safety-flag-count" class="text-emerald-300 font-medium"></span>
+                </div>
+
+                <!-- Zero flags state -->
+                <div id="safety-no-flags" class="hidden py-8 text-center text-emerald-400">
+                    ✅ No safety issues identified in this scan.
+                </div>
+
+                <!-- Flags list (HBF.SA3, HBF.SA4, HBF.SA6) -->
+                <ul id="safety-flags-list" data-testid="safety-flags-list" class="space-y-4"></ul>
+            </div>
         </div>
     </div>
 
@@ -580,7 +624,8 @@
             chapterOutlines: [],
             // HBF.DR7: drafts[] — one entry per chapter, keyed by chapterId
             drafts: [],
-            safetyNotes: ""
+            // HBF.SA5: safetyReport — manuscript-level safety scan results
+            safetyReport: null
         };
 
         const defaultTones = [
@@ -646,10 +691,13 @@
             }
             // HBF.DR3: re-render Drafting tab when activated so chapter list is current
             if (tabId === 'drafting') renderDraftingTab();
+            // HBF.SA1: re-render Safety tab when activated
+            if (tabId === 'safety') renderSafetyTab();
         }
 
         function loadProject() {
-            const saved = localStorage.getItem('herbalBookForgeProject_v0.10.0')
+            const saved = localStorage.getItem('herbalBookForgeProject_v0.11.0')
+                || localStorage.getItem('herbalBookForgeProject_v0.10.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.9.5')
                 || localStorage.getItem('herbalBookForgeProject_v0.9.3');
             if (saved) {
@@ -662,14 +710,18 @@
                         prompts: { ...project.prompts, ...(parsed.prompts || {}) },
                         goals: { ...project.goals, ...(parsed.goals || {}) },
                         // HBF.DR7: preserve drafts from saved state; fall back to empty array
-                        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : []
+                        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
+                        // HBF.SA5: preserve safetyReport from saved state
+                        safetyReport: parsed.safetyReport !== undefined ? parsed.safetyReport : null
                     };
                 } catch (e) {}
             }
 
-            project.meta.version = "0.10.0";
+            project.meta.version = "0.11.0";
             // HBF.DR7: ensure drafts is always a valid array after load
             if (!Array.isArray(project.drafts)) project.drafts = [];
+            // HBF.SA5: ensure safetyReport is null (not undefined) if absent
+            if (project.safetyReport === undefined) project.safetyReport = null;
             if (!Array.isArray(project.setup.collectionIds)) {
                 project.setup.collectionIds = ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"];
             }
@@ -686,12 +738,13 @@
             document.getElementById('prompt-safety').value = project.prompts.safety || '';
             renderChapterList();
             renderDraftingTab();
+            renderSafetyTab();
             updateFooter();
         }
 
         function saveProject() {
             project.meta.lastEdited = new Date().toISOString();
-            localStorage.setItem('herbalBookForgeProject_v0.10.0', JSON.stringify(project));
+            localStorage.setItem('herbalBookForgeProject_v0.11.0', JSON.stringify(project));
             const status = document.getElementById('save-status');
             if (status) {
                 status.innerHTML = `Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
@@ -963,7 +1016,7 @@
                 case 'safety':
                     systemPrompt = project.prompts.safety;
                     if (!systemPrompt || !systemPrompt.trim()) {
-                        systemPrompt = `You are the Safety & Accuracy Checker Agent – expert in herbal safety, dosages, contraindications, and extraction risks.\n\nAlways return ONLY strict JSON as { "flags": [...], "summary": "..." }. The 'flags' array contains flagged issues as strings. Do not include any explanation outside the JSON object.`;
+                        systemPrompt = `You are the Safety & Accuracy Checker Agent – expert in herbal safety, dosages, contraindications, and extraction risks.\n\nYou will receive the text of one or more book chapters. Carefully review for: contraindications, unsafe dosage ranges, extraction risks, pyrrolizidine alkaloid (PA) content limits (e.g., comfrey), and general safety concerns.\n\nAlways return ONLY strict JSON in this exact format:\n{\n  "flags": [\n    {\n      "chapterId": "<number or string>",\n      "chapterTitle": "<chapter title>",\n      "flagType": "<CONTRAINDICATION|DOSAGE|PA_CONTENT|EXTRACTION_RISK|GENERAL_SAFETY>",\n      "flaggedText": "<brief excerpt or description of the issue>",\n      "suggestion": "<specific suggested fix or clarification>"\n    }\n  ],\n  "summary": "<overall safety assessment of the manuscript>"\n}\n\nIf no issues are found, return { "flags": [], "summary": "No safety issues identified." }.\nDo not include any explanation or extra text outside the JSON object.`;
                     }
                     break;
                 default:
@@ -1225,6 +1278,32 @@
         // HBF.DR4: Drafter Agent response parser — validates strict JSON contract and falls back gracefully.
         // Expected shape: { chapterTitle: string, draftText: string, qualityFlags: string[] }
         // On malformed JSON: returns { error, raw, chapterTitle: '', draftText: raw, qualityFlags: [] }
+        // HBF.SA3: Parse Safety agent manuscript-level scan response into structured safetyReport
+        function parseSafetyReport(raw) {
+            let parsed;
+            // Strip markdown code fences if present
+            const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+            try {
+                parsed = JSON.parse(cleaned);
+            } catch (e) {
+                return { error: 'Malformed JSON from Safety Agent', raw, flags: [], summary: 'Safety scan could not be parsed. Please try again.' };
+            }
+            // Validate required fields
+            if (!Array.isArray(parsed.flags) || typeof parsed.summary !== 'string') {
+                return { error: 'Missing required fields (flags, summary)', raw, flags: Array.isArray(parsed.flags) ? parsed.flags : [], summary: parsed.summary || 'Safety scan returned an unexpected format.' };
+            }
+            // Normalise each flag — ensure all required fields are strings
+            const validTypes = ['CONTRAINDICATION', 'DOSAGE', 'PA_CONTENT', 'EXTRACTION_RISK', 'GENERAL_SAFETY'];
+            const flags = parsed.flags.map(f => ({
+                chapterId: f.chapterId !== undefined ? String(f.chapterId) : '',
+                chapterTitle: typeof f.chapterTitle === 'string' ? f.chapterTitle : '',
+                flagType: validTypes.includes(f.flagType) ? f.flagType : 'GENERAL_SAFETY',
+                flaggedText: typeof f.flaggedText === 'string' ? f.flaggedText : '',
+                suggestion: typeof f.suggestion === 'string' ? f.suggestion : ''
+            }));
+            return { flags, summary: parsed.summary };
+        }
+
         function parseDraftResponse(raw) {
             let parsed;
             // Strip markdown code fences if present
@@ -1507,6 +1586,178 @@
         }
 
         // HBF.DR3: Render the Drafting tab — populate chapter selector and restore existing draft if present.
+        // HBF.SA1/SA2/SA3/SA5: Safety tab render and scan pipeline
+        function renderSafetyTab() {
+            const drafts = Array.isArray(project.drafts) ? project.drafts.filter(d => d.draftText && d.draftText.trim()) : [];
+            const emptyState = document.getElementById('safety-empty-state');
+            const scanControls = document.getElementById('safety-scan-controls');
+            const scopeSelect = document.getElementById('safety-scope-select');
+            const reportPanel = document.getElementById('safety-report');
+
+            if (!emptyState) return; // HTML not yet in DOM
+
+            if (drafts.length === 0) {
+                // HBF.SA2: no drafts — show empty state, hide controls and report
+                emptyState.classList.remove('hidden');
+                if (scanControls) scanControls.classList.add('hidden');
+                if (reportPanel) reportPanel.classList.add('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            if (scanControls) scanControls.classList.remove('hidden');
+
+            // Populate scope selector: full manuscript + per-chapter options
+            if (scopeSelect) {
+                const currentVal = scopeSelect.value;
+                scopeSelect.innerHTML = '<option value="full">Full manuscript</option>' +
+                    drafts.map((d, i) => {
+                        const label = d.chapterTitle || `Chapter ${d.chapterId + 1}`;
+                        return `<option value="chapter:${d.chapterId}" ${currentVal === `chapter:${d.chapterId}` ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+                    }).join('');
+            }
+
+            // If a stored report exists, render it
+            if (project.safetyReport) {
+                renderSafetyReport(project.safetyReport);
+            } else {
+                if (reportPanel) reportPanel.classList.add('hidden');
+            }
+        }
+
+        // HBF.SA3: Render a stored safetyReport into the report panel UI
+        function renderSafetyReport(report) {
+            const reportPanel = document.getElementById('safety-report');
+            if (!reportPanel) return;
+            reportPanel.classList.remove('hidden');
+
+            const summaryEl = document.getElementById('safety-summary');
+            if (summaryEl) summaryEl.textContent = report.summary || '';
+
+            const metaEl = document.getElementById('safety-scan-meta');
+            if (metaEl && report.scanTimestamp) {
+                const dt = new Date(report.scanTimestamp);
+                metaEl.textContent = `Scanned ${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — scope: ${report.scanScope || 'full'}`;
+            }
+
+            const flags = Array.isArray(report.flags) ? report.flags : [];
+            const countEl = document.getElementById('safety-flag-count');
+            if (countEl) countEl.textContent = flags.length === 0 ? 'No issues found' : `${flags.length} issue${flags.length === 1 ? '' : 's'} found`;
+
+            const noFlagsEl = document.getElementById('safety-no-flags');
+            const flagsList = document.getElementById('safety-flags-list');
+
+            if (flags.length === 0) {
+                if (noFlagsEl) noFlagsEl.classList.remove('hidden');
+                if (flagsList) flagsList.innerHTML = '';
+                return;
+            }
+            if (noFlagsEl) noFlagsEl.classList.add('hidden');
+
+            const flagTypeColors = {
+                CONTRAINDICATION: 'bg-red-900/50 border-red-700 text-red-300',
+                DOSAGE: 'bg-orange-900/50 border-orange-700 text-orange-300',
+                PA_CONTENT: 'bg-yellow-900/50 border-yellow-700 text-yellow-300',
+                EXTRACTION_RISK: 'bg-amber-900/50 border-amber-700 text-amber-300',
+                GENERAL_SAFETY: 'bg-blue-900/50 border-blue-700 text-blue-300'
+            };
+
+            if (flagsList) {
+                flagsList.innerHTML = flags.map((f, i) => {
+                    const colorClass = flagTypeColors[f.flagType] || flagTypeColors.GENERAL_SAFETY;
+                    const chapterIdNum = parseInt(f.chapterId, 10);
+                    const navAttr = !isNaN(chapterIdNum) ? `data-chapter-id="${chapterIdNum}"` : '';
+                    return `<li class="p-5 border rounded-2xl ${colorClass}">
+                        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+                            <span class="font-semibold">${escapeHtml(f.chapterTitle || `Chapter ${f.chapterId}`)}</span>
+                            <span class="text-xs font-mono px-2 py-1 rounded-full border opacity-80">${escapeHtml(f.flagType)}</span>
+                        </div>
+                        <p class="text-sm mb-2 opacity-90"><strong>Issue:</strong> ${escapeHtml(f.flaggedText)}</p>
+                        <p class="text-sm mb-3 opacity-90"><strong>Suggestion:</strong> ${escapeHtml(f.suggestion)}</p>
+                        ${navAttr ? `<button onclick="navigateToDraftFromFlag(${chapterIdNum})"
+                            class="text-xs px-4 py-2 bg-emerald-700/60 hover:bg-emerald-600/80 rounded-2xl border border-emerald-600">
+                            ✍️ Open in Drafting tab
+                        </button>` : ''}
+                    </li>`;
+                }).join('');
+            }
+        }
+
+        // HBF.SA2/SA5: Run the safety scan for the selected scope
+        async function runSafetyCheck() {
+            const drafts = Array.isArray(project.drafts) ? project.drafts.filter(d => d.draftText && d.draftText.trim()) : [];
+            const statusEl = document.getElementById('safety-status');
+
+            // HBF.SA2 empty manuscript guard
+            if (drafts.length === 0) {
+                if (statusEl) { statusEl.textContent = 'No chapter drafts available. Generate drafts in the Drafting tab first.'; statusEl.classList.remove('hidden'); }
+                return;
+            }
+
+            const scopeSelect = document.getElementById('safety-scope-select');
+            const scope = scopeSelect ? scopeSelect.value : 'full';
+            const scanBtn = document.getElementById('safety-scan-btn');
+
+            if (statusEl) { statusEl.textContent = '🛡️ Running safety scan… this may take 30–60 seconds.'; statusEl.classList.remove('hidden'); }
+            if (scanBtn) scanBtn.disabled = true;
+
+            try {
+                // Build manuscript context based on scope
+                let manuscriptContext = '';
+                let scanScope = scope;
+                if (scope === 'full') {
+                    manuscriptContext = drafts.map(d =>
+                        `=== Chapter: ${d.chapterTitle || `Chapter ${d.chapterId + 1}`} ===\n${d.draftText}`
+                    ).join('\n\n');
+                } else if (scope.startsWith('chapter:')) {
+                    const chapterId = parseInt(scope.replace('chapter:', ''), 10);
+                    const draft = drafts.find(d => d.chapterId === chapterId);
+                    if (!draft) throw new Error('Selected chapter draft not found.');
+                    manuscriptContext = `=== Chapter: ${draft.chapterTitle || `Chapter ${draft.chapterId + 1}`} ===\n${draft.draftText}`;
+                    scanScope = `chapter:${chapterId}`;
+                }
+
+                const result = await callLlmAgent({
+                    agent: 'safety',
+                    context: manuscriptContext,
+                    userPrompt: 'Please perform a thorough safety review of the above chapter text and return your findings in the required JSON format.',
+                    parseResponse: parseSafetyReport,
+                    max_tokens: 2000
+                });
+
+                if (result.error) {
+                    if (statusEl) { statusEl.textContent = `⚠️ ${result.error}`; }
+                } else {
+                    // HBF.SA5: persist to project state
+                    project.safetyReport = {
+                        scanScope,
+                        scanTimestamp: new Date().toISOString(),
+                        flags: result.flags,
+                        summary: result.summary,
+                        lastUpdated: new Date().toISOString()
+                    };
+                    saveProject();
+                    if (statusEl) { statusEl.textContent = `✅ Scan complete — ${result.flags.length} issue(s) found.`; }
+                    renderSafetyReport(project.safetyReport);
+                }
+            } catch (err) {
+                if (statusEl) { statusEl.textContent = `❌ ${err.message}`; }
+            } finally {
+                if (scanBtn) scanBtn.disabled = false;
+            }
+        }
+
+        // HBF.SA4: Navigate from a safety flag to the Drafting tab with the correct chapter selected
+        function navigateToDraftFromFlag(chapterId) {
+            switchTab('drafting');
+            const select = document.getElementById('draft-chapter-select');
+            if (select) {
+                select.value = String(chapterId);
+                // Trigger onchange to render the draft workspace
+                select.dispatchEvent(new Event('change'));
+            }
+        }
+
         function renderDraftingTab() {
             const select = document.getElementById('draft-chapter-select');
             if (!select) return;

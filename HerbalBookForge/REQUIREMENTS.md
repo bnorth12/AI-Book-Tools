@@ -109,9 +109,26 @@ HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LL
 - HBFIT.12: Integration tests SHALL verify that a generated chapter draft (text and revision history) persists across a full page reload (localStorage round-trip).
 - HBFIT.13: Integration tests SHALL cover the end-to-end workflow from Book Goals → Outline → Chapter Outlines → Draft generation for at least one chapter, validating that context flows correctly through each agent.
 
+## Safety Tab Requirements (Sprint 3 — target v0.11.0)
+
+- HBF.SA1: The Safety Tab SHALL provide safety checking using the Safety & Accuracy Checker Agent.
+- HBF.SA2: The Safety Tab SHALL scan the full manuscript or selected chapters for contraindications, dosage issues, extraction risks, and PA content limits (e.g., comfrey). The scan SHALL send all available chapter draft texts as context to the Safety agent.
+- HBF.SA3: The Safety Tab SHALL generate a structured safety report with flagged items and an overall summary. Each flag SHALL include: `chapterId`, `chapterTitle`, `flagType` (one of: CONTRAINDICATION, DOSAGE, PA_CONTENT, EXTRACTION_RISK, GENERAL_SAFETY), `flaggedText`, and `suggestion`. The Safety agent SHALL return strict JSON: `{ "flags": [...], "summary": "..." }`.
+- HBF.SA4: The Safety Tab SHALL integrate with the Drafting tab — each flag SHALL provide a navigate-to-draft action that switches the active tab to Drafting and selects the referenced chapter.
+- HBF.SA5: Safety report results SHALL persist in project state across page reloads and survive localStorage save/load and JSON export/import. The project schema SHALL include a `safetyReport` object with fields: `scanScope`, `scanTimestamp`, `flags[]`, `summary`, `lastUpdated`.
+- HBF.SA6: All Safety tab interactive controls (scope selector, scan button, status indicator, report panel, flag list) SHALL use stable HTML `id` and `data-testid` attributes. These selectors SHALL remain stable across revisions unless intentionally changed with corresponding smoke and regression test updates.
+
+## Integration Testing Requirements (v0.11.0 — Sprint 3)
+
+- HBFIT.14: Integration tests SHALL verify full-manuscript safety scan via the Safety Agent, including valid JSON response structure (`flags[]`, `summary`).
+- HBFIT.15: Integration tests SHALL verify that safety report flags are rendered in the Safety tab UI after a scan completes.
+- HBFIT.16: Integration tests SHALL verify that safety report results persist across a full page reload (localStorage round-trip).
+- HBFIT.17: Integration tests SHALL verify that clicking a flag navigate-to-draft action switches the active tab to Drafting and selects the correct chapter.
+
 ## Sync Status
 
 - Synced with HerbalBookForge.html inline annotations: Yes
 - Last sync date: 2026-05-02
-- Integration test coverage: Sprint 1 complete; Sprint 2 (Drafting) requirements locked — implementation in progress
-- Current status: v0.10.0 Sprint 2 active — HBF.DR1-DR8 and HBFIT.9-13 derived and documented
+- Integration test coverage: Sprint 1 complete; Sprint 2 (Drafting) complete — HBFIT.1-13; Sprint 3 (Safety) requirements locked
+- Current status: v0.11.0 Sprint 3 complete — HBF.SA1-SA6 implemented, HBFIT.14-17 added
+- Last sync: HerbalBookForge.html inline annotations verified against REQUIREMENTS.md — all HBF.SA1-SA6 comments present and accurate

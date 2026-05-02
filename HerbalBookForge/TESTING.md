@@ -8,9 +8,9 @@ HerbalBookForge includes comprehensive test coverage spanning smoke tests, regre
 
 ### 1. Smoke Tests (`herbalbookforge.smoke.spec.js`)
 
-**Purpose**: Quick validation of core UI elements, tab navigation, and Drafting tab control presence
+**Purpose**: Quick validation of core UI elements, tab navigation, Drafting tab control presence, and Safety tab control presence
 
-**Tests** (2 total):
+**Tests** (3 total):
 
 #### Test 1 — App loads and shows main tabs
 - All 7 main tab buttons are visible (`tab-goals`, `tab-outline`, `tab-chapter-outlines`, `tab-drafting`, `tab-prompts`, `tab-safety`, `tab-preview`)
@@ -32,14 +32,25 @@ Switches to the Drafting tab and asserts the following `data-testid` attributes 
 | `validate-status` | Validate status span | Attached |
 | `validation-results` | Validation results panel | Attached |
 
-**Run time**: ~5 seconds
+#### Test 3 — Safety tab renders all required controls (HBF.SA6)
+Switches to the Safety tab and asserts the following `data-testid` attributes are present in the DOM:
+
+| `data-testid` | Element | Notes |
+|---|---|---|
+| `safety-scope-select` | Scan scope dropdown | Attached (visible when drafts exist) |
+| `safety-scan-btn` | Run Safety Scan button | Attached |
+| `safety-status` | Status/progress indicator | Attached |
+| `safety-report` | Safety report panel | Attached (hidden until scan completes) |
+| `safety-empty-state` | No-drafts empty state | Attached (visible when no drafts) |
+
+**Run time**: ~8 seconds
 
 **Command**:
 ```bash
 npx playwright test --project=herbalbookforge-smoke
 ```
 
-**Status**: ✅ Passing (2/2)
+**Status**: ✅ Passing (3/3)
 
 ---
 
@@ -150,6 +161,40 @@ A shared helper `makeProjectState()` injects a minimal pre-built project state (
 - Book Goals Agent → accept goals → Outline generated → accept outline → Chapter Annotator → Drafting tab → Generate Draft for chapter 0
 - Asserts draft is >100 chars and contains herb/plant/medicinal keywords (confirms context flowed through all agents)
 - **Total time**: ~8–12 minutes
+
+---
+
+### 4. Safety Tab Integration Tests (`herbalbookforge.integration.spec.js`) — Sprint 3 (HBFIT.14–17)
+
+**Purpose**: Validate the full Safety tab pipeline — scan via Safety Agent, flag rendering, persistence, and navigate-to-draft integration
+
+**All tests skip gracefully if `GROK_API_KEY` is not configured.**
+
+A shared helper `makeSafetyProjectState()` injects a minimal project state (one chapter draft with comfrey/elderberry text) into `localStorage`. HBFIT.15/16/17 use a pre-built mock safety report to avoid real API calls; HBFIT.14 exercises the live Safety Agent.
+
+#### HBFIT.14 — Full-manuscript safety scan via Safety Agent
+- Injects draft-only state (no stored report), navigates to Safety tab
+- Asserts empty state is hidden (draft exists) and scan controls are visible
+- Clicks Run Safety Scan, waits for `[data-testid="safety-report"]:not(.hidden)` (up to 120s)
+- Validates `localStorage` structure: `flags[]` (array), `summary` (non-empty string), `scanTimestamp`, `scanScope === 'full'`
+
+#### HBFIT.15 — Safety report flags render in Safety tab UI
+- Injects state with pre-built 2-flag safety report (PA_CONTENT + DOSAGE)
+- Navigates to Safety tab, asserts report panel is immediately visible (rendered from stored report)
+- Asserts summary contains expected text
+- Asserts `[data-testid="safety-flags-list"] li` count equals 2
+- Asserts first flag item contains `PA_CONTENT` badge or flaggedText
+
+#### HBFIT.16 — Safety report persists across page reload
+- Injects state with 2-flag report, verifies report on first load (2 flags)
+- Performs `page.reload()`, re-navigates to Safety tab
+- Asserts report still visible with 2 flags after reload
+
+#### HBFIT.17 — Navigate-to-draft action switches tab and selects chapter
+- Injects state with 2-flag report
+- Clicks the "Open in Drafting tab" button on the first flag
+- Asserts `#content-drafting:not(.hidden)` becomes visible (tab switched)
+- Asserts `[data-testid="draft-chapter-select"]` value equals `'0'` (chapter selected)
 
 **Command**:
 ```bash
