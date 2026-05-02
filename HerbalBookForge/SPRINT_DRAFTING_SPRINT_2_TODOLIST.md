@@ -38,18 +38,18 @@ Implement the Drafting tab so users can generate full chapter text from approved
 
 ## Data Contract and State Model Checklist
 - [ ] Define chapter draft object model in project state (proposed):
-  - [ ] chapterId
-  - [ ] chapterTitle
-  - [ ] outlineContext
-  - [ ] draftText
-  - [ ] validation
-  - [ ] revisionHistory[]
-  - [ ] lastUpdated
-- [ ] Define strict JSON response schema for Drafter agent first-pass generation.
-- [ ] Define strict JSON response schema for Drafter agent revision pass.
+  - [x] chapterId
+  - [x] chapterTitle
+  - [x] outlineContext
+  - [x] draftText
+  - [x] validation
+  - [x] revisionHistory[]
+  - [x] lastUpdated
+- [x] Define strict JSON response schema for Drafter agent first-pass generation.
+- [x] Define strict JSON response schema for Drafter agent revision pass.
 - [ ] Define strict JSON response schema for draft validation feedback.
-- [ ] Add defensive parsing and fallback handling for malformed JSON.
-- [ ] Confirm persistence in localStorage save/load and export/import path.
+- [x] Add defensive parsing and fallback handling for malformed JSON.
+- [x] Confirm persistence in localStorage save/load and export/import path.
 
 ## Agent and Prompt Update Checklist
 - [ ] Update Drafter prompt in default prompts and Prompts Editor to enforce strict JSON output contract.

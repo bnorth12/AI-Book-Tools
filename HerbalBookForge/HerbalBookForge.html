@@ -461,7 +461,7 @@
         // Version: 0.9.5 | Date: 2026-04-17
 
         let project = {
-            meta: { version: "0.9.5", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
+            meta: { version: "0.10.0", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
             setup: {
                 apiKey: "",
                 collectionIds: ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"],
@@ -486,6 +486,8 @@
             },
             outline: "",
             chapterOutlines: [],
+            // HBF.DR7: drafts[] — one entry per chapter, keyed by chapterId
+            drafts: [],
             safetyNotes: ""
         };
 
@@ -553,7 +555,9 @@
         }
 
         function loadProject() {
-            const saved = localStorage.getItem('herbalBookForgeProject_v0.9.5') || localStorage.getItem('herbalBookForgeProject_v0.9.3');
+            const saved = localStorage.getItem('herbalBookForgeProject_v0.10.0')
+                || localStorage.getItem('herbalBookForgeProject_v0.9.5')
+                || localStorage.getItem('herbalBookForgeProject_v0.9.3');
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
@@ -562,12 +566,16 @@
                         ...parsed,
                         setup: { ...project.setup, ...(parsed.setup || {}) },
                         prompts: { ...project.prompts, ...(parsed.prompts || {}) },
-                        goals: { ...project.goals, ...(parsed.goals || {}) }
+                        goals: { ...project.goals, ...(parsed.goals || {}) },
+                        // HBF.DR7: preserve drafts from saved state; fall back to empty array
+                        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : []
                     };
                 } catch (e) {}
             }
 
-            project.meta.version = "0.9.5";
+            project.meta.version = "0.10.0";
+            // HBF.DR7: ensure drafts is always a valid array after load
+            if (!Array.isArray(project.drafts)) project.drafts = [];
             if (!Array.isArray(project.setup.collectionIds)) {
                 project.setup.collectionIds = ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"];
             }
@@ -588,7 +596,7 @@
 
         function saveProject() {
             project.meta.lastEdited = new Date().toISOString();
-            localStorage.setItem('herbalBookForgeProject_v0.9.5', JSON.stringify(project));
+            localStorage.setItem('herbalBookForgeProject_v0.10.0', JSON.stringify(project));
             const status = document.getElementById('save-status');
             if (status) {
                 status.innerHTML = `Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
@@ -633,9 +641,11 @@
                         ...parsed,
                         setup: { ...project.setup, ...(parsed.setup || {}) },
                         prompts: { ...project.prompts, ...(parsed.prompts || {}) },
-                        goals: { ...project.goals, ...(parsed.goals || {}) }
+                        goals: { ...project.goals, ...(parsed.goals || {}) },
+                        // HBF.DR7: preserve drafts on import; fall back to empty array
+                        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : []
                     };
-                    project.meta.version = "0.9.5";
+                    project.meta.version = "0.10.0";
                     loadProject();
                     saveProject();
                     alert('Project imported successfully.');
