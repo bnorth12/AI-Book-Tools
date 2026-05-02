@@ -130,4 +130,5 @@ HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LL
 - Synced with HerbalBookForge.html inline annotations: Yes
 - Last sync date: 2026-05-02
 - Integration test coverage: Sprint 1 complete; Sprint 2 (Drafting) complete — HBFIT.1-13; Sprint 3 (Safety) requirements locked
-- Current status: v0.11.0 Sprint 3 active — HBF.SA1-SA6 and HBFIT.14-17 derived and documented
+- Current status: v0.11.0 Sprint 3 complete — HBF.SA1-SA6 implemented, HBFIT.14-17 added
+- Last sync: HerbalBookForge.html inline annotations verified against REQUIREMENTS.md — all HBF.SA1-SA6 comments present and accurate
