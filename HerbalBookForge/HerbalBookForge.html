@@ -1304,32 +1304,6 @@
             return { flags, summary: parsed.summary };
         }
 
-        // HBF.SA3: Parse Safety agent manuscript-level scan response into structured safetyReport
-        function parseSafetyReport(raw) {
-            let parsed;
-            // Strip markdown code fences if present
-            const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-            try {
-                parsed = JSON.parse(cleaned);
-            } catch (e) {
-                return { error: 'Malformed JSON from Safety Agent', raw, flags: [], summary: 'Safety scan could not be parsed. Please try again.' };
-            }
-            // Validate required fields
-            if (!Array.isArray(parsed.flags) || typeof parsed.summary !== 'string') {
-                return { error: 'Missing required fields (flags, summary)', raw, flags: Array.isArray(parsed.flags) ? parsed.flags : [], summary: parsed.summary || 'Safety scan returned an unexpected format.' };
-            }
-            // Normalise each flag — ensure all required fields are strings
-            const validTypes = ['CONTRAINDICATION', 'DOSAGE', 'PA_CONTENT', 'EXTRACTION_RISK', 'GENERAL_SAFETY'];
-            const flags = parsed.flags.map(f => ({
-                chapterId: f.chapterId !== undefined ? String(f.chapterId) : '',
-                chapterTitle: typeof f.chapterTitle === 'string' ? f.chapterTitle : '',
-                flagType: validTypes.includes(f.flagType) ? f.flagType : 'GENERAL_SAFETY',
-                flaggedText: typeof f.flaggedText === 'string' ? f.flaggedText : '',
-                suggestion: typeof f.suggestion === 'string' ? f.suggestion : ''
-            }));
-            return { flags, summary: parsed.summary };
-        }
-
         function parseDraftResponse(raw) {
             let parsed;
             // Strip markdown code fences if present
