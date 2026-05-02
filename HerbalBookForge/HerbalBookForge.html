@@ -552,6 +552,8 @@
             } else {
                 btn.classList.add('active');
             }
+            // HBF.DR3: re-render Drafting tab when activated so chapter list is current
+            if (tabId === 'drafting') renderDraftingTab();
         }
 
         function loadProject() {
@@ -591,6 +593,7 @@
             document.getElementById('prompt-drafter').value = project.prompts.drafter || '';
             document.getElementById('prompt-safety').value = project.prompts.safety || '';
             renderChapterList();
+            renderDraftingTab();
             updateFooter();
         }
 
@@ -1397,6 +1400,178 @@
         function editChapter(index) {
             const textarea = document.getElementById(`chapter-annotation-${index}`);
             if (textarea) textarea.focus();
+        }
+
+        // HBF.DR3: Render the Drafting tab — populate chapter selector and restore existing draft if present.
+        function renderDraftingTab() {
+            const select = document.getElementById('draft-chapter-select');
+            if (!select) return;
+            const chapters = project.chapterOutlines || [];
+            const emptyState = document.getElementById('draft-empty-state');
+            const workspace = document.getElementById('draft-workspace');
+            const generateBtn = document.getElementById('generate-draft-btn');
+
+            if (chapters.length === 0) {
+                select.innerHTML = '<option value="">&#8212; no chapters available &#8212;</option>';
+                select.disabled = true;
+                if (generateBtn) generateBtn.disabled = true;
+                if (emptyState) emptyState.classList.remove('hidden');
+                if (workspace) workspace.classList.add('hidden');
+                return;
+            }
+
+            select.disabled = false;
+            if (generateBtn) generateBtn.disabled = false;
+            if (emptyState) emptyState.classList.add('hidden');
+
+            const currentVal = select.value;
+            select.innerHTML = '<option value="">&#8212; select a chapter &#8212;</option>' +
+                chapters.map((ch, i) =>
+                    `<option value="${i}" ${String(i) === currentVal ? 'selected' : ''}>${escapeHtml(ch.title || `Chapter ${i + 1}`)}</option>`
+                ).join('');
+
+            // Re-attach onchange
+            select.onchange = function () {
+                const idx = parseInt(select.value, 10);
+                if (!isNaN(idx)) renderDraftForChapter(idx);
+                else if (workspace) workspace.classList.add('hidden');
+            };
+
+            const idx = parseInt(select.value, 10);
+            if (!isNaN(idx)) {
+                renderDraftForChapter(idx);
+            } else if (workspace) {
+                workspace.classList.add('hidden');
+            }
+        }
+
+        // HBF.DR3: Render an existing draft for the given chapter index into the workspace panel.
+        function renderDraftForChapter(chapterIndex) {
+            const draft = (project.drafts || []).find(d => d.chapterId === chapterIndex);
+            const workspace = document.getElementById('draft-workspace');
+            if (!draft) {
+                if (workspace) workspace.classList.add('hidden');
+                return;
+            }
+            if (workspace) workspace.classList.remove('hidden');
+
+            const titleEl = document.getElementById('draft-chapter-title');
+            if (titleEl) titleEl.textContent = draft.chapterTitle || '';
+
+            const textarea = document.getElementById('draft-text-area');
+            if (textarea) textarea.value = draft.draftText || '';
+
+            const lastUpdatedEl = document.getElementById('draft-last-updated');
+            if (lastUpdatedEl) {
+                lastUpdatedEl.textContent = draft.lastUpdated
+                    ? `Last updated: ${new Date(draft.lastUpdated).toLocaleString()}`
+                    : '';
+            }
+
+            // Quality flags (HBF.DR4)
+            const flagsContainer = document.getElementById('draft-quality-flags');
+            const flagsList = document.getElementById('draft-quality-flags-list');
+            const flags = draft.qualityFlags || [];
+            if (flags.length > 0 && flagsContainer && flagsList) {
+                flagsList.innerHTML = flags.map(f => `<li>${escapeHtml(String(f))}</li>`).join('');
+                flagsContainer.classList.remove('hidden');
+            } else if (flagsContainer) {
+                flagsContainer.classList.add('hidden');
+            }
+        }
+
+        // HBF.DR3: Generate first-pass chapter draft via Drafter Agent.
+        async function generateChapterDraft() {
+            const select = document.getElementById('draft-chapter-select');
+            const idx = parseInt(select?.value, 10);
+            if (isNaN(idx) || !select?.value) {
+                alert('Please select a chapter before generating a draft.');
+                return;
+            }
+            const chapters = project.chapterOutlines || [];
+            const chapter = chapters[idx];
+            if (!chapter) {
+                alert('Chapter not found. Please re-select.');
+                return;
+            }
+            const apiKey = (project.setup.apiKey || '').trim();
+            if (!apiKey) {
+                alert('Add your Grok API key in Setup before generating a draft.');
+                switchTab('setup');
+                return;
+            }
+
+            const btn = document.getElementById('generate-draft-btn');
+            const statusEl = document.getElementById('draft-status');
+            const setStatus = (msg, isError = false) => {
+                if (!statusEl) return;
+                if (!msg) { statusEl.classList.add('hidden'); statusEl.textContent = ''; return; }
+                statusEl.textContent = msg;
+                statusEl.classList.remove('hidden');
+                statusEl.classList.toggle('text-red-300', isError);
+                statusEl.classList.toggle('text-emerald-300', !isError);
+            };
+
+            const originalBtnText = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+            setStatus(`Generating first-pass draft for “${chapter.title || `Chapter ${idx + 1}`}” with Drafter Agent…`);
+
+            try {
+                // HBF.DR2 + HBF.DR3: build context from book goals + annotated chapter outline
+                const goalsContext = [
+                    `Main Goal: ${project.goals.mainGoal || ''}`,
+                    `Tone/Style: ${project.goals.tone || ''}`,
+                    `Audience: ${project.goals.audience || ''}`,
+                    `Content Types: ${project.goals.contentTypes || ''}`
+                ].join('\n');
+                const outlineContext = typeof chapter.annotation === 'string'
+                    ? chapter.annotation
+                    : JSON.stringify(chapter.annotation, null, 2);
+                const context = `BOOK GOALS:\n${goalsContext}\n\nCHAPTER OUTLINE (annotated):\n${outlineContext}`;
+                const userPrompt = `Write the full first-pass draft for: ${chapter.title || `Chapter ${idx + 1}`}\n\nReturn strict JSON as { "chapterTitle": "...", "draftText": "...", "qualityFlags": [] }`;
+
+                // HBF.DR4: call Drafter Agent with parseDraftResponse
+                const result = await callLlmAgent({
+                    agent: 'drafter',
+                    context,
+                    userPrompt,
+                    parseResponse: parseDraftResponse,
+                    temperature: 0.7,
+                    max_tokens: 4000
+                });
+
+                if (result.error) {
+                    setStatus(`Draft generated with warnings: ${result.error}`, true);
+                } else {
+                    setStatus('');
+                }
+
+                // HBF.DR7: persist draft entry in project.drafts[]
+                const now = new Date().toISOString();
+                if (!Array.isArray(project.drafts)) project.drafts = [];
+                const existingIdx = project.drafts.findIndex(d => d.chapterId === idx);
+                const draftEntry = {
+                    chapterId: idx,
+                    chapterTitle: result.chapterTitle || chapter.title || `Chapter ${idx + 1}`,
+                    outlineContext,
+                    draftText: result.draftText || '',
+                    qualityFlags: result.qualityFlags || [],
+                    validation: null,
+                    revisionHistory: existingIdx >= 0 ? (project.drafts[existingIdx].revisionHistory || []) : [],
+                    lastUpdated: now
+                };
+                if (existingIdx >= 0) {
+                    project.drafts[existingIdx] = draftEntry;
+                } else {
+                    project.drafts.push(draftEntry);
+                }
+                saveProject();
+                renderDraftForChapter(idx);
+            } catch (err) {
+                setStatus(`Generation failed: ${err.message}`, true);
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = originalBtnText; }
+            }
         }
 
         /**
