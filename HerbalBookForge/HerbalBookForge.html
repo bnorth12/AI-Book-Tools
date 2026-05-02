@@ -1005,7 +1005,16 @@
                 },
                 body: JSON.stringify(payload)
             });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            if (!response.ok) {
+                const httpMessages = {
+                    401: 'Invalid API key (HTTP 401). Check your key in Setup.',
+                    403: 'Access denied (HTTP 403). Verify your API key permissions.',
+                    429: 'Rate limit reached (HTTP 429). Wait a moment and try again.',
+                    500: 'Server error (HTTP 500). The API service is having issues.',
+                    503: 'Service unavailable (HTTP 503). Try again shortly.'
+                };
+                throw new Error(httpMessages[response.status] || `HTTP ${response.status}`);
+            }
             const data = await response.json();
             const rawReply = data?.choices?.[0]?.message?.content || '';
             let parsed = rawReply;
@@ -1804,11 +1813,15 @@
                     setReviseStatus('');
                 }
                 const now = new Date().toISOString();
+                const revisedText = result.draftText || existing.draftText;
+                if (!revisedText || !revisedText.trim()) {
+                    setReviseStatus('Revision returned empty text — original draft preserved.', true);
+                }
                 const revisionEntry = { instruction, timestamp: now };
                 const updatedRevisionHistory = [...(existing.revisionHistory || []), revisionEntry];
                 project.drafts[draftIdx] = {
                     ...existing,
-                    draftText: result.draftText || existing.draftText,
+                    draftText: revisedText,
                     qualityFlags: result.qualityFlags || [],
                     revisionHistory: updatedRevisionHistory,
                     lastUpdated: now
@@ -1859,7 +1872,12 @@
             setValidateStatus('Running Safety & Accuracy Checker...');
             try {
                 const existing = project.drafts[draftIdx];
-                const draftText = document.getElementById('draft-text-area')?.value || existing.draftText || '';
+                const draftText = (document.getElementById('draft-text-area')?.value || existing.draftText || '').trim();
+                if (!draftText) {
+                    if (btn) { btn.disabled = false; btn.innerHTML = originalBtnText; }
+                    setValidateStatus('Draft text is empty — generate or write a draft before validating.', true);
+                    return;
+                }
                 const context = `CHAPTER DRAFT TEXT:\n${draftText}`;
                 const userPrompt = `Check this herbal medicine chapter draft for safety issues, contraindications, dosage errors, extraction risks, and accuracy concerns for: ${existing.chapterTitle}\n\nReturn strict JSON as { "flags": [...], "summary": "..." }`;
                 const raw = await callLlmAgent({
