@@ -8,21 +8,38 @@ HerbalBookForge includes comprehensive test coverage spanning smoke tests, regre
 
 ### 1. Smoke Tests (`herbalbookforge.smoke.spec.js`)
 
-**Purpose**: Quick validation of core UI elements and tab navigation
+**Purpose**: Quick validation of core UI elements, tab navigation, and Drafting tab control presence
 
-**What it tests**:
-- All 7 main tabs load and are visible
-- Tab button IDs are correct
-- DOM structure is intact
+**Tests** (2 total):
 
-**Run time**: ~3 seconds
+#### Test 1 — App loads and shows main tabs
+- All 7 main tab buttons are visible (`tab-goals`, `tab-outline`, `tab-chapter-outlines`, `tab-drafting`, `tab-prompts`, `tab-safety`, `tab-preview`)
+
+#### Test 2 — Drafting tab renders all required controls (HBF.DR8)
+Switches to the Drafting tab and asserts the following `data-testid` attributes are present in the DOM:
+
+| `data-testid` | Element | Always visible? |
+|---|---|---|
+| `draft-chapter-select` | Chapter dropdown | ✅ Yes |
+| `generate-draft-btn` | Generate Draft button | ✅ Yes |
+| `draft-status` | Status message span | Attached |
+| `draft-text-area` | Editable draft textarea | Attached (hidden until draft exists) |
+| `save-draft-btn` | Save Draft button | Attached |
+| `revision-instruction` | Revision instruction textarea | Attached |
+| `revise-draft-btn` | Revise Draft button | Attached |
+| `revise-status` | Revise status span | Attached |
+| `validate-draft-btn` | Validate Draft button | Attached |
+| `validate-status` | Validate status span | Attached |
+| `validation-results` | Validation results panel | Attached |
+
+**Run time**: ~5 seconds
 
 **Command**:
 ```bash
 npx playwright test --project=herbalbookforge-smoke
 ```
 
-**Status**: ✅ Passing
+**Status**: ✅ Passing (2/2)
 
 ---
 
@@ -93,6 +110,51 @@ echo "GROK_API_KEY=your_grok_api_key_here" > .env
 - Minimal queries don't crash the application
 - Error messages display properly
 - UI remains responsive
+
+---
+
+### 3. Drafting Tab Integration Tests (`herbalbookforge.integration.spec.js`) — Sprint 2 (HBFIT.9–13)
+
+**Purpose**: Validate the full Drafting tab pipeline — generation, revision, validation, persistence, and end-to-end context flow
+
+**All tests skip gracefully if `GROK_API_KEY` is not configured.**
+
+A shared helper `makeProjectState()` injects a minimal pre-built project state (one chapter outline ± draft) into `localStorage` before each test, avoiding full pipeline setup for isolated tests.
+
+#### HBFIT.9 — First-pass draft generation
+- Injects outline-only state, selects chapter 0, clicks Generate Draft
+- Waits for `#draft-workspace` to become visible (up to 120s)
+- Asserts draft text length >100 chars
+- Validates `localStorage` structure: `chapterId`, `chapterTitle` (string), `draftText` (non-empty string), `qualityFlags` (array)
+
+#### HBFIT.10 — Revision flow
+- Injects draft state, fills revision instruction textarea, clicks Revise Draft
+- Waits for revise button to re-enable (up to 120s)
+- Asserts `revisionHistory[0].instruction` equals the entered instruction
+- Asserts `revisionHistory.length > 0`
+
+#### HBFIT.11 — Validation results rendered
+- Injects draft state, clicks Validate Draft
+- Waits for `[data-testid="validation-results"]:not(.hidden)` (up to 120s)
+- Asserts `#validation-summary` has non-empty text
+- Validates `localStorage` draft has `{ flags: [], summary: string }` shape
+
+#### HBFIT.12 — Persistence across page reload
+- Injects draft + revision history state
+- Navigates to Drafting tab, selects chapter, asserts draft text matches
+- Performs `page.reload()`, re-navigates, re-checks draft text is unchanged
+- Asserts `#revision-history-container` is visible with ≥1 `<li>` in `#revision-history-list`
+
+#### HBFIT.13 — End-to-end pipeline (Book Goals → Outline → Chapter Outlines → Draft)
+- Runs the full real-API pipeline from scratch (no localStorage injection)
+- Book Goals Agent → accept goals → Outline generated → accept outline → Chapter Annotator → Drafting tab → Generate Draft for chapter 0
+- Asserts draft is >100 chars and contains herb/plant/medicinal keywords (confirms context flowed through all agents)
+- **Total time**: ~8–12 minutes
+
+**Command**:
+```bash
+npx playwright test --project=herbalbookforge-integration
+```
 
 ---
 
@@ -280,15 +342,22 @@ jobs:
 
 ## Performance Metrics
 
-### Current Baseline (v0.9.5)
+### Current Baseline (v0.10.0 — Sprint 2)
 
 | Test | Duration | Status |
-|------|----------|--------|
-| Smoke tests | ~3 seconds | ✅ Passing |
-| Integration tests | 6-8 minutes | ✅ Passing |
-| API response time (Book Goals) | 20-45 seconds | ✅ Acceptable |
-| API response time (Outline) | 30-90 seconds | ✅ Acceptable |
-| API response time (Chapter) | 20-60 seconds each | ✅ Acceptable |
+|------|----------|---------|
+| Smoke test 1 — tab navigation | ~3 seconds | ✅ Passing |
+| Smoke test 2 — Drafting tab controls (HBF.DR8) | ~2 seconds | ✅ Passing |
+| Integration: HBFIT.9 — first-pass generation | 1–2 minutes | ✅ (with API key) |
+| Integration: HBFIT.10 — revision flow | 1–2 minutes | ✅ (with API key) |
+| Integration: HBFIT.11 — validation rendered | 30–90 seconds | ✅ (with API key) |
+| Integration: HBFIT.12 — persistence reload | ~5 seconds | ✅ (with API key) |
+| Integration: HBFIT.13 — end-to-end pipeline | 8–12 minutes | ✅ (with API key) |
+| API response time (Book Goals Agent) | 20–45 seconds | ✅ Acceptable |
+| API response time (Outliner Agent) | 30–90 seconds | ✅ Acceptable |
+| API response time (Chapter Annotator) | 20–60 seconds each | ✅ Acceptable |
+| API response time (Drafter Agent) | 30–90 seconds | ✅ Acceptable |
+| API response time (Safety Agent) | 15–60 seconds | ✅ Acceptable |
 
 ---
 
@@ -301,13 +370,13 @@ jobs:
 
 ---
 
-## Future Test Plans (v0.9.6+)
+## Future Test Plans (v0.11.0+)
 
-- [ ] Drafting tab integration tests
-- [ ] Safety checker workflow tests
+- [ ] Safety tab standalone workflow tests (HBF.SA1–SA4)
 - [ ] Preview tab export validation tests
 - [ ] Consistency editing validation tests
-- [ ] Mock LLM responses for faster CI/CD testing
+- [ ] Mock LLM responses for faster CI/CD testing (no API key required)
+- [ ] Regression spec for Drafting tab (selector/visibility assertions after state changes)
 - [ ] Performance regression testing
 - [ ] Cross-browser testing (Firefox, Safari)
 

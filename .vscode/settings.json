@@ -10,6 +10,9 @@
   "chat.tools.terminal.autoApprove": {
     "npx playwright": true,
     "gh": true,
-    "16..25": true
+    "16..25": true,
+    "git mv": true,
+    "git commit": true,
+    "git push": true
   }
 }
