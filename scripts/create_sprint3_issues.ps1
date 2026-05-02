@@ -1,4 +1,4 @@
-$repo = "bnorth12/AI-Book-Tools"
+﻿$repo = "bnorth12/AI-Book-Tools"
 
 $issues = @(
   @{
@@ -318,14 +318,14 @@ Dependencies
 $created = @()
 
 foreach ($issue in $issues) {
-  $args = @(
+  $ghArgs = @(
     "issue","create",
     "--repo",$repo,
     "--title",$issue.Title,
     "--body",$issue.Body
   )
 
-  $url = gh @args
+  $url = gh @ghArgs
   $created += [PSCustomObject]@{
     Title = $issue.Title
     Url = $url
