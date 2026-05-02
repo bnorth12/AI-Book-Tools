@@ -575,7 +575,8 @@
             chapterOutlines: [],
             // HBF.DR7: drafts[] — one entry per chapter, keyed by chapterId
             drafts: [],
-            safetyNotes: ""
+            // HBF.SA5: safetyReport — manuscript-level safety scan results
+            safetyReport: null
         };
 
         const defaultTones = [
@@ -641,10 +642,13 @@
             }
             // HBF.DR3: re-render Drafting tab when activated so chapter list is current
             if (tabId === 'drafting') renderDraftingTab();
+            // HBF.SA1: re-render Safety tab when activated
+            if (tabId === 'safety') renderSafetyTab();
         }
 
         function loadProject() {
-            const saved = localStorage.getItem('herbalBookForgeProject_v0.10.0')
+            const saved = localStorage.getItem('herbalBookForgeProject_v0.11.0')
+                || localStorage.getItem('herbalBookForgeProject_v0.10.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.9.5')
                 || localStorage.getItem('herbalBookForgeProject_v0.9.3');
             if (saved) {
@@ -657,14 +661,18 @@
                         prompts: { ...project.prompts, ...(parsed.prompts || {}) },
                         goals: { ...project.goals, ...(parsed.goals || {}) },
                         // HBF.DR7: preserve drafts from saved state; fall back to empty array
-                        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : []
+                        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
+                        // HBF.SA5: preserve safetyReport from saved state
+                        safetyReport: parsed.safetyReport !== undefined ? parsed.safetyReport : null
                     };
                 } catch (e) {}
             }
 
-            project.meta.version = "0.10.0";
+            project.meta.version = "0.11.0";
             // HBF.DR7: ensure drafts is always a valid array after load
             if (!Array.isArray(project.drafts)) project.drafts = [];
+            // HBF.SA5: ensure safetyReport is null (not undefined) if absent
+            if (project.safetyReport === undefined) project.safetyReport = null;
             if (!Array.isArray(project.setup.collectionIds)) {
                 project.setup.collectionIds = ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"];
             }
@@ -681,12 +689,13 @@
             document.getElementById('prompt-safety').value = project.prompts.safety || '';
             renderChapterList();
             renderDraftingTab();
+            renderSafetyTab();
             updateFooter();
         }
 
         function saveProject() {
             project.meta.lastEdited = new Date().toISOString();
-            localStorage.setItem('herbalBookForgeProject_v0.10.0', JSON.stringify(project));
+            localStorage.setItem('herbalBookForgeProject_v0.11.0', JSON.stringify(project));
             const status = document.getElementById('save-status');
             if (status) {
                 status.innerHTML = `Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
@@ -1502,6 +1511,11 @@
         }
 
         // HBF.DR3: Render the Drafting tab — populate chapter selector and restore existing draft if present.
+        // HBF.SA1: Safety tab render stub — full implementation in Sprint 3 issue #43
+        function renderSafetyTab() {
+            // Placeholder: replaced by full implementation in issue #43
+        }
+
         function renderDraftingTab() {
             const select = document.getElementById('draft-chapter-select');
             if (!select) return;
