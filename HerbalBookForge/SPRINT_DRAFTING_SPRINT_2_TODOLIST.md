@@ -1,9 +1,9 @@
 # HerbalBookForge Sprint 2 Todo List
 
-Date: 2026-04-26
-Sprint Number: Sprint 2 (proposed)
+Date: 2026-04-26 (updated 2026-05-02)
+Sprint Number: Sprint 2
 Target Capability: Drafting tab chapter writing from Book Goals + Chapter Outline inputs
-Status: Planning only (do not execute yet)
+Status: In Progress — Issue #26 complete
 
 ## Sprint 2 Goal
 Implement the Drafting tab so users can generate full chapter text from approved chapter outlines and book goals, validate the generated text, and iteratively revise chapter drafts using user feedback.
@@ -21,20 +21,20 @@ Implement the Drafting tab so users can generate full chapter text from approved
   - Major visual redesign of non-Drafting tabs
 
 ## Requirement Planning and Derivation Checklist
-- [ ] Review current requirements in HerbalBookForge/REQUIREMENTS.md and inline requirement comments in HerbalBookForge/HerbalBookForge.html.
-- [ ] Confirm baseline existing Drafting requirements (HBF.DR1, HBF.DR2) and identify gaps.
-- [ ] Create new Drafting requirements (proposed IDs):
-  - [ ] HBF.DR3: Drafting tab SHALL generate full chapter text using selected chapter outline + book goals context.
-  - [ ] HBF.DR4: Drafter agent SHALL return strict JSON with parseable chapter draft fields.
-  - [ ] HBF.DR5: User SHALL be able to provide revision instructions and regenerate updated chapter text from prior draft.
-  - [ ] HBF.DR6: Draft validation SHALL evaluate structure/quality/safety and present actionable feedback.
-  - [ ] HBF.DR7: Draft edits and revisions SHALL persist in project state and survive reload.
-  - [ ] HBF.DR8: Drafting tab controls/selectors SHALL remain stable or be intentionally revised with test updates.
-- [ ] Add/align integration-test requirements (proposed IDs HBFIT.9-HBFIT.13) for drafting generation, revision, validation, and persistence.
-- [ ] Synchronize requirement IDs across:
-  - [ ] HerbalBookForge/REQUIREMENTS.md
-  - [ ] HerbalBookForge/HerbalBookForge.html (inline comments)
-  - [ ] Sprint issue descriptions and PR traceability
+- [x] Review current requirements in HerbalBookForge/REQUIREMENTS.md and inline requirement comments in HerbalBookForge/HerbalBookForge.html.
+- [x] Confirm baseline existing Drafting requirements (HBF.DR1, HBF.DR2) and identify gaps.
+- [x] Create new Drafting requirements (proposed IDs):
+  - [x] HBF.DR3: Drafting tab SHALL generate full chapter text using selected chapter outline + book goals context.
+  - [x] HBF.DR4: Drafter agent SHALL return strict JSON with parseable chapter draft fields.
+  - [x] HBF.DR5: User SHALL be able to provide revision instructions and regenerate updated chapter text from prior draft.
+  - [x] HBF.DR6: Draft validation SHALL evaluate structure/quality/safety and present actionable feedback.
+  - [x] HBF.DR7: Draft edits and revisions SHALL persist in project state and survive reload.
+  - [x] HBF.DR8: Drafting tab controls/selectors SHALL remain stable or be intentionally revised with test updates.
+- [x] Add/align integration-test requirements (proposed IDs HBFIT.9-HBFIT.13) for drafting generation, revision, validation, and persistence.
+- [x] Synchronize requirement IDs across:
+  - [x] HerbalBookForge/REQUIREMENTS.md
+  - [x] HerbalBookForge/HerbalBookForge.html (inline comments)
+  - [ ] Sprint issue descriptions and PR traceability (manual — apply to GitHub issue #26 body)
 
 ## Data Contract and State Model Checklist
 - [ ] Define chapter draft object model in project state (proposed):

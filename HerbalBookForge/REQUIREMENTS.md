@@ -1,9 +1,9 @@
 # HerbalBookForge Requirements
 
-Date: 2026-04-25
-Application: HerbalBookForge (v0.9.5)
+Date: 2026-05-02
+Application: HerbalBookForge (v0.10.0 — Sprint 2 in progress)
 Source File: HerbalBookForge.html
-Version Status: Stable - v0.9.5 with full test coverage
+Version Status: Sprint 2 active — Drafting tab requirements derived and locked
 
 ## Executive Summary
 
@@ -69,6 +69,17 @@ HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LL
 - HBF.BG.BGA2: Book Goals Agent SHALL return structured JSON suggestions with Copy buttons for each field. Copy To buttons SHALL safely handle all values and never throw JS errors.
 - HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LLM/agent.
 
+## Drafting Tab Requirements (Sprint 2 — target v0.10.0)
+
+- HBF.DR1: The Drafting Tab SHALL allow drafting of individual chapters using the Drafter Agent in the friendly, practical style of Brigitte Mars.
+- HBF.DR2: The Drafting Tab SHALL load the annotated outline from the Chapter Outlines tab as context for the Drafter Agent.
+- HBF.DR3: The Drafting Tab SHALL allow the user to select any chapter that has an accepted outline and generate a first-pass chapter draft. The Drafter Agent SHALL receive the selected chapter's annotated outline and the book goals (Main Goal, Tone/Style, Audience) as context for the generation call.
+- HBF.DR4: The Drafter Agent SHALL return strict JSON with at minimum the following fields: `{ "chapterTitle": "...", "draftText": "...", "qualityFlags": [...] }`. The response parser SHALL validate this structure and fall back gracefully with a user-visible error message on malformed or incomplete responses.
+- HBF.DR5: The user SHALL be able to provide revision instructions and regenerate an updated chapter draft. The revision call SHALL include the prior draft text and the user's revision instruction in the Drafter Agent context. Each revision SHALL be appended to a `revisionHistory[]` array within the chapter draft state, with a timestamp and the instruction used.
+- HBF.DR6: The Drafting Tab SHALL include a draft validation action. The validation step SHALL evaluate the generated text for quality flags and safety notes and present actionable feedback to the user. Validation results SHALL be stored in the chapter draft state.
+- HBF.DR7: Chapter drafts, revision history, and validation results SHALL persist in project state across page reloads and survive localStorage save/load and JSON export/import. The project schema SHALL include a `drafts[]` array keyed by `chapterId` with fields: `chapterId`, `chapterTitle`, `outlineContext`, `draftText`, `validation`, `revisionHistory[]`, `lastUpdated`.
+- HBF.DR8: All Drafting Tab interactive controls (chapter selector, generate button, draft textarea, revision input, validate button) SHALL use stable HTML `id` attributes and `data-testid` attributes. These selectors SHALL remain stable across revisions unless intentionally changed with a corresponding smoke and regression test update.
+
 ## Nonfunctional Requirements
 
 - UIU.HBF.NF1: Layout shall remain responsive across desktop and mobile breakpoints.
@@ -82,7 +93,7 @@ HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LL
 - Functional/nonfunctional sync markers: UIU.HBF.F1/F2 and UIU.HBF.NF1/NF2 comments near header section.
 - Existing HBF.* requirement set remains authoritative for detailed domain behavior.
 
-## Integration Testing Requirements (v0.9.5)
+## Integration Testing Requirements (v0.10.0)
 
 - HBFIT.1: Integration tests SHALL load `.env` file to retrieve GROK_API_KEY
 - HBFIT.2: Tests SHALL make real LLM API calls through all agents (Book Goals, Outliner, Chapter Annotator)
@@ -92,10 +103,15 @@ HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LL
 - HBFIT.6: Tests SHALL skip gracefully if API key not configured
 - HBFIT.7: Tests SHALL verify project state persists across page reloads
 - HBFIT.8: Tests SHALL validate HTML response structure and content length
+- HBFIT.9: Integration tests SHALL verify first-pass chapter draft generation via the Drafter Agent for at least one chapter, including valid JSON response structure (`chapterTitle`, `draftText`, `qualityFlags`).
+- HBFIT.10: Integration tests SHALL verify the revision flow: given an accepted draft and a user revision instruction, the Drafter Agent SHALL return an updated draft and the revision SHALL appear in the chapter's `revisionHistory[]`.
+- HBFIT.11: Integration tests SHALL verify that draft validation results are rendered in the Drafting tab UI after a validation call completes.
+- HBFIT.12: Integration tests SHALL verify that a generated chapter draft (text and revision history) persists across a full page reload (localStorage round-trip).
+- HBFIT.13: Integration tests SHALL cover the end-to-end workflow from Book Goals → Outline → Chapter Outlines → Draft generation for at least one chapter, validating that context flows correctly through each agent.
 
 ## Sync Status
 
 - Synced with HerbalBookForge.html inline annotations: Yes
-- Last sync date: 2026-04-25
-- Integration test coverage: Complete end-to-end workflow validated
-- Current status: v0.9.5 stable with comprehensive test suite
+- Last sync date: 2026-05-02
+- Integration test coverage: Sprint 1 complete; Sprint 2 (Drafting) requirements locked — implementation in progress
+- Current status: v0.10.0 Sprint 2 active — HBF.DR1-DR8 and HBFIT.9-13 derived and documented
