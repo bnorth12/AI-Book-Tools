@@ -15,18 +15,18 @@ Sprint 2 implementation shell for HerbalBookForge Drafting tab work.
 - HBF.UNI1, HBF.UNI4, HBF.UNI4.1
 
 ## Sprint 2 Issues
-- Closes #ISSUE_01
-- Closes #ISSUE_02
-- Closes #ISSUE_03
-- Closes #ISSUE_04
-- Closes #ISSUE_05
-- Closes #ISSUE_06
-- Closes #ISSUE_07
-- Closes #ISSUE_08
-- Closes #ISSUE_09
-- Closes #ISSUE_10
-- Closes #ISSUE_11
-- Closes #ISSUE_12
+- Closes #26 (Drafting requirements analysis and new requirement derivation)
+- Closes #27 (Drafting state model and persistence for chapter drafts)
+- Closes #28 (Drafter prompt contract and JSON parser hardening)
+- Closes #29 (First-pass chapter generation pipeline in Drafting tab)
+- Closes #30 (Editable draft workspace and explicit save behavior)
+- Closes #31 (Revision instruction input and iterative revise flow)
+- Closes #32 (Draft validation pipeline and validation results UI)
+- Closes #33 (Error handling and fallback behavior for drafting workflows)
+- Closes #34 (Smoke and regression test updates for Drafting tab)
+- Closes #35 (Integration test expansion for drafting revision and validation)
+- Closes #36 (Documentation updates for requirements testing and user workflow)
+- Closes #37 (PR packaging review merge issue closure and release evidence)
 
 ## Test Plan
 - Smoke: herbalbookforge-smoke
