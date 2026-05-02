@@ -500,11 +500,60 @@
         <!-- HBF.SA5: Safety report SHALL persist in project.safetyReport with fields: scanScope, scanTimestamp, flags[], summary, lastUpdated. -->
         <!-- HBF.SA6: All Safety tab controls SHALL use stable id and data-testid attributes. -->
         <!-- Sprint 3 Status: In progress | Target: v0.11.0 -->
+        <div class="max-w-5xl mx-auto">
+            <h2 class="text-4xl font-semibold tracking-tight section-header">Safety &amp; Accuracy</h2>
+            <p class="text-emerald-300">Run a safety audit across your manuscript using the Safety &amp; Accuracy Checker Agent. Review contraindications, dosage concerns, PA content limits, and extraction risks.</p>
 
-        <div class="max-w-4xl mx-auto text-center py-32">
-            <div class="text-8xl mb-8">🛡️</div>
-            <h2 class="text-4xl font-semibold mb-4">Safety & Troubleshooting</h2>
-            <p class="text-emerald-400">Coming soon – full safety checking with Safety & Accuracy Checker Agent</p>
+            <!-- Empty state — shown when no chapter drafts exist (HBF.SA6) -->
+            <div id="safety-empty-state" data-testid="safety-empty-state" class="hidden mt-12 text-center py-16 border border-emerald-800 rounded-3xl">
+                <div class="text-6xl mb-4">🛡️</div>
+                <h3 class="text-2xl font-semibold text-emerald-300 mb-2">No chapter drafts available</h3>
+                <p class="text-emerald-500">Generate at least one chapter draft in the Drafting tab before running a safety scan.</p>
+            </div>
+
+            <!-- Scan controls — shown when drafts exist (HBF.SA2, HBF.SA6) -->
+            <div id="safety-scan-controls" class="mt-8 flex flex-wrap items-center gap-4">
+                <label for="safety-scope-select" class="text-emerald-300 font-medium">Scan scope:</label>
+                <select id="safety-scope-select" data-testid="safety-scope-select"
+                    class="bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-4 py-3 text-lg min-w-64">
+                    <option value="full">Full manuscript</option>
+                </select>
+                <button id="safety-scan-btn" data-testid="safety-scan-btn"
+                    onclick="runSafetyCheck()"
+                    class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-medium flex items-center gap-x-2">
+                    🛡️ Run Safety Scan
+                </button>
+            </div>
+
+            <!-- Status message (HBF.SA6) -->
+            <div id="safety-status" data-testid="safety-status" class="mt-4 text-emerald-300 hidden"></div>
+
+            <!-- Safety report panel — shown after scan completes (HBF.SA3, HBF.SA5, HBF.SA6) -->
+            <div id="safety-report" data-testid="safety-report" class="mt-6 hidden">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                    <h3 class="text-2xl font-semibold text-emerald-200">Safety Report</h3>
+                    <span id="safety-scan-meta" class="text-sm text-emerald-500"></span>
+                </div>
+
+                <!-- Summary (HBF.SA3) -->
+                <div class="mb-6 p-5 bg-black/40 border border-emerald-800 rounded-2xl">
+                    <h4 class="text-emerald-400 font-medium mb-2">Overall Summary</h4>
+                    <p id="safety-summary" data-testid="safety-summary" class="text-emerald-200 leading-relaxed"></p>
+                </div>
+
+                <!-- Flag count badge -->
+                <div class="mb-4 flex items-center gap-3">
+                    <span id="safety-flag-count" class="text-emerald-300 font-medium"></span>
+                </div>
+
+                <!-- Zero flags state -->
+                <div id="safety-no-flags" class="hidden py-8 text-center text-emerald-400">
+                    ✅ No safety issues identified in this scan.
+                </div>
+
+                <!-- Flags list (HBF.SA3, HBF.SA4, HBF.SA6) -->
+                <ul id="safety-flags-list" data-testid="safety-flags-list" class="space-y-4"></ul>
+            </div>
         </div>
     </div>
 
