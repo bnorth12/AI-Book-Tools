@@ -354,12 +354,60 @@
         <!-- HBF.DR6: The Drafting Tab SHALL include a draft validation action that evaluates the generated text for quality flags and safety notes and presents actionable feedback. Validation results SHALL be stored in chapter draft state. -->
         <!-- HBF.DR7: Chapter drafts, revision history, and validation results SHALL persist in project state (localStorage save/load and JSON export/import). Schema: drafts[] keyed by chapterId with fields chapterId, chapterTitle, outlineContext, draftText, validation, revisionHistory[], lastUpdated. -->
         <!-- HBF.DR8: All Drafting Tab interactive controls SHALL use stable HTML id and data-testid attributes. Selectors SHALL remain stable unless intentionally revised with a test update. -->
-        <!-- TODO HBF.DR1-DR8: Implement Drafting tab pipeline. Sprint 2 | v0.10.0 -->
+        <div class="max-w-5xl mx-auto">
+            <h2 class="text-4xl font-semibold tracking-tight section-header">Drafting</h2>
+            <p class="text-emerald-300">Generate full chapter drafts using the Drafter Agent. Select a chapter with an accepted outline, then click Generate Draft.</p>
 
-        <div class="max-w-4xl mx-auto text-center py-32">
-            <div class="text-8xl mb-8">✍️</div>
-            <h2 class="text-4xl font-semibold mb-4">Drafting</h2>
-            <p class="text-emerald-400">Coming soon – full chapter drafting with Drafter Agent</p>
+            <!-- Chapter selector + generate controls (HBF.DR3, HBF.DR8) -->
+            <div class="mt-8 flex flex-wrap items-center gap-4">
+                <label for="draft-chapter-select" class="text-emerald-300 font-medium">Chapter:</label>
+                <select id="draft-chapter-select" data-testid="draft-chapter-select"
+                    class="bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-4 py-3 text-lg min-w-64">
+                    <option value="">— select a chapter —</option>
+                </select>
+                <button id="generate-draft-btn" data-testid="generate-draft-btn"
+                    onclick="generateChapterDraft()"
+                    class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-medium flex items-center gap-x-2">
+                    ✍️ Generate Draft
+                </button>
+            </div>
+
+            <!-- Status message (HBF.DR3) -->
+            <div id="draft-status" data-testid="draft-status" class="mt-4 text-emerald-300 hidden"></div>
+
+            <!-- Draft workspace — shown once a draft exists for the selected chapter (HBF.DR3, HBF.DR5, HBF.DR6, HBF.DR8) -->
+            <div id="draft-workspace" class="mt-6 hidden">
+                <div class="flex items-center justify-between mb-3 flex-wrap gap-3">
+                    <h3 id="draft-chapter-title" class="text-2xl font-semibold text-emerald-200"></h3>
+                    <span id="draft-last-updated" class="text-sm text-emerald-500"></span>
+                </div>
+
+                <!-- Editable draft textarea (HBF.CHO3 pattern, HBF.DR7) -->
+                <textarea id="draft-text-area" data-testid="draft-text-area" rows="30"
+                    class="w-full bg-black/60 border border-emerald-700 focus:border-emerald-400 rounded-3xl p-6 leading-relaxed resize-y"></textarea>
+
+                <!-- Save edited draft action (HBF.DR7, HBF.DR8) -->
+                <div class="mt-4 flex gap-3 flex-wrap">
+                    <button id="save-draft-btn" data-testid="save-draft-btn"
+                        onclick="saveDraftEdits()"
+                        class="px-8 py-3 bg-emerald-700 hover:bg-emerald-600 rounded-3xl font-medium">
+                        💾 Save Draft
+                    </button>
+                    <span id="draft-save-status" class="self-center text-sm text-emerald-400 hidden"></span>
+                </div>
+
+                <!-- Quality flags from Drafter Agent (HBF.DR4) -->
+                <div id="draft-quality-flags" class="mt-6 hidden">
+                    <h4 class="text-emerald-400 font-medium mb-2">⚠️ Quality / Safety Flags from Drafter Agent</h4>
+                    <ul id="draft-quality-flags-list" class="space-y-1 text-sm text-yellow-300 list-disc pl-5"></ul>
+                </div>
+            </div>
+
+            <!-- Empty state when no chapter outlines exist -->
+            <div id="draft-empty-state" class="mt-16 text-center hidden">
+                <div class="text-6xl mb-4">📋</div>
+                <p class="text-emerald-400">No accepted chapter outlines yet. Complete the Chapter Outlines tab first.</p>
+            </div>
         </div>
     </div>
 
@@ -1449,6 +1497,9 @@
         function renderDraftForChapter(chapterIndex) {
             const draft = (project.drafts || []).find(d => d.chapterId === chapterIndex);
             const workspace = document.getElementById('draft-workspace');
+            // Clear save status on chapter switch
+            const saveStatus = document.getElementById('draft-save-status');
+            if (saveStatus) saveStatus.classList.add('hidden');
             if (!draft) {
                 if (workspace) workspace.classList.add('hidden');
                 return;
@@ -1574,8 +1625,39 @@
             }
         }
 
-        /**
-         * Chapter Outlines Tab UI Structure (HBF.CHO6)
+        // HBF.DR7: Save manually edited draft text back to project.drafts[] and persist.
+        function saveDraftEdits() {
+            const select = document.getElementById('draft-chapter-select');
+            const idx = parseInt(select?.value, 10);
+            if (isNaN(idx) || !select?.value) {
+                alert('Please select a chapter before saving.');
+                return;
+            }
+            if (!Array.isArray(project.drafts)) project.drafts = [];
+            const draftIdx = project.drafts.findIndex(d => d.chapterId === idx);
+            if (draftIdx < 0) {
+                alert('No draft found for this chapter. Generate a draft first.');
+                return;
+            }
+            const textarea = document.getElementById('draft-text-area');
+            const updatedText = textarea ? textarea.value : project.drafts[draftIdx].draftText;
+            project.drafts[draftIdx].draftText = updatedText;
+            project.drafts[draftIdx].lastUpdated = new Date().toISOString();
+            saveProject();
+
+            // Update the last-updated timestamp in the UI
+            const lastUpdatedEl = document.getElementById('draft-last-updated');
+            if (lastUpdatedEl) {
+                lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleString()}`;
+            }
+            // Show transient save confirmation
+            const saveStatus = document.getElementById('draft-save-status');
+            if (saveStatus) {
+                saveStatus.textContent = `Saved at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                saveStatus.classList.remove('hidden');
+                setTimeout(() => saveStatus.classList.add('hidden'), 3000);
+            }
+        }
          * - Displays a dropdown to select a single chapter/section at a time.
          * - Only the selected chapter’s annotation and title are shown and editable at once.
          * - The dropdown is always present and populated with all chapter titles.
