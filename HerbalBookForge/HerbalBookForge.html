@@ -1612,9 +1612,176 @@
         }
 
         // HBF.DR3: Render the Drafting tab — populate chapter selector and restore existing draft if present.
-        // HBF.SA1: Safety tab render stub — full implementation in Sprint 3 issue #43
+        // HBF.SA1/SA2/SA3/SA5: Safety tab render and scan pipeline
         function renderSafetyTab() {
-            // Placeholder: replaced by full implementation in issue #43
+            const drafts = Array.isArray(project.drafts) ? project.drafts.filter(d => d.draftText && d.draftText.trim()) : [];
+            const emptyState = document.getElementById('safety-empty-state');
+            const scanControls = document.getElementById('safety-scan-controls');
+            const scopeSelect = document.getElementById('safety-scope-select');
+            const reportPanel = document.getElementById('safety-report');
+
+            if (!emptyState) return; // HTML not yet in DOM
+
+            if (drafts.length === 0) {
+                // HBF.SA2: no drafts — show empty state, hide controls and report
+                emptyState.classList.remove('hidden');
+                if (scanControls) scanControls.classList.add('hidden');
+                if (reportPanel) reportPanel.classList.add('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            if (scanControls) scanControls.classList.remove('hidden');
+
+            // Populate scope selector: full manuscript + per-chapter options
+            if (scopeSelect) {
+                const currentVal = scopeSelect.value;
+                scopeSelect.innerHTML = '<option value="full">Full manuscript</option>' +
+                    drafts.map((d, i) => {
+                        const label = d.chapterTitle || `Chapter ${d.chapterId + 1}`;
+                        return `<option value="chapter:${d.chapterId}" ${currentVal === `chapter:${d.chapterId}` ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+                    }).join('');
+            }
+
+            // If a stored report exists, render it
+            if (project.safetyReport) {
+                renderSafetyReport(project.safetyReport);
+            } else {
+                if (reportPanel) reportPanel.classList.add('hidden');
+            }
+        }
+
+        // HBF.SA3: Render a stored safetyReport into the report panel UI
+        function renderSafetyReport(report) {
+            const reportPanel = document.getElementById('safety-report');
+            if (!reportPanel) return;
+            reportPanel.classList.remove('hidden');
+
+            const summaryEl = document.getElementById('safety-summary');
+            if (summaryEl) summaryEl.textContent = report.summary || '';
+
+            const metaEl = document.getElementById('safety-scan-meta');
+            if (metaEl && report.scanTimestamp) {
+                const dt = new Date(report.scanTimestamp);
+                metaEl.textContent = `Scanned ${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — scope: ${report.scanScope || 'full'}`;
+            }
+
+            const flags = Array.isArray(report.flags) ? report.flags : [];
+            const countEl = document.getElementById('safety-flag-count');
+            if (countEl) countEl.textContent = flags.length === 0 ? 'No issues found' : `${flags.length} issue${flags.length === 1 ? '' : 's'} found`;
+
+            const noFlagsEl = document.getElementById('safety-no-flags');
+            const flagsList = document.getElementById('safety-flags-list');
+
+            if (flags.length === 0) {
+                if (noFlagsEl) noFlagsEl.classList.remove('hidden');
+                if (flagsList) flagsList.innerHTML = '';
+                return;
+            }
+            if (noFlagsEl) noFlagsEl.classList.add('hidden');
+
+            const flagTypeColors = {
+                CONTRAINDICATION: 'bg-red-900/50 border-red-700 text-red-300',
+                DOSAGE: 'bg-orange-900/50 border-orange-700 text-orange-300',
+                PA_CONTENT: 'bg-yellow-900/50 border-yellow-700 text-yellow-300',
+                EXTRACTION_RISK: 'bg-amber-900/50 border-amber-700 text-amber-300',
+                GENERAL_SAFETY: 'bg-blue-900/50 border-blue-700 text-blue-300'
+            };
+
+            if (flagsList) {
+                flagsList.innerHTML = flags.map((f, i) => {
+                    const colorClass = flagTypeColors[f.flagType] || flagTypeColors.GENERAL_SAFETY;
+                    const chapterIdNum = parseInt(f.chapterId, 10);
+                    const navAttr = !isNaN(chapterIdNum) ? `data-chapter-id="${chapterIdNum}"` : '';
+                    return `<li class="p-5 border rounded-2xl ${colorClass}">
+                        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+                            <span class="font-semibold">${escapeHtml(f.chapterTitle || `Chapter ${f.chapterId}`)}</span>
+                            <span class="text-xs font-mono px-2 py-1 rounded-full border opacity-80">${escapeHtml(f.flagType)}</span>
+                        </div>
+                        <p class="text-sm mb-2 opacity-90"><strong>Issue:</strong> ${escapeHtml(f.flaggedText)}</p>
+                        <p class="text-sm mb-3 opacity-90"><strong>Suggestion:</strong> ${escapeHtml(f.suggestion)}</p>
+                        ${navAttr ? `<button onclick="navigateToDraftFromFlag(${chapterIdNum})"
+                            class="text-xs px-4 py-2 bg-emerald-700/60 hover:bg-emerald-600/80 rounded-2xl border border-emerald-600">
+                            ✍️ Open in Drafting tab
+                        </button>` : ''}
+                    </li>`;
+                }).join('');
+            }
+        }
+
+        // HBF.SA2/SA5: Run the safety scan for the selected scope
+        async function runSafetyCheck() {
+            const drafts = Array.isArray(project.drafts) ? project.drafts.filter(d => d.draftText && d.draftText.trim()) : [];
+            const statusEl = document.getElementById('safety-status');
+
+            // HBF.SA2 empty manuscript guard
+            if (drafts.length === 0) {
+                if (statusEl) { statusEl.textContent = 'No chapter drafts available. Generate drafts in the Drafting tab first.'; statusEl.classList.remove('hidden'); }
+                return;
+            }
+
+            const scopeSelect = document.getElementById('safety-scope-select');
+            const scope = scopeSelect ? scopeSelect.value : 'full';
+            const scanBtn = document.getElementById('safety-scan-btn');
+
+            if (statusEl) { statusEl.textContent = '🛡️ Running safety scan… this may take 30–60 seconds.'; statusEl.classList.remove('hidden'); }
+            if (scanBtn) scanBtn.disabled = true;
+
+            try {
+                // Build manuscript context based on scope
+                let manuscriptContext = '';
+                let scanScope = scope;
+                if (scope === 'full') {
+                    manuscriptContext = drafts.map(d =>
+                        `=== Chapter: ${d.chapterTitle || `Chapter ${d.chapterId + 1}`} ===\n${d.draftText}`
+                    ).join('\n\n');
+                } else if (scope.startsWith('chapter:')) {
+                    const chapterId = parseInt(scope.replace('chapter:', ''), 10);
+                    const draft = drafts.find(d => d.chapterId === chapterId);
+                    if (!draft) throw new Error('Selected chapter draft not found.');
+                    manuscriptContext = `=== Chapter: ${draft.chapterTitle || `Chapter ${draft.chapterId + 1}`} ===\n${draft.draftText}`;
+                    scanScope = `chapter:${chapterId}`;
+                }
+
+                const result = await callLlmAgent({
+                    agent: 'safety',
+                    context: manuscriptContext,
+                    userPrompt: 'Please perform a thorough safety review of the above chapter text and return your findings in the required JSON format.',
+                    parseResponse: parseSafetyReport,
+                    max_tokens: 2000
+                });
+
+                if (result.error) {
+                    if (statusEl) { statusEl.textContent = `⚠️ ${result.error}`; }
+                } else {
+                    // HBF.SA5: persist to project state
+                    project.safetyReport = {
+                        scanScope,
+                        scanTimestamp: new Date().toISOString(),
+                        flags: result.flags,
+                        summary: result.summary,
+                        lastUpdated: new Date().toISOString()
+                    };
+                    saveProject();
+                    if (statusEl) { statusEl.textContent = `✅ Scan complete — ${result.flags.length} issue(s) found.`; }
+                    renderSafetyReport(project.safetyReport);
+                }
+            } catch (err) {
+                if (statusEl) { statusEl.textContent = `❌ ${err.message}`; }
+            } finally {
+                if (scanBtn) scanBtn.disabled = false;
+            }
+        }
+
+        // HBF.SA4: Navigate from a safety flag to the Drafting tab with the correct chapter selected
+        function navigateToDraftFromFlag(chapterId) {
+            switchTab('drafting');
+            const select = document.getElementById('draft-chapter-select');
+            if (select) {
+                select.value = String(chapterId);
+                // Trigger onchange to render the draft workspace
+                select.dispatchEvent(new Event('change'));
+            }
         }
 
         function renderDraftingTab() {
