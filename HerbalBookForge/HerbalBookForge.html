@@ -491,20 +491,15 @@
         </div>
     </div>
 
-    <!-- SAFETY TAB – DETAILED TODO -->
+    <!-- SAFETY TAB – Sprint 3 (v0.11.0) -->
     <div id="content-safety" class="tab-content hidden">
         <!-- HBF.SA1: The Safety Tab SHALL provide safety checking using the Safety & Accuracy Checker Agent. -->
-        <!-- HBF.SA2: The Safety Tab SHALL scan the entire manuscript or selected chapters for contraindications, dosage issues, extraction risks, and PA content limits (e.g., comfrey). -->
-        <!-- HBF.SA3: The Safety Tab SHALL generate a safety report with flagged items and suggested fixes. -->
-        <!-- HBF.SA4: The Safety Tab SHALL integrate with the Drafter and Chapter Outlines for real-time safety validation. -->
-        <!-- TODO HBF.SA1: Implement Safety Checker Agent call flow and result rendering panel. -->
-        <!-- TODO HBF.SA1 Status: Not started | Planned: v0.10 -->
-        <!-- TODO HBF.SA2: Add selectable scan scope (full manuscript or chapter) and safety-rule scan orchestration. -->
-        <!-- TODO HBF.SA2 Status: Not started | Planned: v0.10 -->
-        <!-- TODO HBF.SA3: Generate structured safety report with flags, severity, and suggested remediation notes. -->
-        <!-- TODO HBF.SA3 Status: Not started | Planned: v0.10 -->
-        <!-- TODO HBF.SA4: Wire safety checks into drafting and chapter-outline edits for re-validation loops. -->
-        <!-- TODO HBF.SA4 Status: Not started | Planned: v0.10 -->
+        <!-- HBF.SA2: The Safety Tab SHALL scan the full manuscript or selected chapters for contraindications, dosage issues, extraction risks, and PA content limits (e.g., comfrey). The scan SHALL send all available chapter draft texts as context to the Safety agent. -->
+        <!-- HBF.SA3: The Safety Tab SHALL generate a structured safety report. Each flag SHALL include: chapterId, chapterTitle, flagType (CONTRAINDICATION|DOSAGE|PA_CONTENT|EXTRACTION_RISK|GENERAL_SAFETY), flaggedText, suggestion. Strict JSON: { "flags": [...], "summary": "..." }. -->
+        <!-- HBF.SA4: The Safety Tab SHALL integrate with the Drafting tab — each flag SHALL provide a navigate-to-draft action that switches the active tab to Drafting and selects the referenced chapter. -->
+        <!-- HBF.SA5: Safety report SHALL persist in project.safetyReport with fields: scanScope, scanTimestamp, flags[], summary, lastUpdated. -->
+        <!-- HBF.SA6: All Safety tab controls SHALL use stable id and data-testid attributes. -->
+        <!-- Sprint 3 Status: In progress | Target: v0.11.0 -->
 
         <div class="max-w-4xl mx-auto text-center py-32">
             <div class="text-8xl mb-8">🛡️</div>
