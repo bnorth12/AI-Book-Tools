@@ -52,14 +52,14 @@ Implement the Drafting tab so users can generate full chapter text from approved
 - [x] Confirm persistence in localStorage save/load and export/import path.
 
 ## Agent and Prompt Update Checklist
-- [ ] Update Drafter prompt in default prompts and Prompts Editor to enforce strict JSON output contract.
-- [ ] Ensure callLlmAgent agent-to-prompt routing remains compliant with HBF.UNI1 and HBF.UNI4.
-- [ ] Add explicit Drafter prompt instructions for:
-  - [ ] Using both Book Goals and selected Chapter Outline
-  - [ ] Producing full chapter prose (not just bullet outline)
-  - [ ] Tone and practical style consistency
-  - [ ] Structured self-check/quality flags in JSON
-- [ ] Add sample Drafter response structure in prompt guidance and parsing docs.
+- [x] Update Drafter prompt in default prompts and Prompts Editor to enforce strict JSON output contract.
+- [x] Ensure callLlmAgent agent-to-prompt routing remains compliant with HBF.UNI1 and HBF.UNI4.
+- [x] Add explicit Drafter prompt instructions for:
+  - [x] Using both Book Goals and selected Chapter Outline
+  - [x] Producing full chapter prose (not just bullet outline)
+  - [x] Tone and practical style consistency
+  - [x] Structured self-check/quality flags in JSON
+- [x] Add sample Drafter response structure in prompt guidance and parsing docs.
 - [ ] Add/confirm separate validation path (Safety and/or validation parser) for generated chapter text.
 
 ## Drafting Workflow Functional Checklist

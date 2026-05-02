@@ -387,7 +387,7 @@
                     <textarea id="prompt-chapter-annotator" class="w-full h-40 bg-black/60 border border-emerald-700 rounded-3xl p-6"></textarea>
                 </div>
                 <div>
-                    <label class="block text-emerald-400 text-sm font-medium mb-2">Drafter Prompt</label>
+                    <label class="block text-emerald-400 text-sm font-medium mb-2">Drafter Prompt (HBF.DR4 — strict JSON contract)</label>
                     <textarea id="prompt-drafter" class="w-full h-40 bg-black/60 border border-emerald-700 rounded-3xl p-6"></textarea>
                 </div>
                 <div>
@@ -472,7 +472,7 @@
                 bookGoalsAgent: `You are the Book Goals Agent – expert herbal book architect focused on helping the user define clear, practical, trustworthy book goals.\n\nWhen responding, always return ONLY the following fields in strict JSON format:\n{\n  \"mainGoal\": \"...\",\n  \"contentTypes\": \"...\",\n  \"tone\": \"...\",\n  \"audience\": \"...\",\n  \"length\": \"...\"\n}\nIf you cannot determine a value, leave it blank. Do not include any explanation or extra text.`,
                 outliner: `You are the Outliner / Structurer Agent – expert herbal book architect.\n\nWhen responding, always return ONLY the following fields in strict JSON format:\n{\n  \"outline\": \"...\"\n}\nThe 'outline' field must contain the full Markdown outline as a string. Do not include any explanation or extra text.\n\nEach chapter must be a Markdown heading in the format: ### Chapter N: Title\n\nExample:\n### Chapter 1: Introduction\n- Topic A\n- Topic B\n\n### Chapter 2: Herbal History\n- Topic C\n- Topic D`,
                 chapterAnnotator: `You are the Chapter Annotator Agent – expert herbal book architect.\nGiven chapter title + chapter context from the full outline, always return ONLY the following fields in strict JSON format:\n{\n  \"title\": \"...\",\n  \"annotation\": \"...\"\n}\nThe 'annotation' field must contain the full Markdown annotation for the chapter. Do not include any explanation or extra text.`,
-                drafter: `You are the Drafter Agent – expert writer in the friendly, practical style of Brigitte Mars.`,
+                drafter: `You are the Drafter Agent – expert writer in the friendly, practical style of Brigitte Mars.\n\nYou will receive the book goals (Main Goal, Tone/Style, Audience) and the annotated chapter outline for a single chapter. Write the full chapter prose for that chapter.\n\nAlways return ONLY the following fields in strict JSON format:\n{\n  "chapterTitle": "...",\n  "draftText": "...",\n  "qualityFlags": []\n}\n\nRules:\n- chapterTitle: the chapter title exactly as provided.\n- draftText: full chapter prose in Markdown. Write at least 800 words of warm, practical, trustworthy herbal content in the style of Brigitte Mars. Use headers, bullet lists, and caution notes where appropriate.\n- qualityFlags: an array of strings, each describing a quality or safety concern the agent noticed (e.g., \"Dosage range not specified for elderberry syrup\"). Leave empty array if none.\n\nDo not include any explanation, preamble, or extra text outside the JSON object.`,
                 safety: `You are the Safety & Accuracy Checker Agent – expert in herbal safety, dosages, contraindications, and extraction risks.\n\nWhen responding, always return ONLY the following fields in strict JSON format:\n{\n  \"flags\": [ ... ],\n  \"summary\": \"...\"\n}\nThe 'flags' field must be an array of flagged issues, and 'summary' is a string. Do not include any explanation or extra text.`
             },
             goals: {
@@ -860,6 +860,10 @@
                     break;
                 case 'drafter':
                     systemPrompt = project.prompts.drafter;
+                    // Fallback to default Drafter prompt if missing (HBF.UNI4)
+                    if (!systemPrompt || !systemPrompt.trim()) {
+                        systemPrompt = `You are the Drafter Agent – expert writer in the friendly, practical style of Brigitte Mars. Always return strict JSON as { "chapterTitle": "...", "draftText": "...", "qualityFlags": [] }.`;
+                    }
                     break;
                 case 'safety':
                     systemPrompt = project.prompts.safety;
@@ -1109,6 +1113,29 @@
                 btn.disabled = false;
                 btn.textContent = original;
             }
+        }
+
+        // HBF.DR4: Drafter Agent response parser — validates strict JSON contract and falls back gracefully.
+        // Expected shape: { chapterTitle: string, draftText: string, qualityFlags: string[] }
+        // On malformed JSON: returns { error, raw, chapterTitle: '', draftText: raw, qualityFlags: [] }
+        function parseDraftResponse(raw) {
+            let parsed;
+            // Strip markdown code fences if present
+            const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+            try {
+                parsed = JSON.parse(cleaned);
+            } catch (e) {
+                return { error: 'Malformed JSON from Drafter Agent', raw, chapterTitle: '', draftText: raw, qualityFlags: [] };
+            }
+            // Validate required fields
+            if (typeof parsed.chapterTitle !== 'string' || typeof parsed.draftText !== 'string') {
+                return { error: 'Missing required fields (chapterTitle, draftText)', raw, chapterTitle: parsed.chapterTitle || '', draftText: parsed.draftText || raw, qualityFlags: Array.isArray(parsed.qualityFlags) ? parsed.qualityFlags : [] };
+            }
+            return {
+                chapterTitle: parsed.chapterTitle,
+                draftText: parsed.draftText,
+                qualityFlags: Array.isArray(parsed.qualityFlags) ? parsed.qualityFlags : []
+            };
         }
 
         function parseChaptersFromOutline(outlineText) {
