@@ -83,9 +83,9 @@
                 <button onclick="switchTab('preview')" id="tab-preview" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">📕 Preview</button>
             </nav>
             <div class="flex items-center gap-x-4">
-                <button onclick="exportProject()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm font-medium shadow-inner">↓ Export</button>
+                <button data-testid="export-project-btn" onclick="exportProject()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm font-medium shadow-inner">↓ Export</button>
                 <label onclick="document.getElementById('import-file').click()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-800 hover:bg-emerald-700 rounded-3xl text-sm font-medium cursor-pointer shadow-inner">↑ Import</label>
-                <input type="file" id="import-file" accept=".json" class="hidden" onchange="handleImport(event)">
+                <input data-testid="import-project-input" type="file" id="import-file" accept=".json" class="hidden" onchange="handleImport(event)">
                 <button onclick="backupCurrentHTML()" class="flex items-center gap-x-2 px-5 h-10 bg-amber-600 hover:bg-amber-500 rounded-3xl text-sm font-medium shadow-inner">💾 Backup HTML</button>
                 <div onclick="showProjectInfo()" class="w-8 h-8 bg-emerald-900 rounded-2xl flex items-center justify-center text-xl cursor-pointer hover:scale-110">ℹ️</div>
             </div>
