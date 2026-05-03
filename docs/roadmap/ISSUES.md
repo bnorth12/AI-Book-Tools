@@ -4,7 +4,7 @@
 
 Use this section as the local execution checklist in VS Code. GitHub issues remain the source of truth.
 
-- [ ] #67 Sprint 5 requirements lock (v0.13.0 scope and acceptance criteria)
+- [x] #67 Sprint 5 requirements lock (v0.13.0 scope and acceptance criteria)
 - [ ] #68 Fix and formalize safety flag content rendering — regression test for parseSafetyReport coerceStr (closes #53)
 - [ ] #69 Implement "Apply suggestion to draft" action on safety flags (closes #52)
 - [ ] #70 Add "Generate Remaining Chapters" to Drafting tab
