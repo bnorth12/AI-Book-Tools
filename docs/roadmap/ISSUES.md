@@ -14,8 +14,8 @@ Use this section as the local execution checklist in VS Code. GitHub issues rema
 - [x] #61 Add RTF export for Word-friendly editing workflow
 - [x] #62 Add smoke coverage for Preview tab controls
 - [x] #63 Add integration tests HBFIT.18-HBFIT.21 for Preview flow
-- [-] #64 Update TESTING and REQUIREMENTS for Preview v0.12.0 (in progress)
-- [ ] #65 Sprint 4 Preview closeout and PR packaging
+- [x] #64 Update TESTING and REQUIREMENTS for Preview v0.12.0
+- [-] #65 Sprint 4 Preview closeout and PR packaging (in progress)
 
 Notes:
 - Deferred Safety issues tracked separately: #52 and #53.
