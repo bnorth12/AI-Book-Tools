@@ -12,9 +12,9 @@ Use this section as the local execution checklist in VS Code. GitHub issues rema
 - [x] #59 Add Markdown export for assembled manuscript
 - [x] #60 Add printable HTML export for print-to-PDF workflow
 - [x] #61 Add RTF export for Word-friendly editing workflow
-- [-] #62 Add smoke coverage for Preview tab controls (in progress)
-- [ ] #63 Add integration tests HBFIT.18-HBFIT.21 for Preview flow
-- [ ] #64 Update TESTING and REQUIREMENTS for Preview v0.12.0
+- [x] #62 Add smoke coverage for Preview tab controls
+- [x] #63 Add integration tests HBFIT.18-HBFIT.21 for Preview flow
+- [-] #64 Update TESTING and REQUIREMENTS for Preview v0.12.0 (in progress)
 - [ ] #65 Sprint 4 Preview closeout and PR packaging
 
 Notes:

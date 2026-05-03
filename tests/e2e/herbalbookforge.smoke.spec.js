@@ -1,5 +1,5 @@
 // Playwright E2E smoke test for HerbalBookForge
-// Covers: tab navigation, Drafting tab control presence (HBF.DR8), Safety tab control presence (HBF.SA6)
+// Covers: tab navigation, Drafting tab controls (HBF.DR8), Safety tab controls (HBF.SA6), Preview tab controls (HBF.PR1/PR2/PR3)
 const { test, expect } = require('@playwright/test');
 
 test.describe('HerbalBookForge Smoke Test', () => {
@@ -51,5 +51,23 @@ test.describe('HerbalBookForge Smoke Test', () => {
     await expect(page.locator('[data-testid="safety-status"]')).toBeAttached();
     await expect(page.locator('[data-testid="safety-report"]')).toBeAttached();
     await expect(page.locator('[data-testid="safety-empty-state"]')).toBeAttached();
+  });
+
+  test('Preview tab renders all required controls (Sprint 4)', async ({ page }) => {
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+
+    // Switch to Preview tab
+    await page.click('button#tab-preview');
+    await page.waitForSelector('#content-preview:not(.hidden)', { timeout: 5000 });
+
+    // Preview assembly and export controls should be present
+    await expect(page.locator('[data-testid="preview-assemble-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="preview-export-md-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="preview-export-html-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="preview-export-rtf-btn"]')).toBeVisible();
+
+    // Empty state visible before assembly; preview content exists in DOM for post-assembly rendering
+    await expect(page.locator('[data-testid="preview-empty-state"]')).toBeVisible();
+    await expect(page.locator('[data-testid="preview-content"]')).toBeAttached();
   });
 });
