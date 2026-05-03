@@ -5,14 +5,14 @@
 Use this section as the local execution checklist in VS Code. GitHub issues remain the source of truth.
 
 - [x] #67 Sprint 5 requirements lock (v0.13.0 scope and acceptance criteria)
-- [ ] #68 Fix and formalize safety flag content rendering — regression test for parseSafetyReport coerceStr (closes #53)
-- [ ] #69 Implement "Apply suggestion to draft" action on safety flags (closes #52)
-- [ ] #70 Add "Generate Remaining Chapters" to Drafting tab
-- [ ] #71 Add smoke test coverage for revision controls and validate-draft-btn (DR8 gaps)
-- [ ] #72 Add integration test asserting flaggedText/suggestion content in safety flag rendering (HBFIT.22)
-- [ ] #73 Add export/import round-trip smoke test
-- [ ] #74 Update TESTING.md and REQUIREMENTS.md for v0.13.0
-- [ ] #75 Sprint 5 closeout and PR packaging
+- [x] #68 Fix and formalize safety flag content rendering — regression test for parseSafetyReport coerceStr (closes #53)
+- [x] #69 Implement "Apply suggestion to draft" action on safety flags (closes #52)
+- [x] #70 Add "Generate Remaining Chapters" to Drafting tab
+- [x] #71 Add smoke test coverage for revision controls and validate-draft-btn (DR8 gaps)
+- [x] #72 Add integration test asserting flaggedText/suggestion content in safety flag rendering (HBFIT.22)
+- [x] #73 Add export/import round-trip smoke test
+- [x] #74 Update TESTING.md and REQUIREMENTS.md for v0.13.0
+- [x] #75 Sprint 5 closeout and PR packaging
 
 Notes:
 - DOCX export (#71 was reassigned — DOCX is deferred beyond v0.13.0, tracked separately)
