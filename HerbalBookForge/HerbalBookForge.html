@@ -608,6 +608,9 @@
                 </aside>
 
                 <section class="card bg-emerald-900/40 border border-emerald-700 rounded-3xl p-6 min-h-[28rem]">
+                    <div id="preview-status" class="hidden mb-5 text-sm text-emerald-300"></div>
+                    <div id="preview-meta" class="hidden mb-5 text-xs text-emerald-500"></div>
+
                     <div id="preview-empty-state" data-testid="preview-empty-state"
                         class="h-full flex flex-col items-center justify-center text-center px-6 py-14">
                         <div class="text-7xl mb-6">📕</div>
@@ -701,6 +704,7 @@
         let apiKeyVisible = false;
         let setupListenersBound = false;
         let goalsListenersBound = false;
+        let previewListenersBound = false;
 
         function escapeHtml(text) {
             return String(text)
@@ -754,6 +758,8 @@
             if (tabId === 'drafting') renderDraftingTab();
             // HBF.SA1: re-render Safety tab when activated
             if (tabId === 'safety') renderSafetyTab();
+            // HBF.PR2: re-render Preview tab when activated
+            if (tabId === 'preview') renderPreviewTab();
         }
 
         function loadProject() {
@@ -805,6 +811,7 @@
             renderChapterList();
             renderDraftingTab();
             renderSafetyTab();
+            renderPreviewTab();
             updateFooter();
         }
 
@@ -1010,6 +1017,136 @@
                     }
                 });
             }
+        }
+
+        function setPreviewStatus(message, level = 'info') {
+            const statusEl = document.getElementById('preview-status');
+            if (!statusEl) return;
+            if (!message) {
+                statusEl.classList.add('hidden');
+                statusEl.textContent = '';
+                statusEl.classList.remove('text-red-300', 'text-amber-300', 'text-emerald-300');
+                statusEl.classList.add('text-emerald-300');
+                return;
+            }
+            statusEl.classList.remove('hidden', 'text-red-300', 'text-amber-300', 'text-emerald-300');
+            statusEl.classList.add(level === 'error' ? 'text-red-300' : (level === 'warn' ? 'text-amber-300' : 'text-emerald-300'));
+            statusEl.textContent = message;
+        }
+
+        function getMostRecentDraftUpdateTimestamp() {
+            const drafts = Array.isArray(project.drafts) ? project.drafts : [];
+            const latest = drafts
+                .map(d => (d && d.lastUpdated ? Date.parse(d.lastUpdated) : NaN))
+                .filter(ts => !isNaN(ts))
+                .sort((a, b) => b - a)[0];
+            return typeof latest === 'number' ? latest : null;
+        }
+
+        function isPreviewStale() {
+            const lastGenerated = project.preview?.lastGenerated ? Date.parse(project.preview.lastGenerated) : NaN;
+            if (isNaN(lastGenerated)) return false;
+            const latestDraftUpdate = getMostRecentDraftUpdateTimestamp();
+            return latestDraftUpdate !== null && latestDraftUpdate > lastGenerated;
+        }
+
+        function renderPreviewTab() {
+            const emptyState = document.getElementById('preview-empty-state');
+            const content = document.getElementById('preview-content');
+            const meta = document.getElementById('preview-meta');
+            if (!emptyState || !content) return;
+
+            const assembledText = (project.preview?.assembledText || '').trim();
+            if (!assembledText) {
+                emptyState.classList.remove('hidden');
+                content.classList.add('hidden');
+                content.innerHTML = '';
+                if (meta) {
+                    meta.classList.add('hidden');
+                    meta.textContent = '';
+                }
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            content.classList.remove('hidden');
+            content.innerHTML = `<div class="whitespace-pre-wrap leading-relaxed text-emerald-100">${escapeHtml(assembledText)}</div>`;
+
+            if (meta) {
+                const generatedLabel = project.preview.lastGenerated
+                    ? new Date(project.preview.lastGenerated).toLocaleString()
+                    : 'Unknown';
+                const sectionCount = assembledText.split('\n\n---\n\n').filter(Boolean).length;
+                meta.textContent = `Last assembled: ${generatedLabel} | Sections: ${sectionCount}`;
+                meta.classList.remove('hidden');
+            }
+
+            if (isPreviewStale()) {
+                setPreviewStatus('Preview may be out of date. Re-run Assemble Manuscript to include latest draft edits.', 'warn');
+            }
+        }
+
+        function assembleManuscript() {
+            const chapters = Array.isArray(project.chapterOutlines) ? project.chapterOutlines : [];
+            const drafts = Array.isArray(project.drafts) ? project.drafts : [];
+
+            if (drafts.length === 0) {
+                project.preview = normalizePreviewState(project.preview);
+                project.preview.assembledText = '';
+                project.preview.lastGenerated = null;
+                saveProject();
+                renderPreviewTab();
+                setPreviewStatus('No chapter drafts available. Generate chapter drafts in the Drafting tab first.', 'error');
+                return;
+            }
+
+            const sections = [];
+
+            // HBF.PR1/HBF.PR2: compile chapter drafts in outline order with stable headings.
+            if (chapters.length > 0) {
+                chapters.forEach((ch, idx) => {
+                    const draft = drafts.find(d => d.chapterId === idx && typeof d.draftText === 'string' && d.draftText.trim());
+                    if (!draft) return;
+                    const title = (ch?.title || draft.chapterTitle || `Chapter ${idx + 1}`).trim();
+                    sections.push(`## ${title}\n\n${draft.draftText.trim()}`);
+                });
+            }
+
+            // Legacy fallback for sessions with drafts but missing chapterOutlines.
+            if (sections.length === 0) {
+                drafts
+                    .filter(d => typeof d?.draftText === 'string' && d.draftText.trim())
+                    .sort((a, b) => (a.chapterId ?? 0) - (b.chapterId ?? 0))
+                    .forEach((d, index) => {
+                        const title = (d.chapterTitle || `Chapter ${(typeof d.chapterId === 'number' ? d.chapterId + 1 : index + 1)}`).trim();
+                        sections.push(`## ${title}\n\n${d.draftText.trim()}`);
+                    });
+            }
+
+            if (sections.length === 0) {
+                project.preview = normalizePreviewState(project.preview);
+                project.preview.assembledText = '';
+                project.preview.lastGenerated = null;
+                saveProject();
+                renderPreviewTab();
+                setPreviewStatus('Draft entries exist but contain no text. Save chapter text before assembling.', 'error');
+                return;
+            }
+
+            project.preview = normalizePreviewState(project.preview);
+            project.preview.assembledText = sections.join('\n\n---\n\n');
+            project.preview.lastGenerated = new Date().toISOString();
+            saveProject();
+            renderPreviewTab();
+            setPreviewStatus(`Assembled manuscript with ${sections.length} section${sections.length === 1 ? '' : 's'}.`);
+        }
+
+        function bindPreviewListeners() {
+            if (previewListenersBound) return;
+            previewListenersBound = true;
+            document.getElementById('preview-assemble-btn')?.addEventListener('click', () => {
+                assembleManuscript();
+            });
         }
 
         function renderChatHistory() {
@@ -2404,6 +2541,7 @@
             loadProject();
             bindSetupListeners();
             bindGoalsListeners();
+            bindPreviewListeners();
             switchTab('goals');
         }
 
