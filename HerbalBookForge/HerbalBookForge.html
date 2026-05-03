@@ -32,7 +32,7 @@
     Four internal herbal-medicine expert agents SHALL be defined inside the app with specialized prompts: Book Goals Agent, Outliner/Structurer, Drafter, Safety & Accuracy Checker.
     Every relevant API call SHALL include BOTH collections_search (default collection_840cb08d-163e-430a-a1aa-dd65b500e9bb) and web_search.
     All functionality SHALL be traceable via numbered SHALL requirements embedded as comments with version/date tracking.
-    Version: 0.9.5 | Date: 2026-04-17
+    Version: 0.13.0 | Date: 2026-05-02 | Sprint 5 — Quality, Workflow & Test Coverage
     -->
 
     <!-- TOP-LEVEL REQUIREMENTS -->
@@ -354,6 +354,7 @@
         <!-- HBF.DR6: The Drafting Tab SHALL include a draft validation action that evaluates the generated text for quality flags and safety notes and presents actionable feedback. Validation results SHALL be stored in chapter draft state. -->
         <!-- HBF.DR7: Chapter drafts, revision history, and validation results SHALL persist in project state (localStorage save/load and JSON export/import). Schema: drafts[] keyed by chapterId with fields chapterId, chapterTitle, outlineContext, draftText, validation, revisionHistory[], lastUpdated. -->
         <!-- HBF.DR8: All Drafting Tab interactive controls SHALL use stable HTML id and data-testid attributes. Selectors SHALL remain stable unless intentionally revised with a test update. -->
+        <!-- HBF.DR9: The Drafting Tab SHALL provide a "Generate Remaining Chapters" action that iterates through the outline in order, skips any chapter with a non-empty existing draft, and generates drafts for all remaining chapters sequentially with a progress indicator. The action SHALL not overwrite any existing draft. -->
         <div class="max-w-5xl mx-auto">
             <h2 class="text-4xl font-semibold tracking-tight section-header">Drafting</h2>
             <p class="text-emerald-300">Generate full chapter drafts using the Drafter Agent. Select a chapter with an accepted outline, then click Generate Draft.</p>
@@ -1658,6 +1659,7 @@
         // On malformed JSON: returns { error, raw, chapterTitle: '', draftText: raw, qualityFlags: [] }
         // HBF.SA3: Parse Safety agent manuscript-level scan response into structured safetyReport
         function parseSafetyReport(raw) {
+            // HBF.SA3 (v0.13.0): Field name normalization is required for resilience. The parser SHALL accept alternative field names (e.g., issue instead of flaggedText, recommendation instead of suggestion) and stringify objects/arrays rather than silently dropping them.
             let parsed;
             // Strip markdown code fences if present
             const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
@@ -1670,14 +1672,26 @@
             if (!Array.isArray(parsed.flags) || typeof parsed.summary !== 'string') {
                 return { error: 'Missing required fields (flags, summary)', raw, flags: Array.isArray(parsed.flags) ? parsed.flags : [], summary: parsed.summary || 'Safety scan returned an unexpected format.' };
             }
-            // Normalise each flag — ensure all required fields are strings
+            console.log('[DEBUG] parseSafetyReport raw flags from LLM:', JSON.stringify(parsed.flags, null, 2));
+            // Normalise each flag — ensure all required fields are strings.
+            // Accept common LLM alternative field names and stringify objects rather than silently dropping them.
             const validTypes = ['CONTRAINDICATION', 'DOSAGE', 'PA_CONTENT', 'EXTRACTION_RISK', 'GENERAL_SAFETY'];
+            const coerceStr = (...candidates) => {
+                for (const v of candidates) {
+                    if (typeof v === 'string' && v.trim()) return v;
+                    if (v !== null && v !== undefined && typeof v === 'object') {
+                        const s = JSON.stringify(v);
+                        if (s && s !== '{}' && s !== '[]') return s;
+                    }
+                }
+                return '';
+            };
             const flags = parsed.flags.map(f => ({
-                chapterId: f.chapterId !== undefined ? String(f.chapterId) : '',
-                chapterTitle: typeof f.chapterTitle === 'string' ? f.chapterTitle : '',
-                flagType: validTypes.includes(f.flagType) ? f.flagType : 'GENERAL_SAFETY',
-                flaggedText: typeof f.flaggedText === 'string' ? f.flaggedText : '',
-                suggestion: typeof f.suggestion === 'string' ? f.suggestion : ''
+                chapterId: f.chapterId !== undefined ? String(f.chapterId) : (f.chapter_id !== undefined ? String(f.chapter_id) : ''),
+                chapterTitle: coerceStr(f.chapterTitle, f.chapter, f.chapter_title),
+                flagType: validTypes.includes(f.flagType) ? f.flagType : (validTypes.includes(f.flag_type) ? f.flag_type : 'GENERAL_SAFETY'),
+                flaggedText: coerceStr(f.flaggedText, f.flagged_text, f.issue, f.text, f.description, f.concern),
+                suggestion: coerceStr(f.suggestion, f.suggestedFix, f.suggested_fix, f.recommendation, f.fix, f.guidance)
             }));
             return { flags, summary: parsed.summary };
         }
@@ -2041,6 +2055,7 @@
             };
 
             if (flagsList) {
+                // HBF.SA4 (v0.13.0): Each flag SHALL provide both a navigate-to-draft action and an apply-suggestion action. Apply-suggestion pre-fills the revision instruction textarea.
                 flagsList.innerHTML = flags.map((f, i) => {
                     const colorClass = flagTypeColors[f.flagType] || flagTypeColors.GENERAL_SAFETY;
                     const chapterIdNum = parseInt(f.chapterId, 10);
