@@ -1,7 +1,7 @@
 # HerbalBookForge Requirements
 
 Date: 2026-05-02
-Application: HerbalBookForge (v0.12.0 — Sprint 4 requirements)
+Application: HerbalBookForge (v1.0.0 — GA Release)
 Source File: HerbalBookForge.html
 Version Status: Sprint 4 active — Preview tab requirements derived and locked
 
@@ -149,6 +149,50 @@ HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LL
 - HBFIT.23: Integration tests SHALL verify the "Apply suggestion" action on a safety flag: clicking the action SHALL pre-fill the revision instruction textarea with the suggestion text, and the user SHALL be able to submit it as a revision (verifying HBF.SA4 extension).
 - HBFIT.24: Integration tests SHALL verify the "Generate Remaining Chapters" action: given a project with a partial set of existing drafts, invoke the action and verify that only chapters without existing drafts are generated (verifying HBF.DR9 non-destructive behavior).
 
+## Sprint 6 Requirements (v0.14.0 — Robustness, UX Polish & Output Quality)
+
+### Drafting Tab (Sprint 6)
+
+- HBF.DR10: Drafting progress and status displays SHALL use 1-based chapter numbering and SHALL match the chapter currently being generated for both single-chapter and batch generation actions. A centralized `toDisplayChapterNumber(index)` helper SHALL be used everywhere chapter numbers appear in status strings.
+
+### Safety Tab (Sprint 6)
+
+- HBF.SA7: Safety scan scope labels SHALL display the exact user-selected chapter number (1-based) for chapter-scoped scans. Full-book safety scan flags SHALL include a `chapterNumber` field (1-based integer) in each flag object to unambiguously identify the flagged chapter.
+- HBF.SA8: The Safety agent prompt/output contract SHALL require per-flag `chapterNumber` (1-based), `issue` or normalized equivalent, and `suggestion` or normalized equivalent. The UI SHALL surface a user-visible parse warning banner when a safety flag cannot be parsed to a displayable state.
+
+### Chapter Outlines Tab (Sprint 6)
+
+- HBF.CHO8: Outline improve/edit outputs SHALL be normalized to human-readable outline text before render/save. A `normalizeOutlineText(raw)` function SHALL strip code fences (` ``` `, ` ```json `, ` ```markdown `), JSON wrapper objects, escaped `\n` sequences, and leading/trailing whitespace. Raw JSON or escaped markup SHALL not be displayed in the chapter-outline editor.
+- HBF.CHO9: Outline generation and improve flows SHALL detect LLM response truncation via `finish_reason`. If `finish_reason === 'length'` or the returned outline structure is incomplete, the flow SHALL surface a clear user warning and SHALL block the Accept action until the user explicitly acknowledges the risk.
+
+### Preview Tab (Sprint 6)
+
+- HBF.PR5: Assembled manuscript output SHALL contain exactly one chapter heading per chapter section. The `assembleManuscript()` function SHALL use the outline chapter title as the heading and SHALL strip any matching heading prefix from the draft body text before concatenation to prevent duplication.
+
+### UI / Navigation (Sprint 6)
+
+- HBF.UI1: Top navigation tab order SHALL reflect author workflow: Setup → Goals → Outline → Chapter Outlines → Drafting → Safety → Preview → Prompts. The Prompts tab SHALL appear after the Preview tab.
+- HBF.UI2: The header Export button SHALL use an outward/upload arrow (↑) and the Import control SHALL use an inward/download arrow (↓), aligned with standard file-operation semantics. Both controls SHALL include `aria-label` and `title` attributes for accessibility.
+- HBF.UI3: The footer status line SHALL use author-facing language. The developer-centric copy "You = developer only | Internal agents = herbal experts only" SHALL be replaced with: "Author Mode | Agents: Herbal Experts Only". A `data-testid="footer-status-label"` attribute SHALL be present on the status element.
+
+### Content Quality / Prompts (Sprint 6)
+
+- HBF.POL1: Style-reference author names used in prompts SHALL not appear by name in generated chapter or outline prose unless explicitly requested by the user. After each draft or outline generation, a `detectAuthorNameLeakage(text, authorNames)` post-check SHALL scan the output for the style-reference author name(s). If a match is found, a non-blocking warning SHALL be surfaced to the user with the flagged excerpt. The warning SHALL not auto-strip content; the user decides whether to revise.
+
+## Integration Testing Requirements (v0.14.0 — Sprint 6)
+
+- HBFIT.25: Integration tests SHALL verify that Generate Remaining Chapters and single-draft generation status messages use 1-based chapter numbering accurate for chapters beyond chapter 10, and that the status matches the chapter currently being generated.
+- HBFIT.26: Integration tests SHALL verify that a chapter-scoped safety scan label displays the correct 1-based chapter number, and that full-book scan flags each include a `chapterNumber` field.
+- HBFIT.27: Integration tests SHALL verify that safety flag rendering works with alternate field names (`issue`, `recommendation`) and that a malformed flag triggers a visible parse warning banner in the Safety tab UI.
+- HBFIT.28: Integration tests SHALL verify that outline improve/edit outputs containing JSON wrappers, code fences, or escaped markup are normalized to readable plain text before populating the outline editor and before being saved to project state.
+- HBFIT.29: Integration tests SHALL verify that a simulated truncated outline response (finish_reason `'length'`) surfaces a user-visible warning and blocks the Accept action until acknowledged.
+- HBFIT.30: Integration tests SHALL verify that assembled manuscript output contains exactly one chapter heading per chapter, with no duplicate heading lines, for both exact-match and near-match chapter title scenarios.
+
+## Smoke Testing Requirements (v0.14.0 — Sprint 6)
+
+- HBFST.7: Smoke tests SHALL verify that the Prompts tab button appears after the Preview tab button in DOM order, and that the footer contains an element with `data-testid="footer-status-label"` containing author-facing text.
+- HBFST.8: Smoke tests SHALL verify that the Export header button has an `aria-label` containing "Export" and uses an outward arrow, and the Import control has an `aria-label` containing "Import" and uses an inward arrow.
+
 ## Deferred Requirements (Post-v0.13.0)
 
 - HBF.PR3.D1: Native DOCX export generation is deferred beyond v0.13.0.
@@ -158,5 +202,5 @@ HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LL
 - Synced with HerbalBookForge.html inline annotations: Yes
 - Last sync date: 2026-05-02 (Sprint 5 requirements lock in progress)
 - Integration test coverage: Sprint 1 complete; Sprint 2 (Drafting) complete — HBFIT.1-13; Sprint 3 (Safety) complete — HBFIT.14-17; Sprint 4 (Preview) complete — HBFIT.18-21; Sprint 5 (Quality & Workflow) requirements locked — HBFIT.22-24, HBF.DR9, HBF.SA3/SA4 extensions
-- Current status: v0.13.0 Sprint 5 requirements locked for Quality, Workflow & Test Coverage
-- Last sync: REQUIREMENTS.md updated 2026-05-02 — HBF.DR9, HBF.SA3 normalization clarification, HBF.SA4 extension, HBFIT.22-24 added
+- Current status: v1.0.0 GA — Sprint 6 Robustness, UX Polish & Output Quality complete
+- Last sync: REQUIREMENTS.md updated 2026-05-02 — HBF.DR10, HBF.SA7-8, HBF.CHO8-9, HBF.PR5, HBF.UI1-3, HBF.POL1, HBFIT.25-30, HBFST.7-8 added

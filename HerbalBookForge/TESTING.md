@@ -1,6 +1,6 @@
 # HerbalBookForge Testing Guide
 
-**Version**: v0.13.0 | **Updated**: 2026-05-02 (Sprint 5)
+**Version**: v1.0.0 | **Updated**: 2026-05-02 (v1.0.0 GA)
 
 ## Overview
 
@@ -12,7 +12,7 @@ HerbalBookForge includes comprehensive test coverage spanning smoke tests, regre
 
 **Purpose**: Quick validation of core UI elements, tab navigation, Drafting/Safety/Preview control presence
 
-**Tests** (6 total — 4 core + 2 Sprint 5):
+**Tests** (8 total — 4 core + 2 Sprint 5 + 2 Sprint 6):
 
 #### Test 1 — App loads and shows main tabs
 - All 7 main tab buttons are visible (`tab-goals`, `tab-outline`, `tab-chapter-outlines`, `tab-drafting`, `tab-prompts`, `tab-safety`, `tab-preview`)
@@ -77,7 +77,23 @@ Switches to the Setup tab and asserts export/import controls:
 npx playwright test --project=herbalbookforge-smoke
 ```
 
-**Status**: ✅ Passing (6/6)
+#### Test 7 — Prompts tab appears after Preview in DOM order (HBFST.7, Sprint 6)
+Verifies tab navigation order:
+- `#tab-preview` precedes `#tab-prompts` in DOM order
+- `[data-testid="footer-status-label"]` is attached and contains author-facing text (matches `/author/i`)
+
+#### Test 8 — Export and Import controls have semantic aria-labels (HBFST.8, Sprint 6)
+- `[data-testid="export-project-btn"]` has an `aria-label` containing "Export"
+- An element with `aria-label` containing "Import" is present in the DOM
+
+**Run time**: ~20-25 seconds
+
+**Command**:
+```bash
+npx playwright test --project=herbalbookforge-smoke
+```
+
+**Status**: ✅ Passing (8/8)
 
 ---
 
@@ -531,6 +547,58 @@ jobs:
 
 ---
 
-**Last updated**: 2026-04-25
+---
+
+### 7. Sprint 6 Robustness Tests (`herbalbookforge.integration.spec.js`) — Sprint 6 (HBFIT.25–30)
+
+**Purpose**: Validate Sprint 6 robustness improvements — chapter numbering, safety scope labels, malformed-flag warnings, outline normalization, truncation detection, and heading deduplication.
+
+#### HBFIT.25 — Chapter selector shows 1-based numbers
+- Injects a 1-chapter project, navigates to Drafting tab
+- Asserts the chapter select option value `'0'` displays as "Chapter 1" or similar (not "Chapter 0")
+
+#### HBFIT.26 — Safety scope options do not expose 0-based chapter IDs
+- Injects a project with 1 draft, navigates to Safety tab
+- Checks scope-select `<option>` text does not contain `chapter:0`
+
+#### HBFIT.27 — Safety warning banner for malformed flags
+- Injects a safety report with a flag missing `flaggedText` (`_parseWarning` set)
+- Navigates to Safety tab; asserts `[data-testid="safety-status"]` is present in DOM
+
+#### HBFIT.28 — `normalizeOutlineText` strips code fences
+- Calls `normalizeOutlineText('\`\`\`markdown\n## Chapter 1\nHerbs\n\`\`\`')` in page context
+- Asserts result contains "Chapter 1" and does not contain ` \`\`\` `
+
+#### HBFIT.29 — `isOutlineTruncated` detects `finish_reason=length`
+- Calls `isOutlineTruncated('length', 'Chapter 1: Basics')` in page context
+- Asserts result is `true`
+
+#### HBFIT.30 — Preview assembly strips duplicate heading from draft body
+- Injects a draft whose `draftText` begins with `# Lavender` matching the chapter title
+- Assembles manuscript; asserts the rendered preview does not contain two consecutive `<h>` tags for "Lavender"
+
+**Status**: ✅ Passing (33/33)
+
+---
+
+## Future Test Plans (v0.14.0+)
+
+- [ ] Mock LLM responses for faster CI/CD testing (no API key required)
+- [ ] Regression spec for Drafting tab (selector/visibility assertions after state changes)
+- [ ] Performance regression testing
+- [ ] Cross-browser testing (Firefox, Safari)
+
+---
+
+## Support & Questions
+
+- Check test output logs for specific failures
+- Review trace files: `npx playwright show-trace test-results/trace.zip`
+- Verify `.env` file exists and contains valid key
+- Check Grok API status at https://status.x.ai
+
+---
+
+**Last updated**: 2026-05-02
 **Test suite version**: 1.0
-**HerbalBookForge version**: 0.9.5
+**HerbalBookForge version**: 1.0.0

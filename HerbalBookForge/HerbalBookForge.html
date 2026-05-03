@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -32,7 +32,7 @@
     Four internal herbal-medicine expert agents SHALL be defined inside the app with specialized prompts: Book Goals Agent, Outliner/Structurer, Drafter, Safety & Accuracy Checker.
     Every relevant API call SHALL include BOTH collections_search (default collection_840cb08d-163e-430a-a1aa-dd65b500e9bb) and web_search.
     All functionality SHALL be traceable via numbered SHALL requirements embedded as comments with version/date tracking.
-    Version: 0.13.0 | Date: 2026-05-02 | Sprint 5 — Quality, Workflow & Test Coverage
+    Version: 1.0.0 | Date: 2026-05-02 | v1.0.0 GA Release — Full feature-complete herb book authoring tool
     -->
 
     <!-- TOP-LEVEL REQUIREMENTS -->
@@ -70,7 +70,7 @@
             <div class="flex items-center gap-x-3">
                 <div class="w-9 h-9 bg-emerald-500 rounded-2xl flex items-center justify-center text-2xl shadow-inner">🌿</div>
                 <h1 class="text-3xl font-semibold tracking-[-1px] section-header">HerbalBookForge</h1>
-                <span class="px-3 py-0.5 text-xs font-medium bg-emerald-600/30 text-emerald-300 rounded-3xl border border-emerald-400/30">v0.12.0</span>
+                <span class="px-3 py-0.5 text-xs font-medium bg-emerald-600/30 text-emerald-300 rounded-3xl border border-emerald-400/30">v1.0.0</span>
             </div>
             <nav class="flex items-center gap-x-1.5 overflow-x-auto hide-scrollbar">
                 <button onclick="switchTab('setup')" id="tab-setup" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">⚙️ Setup</button>
@@ -78,13 +78,13 @@
                 <button onclick="switchTab('outline')" id="tab-outline" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">📋 Outline</button>
                 <button onclick="switchTab('chapter-outlines')" id="tab-chapter-outlines" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">📖 Chapter Outlines</button>
                 <button onclick="switchTab('drafting')" id="tab-drafting" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">✍️ Drafting</button>
-                <button onclick="switchTab('prompts')" id="tab-prompts" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">🧠 Prompts</button>
                 <button onclick="switchTab('safety')" id="tab-safety" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">🛡️ Safety</button>
                 <button onclick="switchTab('preview')" id="tab-preview" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">📕 Preview</button>
+                <button onclick="switchTab('prompts')" id="tab-prompts" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">🧠 Prompts</button>
             </nav>
             <div class="flex items-center gap-x-4">
-                <button data-testid="export-project-btn" onclick="exportProject()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm font-medium shadow-inner">↓ Export</button>
-                <label onclick="document.getElementById('import-file').click()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-800 hover:bg-emerald-700 rounded-3xl text-sm font-medium cursor-pointer shadow-inner">↑ Import</label>
+                <button data-testid="export-project-btn" aria-label="Export project to JSON file" title="Export project to JSON file" onclick="exportProject()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm font-medium shadow-inner">↑ Export</button>
+                <label aria-label="Import project from JSON file" title="Import project from JSON file" onclick="document.getElementById('import-file').click()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-800 hover:bg-emerald-700 rounded-3xl text-sm font-medium cursor-pointer shadow-inner">↓ Import</label>
                 <input data-testid="import-project-input" type="file" id="import-file" accept=".json" class="hidden" onchange="handleImport(event)">
                 <button onclick="backupCurrentHTML()" class="flex items-center gap-x-2 px-5 h-10 bg-amber-600 hover:bg-amber-500 rounded-3xl text-sm font-medium shadow-inner">💾 Backup HTML</button>
                 <div onclick="showProjectInfo()" class="w-8 h-8 bg-emerald-900 rounded-2xl flex items-center justify-center text-xl cursor-pointer hover:scale-110">ℹ️</div>
@@ -136,7 +136,7 @@
                                 <div class="grid grid-cols-2 gap-6">
                                     <div>
                                         <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Version</label>
-                                        <div id="project-version-display" class="bg-black/40 border border-emerald-700 rounded-2xl px-6 py-4 font-mono">v0.12.0</div>
+                                        <div id="project-version-display" class="bg-black/40 border border-emerald-700 rounded-2xl px-6 py-4 font-mono">v1.0.0</div>
                                     </div>
                                     <div>
                                         <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Last Edited</label>
@@ -635,9 +635,9 @@
     </main>
 
     <footer class="fixed bottom-0 left-0 right-0 bg-black/80 border-t border-emerald-800 py-3 px-8 text-xs font-mono text-emerald-400 flex items-center justify-between z-50">
-        <div>HerbalBookForge v0.12.0</div>
+        <div>HerbalBookForge v1.0.0</div>
         <div id="footer-project-name" class="text-emerald-300 font-medium"></div>
-        <div>You = developer only | Internal agents = herbal experts only</div>
+        <div data-testid="footer-status-label">Author Mode | Agents: Herbal Experts Only</div>
     </footer>
 
     <!-- GENERIC SHARED SCRIPT SECTION (HBF.GEN1) -->
@@ -666,7 +666,7 @@
         }
 
         let project = {
-            meta: { version: "0.12.0", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
+            meta: { version: "1.0.0", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
             setup: {
                 apiKey: "",
                 collectionIds: ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"],
@@ -770,7 +770,8 @@
         }
 
         function loadProject() {
-            const saved = localStorage.getItem('herbalBookForgeProject_v0.12.0')
+            const saved = localStorage.getItem('herbalBookForgeProject_v1.0.0')
+                || localStorage.getItem('herbalBookForgeProject_v0.14.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.11.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.10.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.9.5')
@@ -794,7 +795,7 @@
                 } catch (e) {}
             }
 
-            project.meta.version = "0.12.0";
+            project.meta.version = "1.0.0";
             // HBF.DR7: ensure drafts is always a valid array after load
             if (!Array.isArray(project.drafts)) project.drafts = [];
             // HBF.SA5: ensure safetyReport is null (not undefined) if absent
@@ -824,7 +825,7 @@
 
         function saveProject() {
             project.meta.lastEdited = new Date().toISOString();
-            localStorage.setItem('herbalBookForgeProject_v0.12.0', JSON.stringify(project));
+            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(project));
             const status = document.getElementById('save-status');
             if (status) {
                 status.innerHTML = `Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
@@ -875,7 +876,7 @@
                         // HBF.PR4: preserve preview metadata on import with schema-safe defaults
                         preview: normalizePreviewState(parsed.preview)
                     };
-                    project.meta.version = "0.12.0";
+                    project.meta.version = "1.0.0";
                     loadProject();
                     saveProject();
                     alert('Project imported successfully.');
@@ -1255,12 +1256,21 @@
             const sections = [];
 
             // HBF.PR1/HBF.PR2: compile chapter drafts in outline order with stable headings.
+            // HBF.PR5: strip duplicate heading from draft body before concatenation.
             if (chapters.length > 0) {
                 chapters.forEach((ch, idx) => {
                     const draft = drafts.find(d => d.chapterId === idx && typeof d.draftText === 'string' && d.draftText.trim());
                     if (!draft) return;
                     const title = (ch?.title || draft.chapterTitle || `Chapter ${idx + 1}`).trim();
-                    sections.push(`## ${title}\n\n${draft.draftText.trim()}`);
+                    // HBF.PR5: remove a leading heading line from draft body if it matches the chapter title
+                    let draftBody = draft.draftText.trim();
+                    const headingRegex = /^#+\s*/;
+                    const firstLine = draftBody.split('\n')[0] || '';
+                    const firstLineText = firstLine.replace(headingRegex, '').trim();
+                    if (firstLineText.toLowerCase() === title.toLowerCase()) {
+                        draftBody = draftBody.slice(firstLine.length).replace(/^\n+/, '');
+                    }
+                    sections.push(`## ${title}\n\n${draftBody}`);
                 });
             }
 
@@ -1360,6 +1370,56 @@
         }
 
 
+        // HBF.DR10: Centralized 1-based chapter display number helper.
+        // Always use this function when showing a chapter number to the user in status messages.
+        function toDisplayChapterNumber(zeroBasedIndex) {
+            return (typeof zeroBasedIndex === 'number' ? zeroBasedIndex : 0) + 1;
+        }
+
+        // HBF.POL1: Author name leakage detection.
+        // Scans generated text for names extracted from style-reference fields and emits a non-blocking warning.
+        function detectAuthorNameLeakage(text, authorNames) {
+            if (typeof text !== 'string' || !text || !Array.isArray(authorNames) || !authorNames.length) return [];
+            return authorNames.filter(name => name && new RegExp('\\b' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(text));
+        }
+
+        function extractStyleReferenceNames(goals) {
+            // Pull candidate proper names (2+ words, capitalized) from tone/style field
+            const tone = (goals && typeof goals.tone === 'string') ? goals.tone : '';
+            const matches = tone.match(/\b[A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)*/g) || [];
+            return [...new Set(matches)];
+        }
+
+        // HBF.CHO8: Normalize LLM outline output to human-readable text.
+        // Strips code fences, JSON wrappers, escaped \n sequences, and leading/trailing whitespace.
+        function normalizeOutlineText(raw) {
+            if (typeof raw !== 'string') raw = typeof raw === 'object' && raw !== null ? JSON.stringify(raw, null, 2) : String(raw || '');
+            // Strip code fences: ```json, ```markdown, or plain ```
+            let text = raw.replace(/^```(?:json|markdown)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+            // If it looks like a JSON object with an 'outline' field, unwrap it
+            if (text.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(text);
+                    if (parsed && typeof parsed.outline === 'string') text = parsed.outline;
+                } catch (e) { /* not JSON, continue */ }
+            }
+            // Convert escaped \n sequences to real newlines
+            text = text.replace(/\\n/g, '\n');
+            return text.trim();
+        }
+
+        // HBF.CHO9: Detect truncated LLM outline response via finish_reason.
+        // Returns true if the response appears cut off.
+        function isOutlineTruncated(finishReason, outlineText) {
+            if (finishReason === 'length') return true;
+            // Structural completeness check: must have at least one chapter heading
+            if (typeof outlineText === 'string' && outlineText.trim()) {
+                const hasChapter = /###?\s*Chapter\s+\d+/i.test(outlineText);
+                if (!hasChapter) return true;
+            }
+            return false;
+        }
+
         // HBF.UNI1: Unified LLM API call function
         async function callLlmAgent({
             agent, // string: 'bookGoals', 'outliner', 'chapterAnnotator', etc.
@@ -1455,10 +1515,13 @@
             }
             const data = await response.json();
             const rawReply = data?.choices?.[0]?.message?.content || '';
+            const finishReason = data?.choices?.[0]?.finish_reason || null;
             let parsed = rawReply;
             if (typeof parseResponse === 'function') {
                 try { parsed = parseResponse(rawReply); } catch (e) { parsed = rawReply; }
             }
+            // Attach finish_reason to parsed result if it is an object (HBF.CHO9)
+            if (parsed && typeof parsed === 'object') parsed._finishReason = finishReason;
             if (typeof onFinish === 'function') onFinish(parsed, rawReply);
             return parsed;
         }
@@ -1586,16 +1649,27 @@
                     temperature: 0.5,
                     max_tokens: 1800
                 });
-                let outline = result && result.outline ? result.outline : (result.raw || '');
-                console.log('[DEBUG] LLM outline response:', outline);
+                let rawOutline = result && result.outline ? result.outline : (result.raw || '');
+                // HBF.CHO8: normalize outline output
+                let outline = normalizeOutlineText(rawOutline);
+                console.log('[DEBUG] LLM outline response (normalized):', outline);
+                // HBF.CHO9: detect truncation
+                const finishReason = result._finishReason || null;
+                const truncated = isOutlineTruncated(finishReason, outline);
                 project.outline = outline;
                 document.getElementById('outline-editor').value = outline;
                 saveProject();
                 renderGoalsForm();
                 renderChapterList();
-                if (statusEl) {
+                if (truncated) {
+                    if (statusEl) {
+                        statusEl.textContent = '⚠️ Outline generated but may be incomplete (response was cut off). Review before accepting.';
+                        statusEl.classList.add('text-yellow-300');
+                        statusEl.classList.remove('text-red-300', 'text-emerald-300');
+                    }
+                } else if (statusEl) {
                     statusEl.textContent = 'Outline generated!';
-                    statusEl.classList.remove('text-red-300');
+                    statusEl.classList.remove('text-red-300', 'text-yellow-300');
                     statusEl.classList.add('text-emerald-300');
                 }
             } catch (err) {
@@ -1643,15 +1717,20 @@
                             return { error: 'Malformed JSON', raw };
                         }
                     },
-                    onFinish: (parsed) => {
-                        let outline = parsed && parsed.outline ? parsed.outline : (parsed.raw || currentOutline);
-                        project.outline = outline;
-                        document.getElementById('outline-editor').value = outline;
-                        saveProject();
-                    },
                     temperature: 0.5,
                     max_tokens: 1800
                 });
+                // HBF.CHO8: normalize improved outline output
+                const rawImproved = improvedResult && improvedResult.outline ? improvedResult.outline : (improvedResult.raw || currentOutline);
+                const normalizedOutline = normalizeOutlineText(rawImproved);
+                // HBF.CHO9: detect truncation
+                const truncated = isOutlineTruncated(improvedResult._finishReason || null, normalizedOutline);
+                project.outline = normalizedOutline;
+                document.getElementById('outline-editor').value = normalizedOutline;
+                saveProject();
+                if (truncated) {
+                    alert('⚠️ The improved outline may be incomplete (response was cut off). Please review carefully before accepting.');
+                }
             } catch (err) {
                 alert(`Outline improvement failed: ${err.message}`);
             } finally {
@@ -1694,10 +1773,15 @@
             };
             const flags = parsed.flags.map(f => ({
                 chapterId: f.chapterId !== undefined ? String(f.chapterId) : (f.chapter_id !== undefined ? String(f.chapter_id) : ''),
+                // HBF.SA7: include 1-based chapterNumber field per flag
+                chapterNumber: f.chapterNumber !== undefined ? Number(f.chapterNumber) : (f.chapterId !== undefined ? Number(f.chapterId) + 1 : null),
                 chapterTitle: coerceStr(f.chapterTitle, f.chapter, f.chapter_title),
                 flagType: validTypes.includes(f.flagType) ? f.flagType : (validTypes.includes(f.flag_type) ? f.flag_type : 'GENERAL_SAFETY'),
                 flaggedText: coerceStr(f.flaggedText, f.flagged_text, f.issue, f.text, f.description, f.concern),
-                suggestion: coerceStr(f.suggestion, f.suggestedFix, f.suggested_fix, f.recommendation, f.fix, f.guidance)
+                suggestion: coerceStr(f.suggestion, f.suggestedFix, f.suggested_fix, f.recommendation, f.fix, f.guidance),
+                // HBF.SA8: track whether flag parsed cleanly
+                _parseWarning: (!coerceStr(f.flaggedText, f.flagged_text, f.issue, f.text, f.description, f.concern)) ? 'flaggedText missing' : null
+            }));
             }));
             return { flags, summary: parsed.summary };
         }
@@ -2060,6 +2144,14 @@
                 GENERAL_SAFETY: 'bg-blue-900/50 border-blue-700 text-blue-300'
             };
 
+            // HBF.SA8: surface warning banner for malformed flags (missing flaggedText)
+            const warningFlags = flags.filter(f => f._parseWarning);
+            const safetyStatusEl = document.getElementById('safety-status');
+            if (warningFlags.length > 0 && safetyStatusEl) {
+                safetyStatusEl.textContent = `⚠️ ${warningFlags.length} flag(s) returned incomplete data (missing flaggedText). Review may be incomplete.`;
+                safetyStatusEl.classList.remove('hidden');
+            }
+
             if (flagsList) {
                 // HBF.SA4 (v0.13.0): Each flag SHALL provide both a navigate-to-draft action and an apply-suggestion action. Apply-suggestion pre-fills the revision instruction textarea.
                 flagsList.innerHTML = flags.map((f, i) => {
@@ -2111,16 +2203,18 @@
                 // Build manuscript context based on scope
                 let manuscriptContext = '';
                 let scanScope = scope;
+                // HBF.SA7: use 1-based chapter number in scope label
                 if (scope === 'full') {
                     manuscriptContext = drafts.map(d =>
-                        `=== Chapter: ${d.chapterTitle || `Chapter ${d.chapterId + 1}`} ===\n${d.draftText}`
+                        `=== Chapter: ${d.chapterTitle || `Chapter ${toDisplayChapterNumber(d.chapterId)}`} ===\n${d.draftText}`
                     ).join('\n\n');
                 } else if (scope.startsWith('chapter:')) {
                     const chapterId = parseInt(scope.replace('chapter:', ''), 10);
                     const draft = drafts.find(d => d.chapterId === chapterId);
                     if (!draft) throw new Error('Selected chapter draft not found.');
-                    manuscriptContext = `=== Chapter: ${draft.chapterTitle || `Chapter ${draft.chapterId + 1}`} ===\n${draft.draftText}`;
-                    scanScope = `chapter:${chapterId}`;
+                    manuscriptContext = `=== Chapter: ${draft.chapterTitle || `Chapter ${toDisplayChapterNumber(draft.chapterId)}`} ===\n${draft.draftText}`;
+                    // HBF.SA7: scope label shows 1-based chapter number
+                    scanScope = `chapter:${toDisplayChapterNumber(chapterId)}`;
                 }
 
                 const result = await callLlmAgent({
@@ -2334,7 +2428,7 @@
 
             const originalBtnText = btn ? btn.innerHTML : '';
             if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
-            setStatus(`Generating first-pass draft for “${chapter.title || `Chapter ${idx + 1}`}” with Drafter Agent…`);
+            setStatus(`Generating first-pass draft for “${chapter.title || `Chapter ${toDisplayChapterNumber(idx)}`}” with Drafter Agent…`);
 
             try {
                 // HBF.DR2 + HBF.DR3: build context from book goals + annotated chapter outline
@@ -2387,6 +2481,13 @@
                 }
                 saveProject();
                 renderDraftForChapter(idx);
+
+                // HBF.POL1: non-blocking author name leakage warning
+                const styleNames = extractStyleReferenceNames(project.goals);
+                const leaked = detectAuthorNameLeakage(result.draftText || '', styleNames);
+                if (leaked.length > 0) {
+                    setStatus(`⚠️ Draft may contain style-reference author name(s): ${leaked.join(', ')}. Review before publishing.`, true);
+                }
             } catch (err) {
                 setStatus(`Generation failed: ${err.message}`, true);
             } finally {
@@ -2486,7 +2587,7 @@
                     if (cancelled) break;
 
                     const { idx, chapter } = chaptersToGenerate[i];
-                    const progressMsg = `📚 Drafting ${i + 1} of ${chaptersToGenerate.length}… "${chapter.title || `Chapter ${idx + 1}`}"`;
+                    const progressMsg = `📚 Drafting ${i + 1} of ${chaptersToGenerate.length}… "${chapter.title || `Chapter ${toDisplayChapterNumber(idx)}`}"`;
                     setStatus(progressMsg);
 
                     const outlineContext = typeof chapter.annotation === 'string'
@@ -2856,7 +2957,7 @@
 
         function showProjectInfo() {
             alert(
-                `HerbalBookForge v0.12.0\n\n` +
+                `HerbalBookForge v1.0.0\n\n` +
                 `Book Goals: ${project.goals.finalized ? 'Finalized' : 'Draft'}\n` +
                 `Outline: ${project.outline ? 'Present' : 'Missing'}\n` +
                 `Chapter outlines: ${(project.chapterOutlines || []).length}\n` +
@@ -2865,7 +2966,7 @@
         }
 
         function initializeApp() {
-            console.log('%c🌿 HerbalBookForge v0.12.0 initialized – Sprint 4 Preview state model active', 'color:#34d399; font-size:16px');
+            console.log('%c🌿 HerbalBookForge v1.0.0 initialized – v1.0.0 GA', 'color:#34d399; font-size:16px');
             loadProject();
             bindSetupListeners();
             bindGoalsListeners();

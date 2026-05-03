@@ -19,6 +19,82 @@ Notes:
 - #52 and #53 are existing GitHub issues; Sprint 5 closes both.
 - parseSafetyReport coerceStr code fix already landed on main (2026-05-02); #68 adds the formal test and requirement trace.
 
+## HerbalBookForge Next Sprint Analysis (Planning Only, from #102)
+
+Scope rule for this analysis:
+- Includes open sprint issues captured in #102
+- Excludes deferred DOCX export requirement HBF.PR3.D1
+- Planning only; implementation not started
+
+### Canonical Issues and Dedupe Map
+
+- #80 Generate Remaining status appears capped at chapter 10; safety cards still empty
+- #82 Safety scan chapter scope off-by-one and issue text not displayed
+	- duplicates: #79, #81
+- #86 Outline generation/improvement truncation risk (token limit / incomplete response)
+- #88 Export/Import arrow icons reversed
+	- duplicate: #87
+- #91 Bottom status label clarity (developer vs author language)
+	- duplicates: #89, #90
+- #94 Outline edit returns raw JSON/markup instead of readable text
+	- duplicates: #92, #93
+- #95 Move Prompts tab to right of Preview (workflow order)
+- #98 Prevent author names in generated output text
+	- duplicates: #96, #97
+- #99 Drafting progress status off-by-one
+- #101 Assemble manuscript duplicates chapter heading line
+	- duplicate: #100
+
+### Issue Analysis: Potential Cause, Related Requirement, Potential Fix
+
+| Issue | Potential Cause | Related Requirement(s) | Potential Fix |
+|---|---|---|---|
+| #80, #99 | Mixed 0-based vs 1-based chapter indexing in status formatting; progress variable likely derived from array index while UI expects human chapter number | HBF.DR9 | Normalize status display to 1-based chapter numbering everywhere; centralize `toDisplayChapterNumber(index)` helper; add progress assertions for chapters >10 and chapter-specific runs |
+| #82 | Safety scope label built from array index (N-1); parser/render contract mismatch for flag text fields (`flaggedText`/`issue`, `suggestion`/`recommendation`) still leaks blank values in some paths | HBF.SA2, HBF.SA3, HBF.SA6, HBFIT.22 | Enforce strict output contract for safety flags; require normalized fallback map in parser for all render paths; hard-fail malformed flags with visible warning; include chapterNumber per flag in full-book scans |
+| #86 | Outliner/improve calls may hit response token ceiling; no finish-reason handling or truncation guard before accepting output | HBF.BG.G2, HBF.CHO5, HBF.UNI4.1 | Increase max token budget for outline/improve calls; check finish reason and trailing-structure completeness; auto-retry continuation or block accept with actionable warning |
+| #94 | Output parser displays raw JSON/escaped markup when response shape differs from expected text payload; normalization stage may be bypassed in some edit/improve flow | HBF.CHO3, HBF.CHO5, HBF.UNI4.1 | Add canonical outline normalization stage before render/save; strip code fences/escaped newline artifacts; validate readable outline format before enabling accept action |
+| #95 | Top-nav order optimized for implementation chronology, not author workflow sequencing | UIU.HBF.NF3 (UX consistency), HBF.PR1 | Reorder tab controls so Prompts follows Preview; keep selector IDs stable and update smoke expectations for order |
+| #88 | Iconography semantics reversed relative to action labels (export/import mental model) | UIU.HBF.NF3, HBF.PR3 | Swap arrow directions or replace with unambiguous icons; add tooltip/aria-label clarity; retain existing button behavior and test IDs |
+| #91 | Status copy is developer-centric and lacks mode semantics for fielded author use | UIU.HBF.NF3 | Replace with user-facing status taxonomy (Role, Mode, Agent Scope); make role label configurable (`Developer`, `Author`, `Editor`) via project setting/env flag |
+| #98 | Prompt instructions allow style-reference names to leak into output prose; no explicit "style-only reference" constraint | HBF.DR1, HBF.CHO5, HBF.UNI4, HBF.UNI4.1 | Add prompt guardrail: named authors may guide style but must not appear in generated prose unless explicitly requested; add lexical post-check to flag accidental name leakage |
+| #101 | Assemble routine likely concatenates chapter heading from both outline metadata and draft body preamble without dedupe | HBF.PR1, HBF.PR2, HBFIT.18 | Canonicalize one heading source during assembly; strip duplicate heading prefix from draft body when matching chapter title; add regression test for one-heading-per-chapter |
+
+### Cross-Issue Root Cause Themes
+
+- Indexing inconsistency: chapter display logic duplicated across Drafting and Safety flows
+- Schema-contract drift: prompt examples and parser/render expectations diverge over time
+- Output normalization gaps: malformed/escaped LLM output is rendered without a strict sanitize/validate stage
+- UX semantics drift: control order and status copy reflect internal implementation rather than author-facing mental model
+
+### Proposed Requirement Updates for Next Sprint (Draft)
+
+These are proposed requirement changes to be added to `HerbalBookForge/REQUIREMENTS.md` during sprint execution:
+
+- HBF.DR10 (new): Drafting progress and status displays SHALL use 1-based chapter numbering and SHALL match the chapter currently being generated for both single-chapter and batch generation actions.
+- HBF.SA7 (new): Safety scan scope labels SHALL display the exact user-selected chapter number for chapter-scoped scans, and full-book findings SHALL include chapter number per flag.
+- HBF.SA8 (new): Safety prompt/output contract SHALL require per-flag `chapterNumber`, `issue` (or normalized equivalent), and `suggestion` (or normalized equivalent); UI SHALL surface a user-visible parse warning for malformed flags.
+- HBF.CHO8 (new): Outline improve/edit outputs SHALL be normalized to human-readable outline text before render/save; raw JSON/escaped markup SHALL not be displayed in the chapter-outline editor.
+- HBF.CHO9 (new): Outline generation/improve flows SHALL detect truncation and SHALL retry/continue or block acceptance with a clear warning if output is incomplete.
+- HBF.PR5 (new): Assembled manuscript output SHALL contain exactly one chapter heading per chapter section.
+- HBF.UI1 (new): Top navigation order SHALL reflect author workflow: Goals -> Outline -> Chapter Outlines -> Drafting -> Safety -> Preview -> Prompts.
+- HBF.UI2 (new): Header Export/Import icons SHALL align with action semantics and accessible labels.
+- HBF.UI3 (new): Footer status copy SHALL be user-facing, include explicit role/mode semantics, and support configurable role labels for fielded author usage.
+- HBF.POL1 (new): Style-reference author names in prompts SHALL not appear in generated chapter/outline prose unless explicitly requested by the user.
+
+### Proposed Test Additions (Sprint Planning)
+
+- HBFIT.25: Generate Remaining and single draft status numbering is accurate for chapters >10 and matches active chapter.
+- HBFIT.26: Safety chapter-scoped scan label matches selected chapter; full-book flags include chapter number.
+- HBFIT.27: Safety rendering path shows issue/suggestion text for canonical and alternate key names; malformed flags trigger warning.
+- HBFIT.28: Outline improve/edit output normalization strips JSON/escaped markup and preserves readable structure.
+- HBFIT.29: Outline truncation detection blocks acceptance or auto-recovers continuation path.
+- HBFIT.30: Assembled manuscript contains one heading per chapter in preview/export outputs.
+- HBFST.7 (smoke): Nav order check includes Prompts after Preview and validates footer status element semantics.
+- HBFST.8 (smoke): Export/Import icon semantics and accessible labels present.
+
+Planning outcome target:
+- Sprint kickoff starts only after dedupe closure and requirement IDs are finalized in REQUIREMENTS.md.
+
 ## HerbalBookForge Sprint 4 Local Tracker (Preview Tab) — COMPLETE
 
 - [x] #54 Requirements and acceptance criteria (HBF.PR1-HBF.PR4, HBFIT.18-HBFIT.21)
