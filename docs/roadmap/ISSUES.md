@@ -9,8 +9,8 @@ Use this section as the local execution checklist in VS Code. GitHub issues rema
 - [x] #56 Preview tab UI shell with test ids and empty state
 - [x] #57 Implement assembleManuscript from chapter drafts in outline order
 - [x] #58 Implement rendered manuscript preview and refresh behavior
-- [-] #59 Add Markdown export for assembled manuscript (in progress)
-- [ ] #60 Add printable HTML export for print-to-PDF workflow
+- [x] #59 Add Markdown export for assembled manuscript
+- [-] #60 Add printable HTML export for print-to-PDF workflow (in progress)
 - [ ] #61 Add RTF export for Word-friendly editing workflow
 - [ ] #62 Add smoke coverage for Preview tab controls
 - [ ] #63 Add integration tests HBFIT.18-HBFIT.21 for Preview flow

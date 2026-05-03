@@ -1034,6 +1034,45 @@
             statusEl.textContent = message;
         }
 
+        function buildExportTimestampTag(date = new Date()) {
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            const hh = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
+            return `${yyyy}${mm}${dd}-${hh}${min}`;
+        }
+
+        function toSafeSlug(value, fallback = 'herbal-book') {
+            const slug = String(value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9\s-]/g, '')
+                .trim()
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-');
+            return slug || fallback;
+        }
+
+        function recordPreviewExport(type, fileName) {
+            project.preview = normalizePreviewState(project.preview);
+            const item = {
+                type,
+                fileName,
+                timestamp: new Date().toISOString()
+            };
+            project.preview.exportHistory = [item, ...(project.preview.exportHistory || [])].slice(0, 100);
+        }
+
+        function triggerFileDownload(content, fileName, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
         function getMostRecentDraftUpdateTimestamp() {
             const drafts = Array.isArray(project.drafts) ? project.drafts : [];
             const latest = drafts
@@ -1141,11 +1180,33 @@
             setPreviewStatus(`Assembled manuscript with ${sections.length} section${sections.length === 1 ? '' : 's'}.`);
         }
 
+        function exportAsMarkdown() {
+            project.preview = normalizePreviewState(project.preview);
+            const assembledText = (project.preview.assembledText || '').trim();
+            if (!assembledText) {
+                setPreviewStatus('Assemble a manuscript before exporting Markdown.', 'error');
+                return;
+            }
+
+            const slug = toSafeSlug(project.meta?.name, 'herbal-book');
+            const stamp = buildExportTimestampTag();
+            const fileName = `${slug}_${stamp}.md`;
+
+            triggerFileDownload(assembledText, fileName, 'text/markdown;charset=utf-8');
+            recordPreviewExport('markdown', fileName);
+            saveProject();
+            renderPreviewTab();
+            setPreviewStatus(`Markdown export created: ${fileName}`);
+        }
+
         function bindPreviewListeners() {
             if (previewListenersBound) return;
             previewListenersBound = true;
             document.getElementById('preview-assemble-btn')?.addEventListener('click', () => {
                 assembleManuscript();
+            });
+            document.getElementById('preview-export-md-btn')?.addEventListener('click', () => {
+                exportAsMarkdown();
             });
         }
 
