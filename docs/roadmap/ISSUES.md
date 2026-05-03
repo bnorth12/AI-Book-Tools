@@ -6,8 +6,8 @@ Use this section as the local execution checklist in VS Code. GitHub issues rema
 
 - [x] #54 Requirements and acceptance criteria (HBF.PR1-HBF.PR4, HBFIT.18-HBFIT.21)
 - [x] #55 Preview state model and localStorage v0.12.0 migration
-- [-] #56 Preview tab UI shell with test ids and empty state (in progress)
-- [ ] #57 Implement assembleManuscript from chapter drafts in outline order
+- [x] #56 Preview tab UI shell with test ids and empty state
+- [-] #57 Implement assembleManuscript from chapter drafts in outline order (in progress)
 - [ ] #58 Implement rendered manuscript preview and refresh behavior
 - [ ] #59 Add Markdown export for assembled manuscript
 - [ ] #60 Add printable HTML export for print-to-PDF workflow

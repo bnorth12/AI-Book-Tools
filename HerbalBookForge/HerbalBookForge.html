@@ -573,10 +573,51 @@
         <!-- TODO HBF.PR4: Implement preview metadata persistence (lastGenerated, exportHistory) and display. -->
         <!-- TODO HBF.PR4 Status: Not started | Planned: v0.12.0 -->
 
-        <div class="max-w-4xl mx-auto text-center py-32">
-            <div class="text-8xl mb-8">📕</div>
-            <h2 class="text-4xl font-semibold mb-4">Manuscript Preview / Export</h2>
-            <p class="text-emerald-400">Coming soon – full manuscript preview and export</p>
+        <div class="max-w-5xl mx-auto">
+            <div class="mb-10">
+                <h2 class="text-4xl font-semibold tracking-tight section-header">Manuscript Preview</h2>
+                <p class="text-emerald-300 mt-2">Assemble chapter drafts, review the full manuscript, then export for editing or print.</p>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
+                <aside class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-6">
+                    <h3 class="uppercase text-emerald-400 text-xs font-medium mb-4 tracking-widest">Assembly Controls</h3>
+                    <button id="preview-assemble-btn" data-testid="preview-assemble-btn" type="button"
+                        class="w-full px-5 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-medium mb-5">
+                        📚 Assemble Manuscript
+                    </button>
+
+                    <div class="space-y-3">
+                        <button id="preview-export-md-btn" data-testid="preview-export-md-btn" type="button"
+                            class="w-full px-4 py-2.5 bg-emerald-800 hover:bg-emerald-700 rounded-2xl text-sm font-medium">
+                            Export Markdown (.md)
+                        </button>
+                        <button id="preview-export-html-btn" data-testid="preview-export-html-btn" type="button"
+                            class="w-full px-4 py-2.5 bg-emerald-800 hover:bg-emerald-700 rounded-2xl text-sm font-medium">
+                            Export Printable HTML
+                        </button>
+                        <button id="preview-export-rtf-btn" data-testid="preview-export-rtf-btn" type="button"
+                            class="w-full px-4 py-2.5 bg-emerald-800 hover:bg-emerald-700 rounded-2xl text-sm font-medium">
+                            Export Rich Text (.rtf)
+                        </button>
+                    </div>
+
+                    <div class="mt-6 pt-5 border-t border-emerald-800/70">
+                        <p class="text-xs text-emerald-400">PDF output uses browser print via Printable HTML export.</p>
+                    </div>
+                </aside>
+
+                <section class="card bg-emerald-900/40 border border-emerald-700 rounded-3xl p-6 min-h-[28rem]">
+                    <div id="preview-empty-state" data-testid="preview-empty-state"
+                        class="h-full flex flex-col items-center justify-center text-center px-6 py-14">
+                        <div class="text-7xl mb-6">📕</div>
+                        <h3 class="text-2xl font-semibold text-emerald-200 mb-3">No Manuscript Assembled Yet</h3>
+                        <p class="text-emerald-400 max-w-xl">Click Assemble Manuscript to compile your current chapter drafts into a full-book preview.</p>
+                    </div>
+
+                    <article id="preview-content" data-testid="preview-content" class="hidden prose prose-invert max-w-none"></article>
+                </section>
+            </div>
         </div>
     </div>
 
