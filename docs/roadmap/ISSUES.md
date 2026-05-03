@@ -1,5 +1,26 @@
 # Proposed Issues for AI Book Tools
 
+## HerbalBookForge Sprint 4 Local Tracker (Preview Tab)
+
+Use this section as the local execution checklist in VS Code. GitHub issues remain the source of truth, and this list mirrors current Sprint 4 work.
+
+- [x] #54 Requirements and acceptance criteria (HBF.PR1-HBF.PR4, HBFIT.18-HBFIT.21)
+- [x] #55 Preview state model and localStorage v0.12.0 migration
+- [-] #56 Preview tab UI shell with test ids and empty state (in progress)
+- [ ] #57 Implement assembleManuscript from chapter drafts in outline order
+- [ ] #58 Implement rendered manuscript preview and refresh behavior
+- [ ] #59 Add Markdown export for assembled manuscript
+- [ ] #60 Add printable HTML export for print-to-PDF workflow
+- [ ] #61 Add RTF export for Word-friendly editing workflow
+- [ ] #62 Add smoke coverage for Preview tab controls
+- [ ] #63 Add integration tests HBFIT.18-HBFIT.21 for Preview flow
+- [ ] #64 Update TESTING and REQUIREMENTS for Preview v0.12.0
+- [ ] #65 Sprint 4 Preview closeout and PR packaging
+
+Notes:
+- Deferred Safety issues tracked separately: #52 and #53.
+- DOCX export is deferred beyond v0.12.0.
+
 ## Issue 1: Define and publish shared novel schema v1.0
 
 ### Issue 1 Summary

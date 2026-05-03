@@ -1,9 +1,9 @@
 # HerbalBookForge Requirements
 
 Date: 2026-05-02
-Application: HerbalBookForge (v0.10.0 — Sprint 2 in progress)
+Application: HerbalBookForge (v0.12.0 — Sprint 4 requirements)
 Source File: HerbalBookForge.html
-Version Status: Sprint 2 active — Drafting tab requirements derived and locked
+Version Status: Sprint 4 active — Preview tab requirements derived and locked
 
 ## Executive Summary
 
@@ -125,10 +125,28 @@ HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LL
 - HBFIT.16: Integration tests SHALL verify that safety report results persist across a full page reload (localStorage round-trip).
 - HBFIT.17: Integration tests SHALL verify that clicking a flag navigate-to-draft action switches the active tab to Drafting and selects the correct chapter.
 
+## Preview Tab Requirements (Sprint 4 — target v0.12.0)
+
+- HBF.PR1: The Preview Tab SHALL allow preview and export of the assembled full manuscript generated from chapter drafts in outline order.
+- HBF.PR2: The Preview Tab SHALL render the compiled manuscript with clear chapter headings and readable formatting in a dedicated preview region, with clear empty-state guidance when no manuscript has been assembled.
+- HBF.PR3: The Preview Tab SHALL support export of the assembled manuscript in the following formats for v0.12.0: Markdown (`.md`), printable HTML (for browser print and Save as PDF), and Rich Text Format (`.rtf`) for word-processor editing.
+- HBF.PR4: The Preview Tab SHALL track manuscript generation and export activity with persisted metadata including at minimum `lastGenerated` and `exportHistory[]` in project state. Full document diff/version history is deferred beyond v0.12.0.
+
+## Integration Testing Requirements (v0.12.0 — Sprint 4)
+
+- HBFIT.18: Integration tests SHALL verify manuscript assembly from available chapter drafts in outline order and validate the compiled preview content structure.
+- HBFIT.19: Integration tests SHALL verify Preview tab rendering behavior for assembled manuscript content and empty-state guidance when no drafts/manuscript are present.
+- HBFIT.20: Integration tests SHALL verify export actions and guards for Markdown, printable HTML (print-to-PDF workflow), and RTF formats.
+- HBFIT.21: Integration tests SHALL verify persistence and reload behavior for preview state, including `assembledText`, `lastGenerated`, and `exportHistory[]`.
+
+## Deferred Requirements (Post-v0.12.0)
+
+- HBF.PR3.D1: Native DOCX export generation is deferred beyond v0.12.0.
+
 ## Sync Status
 
 - Synced with HerbalBookForge.html inline annotations: Yes
 - Last sync date: 2026-05-02
-- Integration test coverage: Sprint 1 complete; Sprint 2 (Drafting) complete — HBFIT.1-13; Sprint 3 (Safety) requirements locked
-- Current status: v0.11.0 Sprint 3 complete — HBF.SA1-SA6 implemented, HBFIT.14-17 added
-- Last sync: HerbalBookForge.html inline annotations verified against REQUIREMENTS.md — all HBF.SA1-SA6 comments present and accurate
+- Integration test coverage: Sprint 1 complete; Sprint 2 (Drafting) complete — HBFIT.1-13; Sprint 3 (Safety) complete — HBFIT.14-17; Sprint 4 (Preview) requirements locked — HBFIT.18-21
+- Current status: v0.12.0 Sprint 4 requirements locked for Preview tab (implementation in progress)
+- Last sync: HerbalBookForge.html inline annotations verified against REQUIREMENTS.md — HBF.PR1-HBF.PR4 comments updated for Sprint 4 scope
