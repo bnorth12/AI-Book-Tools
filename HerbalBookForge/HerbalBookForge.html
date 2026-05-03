@@ -1073,6 +1073,112 @@
             URL.revokeObjectURL(url);
         }
 
+        function splitAssembledSections(assembledText) {
+            return String(assembledText || '')
+                .split('\n\n---\n\n')
+                .map(s => s.trim())
+                .filter(Boolean)
+                .map((section, index) => {
+                    const headingMatch = section.match(/^##\s+(.+)$/m);
+                    const title = headingMatch ? headingMatch[1].trim() : `Section ${index + 1}`;
+                    const body = headingMatch
+                        ? section.replace(/^##\s+.+(?:\r?\n){1,2}/, '').trim()
+                        : section;
+                    return { title, body };
+                });
+        }
+
+        function exportAsPrintableHtml() {
+            project.preview = normalizePreviewState(project.preview);
+            const assembledText = (project.preview.assembledText || '').trim();
+            if (!assembledText) {
+                setPreviewStatus('Assemble a manuscript before exporting printable HTML.', 'error');
+                return;
+            }
+
+            const sections = splitAssembledSections(assembledText);
+            const bookTitle = project.meta?.name || 'HerbalBookForge Manuscript';
+            const printableHtml = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(bookTitle)} - Printable Manuscript</title>
+  <style>
+    body { font-family: Georgia, 'Times New Roman', serif; margin: 2rem auto; max-width: 8.5in; color: #111; line-height: 1.55; }
+    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.25rem; margin-top: 2rem; margin-bottom: 0.8rem; page-break-after: avoid; }
+    .meta { color: #444; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .chapter-body { white-space: pre-wrap; }
+    @media print {
+      body { margin: 0.6in; max-width: none; }
+      h1, h2 { color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(bookTitle)}</h1>
+  <div class="meta">Generated ${new Date().toLocaleString()} from HerbalBookForge Preview tab</div>
+  ${sections.map(s => `<section><h2>${escapeHtml(s.title)}</h2><div class="chapter-body">${escapeHtml(s.body)}</div></section>`).join('\n')}
+</body>
+</html>`;
+
+            const win = window.open('', '_blank');
+            if (!win) {
+                setPreviewStatus('Popup blocked. Allow popups to open printable HTML export.', 'error');
+                return;
+            }
+
+            win.document.open();
+            win.document.write(printableHtml);
+            win.document.close();
+
+            const slug = toSafeSlug(project.meta?.name, 'herbal-book');
+            const stamp = buildExportTimestampTag();
+            const fileName = `${slug}_${stamp}_print.html`;
+            recordPreviewExport('html-print', fileName);
+            saveProject();
+            renderPreviewTab();
+            setPreviewStatus('Printable HTML opened in a new tab. Use browser Print to save as PDF.');
+        }
+
+        function escapeRtfText(text) {
+            return String(text || '')
+                .replace(/\\/g, '\\\\')
+                .replace(/\{/g, '\\{')
+                .replace(/\}/g, '\\}')
+                .replace(/\r?\n/g, '\\par\n');
+        }
+
+        function exportAsRtf() {
+            project.preview = normalizePreviewState(project.preview);
+            const assembledText = (project.preview.assembledText || '').trim();
+            if (!assembledText) {
+                setPreviewStatus('Assemble a manuscript before exporting RTF.', 'error');
+                return;
+            }
+
+            const sections = splitAssembledSections(assembledText);
+            const bookTitle = project.meta?.name || 'HerbalBookForge Manuscript';
+            let rtf = '{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Calibri;}}\n';
+            rtf += `\\fs40\\b ${escapeRtfText(bookTitle)}\\b0\\fs24\\par\\par\n`;
+            rtf += `\\i Generated ${escapeRtfText(new Date().toLocaleString())}\\i0\\par\\par\n`;
+            sections.forEach(section => {
+                rtf += `\\fs32\\b ${escapeRtfText(section.title)}\\b0\\fs24\\par\\par\n`;
+                rtf += `${escapeRtfText(section.body)}\\par\\par\n`;
+            });
+            rtf += '}';
+
+            const slug = toSafeSlug(project.meta?.name, 'herbal-book');
+            const stamp = buildExportTimestampTag();
+            const fileName = `${slug}_${stamp}.rtf`;
+
+            triggerFileDownload(rtf, fileName, 'application/rtf;charset=utf-8');
+            recordPreviewExport('rtf', fileName);
+            saveProject();
+            renderPreviewTab();
+            setPreviewStatus(`RTF export created: ${fileName}`);
+        }
+
         function getMostRecentDraftUpdateTimestamp() {
             const drafts = Array.isArray(project.drafts) ? project.drafts : [];
             const latest = drafts
@@ -1207,6 +1313,12 @@
             });
             document.getElementById('preview-export-md-btn')?.addEventListener('click', () => {
                 exportAsMarkdown();
+            });
+            document.getElementById('preview-export-html-btn')?.addEventListener('click', () => {
+                exportAsPrintableHtml();
+            });
+            document.getElementById('preview-export-rtf-btn')?.addEventListener('click', () => {
+                exportAsRtf();
             });
         }
 
