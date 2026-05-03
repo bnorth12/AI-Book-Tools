@@ -792,3 +792,230 @@ test.describe('HerbalBookForge Safety Integration Tests (HBFIT.14–17)', () => 
     console.log(`✅ [HBFIT.17] Draft chapter selector shows chapter 0 — HBFIT.17 PASSED`);
   });
 });
+
+// ============================================================
+// HBFIT.18-21: Preview tab integration tests (Sprint 4)
+// These tests use localStorage injection and verify Preview assembly,
+// rendering, export behaviors, and persistence.
+// ============================================================
+
+function makePreviewProjectState({ withAssembled = false, withExportHistory = false } = {}) {
+  const chapterOutlines = [
+    { id: 0, title: 'Chapter 1: Foundations', annotation: 'Intro to herbal fundamentals.' },
+    { id: 1, title: 'Chapter 2: Core Herbs', annotation: 'Profiles for practical home use.' }
+  ];
+  const drafts = [
+    {
+      chapterId: 1,
+      chapterTitle: 'Chapter 2: Core Herbs',
+      outlineContext: chapterOutlines[1].annotation,
+      draftText: 'Chamomile and peppermint are core home herbs for soothing support.',
+      qualityFlags: [],
+      validation: null,
+      revisionHistory: [],
+      lastUpdated: new Date(Date.now() - 1000).toISOString()
+    },
+    {
+      chapterId: 0,
+      chapterTitle: 'Chapter 1: Foundations',
+      outlineContext: chapterOutlines[0].annotation,
+      draftText: 'Medicinal herbs begin with safe identification and preparation discipline.',
+      qualityFlags: [],
+      validation: null,
+      revisionHistory: [],
+      lastUpdated: new Date(Date.now() - 2000).toISOString()
+    }
+  ];
+
+  const preview = {
+    assembledText: withAssembled
+      ? '## Chapter 1: Foundations\n\nMedicinal herbs begin with safe identification and preparation discipline.\n\n---\n\n## Chapter 2: Core Herbs\n\nChamomile and peppermint are core home herbs for soothing support.'
+      : '',
+    lastGenerated: withAssembled ? new Date(Date.now() - 3000).toISOString() : null,
+    exportHistory: withExportHistory ? [
+      { type: 'markdown', fileName: 'test-book_20260502-1010.md', timestamp: new Date(Date.now() - 1000).toISOString() }
+    ] : []
+  };
+
+  return {
+    meta: { version: '0.12.0', name: 'Preview Integration Test Book' },
+    setup: {
+      apiKey: '',
+      apiEndpoint: 'https://api.x.ai/v1/chat/completions',
+      preferredModel: 'grok-4.20-0309-reasoning',
+      projectName: 'Preview Integration Test Book'
+    },
+    goals: {
+      mainGoal: 'A practical beginner herbal guide',
+      tone: 'Warm and practical',
+      audience: 'Beginners',
+      contentTypes: 'Profiles and safety notes',
+      chatHistory: []
+    },
+    outline: { text: '## Chapter 1: Foundations\n## Chapter 2: Core Herbs', accepted: true },
+    chapterOutlines,
+    drafts,
+    safetyReport: null,
+    preview,
+    prompts: { bookGoalsAgent: '', outliner: '', chapterAnnotator: '', drafter: '', safety: '' }
+  };
+}
+
+test.describe('HerbalBookForge Preview Integration Tests (HBFIT.18-21)', () => {
+  // HBFIT.18: Assembly from drafts in outline order
+  test('HBFIT.18 — Assemble manuscript from drafts in outline order', async ({ page }) => {
+    const state = makePreviewProjectState({ withAssembled: false });
+
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+    await page.evaluate((s) => {
+      localStorage.setItem('herbalBookForgeProject_v0.12.0', JSON.stringify(s));
+    }, state);
+    await page.reload();
+
+    await page.click('button#tab-preview');
+    await page.waitForSelector('#content-preview:not(.hidden)', { timeout: 5000 });
+
+    await page.click('[data-testid="preview-assemble-btn"]');
+
+    // Assembled content should be visible and in outline order (Chapter 1 before Chapter 2)
+    await page.waitForSelector('[data-testid="preview-content"]:not(.hidden)', { timeout: 5000 });
+    const content = await page.locator('[data-testid="preview-content"]').textContent();
+    const idx1 = content.indexOf('Chapter 1: Foundations');
+    const idx2 = content.indexOf('Chapter 2: Core Herbs');
+    expect(idx1).toBeGreaterThanOrEqual(0);
+    expect(idx2).toBeGreaterThan(idx1);
+    console.log('✅ [HBFIT.18] Assembled manuscript rendered in outline order');
+  });
+
+  // HBFIT.19: Preview rendering and stale guidance after draft changes
+  test('HBFIT.19 — Preview renders assembled content and shows stale warning after draft edit', async ({ page }) => {
+    const state = makePreviewProjectState({ withAssembled: false });
+
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+    await page.evaluate((s) => {
+      localStorage.setItem('herbalBookForgeProject_v0.12.0', JSON.stringify(s));
+    }, state);
+    await page.reload();
+
+    await page.click('button#tab-preview');
+    await page.waitForSelector('#content-preview:not(.hidden)', { timeout: 5000 });
+
+    // Empty state first
+    await expect(page.locator('[data-testid="preview-empty-state"]')).toBeVisible();
+
+    // Assemble and confirm rendered content
+    await page.click('[data-testid="preview-assemble-btn"]');
+    await page.waitForSelector('[data-testid="preview-content"]:not(.hidden)', { timeout: 5000 });
+    await expect(page.locator('#preview-meta')).not.toHaveClass(/hidden/);
+
+    // Edit a draft then return to preview to trigger stale warning
+    await page.click('button#tab-drafting');
+    await page.waitForSelector('#content-drafting:not(.hidden)', { timeout: 5000 });
+    await page.locator('[data-testid="draft-chapter-select"]').selectOption('0');
+    await page.waitForSelector('#draft-workspace:not(.hidden)', { timeout: 5000 });
+    await page.locator('[data-testid="draft-text-area"]').fill('Updated chapter text to force stale preview warning.');
+    await page.click('[data-testid="save-draft-btn"]');
+
+    await page.click('button#tab-preview');
+    await page.waitForSelector('#content-preview:not(.hidden)', { timeout: 5000 });
+    await expect(page.locator('#preview-status')).toContainText('Preview may be out of date');
+    console.log('✅ [HBFIT.19] Preview stale warning shown after draft update');
+  });
+
+  // HBFIT.20: Export actions and guards for Markdown / HTML-print / RTF
+  test('HBFIT.20 — Export actions and guards for Markdown, HTML-print, and RTF', async ({ page }) => {
+    const state = makePreviewProjectState({ withAssembled: false });
+
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+    await page.evaluate((s) => {
+      localStorage.setItem('herbalBookForgeProject_v0.12.0', JSON.stringify(s));
+    }, state);
+    await page.reload();
+
+    await page.click('button#tab-preview');
+    await page.waitForSelector('#content-preview:not(.hidden)', { timeout: 5000 });
+
+    // Guard when no assembled manuscript
+    await page.click('[data-testid="preview-export-md-btn"]');
+    await expect(page.locator('#preview-status')).toContainText('Assemble a manuscript before exporting');
+
+    // Assemble then verify export actions
+    await page.click('[data-testid="preview-assemble-btn"]');
+
+    const mdDownloadPromise = page.waitForEvent('download');
+    await page.click('[data-testid="preview-export-md-btn"]');
+    const mdDownload = await mdDownloadPromise;
+    expect(mdDownload.suggestedFilename().toLowerCase()).toContain('.md');
+
+    const popupPromise = page.waitForEvent('popup');
+    await page.click('[data-testid="preview-export-html-btn"]');
+    const popup = await popupPromise;
+    await popup.waitForLoadState('domcontentloaded');
+    await expect(popup).toHaveTitle(/Printable Manuscript/i);
+    await popup.close();
+
+    const rtfDownloadPromise = page.waitForEvent('download');
+    await page.click('[data-testid="preview-export-rtf-btn"]');
+    const rtfDownload = await rtfDownloadPromise;
+    expect(rtfDownload.suggestedFilename().toLowerCase()).toContain('.rtf');
+
+    console.log('✅ [HBFIT.20] Markdown, printable HTML, and RTF exports validated');
+  });
+
+  // HBFIT.21: Preview persistence across reload
+  test('HBFIT.21 — Preview state and export history persist across reload', async ({ page }) => {
+    const state = makePreviewProjectState({ withAssembled: false, withExportHistory: false });
+
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+    await page.evaluate((s) => {
+      localStorage.setItem('herbalBookForgeProject_v0.12.0', JSON.stringify(s));
+    }, state);
+    await page.reload();
+
+    await page.click('button#tab-preview');
+    await page.waitForSelector('#content-preview:not(.hidden)', { timeout: 5000 });
+
+    await page.click('[data-testid="preview-assemble-btn"]');
+
+    const mdDownloadPromise = page.waitForEvent('download');
+    await page.click('[data-testid="preview-export-md-btn"]');
+    await mdDownloadPromise;
+
+    // Confirm preview persisted in localStorage before reload
+    const beforeReload = await page.evaluate(() => {
+      const raw = localStorage.getItem('herbalBookForgeProject_v0.12.0');
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      return {
+        hasAssembledText: typeof p?.preview?.assembledText === 'string' && p.preview.assembledText.length > 0,
+        hasLastGenerated: typeof p?.preview?.lastGenerated === 'string',
+        exportCount: Array.isArray(p?.preview?.exportHistory) ? p.preview.exportHistory.length : 0
+      };
+    });
+
+    expect(beforeReload).not.toBeNull();
+    expect(beforeReload.hasAssembledText).toBe(true);
+    expect(beforeReload.hasLastGenerated).toBe(true);
+    expect(beforeReload.exportCount).toBeGreaterThan(0);
+
+    await page.reload();
+    await page.click('button#tab-preview');
+    await page.waitForSelector('#content-preview:not(.hidden)', { timeout: 5000 });
+    await expect(page.locator('[data-testid="preview-content"]')).not.toHaveClass(/hidden/);
+
+    const afterReload = await page.evaluate(() => {
+      const raw = localStorage.getItem('herbalBookForgeProject_v0.12.0');
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      return {
+        hasAssembledText: typeof p?.preview?.assembledText === 'string' && p.preview.assembledText.length > 0,
+        exportCount: Array.isArray(p?.preview?.exportHistory) ? p.preview.exportHistory.length : 0
+      };
+    });
+
+    expect(afterReload).not.toBeNull();
+    expect(afterReload.hasAssembledText).toBe(true);
+    expect(afterReload.exportCount).toBeGreaterThan(0);
+    console.log('✅ [HBFIT.21] Preview assembled state and export history persist after reload');
+  });
+});

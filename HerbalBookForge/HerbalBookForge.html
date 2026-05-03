@@ -70,7 +70,7 @@
             <div class="flex items-center gap-x-3">
                 <div class="w-9 h-9 bg-emerald-500 rounded-2xl flex items-center justify-center text-2xl shadow-inner">🌿</div>
                 <h1 class="text-3xl font-semibold tracking-[-1px] section-header">HerbalBookForge</h1>
-                <span class="px-3 py-0.5 text-xs font-medium bg-emerald-600/30 text-emerald-300 rounded-3xl border border-emerald-400/30">v0.9.5</span>
+                <span class="px-3 py-0.5 text-xs font-medium bg-emerald-600/30 text-emerald-300 rounded-3xl border border-emerald-400/30">v0.12.0</span>
             </div>
             <nav class="flex items-center gap-x-1.5 overflow-x-auto hide-scrollbar">
                 <button onclick="switchTab('setup')" id="tab-setup" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">⚙️ Setup</button>
@@ -136,7 +136,7 @@
                                 <div class="grid grid-cols-2 gap-6">
                                     <div>
                                         <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Version</label>
-                                        <div id="project-version-display" class="bg-black/40 border border-emerald-700 rounded-2xl px-6 py-4 font-mono">v0.9.5</div>
+                                        <div id="project-version-display" class="bg-black/40 border border-emerald-700 rounded-2xl px-6 py-4 font-mono">v0.12.0</div>
                                     </div>
                                     <div>
                                         <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Last Edited</label>
@@ -559,23 +559,68 @@
 
     <!-- PREVIEW TAB – DETAILED TODO -->
     <div id="content-preview" class="tab-content hidden">
-        <!-- HBF.PR1: The Preview Tab SHALL allow preview and export of the full manuscript. -->
-        <!-- HBF.PR2: The Preview Tab SHALL render the compiled book with proper formatting, chapter headings, and annotations. -->
-        <!-- HBF.PR3: The Preview Tab SHALL support export to PDF, Markdown, and printable HTML formats. -->
-        <!-- HBF.PR4: The Preview Tab SHALL include version history and change log for the manuscript. -->
+        <!-- HBF.PR1: The Preview Tab SHALL allow preview and export of the assembled full manuscript generated from chapter drafts in outline order. -->
+        <!-- HBF.PR2: The Preview Tab SHALL render the compiled manuscript with clear chapter headings and readable formatting, with an empty-state when nothing is assembled. -->
+        <!-- HBF.PR3: The Preview Tab SHALL support export to Markdown (.md), printable HTML (browser print/Save as PDF), and Rich Text Format (.rtf) for editor workflows. -->
+        <!-- HBF.PR4: The Preview Tab SHALL track manuscript generation/export metadata in persisted state (lastGenerated, exportHistory[]); full diff history is deferred. -->
+        <!-- HBF.PR3.D1: Native DOCX export generation is deferred beyond v0.12.0. -->
         <!-- TODO HBF.PR1: Implement manuscript assembly pipeline and preview/export controls entry point. -->
-        <!-- TODO HBF.PR1 Status: Not started | Planned: v0.10 -->
+        <!-- TODO HBF.PR1 Status: Not started | Planned: v0.12.0 -->
         <!-- TODO HBF.PR2: Render compiled manuscript with chapter headings, sections, and annotation-aware formatting. -->
-        <!-- TODO HBF.PR2 Status: Not started | Planned: v0.10 -->
-        <!-- TODO HBF.PR3: Add export actions for PDF, Markdown, and printable HTML outputs. -->
-        <!-- TODO HBF.PR3 Status: Not started | Planned: v0.10 -->
-        <!-- TODO HBF.PR4: Implement manuscript version history and change-log display and persistence. -->
-        <!-- TODO HBF.PR4 Status: Not started | Planned: v0.10 -->
+        <!-- TODO HBF.PR2 Status: Not started | Planned: v0.12.0 -->
+        <!-- TODO HBF.PR3: Add export actions for Markdown, printable HTML (print to PDF), and RTF outputs. -->
+        <!-- TODO HBF.PR3 Status: Not started | Planned: v0.12.0 -->
+        <!-- TODO HBF.PR4: Implement preview metadata persistence (lastGenerated, exportHistory) and display. -->
+        <!-- TODO HBF.PR4 Status: Not started | Planned: v0.12.0 -->
 
-        <div class="max-w-4xl mx-auto text-center py-32">
-            <div class="text-8xl mb-8">📕</div>
-            <h2 class="text-4xl font-semibold mb-4">Manuscript Preview / Export</h2>
-            <p class="text-emerald-400">Coming soon – full manuscript preview and export</p>
+        <div class="max-w-5xl mx-auto">
+            <div class="mb-10">
+                <h2 class="text-4xl font-semibold tracking-tight section-header">Manuscript Preview</h2>
+                <p class="text-emerald-300 mt-2">Assemble chapter drafts, review the full manuscript, then export for editing or print.</p>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
+                <aside class="card bg-emerald-900/60 border border-emerald-700 rounded-3xl p-6">
+                    <h3 class="uppercase text-emerald-400 text-xs font-medium mb-4 tracking-widest">Assembly Controls</h3>
+                    <button id="preview-assemble-btn" data-testid="preview-assemble-btn" type="button"
+                        class="w-full px-5 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-medium mb-5">
+                        📚 Assemble Manuscript
+                    </button>
+
+                    <div class="space-y-3">
+                        <button id="preview-export-md-btn" data-testid="preview-export-md-btn" type="button"
+                            class="w-full px-4 py-2.5 bg-emerald-800 hover:bg-emerald-700 rounded-2xl text-sm font-medium">
+                            Export Markdown (.md)
+                        </button>
+                        <button id="preview-export-html-btn" data-testid="preview-export-html-btn" type="button"
+                            class="w-full px-4 py-2.5 bg-emerald-800 hover:bg-emerald-700 rounded-2xl text-sm font-medium">
+                            Export Printable HTML
+                        </button>
+                        <button id="preview-export-rtf-btn" data-testid="preview-export-rtf-btn" type="button"
+                            class="w-full px-4 py-2.5 bg-emerald-800 hover:bg-emerald-700 rounded-2xl text-sm font-medium">
+                            Export Rich Text (.rtf)
+                        </button>
+                    </div>
+
+                    <div class="mt-6 pt-5 border-t border-emerald-800/70">
+                        <p class="text-xs text-emerald-400">PDF output uses browser print via Printable HTML export.</p>
+                    </div>
+                </aside>
+
+                <section class="card bg-emerald-900/40 border border-emerald-700 rounded-3xl p-6 min-h-[28rem]">
+                    <div id="preview-status" class="hidden mb-5 text-sm text-emerald-300"></div>
+                    <div id="preview-meta" class="hidden mb-5 text-xs text-emerald-500"></div>
+
+                    <div id="preview-empty-state" data-testid="preview-empty-state"
+                        class="h-full flex flex-col items-center justify-center text-center px-6 py-14">
+                        <div class="text-7xl mb-6">📕</div>
+                        <h3 class="text-2xl font-semibold text-emerald-200 mb-3">No Manuscript Assembled Yet</h3>
+                        <p class="text-emerald-400 max-w-xl">Click Assemble Manuscript to compile your current chapter drafts into a full-book preview.</p>
+                    </div>
+
+                    <article id="preview-content" data-testid="preview-content" class="hidden prose prose-invert max-w-none"></article>
+                </section>
+            </div>
         </div>
     </div>
 
@@ -583,7 +628,7 @@
     </main>
 
     <footer class="fixed bottom-0 left-0 right-0 bg-black/80 border-t border-emerald-800 py-3 px-8 text-xs font-mono text-emerald-400 flex items-center justify-between z-50">
-        <div>HerbalBookForge v0.9.5</div>
+        <div>HerbalBookForge v0.12.0</div>
         <div id="footer-project-name" class="text-emerald-300 font-medium"></div>
         <div>You = developer only | Internal agents = herbal experts only</div>
     </footer>
@@ -594,10 +639,27 @@
         // HBF.GEN2: The app SHALL sanitize user and agent text before rendering into HTML views.
         // HBF.GEN3: The app SHALL support backward-compatible loading from prior localStorage session keys.
         // HBF.GEN4: The footer SHALL display and auto-update the current project name.
-        // Version: 0.9.5 | Date: 2026-04-17
+        // Version: 0.12.0 | Date: 2026-05-02
+
+        function getDefaultPreviewState() {
+            return {
+                lastGenerated: null,
+                assembledText: "",
+                exportHistory: []
+            };
+        }
+
+        function normalizePreviewState(input) {
+            const safe = (input && typeof input === 'object') ? input : {};
+            return {
+                lastGenerated: safe.lastGenerated || null,
+                assembledText: typeof safe.assembledText === 'string' ? safe.assembledText : "",
+                exportHistory: Array.isArray(safe.exportHistory) ? safe.exportHistory : []
+            };
+        }
 
         let project = {
-            meta: { version: "0.10.0", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
+            meta: { version: "0.12.0", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
             setup: {
                 apiKey: "",
                 collectionIds: ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"],
@@ -625,7 +687,9 @@
             // HBF.DR7: drafts[] — one entry per chapter, keyed by chapterId
             drafts: [],
             // HBF.SA5: safetyReport — manuscript-level safety scan results
-            safetyReport: null
+            safetyReport: null,
+            // HBF.PR4: preview metadata and assembled manuscript state
+            preview: getDefaultPreviewState()
         };
 
         const defaultTones = [
@@ -640,6 +704,7 @@
         let apiKeyVisible = false;
         let setupListenersBound = false;
         let goalsListenersBound = false;
+        let previewListenersBound = false;
 
         function escapeHtml(text) {
             return String(text)
@@ -693,10 +758,13 @@
             if (tabId === 'drafting') renderDraftingTab();
             // HBF.SA1: re-render Safety tab when activated
             if (tabId === 'safety') renderSafetyTab();
+            // HBF.PR2: re-render Preview tab when activated
+            if (tabId === 'preview') renderPreviewTab();
         }
 
         function loadProject() {
-            const saved = localStorage.getItem('herbalBookForgeProject_v0.11.0')
+            const saved = localStorage.getItem('herbalBookForgeProject_v0.12.0')
+                || localStorage.getItem('herbalBookForgeProject_v0.11.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.10.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.9.5')
                 || localStorage.getItem('herbalBookForgeProject_v0.9.3');
@@ -712,16 +780,20 @@
                         // HBF.DR7: preserve drafts from saved state; fall back to empty array
                         drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
                         // HBF.SA5: preserve safetyReport from saved state
-                        safetyReport: parsed.safetyReport !== undefined ? parsed.safetyReport : null
+                        safetyReport: parsed.safetyReport !== undefined ? parsed.safetyReport : null,
+                        // HBF.PR4: preserve preview state from saved state with schema-safe defaults
+                        preview: normalizePreviewState(parsed.preview)
                     };
                 } catch (e) {}
             }
 
-            project.meta.version = "0.11.0";
+            project.meta.version = "0.12.0";
             // HBF.DR7: ensure drafts is always a valid array after load
             if (!Array.isArray(project.drafts)) project.drafts = [];
             // HBF.SA5: ensure safetyReport is null (not undefined) if absent
             if (project.safetyReport === undefined) project.safetyReport = null;
+            // HBF.PR4: ensure preview is always a normalized object
+            project.preview = normalizePreviewState(project.preview);
             if (!Array.isArray(project.setup.collectionIds)) {
                 project.setup.collectionIds = ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"];
             }
@@ -739,12 +811,13 @@
             renderChapterList();
             renderDraftingTab();
             renderSafetyTab();
+            renderPreviewTab();
             updateFooter();
         }
 
         function saveProject() {
             project.meta.lastEdited = new Date().toISOString();
-            localStorage.setItem('herbalBookForgeProject_v0.11.0', JSON.stringify(project));
+            localStorage.setItem('herbalBookForgeProject_v0.12.0', JSON.stringify(project));
             const status = document.getElementById('save-status');
             if (status) {
                 status.innerHTML = `Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
@@ -791,9 +864,11 @@
                         prompts: { ...project.prompts, ...(parsed.prompts || {}) },
                         goals: { ...project.goals, ...(parsed.goals || {}) },
                         // HBF.DR7: preserve drafts on import; fall back to empty array
-                        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : []
+                        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
+                        // HBF.PR4: preserve preview metadata on import with schema-safe defaults
+                        preview: normalizePreviewState(parsed.preview)
                     };
-                    project.meta.version = "0.10.0";
+                    project.meta.version = "0.12.0";
                     loadProject();
                     saveProject();
                     alert('Project imported successfully.');
@@ -830,7 +905,7 @@
             if (collections) collections.value = (project.setup.collectionIds || []).join(', ');
             if (webToggle) webToggle.checked = !!project.setup.webSearchEnabled;
             if (model) model.value = project.setup.preferredModel || 'grok-4.20-0309-reasoning';
-            if (version) version.textContent = `v${project.meta.version || '0.9.5'}`;
+            if (version) version.textContent = `v${project.meta.version || '0.12.0'}`;
             if (lastEdited && project.meta.lastEdited) {
                 lastEdited.textContent = new Date(project.meta.lastEdited).toLocaleString();
             }
@@ -942,6 +1017,309 @@
                     }
                 });
             }
+        }
+
+        function setPreviewStatus(message, level = 'info') {
+            const statusEl = document.getElementById('preview-status');
+            if (!statusEl) return;
+            if (!message) {
+                statusEl.classList.add('hidden');
+                statusEl.textContent = '';
+                statusEl.classList.remove('text-red-300', 'text-amber-300', 'text-emerald-300');
+                statusEl.classList.add('text-emerald-300');
+                return;
+            }
+            statusEl.classList.remove('hidden', 'text-red-300', 'text-amber-300', 'text-emerald-300');
+            statusEl.classList.add(level === 'error' ? 'text-red-300' : (level === 'warn' ? 'text-amber-300' : 'text-emerald-300'));
+            statusEl.textContent = message;
+        }
+
+        function buildExportTimestampTag(date = new Date()) {
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            const hh = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
+            return `${yyyy}${mm}${dd}-${hh}${min}`;
+        }
+
+        function toSafeSlug(value, fallback = 'herbal-book') {
+            const slug = String(value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9\s-]/g, '')
+                .trim()
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-');
+            return slug || fallback;
+        }
+
+        function recordPreviewExport(type, fileName) {
+            project.preview = normalizePreviewState(project.preview);
+            const item = {
+                type,
+                fileName,
+                timestamp: new Date().toISOString()
+            };
+            project.preview.exportHistory = [item, ...(project.preview.exportHistory || [])].slice(0, 100);
+        }
+
+        function triggerFileDownload(content, fileName, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function splitAssembledSections(assembledText) {
+            return String(assembledText || '')
+                .split('\n\n---\n\n')
+                .map(s => s.trim())
+                .filter(Boolean)
+                .map((section, index) => {
+                    const headingMatch = section.match(/^##\s+(.+)$/m);
+                    const title = headingMatch ? headingMatch[1].trim() : `Section ${index + 1}`;
+                    const body = headingMatch
+                        ? section.replace(/^##\s+.+(?:\r?\n){1,2}/, '').trim()
+                        : section;
+                    return { title, body };
+                });
+        }
+
+        function exportAsPrintableHtml() {
+            project.preview = normalizePreviewState(project.preview);
+            const assembledText = (project.preview.assembledText || '').trim();
+            if (!assembledText) {
+                setPreviewStatus('Assemble a manuscript before exporting printable HTML.', 'error');
+                return;
+            }
+
+            const sections = splitAssembledSections(assembledText);
+            const bookTitle = project.meta?.name || 'HerbalBookForge Manuscript';
+            const printableHtml = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(bookTitle)} - Printable Manuscript</title>
+  <style>
+    body { font-family: Georgia, 'Times New Roman', serif; margin: 2rem auto; max-width: 8.5in; color: #111; line-height: 1.55; }
+    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.25rem; margin-top: 2rem; margin-bottom: 0.8rem; page-break-after: avoid; }
+    .meta { color: #444; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .chapter-body { white-space: pre-wrap; }
+    @media print {
+      body { margin: 0.6in; max-width: none; }
+      h1, h2 { color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(bookTitle)}</h1>
+  <div class="meta">Generated ${new Date().toLocaleString()} from HerbalBookForge Preview tab</div>
+  ${sections.map(s => `<section><h2>${escapeHtml(s.title)}</h2><div class="chapter-body">${escapeHtml(s.body)}</div></section>`).join('\n')}
+</body>
+</html>`;
+
+            const win = window.open('', '_blank');
+            if (!win) {
+                setPreviewStatus('Popup blocked. Allow popups to open printable HTML export.', 'error');
+                return;
+            }
+
+            win.document.open();
+            win.document.write(printableHtml);
+            win.document.close();
+
+            const slug = toSafeSlug(project.meta?.name, 'herbal-book');
+            const stamp = buildExportTimestampTag();
+            const fileName = `${slug}_${stamp}_print.html`;
+            recordPreviewExport('html-print', fileName);
+            saveProject();
+            renderPreviewTab();
+            setPreviewStatus('Printable HTML opened in a new tab. Use browser Print to save as PDF.');
+        }
+
+        function escapeRtfText(text) {
+            return String(text || '')
+                .replace(/\\/g, '\\\\')
+                .replace(/\{/g, '\\{')
+                .replace(/\}/g, '\\}')
+                .replace(/\r?\n/g, '\\par\n');
+        }
+
+        function exportAsRtf() {
+            project.preview = normalizePreviewState(project.preview);
+            const assembledText = (project.preview.assembledText || '').trim();
+            if (!assembledText) {
+                setPreviewStatus('Assemble a manuscript before exporting RTF.', 'error');
+                return;
+            }
+
+            const sections = splitAssembledSections(assembledText);
+            const bookTitle = project.meta?.name || 'HerbalBookForge Manuscript';
+            let rtf = '{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Calibri;}}\n';
+            rtf += `\\fs40\\b ${escapeRtfText(bookTitle)}\\b0\\fs24\\par\\par\n`;
+            rtf += `\\i Generated ${escapeRtfText(new Date().toLocaleString())}\\i0\\par\\par\n`;
+            sections.forEach(section => {
+                rtf += `\\fs32\\b ${escapeRtfText(section.title)}\\b0\\fs24\\par\\par\n`;
+                rtf += `${escapeRtfText(section.body)}\\par\\par\n`;
+            });
+            rtf += '}';
+
+            const slug = toSafeSlug(project.meta?.name, 'herbal-book');
+            const stamp = buildExportTimestampTag();
+            const fileName = `${slug}_${stamp}.rtf`;
+
+            triggerFileDownload(rtf, fileName, 'application/rtf;charset=utf-8');
+            recordPreviewExport('rtf', fileName);
+            saveProject();
+            renderPreviewTab();
+            setPreviewStatus(`RTF export created: ${fileName}`);
+        }
+
+        function getMostRecentDraftUpdateTimestamp() {
+            const drafts = Array.isArray(project.drafts) ? project.drafts : [];
+            const latest = drafts
+                .map(d => (d && d.lastUpdated ? Date.parse(d.lastUpdated) : NaN))
+                .filter(ts => !isNaN(ts))
+                .sort((a, b) => b - a)[0];
+            return typeof latest === 'number' ? latest : null;
+        }
+
+        function isPreviewStale() {
+            const lastGenerated = project.preview?.lastGenerated ? Date.parse(project.preview.lastGenerated) : NaN;
+            if (isNaN(lastGenerated)) return false;
+            const latestDraftUpdate = getMostRecentDraftUpdateTimestamp();
+            return latestDraftUpdate !== null && latestDraftUpdate > lastGenerated;
+        }
+
+        function renderPreviewTab() {
+            const emptyState = document.getElementById('preview-empty-state');
+            const content = document.getElementById('preview-content');
+            const meta = document.getElementById('preview-meta');
+            if (!emptyState || !content) return;
+
+            const assembledText = (project.preview?.assembledText || '').trim();
+            if (!assembledText) {
+                emptyState.classList.remove('hidden');
+                content.classList.add('hidden');
+                content.innerHTML = '';
+                if (meta) {
+                    meta.classList.add('hidden');
+                    meta.textContent = '';
+                }
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            content.classList.remove('hidden');
+            content.innerHTML = `<div class="whitespace-pre-wrap leading-relaxed text-emerald-100">${escapeHtml(assembledText)}</div>`;
+
+            if (meta) {
+                const generatedLabel = project.preview.lastGenerated
+                    ? new Date(project.preview.lastGenerated).toLocaleString()
+                    : 'Unknown';
+                const sectionCount = assembledText.split('\n\n---\n\n').filter(Boolean).length;
+                meta.textContent = `Last assembled: ${generatedLabel} | Sections: ${sectionCount}`;
+                meta.classList.remove('hidden');
+            }
+
+            if (isPreviewStale()) {
+                setPreviewStatus('Preview may be out of date. Re-run Assemble Manuscript to include latest draft edits.', 'warn');
+            }
+        }
+
+        function assembleManuscript() {
+            const chapters = Array.isArray(project.chapterOutlines) ? project.chapterOutlines : [];
+            const drafts = Array.isArray(project.drafts) ? project.drafts : [];
+
+            if (drafts.length === 0) {
+                project.preview = normalizePreviewState(project.preview);
+                project.preview.assembledText = '';
+                project.preview.lastGenerated = null;
+                saveProject();
+                renderPreviewTab();
+                setPreviewStatus('No chapter drafts available. Generate chapter drafts in the Drafting tab first.', 'error');
+                return;
+            }
+
+            const sections = [];
+
+            // HBF.PR1/HBF.PR2: compile chapter drafts in outline order with stable headings.
+            if (chapters.length > 0) {
+                chapters.forEach((ch, idx) => {
+                    const draft = drafts.find(d => d.chapterId === idx && typeof d.draftText === 'string' && d.draftText.trim());
+                    if (!draft) return;
+                    const title = (ch?.title || draft.chapterTitle || `Chapter ${idx + 1}`).trim();
+                    sections.push(`## ${title}\n\n${draft.draftText.trim()}`);
+                });
+            }
+
+            // Legacy fallback for sessions with drafts but missing chapterOutlines.
+            if (sections.length === 0) {
+                drafts
+                    .filter(d => typeof d?.draftText === 'string' && d.draftText.trim())
+                    .sort((a, b) => (a.chapterId ?? 0) - (b.chapterId ?? 0))
+                    .forEach((d, index) => {
+                        const title = (d.chapterTitle || `Chapter ${(typeof d.chapterId === 'number' ? d.chapterId + 1 : index + 1)}`).trim();
+                        sections.push(`## ${title}\n\n${d.draftText.trim()}`);
+                    });
+            }
+
+            if (sections.length === 0) {
+                project.preview = normalizePreviewState(project.preview);
+                project.preview.assembledText = '';
+                project.preview.lastGenerated = null;
+                saveProject();
+                renderPreviewTab();
+                setPreviewStatus('Draft entries exist but contain no text. Save chapter text before assembling.', 'error');
+                return;
+            }
+
+            project.preview = normalizePreviewState(project.preview);
+            project.preview.assembledText = sections.join('\n\n---\n\n');
+            project.preview.lastGenerated = new Date().toISOString();
+            saveProject();
+            renderPreviewTab();
+            setPreviewStatus(`Assembled manuscript with ${sections.length} section${sections.length === 1 ? '' : 's'}.`);
+        }
+
+        function exportAsMarkdown() {
+            project.preview = normalizePreviewState(project.preview);
+            const assembledText = (project.preview.assembledText || '').trim();
+            if (!assembledText) {
+                setPreviewStatus('Assemble a manuscript before exporting Markdown.', 'error');
+                return;
+            }
+
+            const slug = toSafeSlug(project.meta?.name, 'herbal-book');
+            const stamp = buildExportTimestampTag();
+            const fileName = `${slug}_${stamp}.md`;
+
+            triggerFileDownload(assembledText, fileName, 'text/markdown;charset=utf-8');
+            recordPreviewExport('markdown', fileName);
+            saveProject();
+            renderPreviewTab();
+            setPreviewStatus(`Markdown export created: ${fileName}`);
+        }
+
+        function bindPreviewListeners() {
+            if (previewListenersBound) return;
+            previewListenersBound = true;
+            document.getElementById('preview-assemble-btn')?.addEventListener('click', () => {
+                assembleManuscript();
+            });
+            document.getElementById('preview-export-md-btn')?.addEventListener('click', () => {
+                exportAsMarkdown();
+            });
+            document.getElementById('preview-export-html-btn')?.addEventListener('click', () => {
+                exportAsPrintableHtml();
+            });
+            document.getElementById('preview-export-rtf-btn')?.addEventListener('click', () => {
+                exportAsRtf();
+            });
         }
 
         function renderChatHistory() {
@@ -2323,19 +2701,20 @@
 
         function showProjectInfo() {
             alert(
-                `HerbalBookForge v0.9.5\n\n` +
+                `HerbalBookForge v0.12.0\n\n` +
                 `Book Goals: ${project.goals.finalized ? 'Finalized' : 'Draft'}\n` +
                 `Outline: ${project.outline ? 'Present' : 'Missing'}\n` +
                 `Chapter outlines: ${(project.chapterOutlines || []).length}\n` +
-                `Drafting/Safety/Preview: Planned (v0.10)`
+                `Drafting/Safety: Implemented | Preview: Sprint 4 (v0.12.0)`
             );
         }
 
         function initializeApp() {
-            console.log('%c🌿 HerbalBookForge v0.9.5 initialized – Full requirements + detailed TODOs added', 'color:#34d399; font-size:16px');
+            console.log('%c🌿 HerbalBookForge v0.12.0 initialized – Sprint 4 Preview state model active', 'color:#34d399; font-size:16px');
             loadProject();
             bindSetupListeners();
             bindGoalsListeners();
+            bindPreviewListeners();
             switchTab('goals');
         }
 

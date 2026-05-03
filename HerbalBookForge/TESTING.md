@@ -8,9 +8,9 @@ HerbalBookForge includes comprehensive test coverage spanning smoke tests, regre
 
 ### 1. Smoke Tests (`herbalbookforge.smoke.spec.js`)
 
-**Purpose**: Quick validation of core UI elements, tab navigation, Drafting tab control presence, and Safety tab control presence
+**Purpose**: Quick validation of core UI elements, tab navigation, Drafting/Safety/Preview control presence
 
-**Tests** (3 total):
+**Tests** (4 total):
 
 #### Test 1 — App loads and shows main tabs
 - All 7 main tab buttons are visible (`tab-goals`, `tab-outline`, `tab-chapter-outlines`, `tab-drafting`, `tab-prompts`, `tab-safety`, `tab-preview`)
@@ -43,14 +43,26 @@ Switches to the Safety tab and asserts the following `data-testid` attributes ar
 | `safety-report` | Safety report panel | Attached (hidden until scan completes) |
 | `safety-empty-state` | No-drafts empty state | Attached (visible when no drafts) |
 
-**Run time**: ~8 seconds
+#### Test 4 — Preview tab renders all required controls (Sprint 4)
+Switches to the Preview tab and asserts the following `data-testid` attributes:
+
+| `data-testid` | Element | Notes |
+|---|---|---|
+| `preview-assemble-btn` | Assemble Manuscript button | Visible |
+| `preview-export-md-btn` | Export Markdown button | Visible |
+| `preview-export-html-btn` | Export Printable HTML button | Visible |
+| `preview-export-rtf-btn` | Export RTF button | Visible |
+| `preview-empty-state` | Preview empty state panel | Visible before assembly |
+| `preview-content` | Preview content container | Attached (shown after assembly) |
+
+**Run time**: ~10-15 seconds
 
 **Command**:
 ```bash
 npx playwright test --project=herbalbookforge-smoke
 ```
 
-**Status**: ✅ Passing (3/3)
+**Status**: ✅ Passing (4/4)
 
 ---
 
@@ -200,6 +212,44 @@ A shared helper `makeSafetyProjectState()` injects a minimal project state (one 
 ```bash
 npx playwright test --project=herbalbookforge-integration
 ```
+
+---
+
+### 5. Preview Tab Integration Tests (`herbalbookforge.integration.spec.js`) — Sprint 4 (HBFIT.18-21)
+
+**Purpose**: Validate Preview tab manuscript assembly, rendering/refresh behavior, export guards/actions, and persistence
+
+These tests use localStorage-injected project state and do not require live LLM responses.
+
+#### HBFIT.18 — Assembly in outline order
+- Injects two drafts intentionally out of array order
+- Clicks Assemble Manuscript
+- Asserts Preview content renders Chapter 1 before Chapter 2
+
+#### HBFIT.19 — Rendering and stale preview guidance
+- Verifies empty-state is visible before assembly
+- Asserts assembled preview becomes visible with metadata
+- Edits and saves a draft in Drafting tab
+- Returns to Preview and asserts stale warning appears
+
+#### HBFIT.20 — Export actions and guards
+- Verifies guard message when exporting before assembly
+- After assembly, validates:
+   - Markdown export triggers a `.md` download
+   - Printable HTML export opens a popup print document
+   - RTF export triggers a `.rtf` download
+
+#### HBFIT.21 — Preview persistence across reload
+- Assembles manuscript and triggers export to create history
+- Verifies `preview.assembledText`, `preview.lastGenerated`, and `preview.exportHistory[]` in localStorage
+- Reloads page and confirms Preview content remains rendered
+
+**Command (targeted)**:
+```bash
+npx playwright test --project=herbalbookforge-integration --grep "HBFIT\.18|HBFIT\.19|HBFIT\.20|HBFIT\.21"
+```
+
+**Status**: ✅ Passing (4/4 targeted)
 
 ---
 
