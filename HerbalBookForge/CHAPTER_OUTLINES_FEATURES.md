@@ -1,4 +1,4 @@
-# HerbalBookForge Chapter Outlines Features (Sprint X)
+﻿# HerbalBookForge Chapter Outlines Features (Sprint X)
 
 ## Features Implemented
 
@@ -43,6 +43,9 @@ Full end-to-end integration tests are now available in `tests/e2e/herbalbookforg
 - Handles API delays and LLM response waits (60+ second timeouts)
 
 Run with:
+
 ```bash
+
 npx playwright test --project=herbalbookforge-integration
+
 ```

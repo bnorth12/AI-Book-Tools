@@ -1,4 +1,4 @@
-# Feature Release Secure SDLC Checklist
+﻿# Feature Release Secure SDLC Checklist
 
 ## Current Status Snapshot (HerbalBookForge Chapter Outlines, 2026-04-25)
 

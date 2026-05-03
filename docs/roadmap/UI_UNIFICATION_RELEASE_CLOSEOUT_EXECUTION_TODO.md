@@ -1,4 +1,4 @@
-# UI Unification Release Closeout Execution Todo
+﻿# UI Unification Release Closeout Execution Todo
 
 Date: 2026-04-19
 Scope: feature/ui-unification-foundation

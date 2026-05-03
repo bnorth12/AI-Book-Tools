@@ -1,4 +1,4 @@
-# System Security Analysis
+﻿# System Security Analysis
 
 This folder is the canonical location for threat model and cyber threat analysis artifacts.
 

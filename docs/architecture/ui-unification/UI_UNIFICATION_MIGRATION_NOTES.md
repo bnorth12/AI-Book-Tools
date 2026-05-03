@@ -1,4 +1,4 @@
-# UI Unification Per-Tool Migration Notes
+﻿# UI Unification Per-Tool Migration Notes
 
 Date: 2026-04-19
 Branch: feature/ui-unification-foundation

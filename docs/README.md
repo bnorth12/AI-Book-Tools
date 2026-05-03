@@ -1,4 +1,4 @@
-# Documentation Index
+﻿# Documentation Index
 
 This directory contains process, planning, architecture, and release documentation.
 

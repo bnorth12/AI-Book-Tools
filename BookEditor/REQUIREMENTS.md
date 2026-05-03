@@ -1,4 +1,4 @@
-# BookEditor Requirements
+﻿# BookEditor Requirements
 
 Date: 2026-04-19
 Application: BookEditor

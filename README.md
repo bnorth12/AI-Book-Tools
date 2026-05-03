@@ -1,4 +1,4 @@
-# AI Book Tools
+﻿# AI Book Tools
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub issues](https://img.shields.io/github/issues/bnorth12/AI-Book-Tools)](https://github.com/bnorth12/AI-Book-Tools/issues)
@@ -18,6 +18,7 @@ Current tool releases: NovelWriter 0.3.4, BookEditor 0.4.0, BookDecomposer 0.2.0
 ## Project Structure
 
 ```text
+
 AI-Book-Tools/
 ├── index.html                               # Main launcher page
 ├── README.md                                # This file
@@ -48,6 +49,7 @@ AI-Book-Tools/
 │   ├── integration/                         # Cross-tool integration issue docs
 │   └── community/                           # Community setup docs
 └── .github/                                 # GitHub configuration and templates
+
 ```
 
 ## Development
@@ -63,6 +65,7 @@ Documentation index: [docs/README.md](docs/README.md)
 ### Local Development
 
 ```bash
+
 # Clone the repository
 git clone https://github.com/bnorth12/AI-Book-Tools.git
 cd AI-Book-Tools
@@ -73,6 +76,7 @@ npm run serve
 python -m http.server 8000
 
 # Open index.html in your browser
+
 ```
 
 ### Code Quality

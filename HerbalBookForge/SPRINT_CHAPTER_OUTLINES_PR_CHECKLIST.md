@@ -1,4 +1,4 @@
-# HerbalBookForge Chapter Outlines Sprint: PR and Closeout Checklist
+﻿# HerbalBookForge Chapter Outlines Sprint: PR and Closeout Checklist
 
 ## Status Audit (2026-04-25) — Updated
 

@@ -1,4 +1,4 @@
-# Release Snapshot Packaging Policy
+﻿# Release Snapshot Packaging Policy
 
 This policy defines mandatory release snapshot packaging in the repository root.
 

@@ -2,5 +2,10 @@ node_modules/
 **/node_modules/**
 playwright-report/
 **/playwright-report/**
+playwright-report-smoke/
+playwright-report-smoke-full/
+playwright-report-ui-shell/
 test-results/
 **/test-results/**
+docs/releases/evidence/
+

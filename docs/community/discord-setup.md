@@ -1,4 +1,4 @@
-# Discord Community Setup Guide
+﻿# Discord Community Setup Guide
 
 This guide explains how to set up a Discord server for the AI Book Tools community.
 

@@ -1,4 +1,4 @@
-# NovelWriter Requirements
+﻿# NovelWriter Requirements
 
 Date: 2026-04-19
 Application: NovelWriter

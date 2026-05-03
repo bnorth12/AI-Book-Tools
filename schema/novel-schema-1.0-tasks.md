@@ -1,4 +1,4 @@
-# Shared Novel Schema v1.0 Tasks
+﻿# Shared Novel Schema v1.0 Tasks
 
 This document describes the initial shared schema and the implementation tasks for each tool.
 

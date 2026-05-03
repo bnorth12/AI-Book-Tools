@@ -1,4 +1,4 @@
-# UI Unification Execution and Risk Test Plan
+﻿# UI Unification Execution and Risk Test Plan
 
 Date: 2026-04-19
 Branch: feature/ui-unification-foundation

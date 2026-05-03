@@ -1,4 +1,4 @@
-# UI Unification Visual Consistency Checklist
+﻿# UI Unification Visual Consistency Checklist
 
 Date: 2026-04-19
 Branch: feature/ui-unification-foundation

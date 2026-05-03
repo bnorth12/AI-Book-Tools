@@ -13,6 +13,21 @@
     "16..25": true,
     "git mv": true,
     "git commit": true,
-    "git push": true
+    "git push": true,
+    "git remote": true,
+    "ForEach-Object": true,
+    "/^npx markdownlint-cli \"HerbalBookForge/SPRINT_ROBUSTNESS_SPRINT_6_TODOLIST\\.md\" \"HerbalBookForge/REQUIREMENTS\\.md\" 2>&1 \\| Select-Object -First 30$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^npx markdownlint-cli \"HerbalBookForge/SPRINT_ROBUSTNESS_SPRINT_6_TODOLIST\\.md\" 2>&1 \\| Select-Object -First 20$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "npx markdownlint-cli": true,
+    "/^cd C:\\\\NovelWriterSite\n\n# Fix MD022 \\(blank line after heading\\) and MD032/MD031 \\(blank lines around lists/fences\\)\n# across all markdown files tracked by git \\(respects \\.markdownlintignore by working on committed files\\)\n\n\\$files = @\\(\n  \"BookEditor/README\\.md\",\n  \"HerbalBookForge/CHAPTER_OUTLINES_FEATURES\\.md\",\n  \"HerbalBookForge/CONTRIBUTING\\.md\",\n  \"HerbalBookForge/ISSUES\\.md\",\n  \"HerbalBookForge/README\\.md\",\n  \"HerbalBookForge/REQUIREMENTS\\.md\",\n  \"HerbalBookForge/SPRINT_CHAPTER_OUTLINES_PLAN\\.md\",\n  \"HerbalBookForge/SPRINT_CHAPTER_OUTLINES_PR_CHECKLIST\\.md\",\n  \"HerbalBookForge/SPRINT_DRAFTING_SPRINT_2_TODOLIST\\.md\",\n  \"HerbalBookForge/SPRINT_ROBUSTNESS_SPRINT_6_TODOLIST\\.md\",\n  \"HerbalBookForge/SPRINT_SAFETY_SPRINT_3_TODOLIST\\.md\",\n  \"HerbalBookForge/TESTING\\.md\",\n  \"NovelWriter/README\\.md\",\n  \"docs/releases/RELEASE_CLOSEOUT_REPORT_2026-04-19\\.md\",\n  \"docs/releases/RELEASE_CLOSEOUT_REPORT_SPRINT3_SAFETY_2026-05-02\\.md\",\n  \"docs/releases/RELEASE_CLOSEOUT_REPORT_SPRINT4_PREVIEW_2026-05-02\\.md\",\n  \"docs/releases/RELEASE_CLOSEOUT_REPORT_SPRINT5_QUALITY_2026-05-02\\.md\",\n  \"docs/releases/RELEASE_CLOSEOUT_REPORT_V1_0_0_2026-05-02\\.md\"\n\\)\n\nforeach \\(\\$file in \\$files\\) \\{\n  if \\(-not \\(Test-Path \\$file\\)\\) \\{ continue \\}\n  \\$lines = \\[System\\.IO\\.File\\]::ReadAllText\\(\\$file, \\[System\\.Text\\.Encoding\\]::UTF8\\) -split \"`n\"\n  \\$result = \\[System\\.Collections\\.Generic\\.List\\[string\\]\\]::new\\(\\)\n  for \\(\\$i = 0; \\$i -lt \\$lines\\.Count; \\$i\\+\\+\\) \\{\n    \\$line = \\$lines\\[\\$i\\]\n    # Fix MD010: replace hard tabs at line start with 2 spaces\n    \\$line = \\$line -replace '\\^\\\\t', '  '\n    \\$result\\.Add\\(\\$line\\)\n    # Fix MD022 Below: add blank line after heading if next line is non-empty\n    if \\(\\$line -match '\\^#\\{1,6\\} ' -and \\$i \\+ 1 -lt \\$lines\\.Count -and \\$lines\\[\\$i\\+1\\]\\.Trim\\(\\) -ne ''\\) \\{\n      \\$result\\.Add\\(''\\)\n    \\}\n  \\}\n  # Collapse 3\\+ blank lines to max 2\n  \\$joined = \\$result -join \"`n\"\n  while \\(\\$joined -match \"`n`n`n\"\\) \\{ \\$joined = \\$joined -replace \"`n`n`n\", \"`n`n\" \\}\n  # Remove trailing spaces from each line\n  \\$fixed = \\(\\$joined -split \"`n\" \\| ForEach-Object \\{ \\$_\\.TrimEnd\\(\\) \\}\\) -join \"`n\"\n  \\[System\\.IO\\.File\\]::WriteAllText\\(\\$file, \\$fixed, \\[System\\.Text\\.Encoding\\]::UTF8\\)\n\\}\nWrite-Host \"Done fixing \\$\\(\\$files\\.Count\\) files\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
   }
 }

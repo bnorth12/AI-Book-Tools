@@ -1,4 +1,4 @@
-# Book Decomposer
+﻿# Book Decomposer
 
 An AI-powered tool that analyzes existing books and breaks them down into structured components for study, analysis, or reuse.
 

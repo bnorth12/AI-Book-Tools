@@ -1,4 +1,4 @@
-# UIU.X.3 Accessibility and Responsive Checklist
+﻿# UIU.X.3 Accessibility and Responsive Checklist
 
 Date: 2026-04-19
 Branch: feature/ui-unification-foundation

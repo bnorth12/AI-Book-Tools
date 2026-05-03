@@ -1,4 +1,4 @@
-# HerbalBookForge Sprint 3 Todo List
+﻿# HerbalBookForge Sprint 3 Todo List
 
 Date: 2026-05-02
 Sprint Number: Sprint 3
@@ -6,9 +6,11 @@ Target Capability: Safety tab — full manuscript/chapter safety scanning, repor
 Status: Planning — branch created, issues pending
 
 ## Sprint 3 Goal
+
 Implement the Safety tab so users can run a safety audit across the full manuscript or selected chapters using the Safety & Accuracy Checker Agent, receive a structured report of contraindications, dosage issues, and PA content limits with suggested fixes per flag, and navigate directly from a safety flag to the relevant draft chapter.
 
 ## Scope Summary
+
 - In scope:
   - Safety tab end-to-end workflow for full-manuscript and per-chapter safety scanning
   - Safety agent prompt/response contract at manuscript scope (distinct from per-chapter validation introduced in Sprint 2)
@@ -24,6 +26,7 @@ Implement the Safety tab so users can run a safety audit across the full manuscr
   - Major visual redesign of non-Safety tabs
 
 ## Requirement Planning and Derivation Checklist
+
 - [ ] Review current Safety tab requirement stubs in HerbalBookForge.html (HBF.SA1–SA4) and REQUIREMENTS.md.
 - [ ] Confirm baseline existing Safety agent wiring in callLlmAgent (from Sprint 2 per-chapter validation).
 - [ ] Create and finalize new Safety requirements:
@@ -44,6 +47,7 @@ Implement the Safety tab so users can run a safety audit across the full manuscr
   - [ ] Sprint issue descriptions and PR traceability
 
 ## Data Contract and State Model Checklist
+
 - [ ] Define `safetyReport` object in project state:
   - [ ] scanScope: "full" | "chapter:<chapterId>"
   - [ ] scanTimestamp: ISO string
@@ -57,6 +61,7 @@ Implement the Safety tab so users can run a safety audit across the full manuscr
 - [ ] Confirm coexistence with per-chapter `validation` field already in `drafts[]` from Sprint 2.
 
 ## Agent and Prompt Update Checklist
+
 - [ ] Update Safety agent system prompt in `callLlmAgent` default prompts to support manuscript-level scope.
 - [ ] Distinguish manuscript-level Safety scan (Safety tab) from per-chapter validation (Drafting tab) in prompt routing:
   - [ ] Per-chapter validation (Sprint 2): remains in `drafts[idx].validation` via Drafting tab.
@@ -69,6 +74,7 @@ Implement the Safety tab so users can run a safety audit across the full manuscr
 - [ ] Ensure `callLlmAgent` routing remains compliant with HBF.UNI1 and HBF.UNI4.
 
 ## Safety Workflow Functional Checklist
+
 - [ ] Safety tab scope selector (full manuscript or per-chapter dropdown).
 - [ ] Run Safety Scan action button.
 - [ ] Render structured safety report panel (summary + flag list).
@@ -79,6 +85,7 @@ Implement the Safety tab so users can run a safety audit across the full manuscr
 - [ ] Re-scan action to refresh report after revisions.
 
 ## UI and UX Checklist (Safety Tab)
+
 - [ ] Add required Safety tab controls with `data-testid` hooks.
 - [ ] Keep responsive layout and keyboard focus requirements intact (UIU.HBF.NF1–NF4).
 - [ ] Add clear empty state when no chapter drafts are available.
@@ -87,6 +94,7 @@ Implement the Safety tab so users can run a safety audit across the full manuscr
 - [ ] Ensure IDs/selectors used by existing smoke/regression tests remain stable or update tests in same sprint.
 
 ## Testing and Test Asset Update Checklist
+
 - [ ] Update smoke tests to verify Safety tab controls/visibility (HBF.SA6).
 - [ ] Add Safety-specific integration tests:
   - [ ] Full-manuscript scan (HBFIT.14)
@@ -104,6 +112,7 @@ Implement the Safety tab so users can run a safety audit across the full manuscr
 - [ ] Capture and store sprint test evidence under docs/releases/evidence/.
 
 ## GitHub and Administrative Process Checklist
+
 - [ ] Create sprint issue set (target: 12 issues) for Sprint 3.
 - [ ] Every issue includes:
   - [ ] Requirement IDs
@@ -126,6 +135,7 @@ Implement the Safety tab so users can run a safety audit across the full manuscr
 - [ ] Update sprint checklist and release evidence docs for closeout.
 
 ## Suggested Sprint 3 Issue Backlog (Planning Draft)
+
 - [ ] Issue 1: Requirement analysis — HBF.SA1–SA6 and HBFIT.14–17 derivation
 - [ ] Issue 2: Safety state model — `safetyReport` schema and persistence
 - [ ] Issue 3: Safety agent prompt update — manuscript-level scan contract and JSON parser
@@ -140,6 +150,7 @@ Implement the Safety tab so users can run a safety audit across the full manuscr
 - [ ] Issue 12: PR packaging, evidence files, and sprint closeout
 
 ## Definition of Done (Sprint 3)
+
 - [ ] All Sprint 3 issues are created, implemented, reviewed, and closed.
 - [ ] Feature branch is merged to main and deleted.
 - [ ] PR is merged with requirement traceability and passing tests documented.
@@ -150,4 +161,5 @@ Implement the Safety tab so users can run a safety audit across the full manuscr
 - [ ] Version bumped to v0.11.0 in HerbalBookForge.html and package.json.
 
 ## Execution Guardrail
+
 This document is planning only. Do not start issue filing, implementation, testing, or PR creation until explicit kickoff approval is given for each phase.

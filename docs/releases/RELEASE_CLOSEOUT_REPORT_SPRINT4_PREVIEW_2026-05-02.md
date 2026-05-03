@@ -1,4 +1,4 @@
-# Sprint 4 Closeout Report - Preview Tab (v0.12.0)
+﻿# Sprint 4 Closeout Report - Preview Tab (v0.12.0)
 
 Date: 2026-05-02
 Scope: HerbalBookForge Sprint 4 - Preview tab implementation
@@ -9,6 +9,7 @@ Branch: feature/herbalbookforge-sprint-4-preview
 Sprint 4 implemented the Preview tab end-to-end for manuscript assembly, in-app rendering, and export workflows.
 
 Delivered capabilities:
+
 - Preview manuscript assembly from chapter drafts in outline order
 - Preview rendering with empty-state handling and stale-preview guidance
 - Export to Markdown (.md)
@@ -17,11 +18,13 @@ Delivered capabilities:
 - Preview state persistence in localStorage v0.12.0 (`project.preview.lastGenerated`, `project.preview.assembledText`, `project.preview.exportHistory[]`)
 
 Deferred:
+
 - Native DOCX export (tracked as deferred requirement beyond v0.12.0)
 
 ## Issue Coverage
 
 Completed Sprint 4 issues:
+
 - #54 Requirements and acceptance criteria (HBF.PR1-HBF.PR4, HBFIT.18-HBFIT.21)
 - #55 Preview state model and localStorage v0.12.0 migration
 - #56 Preview tab UI shell with test ids and empty state
@@ -38,11 +41,13 @@ Completed Sprint 4 issues:
 ## Validation Evidence
 
 Smoke suite:
+
 - Command: `npx playwright test --project=herbalbookforge-smoke --reporter=list`
 - Result: 4 passed
 - Included Preview smoke control coverage.
 
 Preview integration slice:
+
 - Command: `npx playwright test --project=herbalbookforge-integration --grep "HBFIT\.18|HBFIT\.19|HBFIT\.20|HBFIT\.21"`
 - Result: 4 passed
 - Covered assembly ordering, render/refresh behavior, export actions/guards, and persistence.
@@ -60,9 +65,11 @@ Preview integration slice:
 ## PR Packaging Notes
 
 Suggested PR title:
+
 - feat(hbf): Sprint 4 Preview tab v0.12.0
 
 Suggested PR summary bullets:
+
 - Adds Preview tab manuscript assembly and render pipeline
 - Adds export support: Markdown, printable HTML (print-to-PDF), and RTF
 - Adds persistent preview metadata state in localStorage v0.12.0
@@ -70,6 +77,7 @@ Suggested PR summary bullets:
 - Documents DOCX export deferment beyond v0.12.0
 
 Risk notes:
+
 - Printable HTML export depends on popup allowance in browser settings
 - Native DOCX generation remains deferred by design
 

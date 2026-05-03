@@ -93,4 +93,46 @@ test.describe('HerbalBookForge Smoke Test', () => {
     await expect(page.locator('[data-testid="export-project-btn"]')).toBeAttached();
     await expect(page.locator('[data-testid="import-project-input"]')).toBeAttached();
   });
+
+  // HBFST.7 (Sprint 6): Tab order — Prompts tab appears after Preview; footer has author-facing label
+  test('Prompts tab appears after Preview tab in DOM order (HBFST.7)', async ({ page }) => {
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+
+    // Verify Prompts tab is present
+    await expect(page.locator('button#tab-prompts')).toBeVisible();
+
+    // Verify DOM order: #tab-preview comes before #tab-prompts
+    const tabOrder = await page.evaluate(() => {
+      const tabs = Array.from(document.querySelectorAll('button[id^="tab-"]'));
+      return tabs.map(t => t.id);
+    });
+    const previewIdx = tabOrder.indexOf('tab-preview');
+    const promptsIdx = tabOrder.indexOf('tab-prompts');
+    expect(previewIdx).toBeGreaterThan(-1);
+    expect(promptsIdx).toBeGreaterThan(-1);
+    expect(promptsIdx).toBeGreaterThan(previewIdx);
+
+    // Verify footer has author-facing label with correct data-testid
+    const footerLabel = page.locator('[data-testid="footer-status-label"]');
+    await expect(footerLabel).toBeAttached();
+    const text = await footerLabel.textContent();
+    expect(text).toMatch(/author/i);
+  });
+
+  // HBFST.8 (Sprint 6): Export button and import input have meaningful aria-labels
+  test('Export and Import controls have semantic aria-labels (HBFST.8)', async ({ page }) => {
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+
+    const exportBtn = page.locator('[data-testid="export-project-btn"]');
+    const importInput = page.locator('[data-testid="import-project-input"]').locator('..').locator('label').first();
+
+    await expect(exportBtn).toBeAttached();
+    const exportLabel = await exportBtn.getAttribute('aria-label');
+    expect(exportLabel).toBeTruthy();
+    expect(exportLabel.toLowerCase()).toContain('export');
+
+    // Import label element should contain "Import" in aria-label or visible text
+    const importLabel = page.locator('[aria-label*="Import"], [aria-label*="import"]').first();
+    await expect(importLabel).toBeAttached();
+  });
 });

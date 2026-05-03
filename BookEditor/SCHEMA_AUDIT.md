@@ -1,4 +1,4 @@
-# BookEditor Schema Audit
+﻿# BookEditor Schema Audit
 
 ## Current BookEditor Fields (by Tab)
 

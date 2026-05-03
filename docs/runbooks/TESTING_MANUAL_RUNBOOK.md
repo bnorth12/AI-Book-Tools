@@ -1,4 +1,4 @@
-# Manual Test Runbook (Human-Operated)
+﻿# Manual Test Runbook (Human-Operated)
 
 This runbook explains how to run and observe the Playwright suites manually while they execute, and how to analyze failures quickly.
 
@@ -26,9 +26,11 @@ These suites are covered:
 Use one shell and keep all test commands in that same shell.
 
 ```powershell
+
 Remove-Item Env:XAI_API_KEY -ErrorAction SilentlyContinue
 $env:XAI_API_KEY = "YOUR_REAL_KEY"
 [string]::IsNullOrWhiteSpace($env:XAI_API_KEY)
+
 ```
 
 Expected result from the last line: `False`
@@ -40,31 +42,41 @@ If you suspect a bad key, re-run this block before starting a new test process.
 ### Fast sanity check (recommended first)
 
 ```powershell
+
 npx playwright test --project=smoke -g QSMOKE-01 --reporter=line
+
 ```
 
 ### Quick smoke project
 
 ```powershell
+
 npx playwright test --project=smoke --reporter=line
+
 ```
 
 ### Full additive smoke project (long-running)
 
 ```powershell
+
 npx playwright test --project=smoke-full --reporter=line
+
 ```
 
 ### Regression project
 
 ```powershell
+
 npx playwright test --project=regression --reporter=line
+
 ```
 
 ### Single test targeting
 
 ```powershell
+
 npx playwright test --project=smoke-full -g "SMOKE-01 Additive full end-to-end flow preserves prior tab state" --reporter=line
+
 ```
 
 ### Generate HTML report from command line
@@ -74,19 +86,25 @@ When you override reporters (for example `--reporter=line`), Playwright will not
 Use this form to keep line output and also generate a fresh HTML report:
 
 ```powershell
+
 npx playwright test --project=smoke-full --reporter=line,html
+
 ```
 
 For quick smoke with HTML output:
 
 ```powershell
+
 npx playwright test --project=smoke --reporter=line,html
+
 ```
 
 Then open the generated report:
 
 ```powershell
+
 npx playwright show-report
+
 ```
 
 ## Live Monitoring While Tests Run
@@ -187,13 +205,17 @@ Export behavior note:
 Open trace after a failure:
 
 ```powershell
+
 npx playwright show-trace test-results\<failure-folder>\trace.zip
+
 ```
 
 Open HTML report:
 
 ```powershell
+
 npx playwright show-report
+
 ```
 
 ## Release Tagging Rule (When Closing a Release)

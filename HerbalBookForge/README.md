@@ -1,4 +1,4 @@
-# Herbal Book Forge
+﻿# Herbal Book Forge
 
 A specialized AI-powered book creation tool designed for crafting herbal medicine, botany, and natural wellness books with structured guidance and expert-level content generation.
 
@@ -52,9 +52,12 @@ HerbalBookForge includes comprehensive test coverage:
   - Project state persistence
 
 To run tests:
+
 ```bash
+
 npx playwright test --project=herbalbookforge-smoke
 npx playwright test --project=herbalbookforge-integration
+
 ```
 
 Integration tests require `GROK_API_KEY` configured in `.env` file.

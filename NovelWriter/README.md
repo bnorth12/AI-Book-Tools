@@ -1,4 +1,4 @@
-# Novel Writer
+﻿# Novel Writer
 
 A comprehensive AI-assisted novel writing tool that guides you through the entire creative process from concept to completion.
 
@@ -45,9 +45,9 @@ Use the advanced workflow regression path for realistic smoke testing:
 - Preserves existing tab labels/IDs and `showTab` semantics for compatibility.
 - Maintains stable selectors (`data-testid`) for smoke/regression automation.
 - UI unification references:
-	- `docs/architecture/ui-unification/UI_UNIFICATION_REQUIREMENT_INDEX.md`
-	- `docs/architecture/ui-unification/UI_UNIFICATION_MIGRATION_NOTES.md`
-	- `docs/architecture/ui-unification/UI_UNIFICATION_VISUAL_CONSISTENCY_CHECKLIST.md`
+  - `docs/architecture/ui-unification/UI_UNIFICATION_REQUIREMENT_INDEX.md`
+  - `docs/architecture/ui-unification/UI_UNIFICATION_MIGRATION_NOTES.md`
+  - `docs/architecture/ui-unification/UI_UNIFICATION_VISUAL_CONSISTENCY_CHECKLIST.md`
 
 ## Requirements
 

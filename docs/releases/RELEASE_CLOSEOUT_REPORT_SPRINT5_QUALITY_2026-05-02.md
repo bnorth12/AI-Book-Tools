@@ -1,9 +1,10 @@
-# Sprint 5 Closeout Report — HerbalBookForge v0.13.0
+﻿# Sprint 5 Closeout Report — HerbalBookForge v0.13.0
+
 ## Quality, Workflow & Test Coverage
 
-**Sprint Duration**: 2026-04-19 → 2026-05-02  
-**Release**: HerbalBookForge v0.13.0  
-**Branch**: `feature/herbalbookforge-sprint-5` → `main`  
+**Sprint Duration**: 2026-04-19 → 2026-05-02
+**Release**: HerbalBookForge v0.13.0
+**Branch**: `feature/herbalbookforge-sprint-5` → `main`
 **Status**: ✅ **COMPLETE**
 
 ---
@@ -11,6 +12,7 @@
 ## Executive Summary
 
 Sprint 5 delivered critical quality improvements and feature enhancements to HerbalBookForge, focusing on:
+
 - **Robustness**: Field name normalization in Safety analysis to handle LLM response variations
 - **Workflow**: Apply-suggestion action and Generate Remaining Chapters feature for improved productivity
 - **Test Coverage**: Extended smoke tests and 3 new integration tests (HBFIT.22-24)
@@ -23,9 +25,11 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ## Issues Resolved
 
 ### #67: Sprint 5 Requirements Lock ✅
+
 **Requirement**: Document all v0.13.0 functional and nonfunctional requirements in REQUIREMENTS.md
 
 **Deliverables**:
+
 - Updated `HerbalBookForge/REQUIREMENTS.md` with Sprint 5 requirements
 - Added HBF.DR9 (Generate Remaining Chapters feature specification)
 - Extended HBF.SA3 (field normalization for resilience) and HBF.SA4 (apply-suggestion action)
@@ -37,11 +41,13 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ---
 
 ### #68: Safety Flag Rendering Fix ✅
+
 **Issue**: Safety flags with alternative field names (e.g., `issue` instead of `flaggedText`) rendered as empty
 
 **Root Cause**: `parseSafetyReport()` used strict `typeof === 'string'` checks, silently fell back to empty string when LLM returned non-canonical field names or objects
 
-**Solution**: 
+**Solution**:
+
 - Implemented `coerceStr()` helper function in `parseSafetyReport()`
 - Tries multiple candidate field names in priority order: `flaggedText|flagged_text|issue|text|description|concern`
 - Stringifies objects/arrays instead of silently dropping them
@@ -54,9 +60,11 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ---
 
 ### #69: Apply Suggestion Action ✅
+
 **Feature**: Each safety flag SHALL provide an "Apply suggestion" action that pre-fills the revision instruction textarea
 
 **Implementation**:
+
 - Added `applySuggestionToDraft(chapterId, suggestion)` function
 - Purple "💡 Apply suggestion" button added to each safety flag
 - Workflow: Click button → navigate to Drafting tab → select chapter → pre-fill revision textarea with suggestion
@@ -69,11 +77,13 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ---
 
 ### #70: Generate Remaining Chapters ✅
+
 **Feature**: The Drafting Tab SHALL provide a "Generate Remaining Chapters" action that iterates through the outline in order, skips chapters with existing drafts, and generates drafts for all remaining chapters
 
 **Design**: Non-destructive batch generation to prevent accidental data loss
 
 **Implementation**:
+
 - Added `generateRemainingChapters()` async function
 - Blue "📚 Generate Remaining" button in Drafting tab UI
 - Validates preconditions (chapters exist, API key present)
@@ -89,13 +99,17 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ---
 
 ### #71: Smoke Test Coverage (DR8 Gaps) ✅
+
 **Requirement**: Extend smoke tests to validate all Drafting tab (HBF.DR8) controls
 
 **Implementation**:
+
 - Added Test 5: Drafting tab generates Generate Remaining button (HBF.DR9, Sprint 5)
   - Validates `generate-remaining-btn` is visible
+
 - Added Test 6: Setup tab export/import controls
   - Validates `export-project-btn` and `import-project-input` are attached
+
 - Updated data-testid attributes: `export-project-btn`, `import-project-input`
 
 **Status**: 6/6 smoke tests passing
@@ -105,6 +119,7 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ---
 
 ### #73: Export/Import Round-trip Test ✅
+
 **Feature**: Validate export/import preserves project data (part of #71 scope)
 
 **Implementation**: Test 6 (Setup tab export/import controls) validates export and import UI elements are present and correctly identified
@@ -116,14 +131,18 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ---
 
 ### #72: Integration Test Suite (HBFIT.22-24) ✅
+
 **Feature**: Add integration tests for Sprint 5 safety/drafting workflows
 
 **Implementation**:
+
 - **HBFIT.22**: Safety flag `flaggedText` and `suggestion` content render in flag boxes
   - Tests field normalization with alternative field names
   - Validates `coerceStr()` resilience
+
 - **HBFIT.23**: Apply suggestion action pre-fills revision instruction textarea
   - Tests `applySuggestionToDraft()` workflow end-to-end
+
 - **HBFIT.24**: Generate Remaining Chapters skips existing drafts
   - Tests `generateRemainingChapters()` non-destructive batch generation
 
@@ -134,9 +153,11 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ---
 
 ### #74: Documentation Sync ✅
+
 **Requirement**: Update TESTING.md and REQUIREMENTS.md with v0.13.0 status and Sprint 5 features
 
 **Implementation**:
+
 - Updated TESTING.md header with v0.13.0 and 2026-05-02 date
 - Extended Smoke Tests section: 4 → 6 tests, added Test 5 & 6 descriptions
 - Updated status: ✅ Passing (6/6)
@@ -149,9 +170,11 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ---
 
 ### #75: Sprint 5 Closeout & PR Packaging ✅
+
 **Deliverables**: This closeout report, PR preparation
 
-**Content**: 
+**Content**:
+
 - Sprint scope (#67-#75)
 - Commit evidence with commit hashes
 - Test results summary (6/6 smoke, 27/27 integration)
@@ -162,6 +185,7 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ## Test Results Summary
 
 ### Smoke Tests (`herbalbookforge.smoke.spec.js`)
+
 **Status**: ✅ **6/6 PASSING**
 
 | Test | Purpose | Status |
@@ -174,6 +198,7 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 | Test 6 (NEW) | Setup tab renders export/import controls | ✅ Passing |
 
 ### Integration Tests (`herbalbookforge.integration.spec.js`)
+
 **Status**: ✅ **27/27 PASSING** (21 legacy + 6 new)
 
 | Test Batch | Tests | Count | Status |
@@ -202,6 +227,7 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 | `e388da4` | docs(hbf): Update TESTING.md for Sprint 5 — extend smoke tests (6/6), add HBFIT.22-24 integration tests | #74 |
 
 **Total Changes**:
+
 - 2 feature implementations (`apply-suggestion`, `generate-remaining`)
 - 1 bug fix (`coerceStr()` field normalization)
 - 6 test additions (smoke tests + integration tests)
@@ -211,8 +237,8 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 
 ## Version & Release Info
 
-**Application Version**: v0.13.0  
-**localStorage Key**: `herbalBookForgeProject_v0.13.0` (with fallback chain)  
+**Application Version**: v0.13.0
+**localStorage Key**: `herbalBookForgeProject_v0.13.0` (with fallback chain)
 **Header Updated**: "0.13.0 | Date: 2026-05-02 | Sprint 5 — Quality, Workflow & Test Coverage"
 
 ---
@@ -220,6 +246,7 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ## Deferred Items
 
 ### Issue #66: DOCX Export Support
+
 **Status**: ⏸️ DEFERRED (by user request on 2026-04-30)
 
 **Reason**: Focus on quality and test coverage for v0.13.0; DOCX support requires separate investigation of .NET DOCX libraries and will be scoped for future release
@@ -231,15 +258,18 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ## Known Issues & Edge Cases
 
 ### Edge Case: Generate Remaining Chapters with No Outline
-**Behavior**: Graceful failure with alert message "Please create an outline first"  
+
+**Behavior**: Graceful failure with alert message "Please create an outline first"
 **Test**: Implicit in HBFIT.24 (chapter existence validation)
 
 ### Edge Case: Apply Suggestion with Empty Suggestion Text
-**Behavior**: Textarea pre-filled with empty string (user sees blank field, no error)  
+
+**Behavior**: Textarea pre-filled with empty string (user sees blank field, no error)
 **Recommendation**: Consider adding placeholder text "Enter revision instruction..." if suggestion is empty
 
 ### Field Normalization Coverage
-**Current**: `coerceStr()` handles 6 candidate field names  
+
+**Current**: `coerceStr()` handles 6 candidate field names
 **Future Enhancement**: Consider telemetry to track which alternative field names appear in real LLM responses
 
 ---
@@ -266,26 +296,33 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 ## Appendix: Feature Specifications
 
 ### HBF.DR9 — Generate Remaining Chapters (v0.13.0)
+
 **Specification**:
+
 - Button: "📚 Generate Remaining" (blue, emerald-700 hover)
 - Behavior: Non-destructive batch iteration through outline
   - Checks each chapter for existing non-empty draft
   - Skips chapters with drafts (no overwrite)
   - Generates drafts for missing chapters in order
   - Shows progress indicator ("Drafting X of Y...")
+
 - API: Calls Drafter Agent (same as single Generate Draft)
 - Persistence: Saves to `project.drafts[]` on completion
 - Error Handling: Alerts user if preconditions unmet (no chapters, no API key)
 
 ### HBF.SA3 Extended — Field Name Normalization (v0.13.0)
+
 **Specification**:
+
 - `coerceStr()` helper attempts multiple field name candidates
 - Candidate Priority: `flaggedText|flagged_text|issue|text|description|concern`
 - Fallback: Stringifies objects/arrays instead of silently dropping
 - Robustness: Resilient to LLM response variations
 
 ### HBF.SA4 Extended — Apply Suggestion Action (v0.13.0)
+
 **Specification**:
+
 - Button: "💡 Apply suggestion" (purple, violet-600)
 - Behavior: Pre-fills revision instruction with suggestion text
 - Workflow:
@@ -299,9 +336,8 @@ All 9 planned issues (#67-#75, with #66 deferred) successfully completed.
 
 ## Sign-Off
 
-**Sprint 5 Lead**: GitHub Copilot  
-**Date**: 2026-05-02  
+**Sprint 5 Lead**: GitHub Copilot
+**Date**: 2026-05-02
 **Status**: ✅ **READY FOR RELEASE**
 
 All issues resolved, tests passing, documentation synchronized. HerbalBookForge v0.13.0 is production-ready.
-

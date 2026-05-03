@@ -1,4 +1,4 @@
-# BookDecomposer Requirements
+﻿# BookDecomposer Requirements
 
 Date: 2026-04-19
 Application: BookDecomposer

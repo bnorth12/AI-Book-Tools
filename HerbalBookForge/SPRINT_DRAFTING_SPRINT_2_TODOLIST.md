@@ -1,4 +1,4 @@
-# HerbalBookForge Sprint 2 Todo List
+﻿# HerbalBookForge Sprint 2 Todo List
 
 Date: 2026-04-26 (updated 2026-05-02)
 Sprint Number: Sprint 2
@@ -6,9 +6,11 @@ Target Capability: Drafting tab chapter writing from Book Goals + Chapter Outlin
 Status: In Progress — Issue #26 complete
 
 ## Sprint 2 Goal
+
 Implement the Drafting tab so users can generate full chapter text from approved chapter outlines and book goals, validate the generated text, and iteratively revise chapter drafts using user feedback.
 
 ## Scope Summary
+
 - In scope:
   - Drafting tab end-to-end workflow for first-pass chapter generation
   - JSON-based Drafter agent prompt/response contract updates
@@ -21,6 +23,7 @@ Implement the Drafting tab so users can generate full chapter text from approved
   - Major visual redesign of non-Drafting tabs
 
 ## Requirement Planning and Derivation Checklist
+
 - [x] Review current requirements in HerbalBookForge/REQUIREMENTS.md and inline requirement comments in HerbalBookForge/HerbalBookForge.html.
 - [x] Confirm baseline existing Drafting requirements (HBF.DR1, HBF.DR2) and identify gaps.
 - [x] Create new Drafting requirements (proposed IDs):
@@ -37,6 +40,7 @@ Implement the Drafting tab so users can generate full chapter text from approved
   - [ ] Sprint issue descriptions and PR traceability (manual — apply to GitHub issue #26 body)
 
 ## Data Contract and State Model Checklist
+
 - [ ] Define chapter draft object model in project state (proposed):
   - [x] chapterId
   - [x] chapterTitle
@@ -52,6 +56,7 @@ Implement the Drafting tab so users can generate full chapter text from approved
 - [x] Confirm persistence in localStorage save/load and export/import path.
 
 ## Agent and Prompt Update Checklist
+
 - [x] Update Drafter prompt in default prompts and Prompts Editor to enforce strict JSON output contract.
 - [x] Ensure callLlmAgent agent-to-prompt routing remains compliant with HBF.UNI1 and HBF.UNI4.
 - [x] Add explicit Drafter prompt instructions for:
@@ -63,6 +68,7 @@ Implement the Drafting tab so users can generate full chapter text from approved
 - [ ] Add/confirm separate validation path (Safety and/or validation parser) for generated chapter text.
 
 ## Drafting Workflow Functional Checklist
+
 - [ ] Drafting tab chapter selector bound to accepted chapter outlines.
 - [ ] Generate first-pass chapter draft action.
 - [ ] Render generated chapter text in editable draft workspace.
@@ -74,6 +80,7 @@ Implement the Drafting tab so users can generate full chapter text from approved
 - [ ] Clear status/progress indicators for long-running LLM requests.
 
 ## UI and UX Checklist (Drafting Tab)
+
 - [ ] Add required Drafting tab controls and data-testid hooks.
 - [ ] Keep responsive layout and keyboard focus requirements intact.
 - [ ] Add clear empty states when no chapter outlines are available.
@@ -81,6 +88,7 @@ Implement the Drafting tab so users can generate full chapter text from approved
 - [ ] Ensure IDs/selectors used by existing smoke/regression tests remain stable or update tests in same sprint.
 
 ## Testing and Test Asset Update Checklist
+
 - [ ] Update smoke tests to verify Drafting tab controls/visibility.
 - [ ] Add Drafting-specific functional tests:
   - [ ] first-pass generation
@@ -100,6 +108,7 @@ Implement the Drafting tab so users can generate full chapter text from approved
 - [ ] Capture and store sprint test evidence under docs/releases/evidence/.
 
 ## GitHub and Administrative Process Checklist
+
 - [ ] Create sprint issue set (target: 10-14 issues) for Sprint 2.
 - [ ] Every issue includes:
   - [ ] Requirement IDs
@@ -122,6 +131,7 @@ Implement the Drafting tab so users can generate full chapter text from approved
 - [ ] Update sprint checklist and release evidence docs for closeout.
 
 ## Suggested Sprint 2 Issue Backlog (Planning Draft)
+
 - [ ] Issue 1: Requirement analysis and DR3-DR8 derivation
 - [ ] Issue 2: Drafting tab state model and persistence updates
 - [ ] Issue 3: Drafter prompt/spec update and parser hardening
@@ -136,6 +146,7 @@ Implement the Drafting tab so users can generate full chapter text from approved
 - [ ] Issue 12: PR packaging, evidence, and sprint closeout
 
 ## Definition of Done (Sprint 2)
+
 - [ ] All Sprint 2 issues are created, implemented, reviewed, and closed.
 - [ ] Feature branch is merged to main and deleted.
 - [ ] PR is merged with requirement traceability and passing tests documented.
@@ -145,4 +156,5 @@ Implement the Drafting tab so users can generate full chapter text from approved
 - [ ] Release evidence and sprint closeout artifacts are complete.
 
 ## Execution Guardrail
+
 This document is planning only. Do not start issue filing, branching, implementation, testing, or PR creation until explicit kickoff approval is given.
