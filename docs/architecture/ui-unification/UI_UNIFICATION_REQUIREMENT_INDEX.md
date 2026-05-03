@@ -1,4 +1,4 @@
-# UI Unification Requirement Index
+﻿# UI Unification Requirement Index
 
 Date: 2026-04-19
 Branch: feature/ui-unification-foundation

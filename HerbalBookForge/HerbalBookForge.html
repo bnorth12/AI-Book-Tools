@@ -1782,7 +1782,6 @@
                 // HBF.SA8: track whether flag parsed cleanly
                 _parseWarning: (!coerceStr(f.flaggedText, f.flagged_text, f.issue, f.text, f.description, f.concern)) ? 'flaggedText missing' : null
             }));
-            }));
             return { flags, summary: parsed.summary };
         }
 

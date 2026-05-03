@@ -1,4 +1,4 @@
-# Chapter Outlines Sprint: GitHub Issue Templates
+﻿# Chapter Outlines Sprint: GitHub Issue Templates
 
 ## 1. Refactor Tab and Navigation
 

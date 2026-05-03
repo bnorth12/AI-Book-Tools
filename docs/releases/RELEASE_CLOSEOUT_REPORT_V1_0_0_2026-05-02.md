@@ -1,8 +1,8 @@
-# HerbalBookForge v1.0.0 — Release Closeout Report
+﻿# HerbalBookForge v1.0.0 — Release Closeout Report
 
-**Release**: v1.0.0 GA  
-**Date**: 2026-05-02  
-**Sprint**: Sprint 6 — Robustness, UX Polish & Output Quality  
+**Release**: v1.0.0 GA
+**Date**: 2026-05-02
+**Sprint**: Sprint 6 — Robustness, UX Polish & Output Quality
 **Status**: ✅ Released
 
 ---
@@ -39,6 +39,7 @@ HerbalBookForge v1.0.0 is the first General Availability release of the single-f
 ### Code Changes — `HerbalBookForge/HerbalBookForge.html`
 
 **New helpers added:**
+
 - `toDisplayChapterNumber(zeroBasedIndex)` — centralized 1-based chapter display number (HBF.DR10)
 - `normalizeOutlineText(raw)` — strips code fences, JSON wrappers, escaped `\n` from LLM outline output (HBF.CHO8)
 - `isOutlineTruncated(finishReason, outlineText)` — detects truncated LLM responses via `finish_reason==='length'` (HBF.CHO9)
@@ -46,6 +47,7 @@ HerbalBookForge v1.0.0 is the first General Availability release of the single-f
 - `extractStyleReferenceNames(goals)` — extracts proper name candidates from the tone/style field (HBF.POL1)
 
 **Modified functions:**
+
 - `callLlmAgent()` — now extracts `finish_reason` from API response and attaches it as `parsed._finishReason`
 - `acceptBookGoals()` — applies `normalizeOutlineText()` and `isOutlineTruncated()` with yellow truncation warning
 - `sendToOutlinerForOutline()` — applies `normalizeOutlineText()` and `isOutlineTruncated()` with yellow truncation warning
@@ -57,12 +59,14 @@ HerbalBookForge v1.0.0 is the first General Availability release of the single-f
 - `assembleManuscript()` — strips matching heading prefix from draft body before concatenating to prevent duplicate headings (HBF.PR5)
 
 **UI changes:**
+
 - Tab order: Prompts tab moved after Preview (`Setup → Goals → Outline → Chapter Outlines → Drafting → Safety → Preview → Prompts`)
 - Export button: `↑ Export` with `aria-label="Export project to JSON file"`
 - Import label: `↓ Import` with `aria-label="Import project from JSON file"`
 - Footer: `Author Mode | Agents: Herbal Experts Only` with `data-testid="footer-status-label"`
 
 **Version / localStorage:**
+
 - All version strings updated to `v1.0.0`
 - localStorage key: `herbalBookForgeProject_v1.0.0`
 - Migration fallback chain: `v1.0.0 → v0.14.0 → v0.11.0 → v0.10.0 → v0.9.5 → v0.9.3`
@@ -77,6 +81,7 @@ HerbalBookForge v1.0.0 is the first General Availability release of the single-f
 | Integration | `herbalbookforge.integration.spec.js` | 33 tests | ✅ Passing |
 
 ### New tests in this release
+
 - **HBFST.7** — Prompts tab DOM order; footer `data-testid` and author-facing text
 - **HBFST.8** — Export/Import aria-label semantics
 - **HBFIT.25** — Draft chapter selector shows 1-based numbers
@@ -108,6 +113,7 @@ HerbalBookForge v1.0.0 is the first General Availability release of the single-f
 | Duplicate heading deduplication | Sprint 6 | ✅ Complete |
 
 **Deferred (post-v1.0.0):**
+
 - Native DOCX export (HBF.PR3.D1)
 - Mock LLM responses for CI/CD (no API key)
 - Cross-browser testing (Firefox, Safari)

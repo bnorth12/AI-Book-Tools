@@ -1,4 +1,4 @@
-# HerbalBookForge Chapter Outlines Sprint: Issue Breakdown
+﻿# HerbalBookForge Chapter Outlines Sprint: Issue Breakdown
 
 ## Issues to Create
 

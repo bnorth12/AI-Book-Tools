@@ -1,4 +1,4 @@
-# Post-UI Capability Release Todo: Novel Quality and Narrative Intelligence
+﻿# Post-UI Capability Release Todo: Novel Quality and Narrative Intelligence
 
 ## Release Positioning
 

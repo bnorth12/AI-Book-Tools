@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to AI Book Tools will be documented in this file.
 

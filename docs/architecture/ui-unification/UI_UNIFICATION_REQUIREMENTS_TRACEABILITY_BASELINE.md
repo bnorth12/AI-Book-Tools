@@ -1,4 +1,4 @@
-# UI Unification Requirements Traceability Baseline
+﻿# UI Unification Requirements Traceability Baseline
 
 Date: 2026-04-19
 Branch: feature/ui-unification-foundation

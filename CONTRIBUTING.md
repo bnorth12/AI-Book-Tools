@@ -1,4 +1,4 @@
-# Contributing to AI Book Tools
+﻿# Contributing to AI Book Tools
 
 Thank you for your interest in contributing to AI Book Tools! This document provides guidelines for contributing to the project.
 

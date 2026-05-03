@@ -1,4 +1,4 @@
-# Current Release SSDLC Status (Backfilled)
+﻿# Current Release SSDLC Status (Backfilled)
 
 This file backfills the Secure SDLC checklist for the current capability release because the formal checklist was introduced mid-stream.
 

@@ -1,4 +1,4 @@
-# Next Minor Capability Release Todo
+﻿# Next Minor Capability Release Todo
 
 ## Release Theme
 

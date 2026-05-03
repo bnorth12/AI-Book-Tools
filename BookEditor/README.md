@@ -1,4 +1,4 @@
-# Book Editor
+﻿# Book Editor
 
 An AI-powered book editing and improvement tool that helps refine existing manuscripts through targeted suggestions and collaborative editing.
 
@@ -42,9 +42,9 @@ This tool now exports and imports the shared wrapper format defined by `schema/n
 - Preserves existing tab labels/IDs and workflow sequencing to avoid functional drift.
 - Maintains stable selectors (`data-testid`) for smoke/regression automation.
 - UI unification references:
-	- `docs/architecture/ui-unification/UI_UNIFICATION_REQUIREMENT_INDEX.md`
-	- `docs/architecture/ui-unification/UI_UNIFICATION_MIGRATION_NOTES.md`
-	- `docs/architecture/ui-unification/UI_UNIFICATION_VISUAL_CONSISTENCY_CHECKLIST.md`
+  - `docs/architecture/ui-unification/UI_UNIFICATION_REQUIREMENT_INDEX.md`
+  - `docs/architecture/ui-unification/UI_UNIFICATION_MIGRATION_NOTES.md`
+  - `docs/architecture/ui-unification/UI_UNIFICATION_VISUAL_CONSISTENCY_CHECKLIST.md`
 
 ## Version
 

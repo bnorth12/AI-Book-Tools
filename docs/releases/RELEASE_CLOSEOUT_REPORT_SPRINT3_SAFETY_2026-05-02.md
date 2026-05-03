@@ -1,4 +1,4 @@
-# Release Closeout Report — Sprint 3 Safety Tab (v0.11.0) — 2026-05-02
+﻿# Release Closeout Report — Sprint 3 Safety Tab (v0.11.0) — 2026-05-02
 
 ## Objective
 
@@ -49,6 +49,7 @@ work, and recording final test evidence.
 ### Smoke Tests — Final Run Before Merge
 
 ```
+
 Running 3 tests using 1 worker
 
   ✓  1  App loads and shows main tabs (1.6s)
@@ -56,6 +57,7 @@ Running 3 tests using 1 worker
   ✓  3  Safety tab renders all required controls (HBF.SA6) (2.2s)
 
   3 passed (8.2s)
+
 ```
 
 ### Integration Tests
@@ -71,6 +73,7 @@ Running 3 tests using 1 worker
 
 - **Safety agent**: `grok-4.20-0309-reasoning` with manuscript-level JSON contract
   `{ "flags": [{ chapterId, chapterTitle, flagType, flaggedText, suggestion }], "summary": "..." }`
+
 - **Flag types**: `CONTRAINDICATION`, `DOSAGE`, `PA_CONTENT`, `EXTRACTION_RISK`, `GENERAL_SAFETY`
 - **Scan scopes**: Full manuscript + per-chapter (dropdown populated from `project.drafts`)
 - **Persistence key**: `herbalBookForgeProject_v0.11.0` (fallback chain: v0.10.0 → v0.9.5 → v0.9.3)

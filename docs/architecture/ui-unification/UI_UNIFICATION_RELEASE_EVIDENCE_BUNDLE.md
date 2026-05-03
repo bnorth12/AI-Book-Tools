@@ -1,4 +1,4 @@
-# UI Unification Release Evidence Bundle
+﻿# UI Unification Release Evidence Bundle
 
 Date: 2026-04-21
 Branch: main

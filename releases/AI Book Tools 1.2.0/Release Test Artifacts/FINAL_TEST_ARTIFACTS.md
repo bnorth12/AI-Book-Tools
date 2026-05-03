@@ -1,4 +1,4 @@
-# Final Test Artifacts - AI Book Tools 1.2.0
+﻿# Final Test Artifacts - AI Book Tools 1.2.0
 
 Release snapshot folder: releases/AI Book Tools 1.2.0
 Artifacts folder: releases/AI Book Tools 1.2.0/Release Test Artifacts

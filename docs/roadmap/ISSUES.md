@@ -1,4 +1,4 @@
-# Proposed Issues for AI Book Tools
+﻿# Proposed Issues for AI Book Tools
 
 ## HerbalBookForge Sprint 5 Local Tracker (Quality, Workflow & Test Coverage — v0.13.0)
 
@@ -15,6 +15,7 @@ Use this section as the local execution checklist in VS Code. GitHub issues rema
 - [x] #75 Sprint 5 closeout and PR packaging
 
 Notes:
+
 - DOCX export (#71 was reassigned — DOCX is deferred beyond v0.13.0, tracked separately)
 - #52 and #53 are existing GitHub issues; Sprint 5 closes both.
 - parseSafetyReport coerceStr code fix already landed on main (2026-05-02); #68 adds the formal test and requirement trace.
@@ -22,6 +23,7 @@ Notes:
 ## HerbalBookForge Next Sprint Analysis (Planning Only, from #102)
 
 Scope rule for this analysis:
+
 - Includes open sprint issues captured in #102
 - Excludes deferred DOCX export requirement HBF.PR3.D1
 - Planning only; implementation not started
@@ -30,20 +32,25 @@ Scope rule for this analysis:
 
 - #80 Generate Remaining status appears capped at chapter 10; safety cards still empty
 - #82 Safety scan chapter scope off-by-one and issue text not displayed
-	- duplicates: #79, #81
+  - duplicates: #79, #81
+
 - #86 Outline generation/improvement truncation risk (token limit / incomplete response)
 - #88 Export/Import arrow icons reversed
-	- duplicate: #87
+  - duplicate: #87
+
 - #91 Bottom status label clarity (developer vs author language)
-	- duplicates: #89, #90
+  - duplicates: #89, #90
+
 - #94 Outline edit returns raw JSON/markup instead of readable text
-	- duplicates: #92, #93
+  - duplicates: #92, #93
+
 - #95 Move Prompts tab to right of Preview (workflow order)
 - #98 Prevent author names in generated output text
-	- duplicates: #96, #97
+  - duplicates: #96, #97
+
 - #99 Drafting progress status off-by-one
 - #101 Assemble manuscript duplicates chapter heading line
-	- duplicate: #100
+  - duplicate: #100
 
 ### Issue Analysis: Potential Cause, Related Requirement, Potential Fix
 
@@ -93,6 +100,7 @@ These are proposed requirement changes to be added to `HerbalBookForge/REQUIREME
 - HBFST.8 (smoke): Export/Import icon semantics and accessible labels present.
 
 Planning outcome target:
+
 - Sprint kickoff starts only after dedupe closure and requirement IDs are finalized in REQUIREMENTS.md.
 
 ## HerbalBookForge Sprint 4 Local Tracker (Preview Tab) — COMPLETE

@@ -1,4 +1,4 @@
-# UI Unification Threat Model and Cyber Threat Analysis
+﻿# UI Unification Threat Model and Cyber Threat Analysis
 
 Date: 2026-04-19
 Branch: feature/ui-unification-foundation

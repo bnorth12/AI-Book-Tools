@@ -1,4 +1,4 @@
-# Issue: Define and implement shared versioned novel schema
+﻿# Issue: Define and implement shared versioned novel schema
 
 ## Summary
 

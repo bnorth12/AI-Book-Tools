@@ -1,4 +1,4 @@
----
+﻿---
 name: Feature Request
 about: Suggest a new feature or enhancement
 title: "[FEATURE] Brief description of the requested feature"
