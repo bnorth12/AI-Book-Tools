@@ -1,5 +1,7 @@
 # HerbalBookForge Testing Guide
 
+**Version**: v0.13.0 | **Updated**: 2026-05-02 (Sprint 5)
+
 ## Overview
 
 HerbalBookForge includes comprehensive test coverage spanning smoke tests, regression tests, and full integration tests with real LLM API calls.
@@ -10,7 +12,7 @@ HerbalBookForge includes comprehensive test coverage spanning smoke tests, regre
 
 **Purpose**: Quick validation of core UI elements, tab navigation, Drafting/Safety/Preview control presence
 
-**Tests** (4 total):
+**Tests** (6 total — 4 core + 2 Sprint 5):
 
 #### Test 1 — App loads and shows main tabs
 - All 7 main tab buttons are visible (`tab-goals`, `tab-outline`, `tab-chapter-outlines`, `tab-drafting`, `tab-prompts`, `tab-safety`, `tab-preview`)
@@ -55,14 +57,27 @@ Switches to the Preview tab and asserts the following `data-testid` attributes:
 | `preview-empty-state` | Preview empty state panel | Visible before assembly |
 | `preview-content` | Preview content container | Attached (shown after assembly) |
 
-**Run time**: ~10-15 seconds
+#### Test 5 — Drafting tab renders Generate Remaining button (HBF.DR9, Sprint 5)
+Switches to the Drafting tab and asserts:
+- `generate-remaining-btn` is visible (blue button labeled "📚 Generate Remaining")
+- Validates Sprint 5 Generate Remaining Chapters feature is present
+
+#### Test 6 — Setup tab renders export/import controls (Sprint 5)
+Switches to the Setup tab and asserts export/import controls:
+
+| `data-testid` | Element |
+|---|---|
+| `export-project-btn` | Export Project button |
+| `import-project-input` | Import Project file input |
+
+**Run time**: ~15-20 seconds
 
 **Command**:
 ```bash
 npx playwright test --project=herbalbookforge-smoke
 ```
 
-**Status**: ✅ Passing (4/4)
+**Status**: ✅ Passing (6/6)
 
 ---
 
@@ -250,6 +265,36 @@ npx playwright test --project=herbalbookforge-integration --grep "HBFIT\.18|HBFI
 ```
 
 **Status**: ✅ Passing (4/4 targeted)
+
+---
+
+### 6. Safety & Drafting Tab Integration Tests (`herbalbookforge.integration.spec.js`) — Sprint 5 (HBFIT.22-24)
+
+**Purpose**: Validate Sprint 5 quality and workflow improvements: Safety flag rendering with field normalization, apply-suggestion action, and generate-remaining-chapters feature
+
+#### HBFIT.22 — Safety flag flaggedText and suggestion content render in flag boxes
+- Injects mock safetyReport with 2 flags (using alternative field names: `issue` instead of `flaggedText`)
+- Verifies both `flaggedText` and `suggestion` content render visibly in safety flag boxes
+- Tests `coerceStr()` field normalization resilience
+
+#### HBFIT.23 — Apply suggestion action pre-fills revision instruction textarea
+- Loads project state with safety report
+- Clicks "💡 Apply suggestion" button on a flag
+- Verifies `revision-instruction` textarea is pre-filled with suggestion text
+- Tests `applySuggestionToDraft()` workflow
+
+#### HBFIT.24 — Generate Remaining Chapters skips chapters with existing drafts
+- Creates project state with Chapter 1 (existing draft) and Chapter 2 (empty)
+- Clicks "📚 Generate Remaining" button
+- Verifies Chapter 1 draft unchanged and Chapter 2 now populated with generated draft
+- Tests `generateRemainingChapters()` non-destructive batch generation
+
+**Command (targeted)**:
+```bash
+npx playwright test --project=herbalbookforge-integration --grep "HBFIT\.22|HBFIT\.23|HBFIT\.24"
+```
+
+**Status**: ✅ Passing (3/3)
 
 ---
 
