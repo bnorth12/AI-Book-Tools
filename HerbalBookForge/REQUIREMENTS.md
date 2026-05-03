@@ -80,6 +80,10 @@ HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LL
 - HBF.DR7: Chapter drafts, revision history, and validation results SHALL persist in project state across page reloads and survive localStorage save/load and JSON export/import. The project schema SHALL include a `drafts[]` array keyed by `chapterId` with fields: `chapterId`, `chapterTitle`, `outlineContext`, `draftText`, `validation`, `revisionHistory[]`, `lastUpdated`.
 - HBF.DR8: All Drafting Tab interactive controls (chapter selector, generate button, draft textarea, revision input, validate button) SHALL use stable HTML `id` attributes and `data-testid` attributes. These selectors SHALL remain stable across revisions unless intentionally changed with a corresponding smoke and regression test update.
 
+## Drafting Tab Requirements (Sprint 5 — target v0.13.0)
+
+- HBF.DR9: The Drafting Tab SHALL provide a "Generate Remaining Chapters" action that iterates through the outline in order, skips any chapter that already has a non-empty draft, and generates drafts for all remaining chapters sequentially with a progress indicator (e.g., "Drafting 2 of 5..."). The action SHALL not overwrite any existing draft and SHALL allow the user to cancel the batch operation at any time.
+
 ## Nonfunctional Requirements
 
 - UIU.HBF.NF1: Layout shall remain responsive across desktop and mobile breakpoints.
@@ -113,8 +117,8 @@ HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LL
 
 - HBF.SA1: The Safety Tab SHALL provide safety checking using the Safety & Accuracy Checker Agent.
 - HBF.SA2: The Safety Tab SHALL scan the full manuscript or selected chapters for contraindications, dosage issues, extraction risks, and PA content limits (e.g., comfrey). The scan SHALL send all available chapter draft texts as context to the Safety agent.
-- HBF.SA3: The Safety Tab SHALL generate a structured safety report with flagged items and an overall summary. Each flag SHALL include: `chapterId`, `chapterTitle`, `flagType` (one of: CONTRAINDICATION, DOSAGE, PA_CONTENT, EXTRACTION_RISK, GENERAL_SAFETY), `flaggedText`, and `suggestion`. The Safety agent SHALL return strict JSON: `{ "flags": [...], "summary": "..." }`.
-- HBF.SA4: The Safety Tab SHALL integrate with the Drafting tab — each flag SHALL provide a navigate-to-draft action that switches the active tab to Drafting and selects the referenced chapter.
+- HBF.SA3: The Safety Tab SHALL generate a structured safety report with flagged items and an overall summary. Each flag SHALL include: `chapterId`, `chapterTitle`, `flagType` (one of: CONTRAINDICATION, DOSAGE, PA_CONTENT, EXTRACTION_RISK, GENERAL_SAFETY), `flaggedText`, and `suggestion`. The Safety agent SHALL return strict JSON: `{ "flags": [...], "summary": "..." }`. Field name normalization is required for resilience: the parser SHALL accept alternative field names (e.g., `issue` instead of `flaggedText`, `recommendation` instead of `suggestion`) and stringify objects/arrays rather than silently dropping them.
+- HBF.SA4: The Safety Tab SHALL integrate with the Drafting tab — each flag SHALL provide a navigate-to-draft action that switches the active tab to Drafting and selects the referenced chapter. Additionally, each flag SHALL provide an "Apply suggestion" action that pre-fills the revision instruction textarea with the flag's suggestion text, allowing the user to review and submit it as a revision.
 - HBF.SA5: Safety report results SHALL persist in project state across page reloads and survive localStorage save/load and JSON export/import. The project schema SHALL include a `safetyReport` object with fields: `scanScope`, `scanTimestamp`, `flags[]`, `summary`, `lastUpdated`.
 - HBF.SA6: All Safety tab interactive controls (scope selector, scan button, status indicator, report panel, flag list) SHALL use stable HTML `id` and `data-testid` attributes. These selectors SHALL remain stable across revisions unless intentionally changed with corresponding smoke and regression test updates.
 
@@ -139,14 +143,20 @@ HBF.BG.BGA3: User SHALL see clear indication that the request was sent to the LL
 - HBFIT.20: Integration tests SHALL verify export actions and guards for Markdown, printable HTML (print-to-PDF workflow), and RTF formats.
 - HBFIT.21: Integration tests SHALL verify persistence and reload behavior for preview state, including `assembledText`, `lastGenerated`, and `exportHistory[]`.
 
-## Deferred Requirements (Post-v0.12.0)
+## Integration Testing Requirements (v0.13.0 — Sprint 5)
 
-- HBF.PR3.D1: Native DOCX export generation is deferred beyond v0.12.0.
+- HBFIT.22: Integration tests SHALL inject a project state with a known safety report containing explicit `flaggedText` and `suggestion` values, render the Safety tab, and assert that those strings are visible in the rendered flag boxes (verifying HBF.SA3 field normalization resilience).
+- HBFIT.23: Integration tests SHALL verify the "Apply suggestion" action on a safety flag: clicking the action SHALL pre-fill the revision instruction textarea with the suggestion text, and the user SHALL be able to submit it as a revision (verifying HBF.SA4 extension).
+- HBFIT.24: Integration tests SHALL verify the "Generate Remaining Chapters" action: given a project with a partial set of existing drafts, invoke the action and verify that only chapters without existing drafts are generated (verifying HBF.DR9 non-destructive behavior).
+
+## Deferred Requirements (Post-v0.13.0)
+
+- HBF.PR3.D1: Native DOCX export generation is deferred beyond v0.13.0.
 
 ## Sync Status
 
 - Synced with HerbalBookForge.html inline annotations: Yes
-- Last sync date: 2026-05-02
-- Integration test coverage: Sprint 1 complete; Sprint 2 (Drafting) complete — HBFIT.1-13; Sprint 3 (Safety) complete — HBFIT.14-17; Sprint 4 (Preview) requirements locked — HBFIT.18-21
-- Current status: v0.12.0 Sprint 4 requirements locked for Preview tab (implementation in progress)
-- Last sync: HerbalBookForge.html inline annotations verified against REQUIREMENTS.md — HBF.PR1-HBF.PR4 comments updated for Sprint 4 scope
+- Last sync date: 2026-05-02 (Sprint 5 requirements lock in progress)
+- Integration test coverage: Sprint 1 complete; Sprint 2 (Drafting) complete — HBFIT.1-13; Sprint 3 (Safety) complete — HBFIT.14-17; Sprint 4 (Preview) complete — HBFIT.18-21; Sprint 5 (Quality & Workflow) requirements locked — HBFIT.22-24, HBF.DR9, HBF.SA3/SA4 extensions
+- Current status: v0.13.0 Sprint 5 requirements locked for Quality, Workflow & Test Coverage
+- Last sync: REQUIREMENTS.md updated 2026-05-02 — HBF.DR9, HBF.SA3 normalization clarification, HBF.SA4 extension, HBFIT.22-24 added

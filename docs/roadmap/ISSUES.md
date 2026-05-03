@@ -1,8 +1,25 @@
 # Proposed Issues for AI Book Tools
 
-## HerbalBookForge Sprint 4 Local Tracker (Preview Tab)
+## HerbalBookForge Sprint 5 Local Tracker (Quality, Workflow & Test Coverage — v0.13.0)
 
-Use this section as the local execution checklist in VS Code. GitHub issues remain the source of truth, and this list mirrors current Sprint 4 work.
+Use this section as the local execution checklist in VS Code. GitHub issues remain the source of truth.
+
+- [x] #67 Sprint 5 requirements lock (v0.13.0 scope and acceptance criteria)
+- [x] #68 Fix and formalize safety flag content rendering — regression test for parseSafetyReport coerceStr (closes #53)
+- [x] #69 Implement "Apply suggestion to draft" action on safety flags (closes #52)
+- [x] #70 Add "Generate Remaining Chapters" to Drafting tab
+- [x] #71 Add smoke test coverage for revision controls and validate-draft-btn (DR8 gaps)
+- [x] #72 Add integration test asserting flaggedText/suggestion content in safety flag rendering (HBFIT.22)
+- [x] #73 Add export/import round-trip smoke test
+- [x] #74 Update TESTING.md and REQUIREMENTS.md for v0.13.0
+- [x] #75 Sprint 5 closeout and PR packaging
+
+Notes:
+- DOCX export (#71 was reassigned — DOCX is deferred beyond v0.13.0, tracked separately)
+- #52 and #53 are existing GitHub issues; Sprint 5 closes both.
+- parseSafetyReport coerceStr code fix already landed on main (2026-05-02); #68 adds the formal test and requirement trace.
+
+## HerbalBookForge Sprint 4 Local Tracker (Preview Tab) — COMPLETE
 
 - [x] #54 Requirements and acceptance criteria (HBF.PR1-HBF.PR4, HBFIT.18-HBFIT.21)
 - [x] #55 Preview state model and localStorage v0.12.0 migration
@@ -16,10 +33,6 @@ Use this section as the local execution checklist in VS Code. GitHub issues rema
 - [x] #63 Add integration tests HBFIT.18-HBFIT.21 for Preview flow
 - [x] #64 Update TESTING and REQUIREMENTS for Preview v0.12.0
 - [x] #65 Sprint 4 Preview closeout and PR packaging
-
-Notes:
-- Deferred Safety issues tracked separately: #52 and #53.
-- DOCX export is deferred beyond v0.12.0.
 
 ## Issue 1: Define and publish shared novel schema v1.0
 

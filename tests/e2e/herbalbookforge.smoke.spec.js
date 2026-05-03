@@ -70,4 +70,27 @@ test.describe('HerbalBookForge Smoke Test', () => {
     await expect(page.locator('[data-testid="preview-empty-state"]')).toBeVisible();
     await expect(page.locator('[data-testid="preview-content"]')).toBeAttached();
   });
+
+  test('Drafting tab renders Generate Remaining button (HBF.DR9, Sprint 5)', async ({ page }) => {
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+
+    // Switch to Drafting tab
+    await page.click('button#tab-drafting');
+    await page.waitForSelector('#content-drafting:not(.hidden)', { timeout: 5000 });
+
+    // Generate Remaining button should be visible next to Generate Draft
+    await expect(page.locator('[data-testid="generate-remaining-btn"]')).toBeVisible();
+  });
+
+  test('Setup tab renders export/import controls', async ({ page }) => {
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+
+    // Switch to Setup tab
+    await page.click('button#tab-setup');
+    await page.waitForSelector('#content-setup:not(.hidden)', { timeout: 5000 });
+
+    // Export and import button/input should be attached to DOM
+    await expect(page.locator('[data-testid="export-project-btn"]')).toBeAttached();
+    await expect(page.locator('[data-testid="import-project-input"]')).toBeAttached();
+  });
 });

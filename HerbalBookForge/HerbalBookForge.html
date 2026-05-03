@@ -32,7 +32,7 @@
     Four internal herbal-medicine expert agents SHALL be defined inside the app with specialized prompts: Book Goals Agent, Outliner/Structurer, Drafter, Safety & Accuracy Checker.
     Every relevant API call SHALL include BOTH collections_search (default collection_840cb08d-163e-430a-a1aa-dd65b500e9bb) and web_search.
     All functionality SHALL be traceable via numbered SHALL requirements embedded as comments with version/date tracking.
-    Version: 0.9.5 | Date: 2026-04-17
+    Version: 0.13.0 | Date: 2026-05-02 | Sprint 5 — Quality, Workflow & Test Coverage
     -->
 
     <!-- TOP-LEVEL REQUIREMENTS -->
@@ -83,9 +83,9 @@
                 <button onclick="switchTab('preview')" id="tab-preview" class="tab-button px-6 py-3 text-sm font-medium flex items-center gap-x-2 rounded-3xl hover:bg-emerald-800/50">📕 Preview</button>
             </nav>
             <div class="flex items-center gap-x-4">
-                <button onclick="exportProject()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm font-medium shadow-inner">↓ Export</button>
+                <button data-testid="export-project-btn" onclick="exportProject()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-600 hover:bg-emerald-500 rounded-3xl text-sm font-medium shadow-inner">↓ Export</button>
                 <label onclick="document.getElementById('import-file').click()" class="flex items-center gap-x-2 px-5 h-10 bg-emerald-800 hover:bg-emerald-700 rounded-3xl text-sm font-medium cursor-pointer shadow-inner">↑ Import</label>
-                <input type="file" id="import-file" accept=".json" class="hidden" onchange="handleImport(event)">
+                <input data-testid="import-project-input" type="file" id="import-file" accept=".json" class="hidden" onchange="handleImport(event)">
                 <button onclick="backupCurrentHTML()" class="flex items-center gap-x-2 px-5 h-10 bg-amber-600 hover:bg-amber-500 rounded-3xl text-sm font-medium shadow-inner">💾 Backup HTML</button>
                 <div onclick="showProjectInfo()" class="w-8 h-8 bg-emerald-900 rounded-2xl flex items-center justify-center text-xl cursor-pointer hover:scale-110">ℹ️</div>
             </div>
@@ -354,6 +354,7 @@
         <!-- HBF.DR6: The Drafting Tab SHALL include a draft validation action that evaluates the generated text for quality flags and safety notes and presents actionable feedback. Validation results SHALL be stored in chapter draft state. -->
         <!-- HBF.DR7: Chapter drafts, revision history, and validation results SHALL persist in project state (localStorage save/load and JSON export/import). Schema: drafts[] keyed by chapterId with fields chapterId, chapterTitle, outlineContext, draftText, validation, revisionHistory[], lastUpdated. -->
         <!-- HBF.DR8: All Drafting Tab interactive controls SHALL use stable HTML id and data-testid attributes. Selectors SHALL remain stable unless intentionally revised with a test update. -->
+        <!-- HBF.DR9: The Drafting Tab SHALL provide a "Generate Remaining Chapters" action that iterates through the outline in order, skips any chapter with a non-empty existing draft, and generates drafts for all remaining chapters sequentially with a progress indicator. The action SHALL not overwrite any existing draft. -->
         <div class="max-w-5xl mx-auto">
             <h2 class="text-4xl font-semibold tracking-tight section-header">Drafting</h2>
             <p class="text-emerald-300">Generate full chapter drafts using the Drafter Agent. Select a chapter with an accepted outline, then click Generate Draft.</p>
@@ -369,6 +370,12 @@
                     onclick="generateChapterDraft()"
                     class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-medium flex items-center gap-x-2">
                     ✍️ Generate Draft
+                </button>
+                <!-- HBF.DR9: Generate Remaining Chapters button (v0.13.0) -->
+                <button id="generate-remaining-btn" data-testid="generate-remaining-btn"
+                    onclick="generateRemainingChapters()"
+                    class="px-8 py-3 bg-blue-600 hover:bg-blue-500 rounded-3xl font-medium flex items-center gap-x-2">
+                    📚 Generate Remaining
                 </button>
             </div>
 
@@ -1658,6 +1665,7 @@
         // On malformed JSON: returns { error, raw, chapterTitle: '', draftText: raw, qualityFlags: [] }
         // HBF.SA3: Parse Safety agent manuscript-level scan response into structured safetyReport
         function parseSafetyReport(raw) {
+            // HBF.SA3 (v0.13.0): Field name normalization is required for resilience. The parser SHALL accept alternative field names (e.g., issue instead of flaggedText, recommendation instead of suggestion) and stringify objects/arrays rather than silently dropping them.
             let parsed;
             // Strip markdown code fences if present
             const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
@@ -1670,14 +1678,26 @@
             if (!Array.isArray(parsed.flags) || typeof parsed.summary !== 'string') {
                 return { error: 'Missing required fields (flags, summary)', raw, flags: Array.isArray(parsed.flags) ? parsed.flags : [], summary: parsed.summary || 'Safety scan returned an unexpected format.' };
             }
-            // Normalise each flag — ensure all required fields are strings
+            console.log('[DEBUG] parseSafetyReport raw flags from LLM:', JSON.stringify(parsed.flags, null, 2));
+            // Normalise each flag — ensure all required fields are strings.
+            // Accept common LLM alternative field names and stringify objects rather than silently dropping them.
             const validTypes = ['CONTRAINDICATION', 'DOSAGE', 'PA_CONTENT', 'EXTRACTION_RISK', 'GENERAL_SAFETY'];
+            const coerceStr = (...candidates) => {
+                for (const v of candidates) {
+                    if (typeof v === 'string' && v.trim()) return v;
+                    if (v !== null && v !== undefined && typeof v === 'object') {
+                        const s = JSON.stringify(v);
+                        if (s && s !== '{}' && s !== '[]') return s;
+                    }
+                }
+                return '';
+            };
             const flags = parsed.flags.map(f => ({
-                chapterId: f.chapterId !== undefined ? String(f.chapterId) : '',
-                chapterTitle: typeof f.chapterTitle === 'string' ? f.chapterTitle : '',
-                flagType: validTypes.includes(f.flagType) ? f.flagType : 'GENERAL_SAFETY',
-                flaggedText: typeof f.flaggedText === 'string' ? f.flaggedText : '',
-                suggestion: typeof f.suggestion === 'string' ? f.suggestion : ''
+                chapterId: f.chapterId !== undefined ? String(f.chapterId) : (f.chapter_id !== undefined ? String(f.chapter_id) : ''),
+                chapterTitle: coerceStr(f.chapterTitle, f.chapter, f.chapter_title),
+                flagType: validTypes.includes(f.flagType) ? f.flagType : (validTypes.includes(f.flag_type) ? f.flag_type : 'GENERAL_SAFETY'),
+                flaggedText: coerceStr(f.flaggedText, f.flagged_text, f.issue, f.text, f.description, f.concern),
+                suggestion: coerceStr(f.suggestion, f.suggestedFix, f.suggested_fix, f.recommendation, f.fix, f.guidance)
             }));
             return { flags, summary: parsed.summary };
         }
@@ -2041,10 +2061,12 @@
             };
 
             if (flagsList) {
+                // HBF.SA4 (v0.13.0): Each flag SHALL provide both a navigate-to-draft action and an apply-suggestion action. Apply-suggestion pre-fills the revision instruction textarea.
                 flagsList.innerHTML = flags.map((f, i) => {
                     const colorClass = flagTypeColors[f.flagType] || flagTypeColors.GENERAL_SAFETY;
                     const chapterIdNum = parseInt(f.chapterId, 10);
                     const navAttr = !isNaN(chapterIdNum) ? `data-chapter-id="${chapterIdNum}"` : '';
+                    const suggestionEscaped = escapeHtml(f.suggestion).replace(/'/g, '&#39;');
                     return `<li class="p-5 border rounded-2xl ${colorClass}">
                         <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
                             <span class="font-semibold">${escapeHtml(f.chapterTitle || `Chapter ${f.chapterId}`)}</span>
@@ -2052,10 +2074,16 @@
                         </div>
                         <p class="text-sm mb-2 opacity-90"><strong>Issue:</strong> ${escapeHtml(f.flaggedText)}</p>
                         <p class="text-sm mb-3 opacity-90"><strong>Suggestion:</strong> ${escapeHtml(f.suggestion)}</p>
-                        ${navAttr ? `<button onclick="navigateToDraftFromFlag(${chapterIdNum})"
-                            class="text-xs px-4 py-2 bg-emerald-700/60 hover:bg-emerald-600/80 rounded-2xl border border-emerald-600">
-                            ✍️ Open in Drafting tab
-                        </button>` : ''}
+                        <div class="flex flex-wrap gap-2">
+                            ${navAttr ? `<button onclick="navigateToDraftFromFlag(${chapterIdNum})"
+                                class="text-xs px-4 py-2 bg-emerald-700/60 hover:bg-emerald-600/80 rounded-2xl border border-emerald-600">
+                                ✍️ Open in Drafting tab
+                            </button>` : ''}
+                            ${navAttr ? `<button onclick="applySuggestionToDraft(${chapterIdNum}, '${suggestionEscaped}')"
+                                class="text-xs px-4 py-2 bg-purple-700/60 hover:bg-purple-600/80 rounded-2xl border border-purple-600">
+                                💡 Apply suggestion
+                            </button>` : ''}
+                        </div>
                     </li>`;
                 }).join('');
             }
@@ -2134,6 +2162,20 @@
                 // Trigger onchange to render the draft workspace
                 select.dispatchEvent(new Event('change'));
             }
+        }
+
+        // HBF.SA4 (v0.13.0): Apply suggestion from a safety flag — navigate to Drafting, select chapter, pre-fill revision instruction textarea
+        function applySuggestionToDraft(chapterId, suggestion) {
+            navigateToDraftFromFlag(chapterId);
+            // After a brief delay to allow DOM updates, focus and pre-fill the revision instruction textarea
+            setTimeout(() => {
+                const revisionTextarea = document.getElementById('revision-instruction');
+                if (revisionTextarea) {
+                    revisionTextarea.value = suggestion;
+                    revisionTextarea.focus();
+                    setStatusMessage('✅ Suggestion pre-filled — review and click Revise Draft to apply.', 'draft-status');
+                }
+            }, 100);
         }
 
         function renderDraftingTab() {
@@ -2385,6 +2427,119 @@
                 setTimeout(() => saveStatus.classList.add('hidden'), 3000);
             }
         }
+
+        // HBF.DR9: Generate Remaining Chapters — iterate through outline, skip chapters with existing drafts, generate all remaining chapters
+        async function generateRemainingChapters() {
+            const chapters = project.chapterOutlines || [];
+            if (chapters.length === 0) {
+                alert('No chapter outlines available. Create outlines in the Chapter Outlines tab first.');
+                return;
+            }
+
+            const apiKey = (project.setup.apiKey || '').trim();
+            if (!apiKey) {
+                alert('Add your Grok API key in Setup before generating drafts.');
+                switchTab('setup');
+                return;
+            }
+
+            if (!Array.isArray(project.drafts)) project.drafts = [];
+
+            // Find chapters without existing drafts
+            const chaptersToGenerate = chapters
+                .map((ch, idx) => ({
+                    idx,
+                    chapter: ch,
+                    hasDraft: project.drafts.some(d => d.chapterId === idx && d.draftText && d.draftText.trim())
+                }))
+                .filter(item => !item.hasDraft);
+
+            if (chaptersToGenerate.length === 0) {
+                alert('All chapters already have drafts. Nothing to generate.');
+                return;
+            }
+
+            const btn = document.getElementById('generate-remaining-btn');
+            const statusEl = document.getElementById('draft-status');
+            const setStatus = (msg, isError = false) => {
+                if (!statusEl) return;
+                if (!msg) { statusEl.classList.add('hidden'); statusEl.textContent = ''; return; }
+                statusEl.textContent = msg;
+                statusEl.classList.remove('hidden');
+                statusEl.classList.toggle('text-red-300', isError);
+                statusEl.classList.toggle('text-emerald-300', !isError);
+            };
+
+            if (btn) { btn.disabled = true; }
+            const originalBtnText = btn ? btn.innerHTML : '';
+            let cancelled = false;
+
+            const goalsContext = [
+                `Main Goal: ${project.goals.mainGoal || ''}`,
+                `Tone/Style: ${project.goals.tone || ''}`,
+                `Audience: ${project.goals.audience || ''}`,
+                `Content Types: ${project.goals.contentTypes || ''}`
+            ].join('\n');
+
+            try {
+                for (let i = 0; i < chaptersToGenerate.length; i++) {
+                    if (cancelled) break;
+
+                    const { idx, chapter } = chaptersToGenerate[i];
+                    const progressMsg = `📚 Drafting ${i + 1} of ${chaptersToGenerate.length}… "${chapter.title || `Chapter ${idx + 1}`}"`;
+                    setStatus(progressMsg);
+
+                    const outlineContext = typeof chapter.annotation === 'string'
+                        ? chapter.annotation
+                        : JSON.stringify(chapter.annotation, null, 2);
+                    const context = `BOOK GOALS:\n${goalsContext}\n\nCHAPTER OUTLINE (annotated):\n${outlineContext}`;
+                    const userPrompt = `Write the full first-pass draft for: ${chapter.title || `Chapter ${idx + 1}`}\n\nReturn strict JSON as { "chapterTitle": "...", "draftText": "...", "qualityFlags": [] }`;
+
+                    try {
+                        const result = await callLlmAgent({
+                            agent: 'drafter',
+                            context,
+                            userPrompt,
+                            parseResponse: parseDraftResponse,
+                            temperature: 0.7,
+                            max_tokens: 4000
+                        });
+
+                        // HBF.DR7: persist draft entry
+                        const now = new Date().toISOString();
+                        const existingIdx = project.drafts.findIndex(d => d.chapterId === idx);
+                        const draftEntry = {
+                            chapterId: idx,
+                            chapterTitle: result.chapterTitle || chapter.title || `Chapter ${idx + 1}`,
+                            outlineContext,
+                            draftText: result.draftText || '',
+                            qualityFlags: result.qualityFlags || [],
+                            validation: null,
+                            revisionHistory: existingIdx >= 0 ? (project.drafts[existingIdx].revisionHistory || []) : [],
+                            lastUpdated: now
+                        };
+                        if (existingIdx >= 0) {
+                            project.drafts[existingIdx] = draftEntry;
+                        } else {
+                            project.drafts.push(draftEntry);
+                        }
+                        saveProject();
+                    } catch (err) {
+                        setStatus(`❌ Draft generation failed for ${chapter.title || `Chapter ${idx + 1}`}: ${err.message}`, true);
+                        continue;
+                    }
+                }
+
+                if (!cancelled) {
+                    setStatus(`✅ Complete — ${chaptersToGenerate.length} chapter(s) drafted successfully.`);
+                }
+            } catch (err) {
+                setStatus(`❌ Batch generation stopped: ${err.message}`, true);
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = originalBtnText; }
+            }
+        }
+
         // HBF.DR5: Send prior draft + revision instruction to Drafter Agent and update project.drafts[].
         async function reviseChapterDraft() {
             const select = document.getElementById('draft-chapter-select');
