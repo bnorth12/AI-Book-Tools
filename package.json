@@ -43,7 +43,7 @@
     "node": ">=14.0.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.53.0",
+    "@playwright/test": "^1.62.1",
     "htmlhint": "^1.1.4",
     "markdownlint-cli": "^0.48.0"
   },
