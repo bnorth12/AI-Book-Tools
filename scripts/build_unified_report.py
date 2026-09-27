@@ -224,19 +224,18 @@ def build_report(report: dict, nd: dict) -> str:
     def _score_line(s):
         return fmt_attr_scores(s if isinstance(s, dict) else None)
 
-            f"interest={s.get('interest')} readability={s.get('readability')} "
-            f"aiSlopRisk={s.get('aiSlopRisk')} humanLikeness={s.get('humanLikeness')}"
-        )
-
     # before/after automated chapter edit (heuristics)
     q_by = {s.get("label"): s for s in quality if isinstance(s, dict)}
     ch1_gen = q_by.get("chapter1-generate") or q_by.get("chapter1-heuristics")
     ch1_after = q_by.get("chapter1-afterUpdate")
     ch2_gen = q_by.get("chapter2-generate") or q_by.get("chapter2-heuristics")
 
-    lines.append("### Quality & automated editing (separate from cost)
-
-_QE6 attributes:_ when present on samples/gates, scores include `consistency` / `flow` / `pacing` alongside interest/readability/aiSlopRisk/humanLikeness.")
+    lines.append("### Quality & automated editing (separate from cost)")
+    lines.append("")
+    lines.append(
+        "_QE6 attributes:_ when present on samples/gates, scores include "
+        "`consistency` / `flow` / `pacing` alongside interest/readability/aiSlopRisk/humanLikeness."
+    )
     lines.append("")
     if gate:
         passed = gate.get("passed")
