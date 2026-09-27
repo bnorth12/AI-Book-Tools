@@ -251,6 +251,8 @@ Synced: 2026-04-19
 			        </select>
 			        <label for="maxTokens">Max Tokens per Update:</label>
 			        <input type="number" id="maxTokens" min="500" value="6000">
+			        <button type="button" id="c1SmokeBtn" onclick="runC1Smoke()" title="Cheap C1 digest / no-full-dump smoke (#120)">C1 Smoke (cheap)</button>
+			        <pre id="c1SmokeResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7f7f7;border:1px solid #ddd;border-radius:4px;white-space:pre-wrap;max-height:220px;overflow:auto;">C1 smoke idle — click to validate digests (no full manuscript dump).</pre>
 			        <label for="genre">Genre:</label>
 			        <select id="genre" onchange="enableAuthorFetch()">
 			            <option value="scifi">Science Fiction</option>
@@ -2320,6 +2322,144 @@ Synced: 2026-04-19
 			return Array.from(map.values());
 		}
 
+		// C1 smoke (#120): cheap local digest / no-full-manuscript asserts + optional tiny API ping
+		function assertNoFullManuscriptDump() {
+			const notes = [];
+			const hotFns = [];
+			try { if (typeof generateChapter === 'function') hotFns.push(['generateChapter', generateChapter]); } catch (e) {}
+			try { if (typeof suggestBookImprovements === 'function') hotFns.push(['suggestBookImprovements', suggestBookImprovements]); } catch (e) {}
+			try { if (typeof breakdownImprovement === 'function') hotFns.push(['breakdownImprovement', breakdownImprovement]); } catch (e) {}
+			try { if (typeof updateChapter === 'function') hotFns.push(['updateChapter', updateChapter]); } catch (e) {}
+			let scanFail = false;
+			for (const [name, fn] of hotFns) {
+				const body = Function.prototype.toString.call(fn);
+				if (/\bchapters\.join\b/.test(body)) {
+					scanFail = true;
+					notes.push(name + ': FAIL chapters.join in body');
+				} else {
+					notes.push(name + ': ok (no chapters.join)');
+				}
+			}
+			if (!hotFns.length) notes.push('hot-path scan: SKIP (functions not in scope)');
+
+			const saved = {
+				chapters: novelData.chapters,
+				characters: novelData.characters,
+				subplots: novelData.subplots,
+				storyArc: novelData.storyArc,
+				generalPlot: novelData.generalPlot,
+				setting: novelData.setting,
+				styleGuide: novelData.styleGuide,
+				title: novelData.title,
+				genre: novelData.genre
+			};
+			const huge = 'X'.repeat(50000);
+			novelData.chapters = [huge, huge, huge];
+			novelData.characters = [{ name: 'SmokeHero', arc: 'a'.repeat(2000), backstory: 'b'.repeat(5000) }];
+			novelData.subplots = ['subplot-'.repeat(400)];
+			novelData.storyArc = 'arc-'.repeat(500);
+			novelData.generalPlot = 'plot-'.repeat(500);
+			novelData.setting = 'set-'.repeat(500);
+			novelData.styleGuide = 'style-'.repeat(500);
+			novelData.title = 'C1 Smoke Novel';
+			novelData.genre = 'scifi';
+			const chapterSum = novelData.chapters.reduce((n, c) => n + (c ? c.length : 0), 0);
+			const pack = buildPromptContextPack({ chapterNum: null, includePacket: false });
+			const packChars = (pack && pack._approxChars) || JSON.stringify(pack).length;
+			const digChars = JSON.stringify(digestCharacters(novelData.characters)).length;
+			const subChars = JSON.stringify(digestSubplots(novelData.subplots)).length;
+			const compactOk = packChars < Math.floor(chapterSum / 20) && packChars < 8000;
+			notes.push('packChars=' + packChars + ' chapterSum=' + chapterSum + (compactOk ? ' ok' : ' FAIL'));
+			notes.push('digestCharactersChars=' + digChars + (digChars < 2000 ? ' ok' : ' FAIL'));
+			notes.push('digestSubplotsChars=' + subChars + (subChars < 800 ? ' ok' : ' FAIL'));
+			Object.assign(novelData, saved);
+			if (scanFail || !compactOk || digChars >= 2000 || subChars >= 800) {
+				const err = new Error('assertNoFullManuscriptDump failed: ' + notes.join('; '));
+				err.notes = notes;
+				throw err;
+			}
+			return notes;
+		}
+
+		async function runC1Smoke() {
+			const out = document.getElementById('c1SmokeResult');
+			const lines = [];
+			const pass = (msg) => { lines.push('PASS: ' + msg); };
+			const fail = (msg) => { lines.push('FAIL: ' + msg); };
+			const info = (msg) => { lines.push('- ' + msg); };
+			const render = (header) => {
+				const body = (header ? header + '\n' : '') + lines.join('\n');
+				if (out) out.textContent = body;
+				console.log('[C1 Smoke]', body);
+			};
+			render('C1 smoke running...');
+			let failed = false;
+			try {
+				if (typeof digestText !== 'function') { fail('digestText missing'); failed = true; }
+				else {
+					const long = 'Z'.repeat(10000);
+					const d = digestText(long, 200);
+					if (typeof d === 'string' && d.length <= 201 && d.endsWith('\u2026')) pass('digestText truncates 10k -> <=maxChars+ellipsis (' + d.length + ' chars)');
+					else { fail('digestText truncation unexpected: len=' + (d && d.length)); failed = true; }
+				}
+				if (typeof digestCharacters !== 'function') { fail('digestCharacters missing'); failed = true; }
+				else {
+					const dc = digestCharacters([{ name: 'A', arc: 'x'.repeat(500), backstory: 'y'.repeat(2000) }, { name: '' }]);
+					if (Array.isArray(dc) && dc.length === 1 && dc[0].name === 'A' && dc[0].arc.length <= 121 && dc[0].backstory.length <= 321) pass('digestCharacters returns compact structures');
+					else { fail('digestCharacters not compact'); failed = true; }
+				}
+				if (typeof digestSubplots !== 'function') { fail('digestSubplots missing'); failed = true; }
+				else {
+					const ds = digestSubplots(['p'.repeat(1000), 'q'.repeat(1000), 'r'.repeat(1000), 's'.repeat(1000)], 3, 180);
+					if (Array.isArray(ds) && ds.length === 3 && ds.every(x => x.summary && x.summary.length <= 181)) pass('digestSubplots returns compact structures');
+					else { fail('digestSubplots not compact'); failed = true; }
+				}
+				if (typeof buildPromptContextPack !== 'function') { fail('buildPromptContextPack missing'); failed = true; }
+				else {
+					const pack = buildPromptContextPack({ includePacket: false, extra: { smoke: true } });
+					const s = typeof pack === 'string' ? pack : JSON.stringify(pack);
+					if (pack && typeof pack === 'object' && !s.includes('X'.repeat(1000))) pass('buildPromptContextPack returns compact object (no huge manuscript embed)');
+					else { fail('buildPromptContextPack unexpected'); failed = true; }
+				}
+				try {
+					const dumpNotes = assertNoFullManuscriptDump();
+					pass('assertNoFullManuscriptDump — no chapters.join on hot paths; pack << manuscript');
+					dumpNotes.forEach(n => info(n));
+				} catch (e) {
+					fail('assertNoFullManuscriptDump: ' + (e && e.message ? e.message : e));
+					if (e && e.notes) e.notes.forEach(n => info(n));
+					failed = true;
+				}
+
+				const keyEl = document.getElementById('apiKey');
+				const key = keyEl && keyEl.value ? keyEl.value.trim() : '';
+				if (!key) {
+					info('api: skipped (no key)');
+				} else {
+					try {
+						const tab1 = document.getElementById('tab1');
+						const model = (document.getElementById('model') || {}).value || '';
+						await callAI(
+							[
+								{ role: 'system', content: 'Reply with exactly: ok' },
+								{ role: 'user', content: 'ping' }
+							],
+							tab1,
+							{ max_tokens: 32, operationName: 'C1 Smoke tiny completion' }
+						);
+						info('api: ok (model=' + model + ', max_tokens=32)');
+					} catch (apiErr) {
+						info('api: FAIL ' + (apiErr && apiErr.message ? apiErr.message : apiErr));
+					}
+				}
+			} catch (err) {
+				fail('unexpected: ' + (err && err.message ? err.message : err));
+				failed = true;
+			}
+			const header = failed ? 'C1 SMOKE: FAIL' : 'C1 SMOKE: PASS';
+			render(header);
+			return !failed;
+		}
 
 		function getTrimmedContext(text, maxChars = 1200) {
 			if (!text || typeof text !== 'string') return '';
