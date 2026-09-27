@@ -76,7 +76,7 @@ function parseModelJSONResponse(rawText) {
 
 async function callGrokAPI(messages, maxTokens, isJSON) {
     const apiKey = document.getElementById("apiKey").value.trim();
-    const selectedModel = document.getElementById("model")?.value || "grok-4.20-0309-reasoning";
+    const selectedModel = document.getElementById("model")?.value || "grok-4.7";
     const customModel = document.getElementById("customModel")?.value.trim() || "";
     const model = selectedModel === "custom" ? customModel : selectedModel;
     const useResponsesAPI = model.includes("multi-agent");

@@ -172,11 +172,14 @@
                                 <div>
                                     <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Model</label>
                                     <select id="preferred-model" class="w-full bg-black/40 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-6 py-4 text-lg">
-                                        <option value="grok-4.20-0309-reasoning" selected>grok-4.20-0309-reasoning (Recommended)</option>
-                                        <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
-                                        <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
-                                        <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
-                                        <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
+                                        <option value="grok-4.7" selected>grok-4.7 (Recommended)</option>
+                        <option value="grok-4.6">grok-4.6</option>
+                        <option value="grok-4.5">grok-4.5</option>
+                        <option value="grok-4.3">grok-4.3</option>
+                        <option value="grok-4.20-0309-reasoning">grok-4.20-0309-reasoning</option>
+                        <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
+                        <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
+                        <option value="grok-build-0.1">grok-build-0.1</option>
                                     </select>
                                 </div>
                                 <div>
@@ -671,7 +674,7 @@
                 apiKey: "",
                 collectionIds: ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"],
                 webSearchEnabled: true,
-                preferredModel: "grok-4.20-0309-reasoning"
+                preferredModel: "grok-4.7"
             },
             prompts: {
                 bookGoalsAgent: `You are the Book Goals Agent – expert herbal book architect focused on helping the user define clear, practical, trustworthy book goals.\n\nWhen responding, always return ONLY the following fields in strict JSON format:\n{\n  \"mainGoal\": \"...\",\n  \"contentTypes\": \"...\",\n  \"tone\": \"...\",\n  \"audience\": \"...\",\n  \"length\": \"...\"\n}\nIf you cannot determine a value, leave it blank. Do not include any explanation or extra text.`,
@@ -912,7 +915,7 @@
             if (api) api.value = project.setup.apiKey || '';
             if (collections) collections.value = (project.setup.collectionIds || []).join(', ');
             if (webToggle) webToggle.checked = !!project.setup.webSearchEnabled;
-            if (model) model.value = project.setup.preferredModel || 'grok-4.20-0309-reasoning';
+            if (model) model.value = project.setup.preferredModel || 'grok-4.7';
             if (version) version.textContent = `v${project.meta.version || '0.12.0'}`;
             if (lastEdited && project.meta.lastEdited) {
                 lastEdited.textContent = new Date(project.meta.lastEdited).toLocaleString();
@@ -1480,12 +1483,21 @@
                 { role: 'system', content: String(systemPrompt || '') },
                 { role: 'user', content: String(userContent || '') }
             ];
-            const payload = {
-                model: project.setup.preferredModel,
-                messages,
-                temperature,
-                max_tokens
-            };
+            const modelName = project.setup.preferredModel || '';
+            const useResponsesAPI = typeof modelName === 'string' && modelName.includes('multi-agent');
+            const payload = useResponsesAPI
+                ? {
+                    model: modelName,
+                    input: messages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
+                    temperature,
+                    max_output_tokens: max_tokens
+                }
+                : {
+                    model: modelName,
+                    messages,
+                    temperature,
+                    max_tokens
+                };
             // REMOVE tools for all Outline Q&A chat requests (context: 'specificQA')
             // Do not add tools to the payload for outline chat
             // Debug: log payload for troubleshooting 422 errors
@@ -1494,7 +1506,9 @@
             } catch (e) {
                 console.log('[DEBUG] LLM API payload: [unserializable]', payload);
             }
-            const endpoint = project.setup.apiEndpoint || 'https://api.x.ai/v1/chat/completions';
+            const endpoint = useResponsesAPI
+                ? 'https://api.x.ai/v1/responses'
+                : (project.setup.apiEndpoint || 'https://api.x.ai/v1/chat/completions');
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
@@ -1514,8 +1528,24 @@
                 throw new Error(httpMessages[response.status] || `HTTP ${response.status}`);
             }
             const data = await response.json();
-            const rawReply = data?.choices?.[0]?.message?.content || '';
-            const finishReason = data?.choices?.[0]?.finish_reason || null;
+            let rawReply = '';
+            let finishReason = null;
+            if (useResponsesAPI) {
+                if (typeof data.output_text === 'string' && data.output_text.length > 0) {
+                    rawReply = data.output_text;
+                } else if (Array.isArray(data.output)) {
+                    rawReply = data.output
+                        .flatMap(item => Array.isArray(item.content) ? item.content : [])
+                        .filter(part => part.type === 'output_text' && typeof part.text === 'string')
+                        .map(part => part.text)
+                        .join('\n')
+                        .trim();
+                }
+                finishReason = data.status || null;
+            } else {
+                rawReply = data?.choices?.[0]?.message?.content || '';
+                finishReason = data?.choices?.[0]?.finish_reason || null;
+            }
             let parsed = rawReply;
             if (typeof parseResponse === 'function') {
                 try { parsed = parseResponse(rawReply); } catch (e) { parsed = rawReply; }

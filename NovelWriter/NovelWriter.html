@@ -243,11 +243,14 @@ Synced: 2026-04-19
 			        <input type="text" id="apiKey" placeholder="Enter your xAI API key">
 			        <label for="model">Model:</label>
 			        <select id="model">
-			            <option value="grok-4.20-0309-reasoning" selected>grok-4.20-0309-reasoning (Recommended)</option>
-			            <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
-			            <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
-			            <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
-			            <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
+			            <option value="grok-4.7" selected>grok-4.7 (Recommended)</option>
+                        <option value="grok-4.6">grok-4.6</option>
+                        <option value="grok-4.5">grok-4.5</option>
+                        <option value="grok-4.3">grok-4.3</option>
+                        <option value="grok-4.20-0309-reasoning">grok-4.20-0309-reasoning</option>
+                        <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
+                        <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
+                        <option value="grok-build-0.1">grok-build-0.1</option>
 			        </select>
 			        <label for="maxTokens">Max Tokens per Update:</label>
 			        <input type="number" id="maxTokens" min="500" value="6000">
@@ -572,7 +575,7 @@ Synced: 2026-04-19
 	    // Global data structures
 	    let novelData = {
 	        apiKey: '',
-	        model: 'grok-4.20-0309-reasoning',
+	        model: 'grok-4.7',
 	        maxTokens: 6000,
 	        genre: 'scifi',
 	        title: '',
@@ -936,7 +939,8 @@ Synced: 2026-04-19
 		        throw new Error('API Key is missing');
 		    }
 
-		    const endpoint = 'https://api.x.ai/v1/chat/completions';
+		    const useResponsesAPI = typeof model === 'string' && model.includes('multi-agent');
+		    const endpoint = useResponsesAPI ? 'https://api.x.ai/v1/responses' : 'https://api.x.ai/v1/chat/completions';
 		    const genre = document.getElementById('genre')?.value;
 		    const adjustedMessages = Array.isArray(messages) ? [...messages] : [];
 		    if (genre === 'scifi') {
@@ -945,26 +949,34 @@ Synced: 2026-04-19
 		            content: 'When writing science fiction, prioritize hard-science plausibility, coherent cause-and-effect, and realistic technological constraints. Avoid space-opera tropes unless explicitly requested.'
 		        });
 		    }
-		    console.log('Attempting API call to:', endpoint, 'Model:', model, 'Max Tokens:', maxTokens, 'Messages:', messages);
+		    console.log('Attempting API call to:', endpoint, 'Model:', model, 'Max Tokens:', maxTokens, 'Messages:', messages, 'useResponsesAPI:', useResponsesAPI);
 		    if (loadingDiv) loadingDiv.style.display = 'block';
 			activeAICallCount += 1;
 			setExecutionStatus(operationName, 'running', 'Preparing request payload.');
 
 		    try {
 				setExecutionStatus(operationName, 'waiting', 'Waiting on LLM response...');
+		        const requestBody = useResponsesAPI
+		            ? {
+		                model: model,
+		                input: adjustedMessages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
+		                max_output_tokens: maxTokens,
+		                temperature: 0.65
+		            }
+		            : {
+		                model: model,
+		                messages: adjustedMessages,
+		                max_tokens: maxTokens,
+		                stream: false,
+		                temperature: 0.65
+		            };
 		        const response = await fetch(endpoint, {
 		            method: 'POST',
 		            headers: {
 		                'Content-Type': 'application/json',
 		                'Authorization': `Bearer ${apiKey}`
 		            },
-		            body: JSON.stringify({
-		                model: model,
-		                messages: adjustedMessages,
-		                max_tokens: maxTokens,
-		                stream: false,
-		                temperature: 0.65
-		            })
+		            body: JSON.stringify(requestBody)
 		        });
 		        if (!response.ok) {
 		            throw new Error(`HTTP error! Status: ${response.status}, Text: ${await response.text()}`);
@@ -972,8 +984,25 @@ Synced: 2026-04-19
 		        const text = await response.text();
 		        console.log('Raw AI response:', text);
 		        let jsonResponse = JSON.parse(text);
-		        let content = jsonResponse.choices && jsonResponse.choices[0] && jsonResponse.choices[0].message ?
-		                      jsonResponse.choices[0].message.content : text;
+		        let content = '';
+		        if (useResponsesAPI) {
+		            if (typeof jsonResponse.output_text === 'string' && jsonResponse.output_text.length > 0) {
+		                content = jsonResponse.output_text;
+		            } else if (Array.isArray(jsonResponse.output)) {
+		                content = jsonResponse.output
+		                    .flatMap(item => Array.isArray(item.content) ? item.content : [])
+		                    .filter(part => part.type === 'output_text' && typeof part.text === 'string')
+		                    .map(part => part.text)
+		                    .join('\n')
+		                    .trim();
+		            }
+		            if (!content) {
+		                throw new Error('Invalid responses API response: missing output text');
+		            }
+		        } else {
+		            content = jsonResponse.choices && jsonResponse.choices[0] && jsonResponse.choices[0].message ?
+		                          jsonResponse.choices[0].message.content : text;
+		        }
 
 		        // Parse content if it’s JSON
 				if (adjustedMessages.some(m => typeof m.content === 'string' && (m.content.includes('Return as JSON') || m.content.includes('Return the response as a JSON')))) {
@@ -3373,7 +3402,7 @@ Synced: 2026-04-19
 		            requestLog = importedRequestLog;
 
 		            document.getElementById('apiKey').value = novelData.apiKey || '';
-		            document.getElementById('model').value = novelData.model || 'grok-4.20-0309-reasoning';
+		            document.getElementById('model').value = novelData.model || 'grok-4.7';
 		            document.getElementById('maxTokens').value = novelData.maxTokens || 6000;
 		            document.getElementById('genre').value = novelData.genre || 'scifi';
 		            const authorSelect = document.getElementById('authorStyle');
@@ -4429,7 +4458,7 @@ Synced: 2026-04-19
 		// Reset state for tests with real API setup
 		function resetState() {
 		    novelData = {
-		        apiKey: '', model: 'grok-4.20-0309-reasoning', maxTokens: 6000,
+		        apiKey: '', model: 'grok-4.7', maxTokens: 6000,
 		        genre: 'scifi', title: '', storyArc: '', generalPlot: '', setting: '',
 		        numChapters: 10, chapterLength: 2000, authorStyle: '', styleGuide: '',
 		        authors: [], characters: [], subplots: [], novelOutline: '', plotOutline: '',
@@ -4444,7 +4473,7 @@ Synced: 2026-04-19
 		    };
 		    requestLog = { lastPrompt: 'No requests made yet.', status: 'Idle', returnedInfo: 'No response yet.', tokenUsage: 'Not available', cost: 'Not available', originTab: null };
 		    // API key is not persisted to localStorage per NW.GEN8
-		    document.getElementById('model').value = 'grok-4.20-0309-reasoning';
+		    document.getElementById('model').value = 'grok-4.7';
 		    document.getElementById('maxTokens').value = '6000';
 		    document.getElementById('genre').value = 'scifi';
 		    document.getElementById('authorStyle').value = '';
