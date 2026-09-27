@@ -252,7 +252,9 @@ Synced: 2026-04-19
 			        <label for="maxTokens">Max Tokens per Update:</label>
 			        <input type="number" id="maxTokens" min="500" value="6000">
 			        <button type="button" id="c1SmokeBtn" onclick="runC1Smoke()" title="Cheap C1 digest / no-full-dump smoke (#120)">C1 Smoke (cheap)</button>
+			        <button type="button" id="trackedE2EBtn" onclick="runTrackedE2E()" title="Lean start-to-finish tracked E2E: tokens + prose quality (#120 C3)">Tracked E2E (lean)</button>
 			        <pre id="c1SmokeResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7f7f7;border:1px solid #ddd;border-radius:4px;white-space:pre-wrap;max-height:220px;overflow:auto;">C1 smoke idle — click to validate digests (no full manuscript dump).</pre>
+			        <pre id="trackedE2EResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f0f4ff;border:1px solid #b8c7e8;border-radius:4px;white-space:pre-wrap;max-height:360px;overflow:auto;">Tracked E2E idle - click for lean 2-chapter token+quality run.</pre>
 			        <label for="genre">Genre:</label>
 			        <select id="genre" onchange="enableAuthorFetch()">
 			            <option value="scifi">Science Fiction</option>
@@ -606,7 +608,10 @@ Synced: 2026-04-19
 	        autoContinuityAudit: true,
 	        chapterContinuityPackets: [],
 	        continuityTracker: { chapters: [], characterArcProgress: [], storyArcProgress: {} },
-	        continuityFindings: []
+	        continuityFindings: [],
+	        // Book-level token rollup (PRODUCT RULE #120 C3) — exported with session
+	        tokenUsage: null,
+	        qualitySamples: []
 	    };
 
 	    let requestLog = {
@@ -615,10 +620,104 @@ Synced: 2026-04-19
 	        returnedInfo: 'No response yet.',
 	        tokenUsage: 'Not available',
 	        cost: 'Not available',
-	        originTab: null
+	        originTab: null,
+	        contextPackChars: null,
+	        tokenUsageDetail: null
 	    };
 
-		let activeAICallCount = 0;
+		
+		// NW.GEN3b / #120 C3 PRODUCT RULE: book-level token rollup lives on novelData.tokenUsage.
+		// Every LLM response's usage (prompt/completion/total) SHALL accumulate against the current book/session
+		// so each book created or edited carries cumulative token usage through export/import (mirrors BookEditor totalTokenUsage).
+		function emptyBookTokenUsage() {
+			return {
+				prompt_tokens: 0,
+				completion_tokens: 0,
+				total_tokens: 0,
+				prompt_tokens_details: { text_tokens: 0, audio_tokens: 0, image_tokens: 0, cached_tokens: 0 },
+				calls: [],
+				contextPackCharsSum: 0,
+				startedAt: null,
+				updatedAt: null
+			};
+		}
+
+		function ensureBookTokenUsage() {
+			if (!novelData.tokenUsage || typeof novelData.tokenUsage !== 'object') {
+				novelData.tokenUsage = emptyBookTokenUsage();
+			}
+			if (!Array.isArray(novelData.tokenUsage.calls)) novelData.tokenUsage.calls = [];
+			if (!novelData.tokenUsage.prompt_tokens_details) {
+				novelData.tokenUsage.prompt_tokens_details = { text_tokens: 0, audio_tokens: 0, image_tokens: 0, cached_tokens: 0 };
+			}
+			return novelData.tokenUsage;
+		}
+
+		function resetBookTokenUsage() {
+			novelData.tokenUsage = emptyBookTokenUsage();
+			novelData.tokenUsage.startedAt = new Date().toISOString();
+			return novelData.tokenUsage;
+		}
+
+		/** Record one API usage onto the current book's ledger + refresh requestLog.tokenUsage (last + book totals). */
+		function recordBookTokenUsage(entry) {
+			const ledger = ensureBookTokenUsage();
+			if (!ledger.startedAt) ledger.startedAt = new Date().toISOString();
+			const prompt_tokens = Number(entry.prompt_tokens) || 0;
+			const completion_tokens = Number(entry.completion_tokens) || 0;
+			const total_tokens = Number(entry.total_tokens) || (prompt_tokens + completion_tokens);
+			const details = entry.prompt_tokens_details || {};
+			const packChars = entry.contextPackChars != null ? Number(entry.contextPackChars) : null;
+			const row = {
+				operationName: entry.operationName || 'AI Operation',
+				originTab: entry.originTab || requestLog.originTab || null,
+				model: entry.model || '',
+				prompt_tokens,
+				completion_tokens,
+				total_tokens,
+				contextPackChars: packChars,
+				ts: entry.ts || new Date().toISOString()
+			};
+			ledger.calls.push(row);
+			ledger.prompt_tokens += prompt_tokens;
+			ledger.completion_tokens += completion_tokens;
+			ledger.total_tokens += total_tokens;
+			ledger.prompt_tokens_details.text_tokens += Number(details.text_tokens) || prompt_tokens;
+			ledger.prompt_tokens_details.audio_tokens += Number(details.audio_tokens) || 0;
+			ledger.prompt_tokens_details.image_tokens += Number(details.image_tokens) || 0;
+			ledger.prompt_tokens_details.cached_tokens += Number(details.cached_tokens) || 0;
+			if (packChars != null && !Number.isNaN(packChars)) ledger.contextPackCharsSum += packChars;
+			ledger.updatedAt = row.ts;
+			requestLog.tokenUsageDetail = row;
+			requestLog.tokenUsage =
+				'Last: ' + row.prompt_tokens + '/' + row.completion_tokens + '/' + row.total_tokens + ' (prompt/comp/total)' +
+				' | Book: ' + ledger.prompt_tokens + '/' + ledger.completion_tokens + '/' + ledger.total_tokens +
+				' across ' + ledger.calls.length + ' call(s)' +
+				(packChars != null ? ('; packChars=' + packChars) : '');
+			return row;
+		}
+
+		// Thin aliases for E2E / console: session === current book ledger
+		function getSessionUsage() { return JSON.parse(JSON.stringify(ensureBookTokenUsage())); }
+		function resetSessionUsage() { return resetBookTokenUsage(); }
+		function getBookTokenUsage() { return getSessionUsage(); }
+
+		function ensureBookQualitySamples() {
+			if (!Array.isArray(novelData.qualitySamples)) novelData.qualitySamples = [];
+			return novelData.qualitySamples;
+		}
+
+		function getSessionQuality() {
+			return { samples: JSON.parse(JSON.stringify(ensureBookQualitySamples())) };
+		}
+
+		window.getSessionUsage = getSessionUsage;
+		window.resetSessionUsage = resetSessionUsage;
+		window.getBookTokenUsage = getBookTokenUsage;
+		window.resetBookTokenUsage = resetBookTokenUsage;
+		window.getSessionQuality = getSessionQuality;
+
+let activeAICallCount = 0;
 		let executionStatus = {
 			functionName: 'Idle',
 			state: 'idle',
@@ -712,7 +811,7 @@ Synced: 2026-04-19
 
 		const defaultPromptCatalog = {
 			tab1: {
-				fetchAuthors: { name: 'Author Discovery Agent', systemPrompt: 'You are a literature researcher helping a novelist find high-signal author references for the type of book they are drafting (selected genre). Rank by how interesting and useful each voice is as a style model for that book type — not by fame alone. Prefer writers whose work is distinctive within or against that genre's conventions (including thoughtful genre-bending when it fits the selected genre). Cover recent and historical voices; keep guidance practical for imitation prompts.' },
+				fetchAuthors: { name: 'Author Discovery Agent', systemPrompt: 'You are a literature researcher helping a novelist find high-signal author references for the type of book they are drafting (selected genre). Rank by how interesting and useful each voice is as a style model for that book type — not by fame alone. Prefer writers whose work is distinctive within or against that genre\'s conventions (including thoughtful genre-bending when it fits the selected genre). Cover recent and historical voices; keep guidance practical for imitation prompts.' },
 				fetchStyleGuide: { name: 'Style Guide Agent', systemPrompt: 'You are a literary style analyst. Produce concrete, reusable style guidance covering voice, sentence rhythm, pacing, imagery density, dialogue patterns, and narrative distance.' },
 				suggestStoryArc: { name: 'Story Arc Agent', systemPrompt: 'You are a story architect designing emotionally coherent long-form arcs. Emphasize escalating stakes, thematic progression, and act-level turning points that can sustain chapter-level execution.' },
 				suggestGeneralPlot: { name: 'General Plot Agent', systemPrompt: 'You are a plot designer for serialized novels. Build causally linked events, meaningful reversals, and clear consequence chains that keep momentum across the full chapter count.' },
@@ -971,9 +1070,28 @@ Synced: 2026-04-19
 		        if (!response.ok) {
 		            throw new Error(`HTTP error! Status: ${response.status}, Text: ${await response.text()}`);
 		        }
-		        const text = await response.text();
+		        		        const text = await response.text();
 		        console.log('Raw AI response:', text);
 		        let jsonResponse = JSON.parse(text);
+		        // #120 C3 / NW.GEN3b: capture usage from FIRST HTTP-body parse before content rewrite overwrites jsonResponse.
+		        // PRODUCT RULE: roll into novelData.tokenUsage (book-level), same idea as BookEditor totalTokenUsage.
+		        const httpUsage = (jsonResponse && jsonResponse.usage) ? jsonResponse.usage : null;
+		        const usagePrompt = httpUsage ? (httpUsage.prompt_tokens || httpUsage.input_tokens || 0) : 0;
+		        const usageCompletion = httpUsage ? (httpUsage.completion_tokens || httpUsage.output_tokens || 0) : 0;
+		        const usageTotal = httpUsage ? (httpUsage.total_tokens || (usagePrompt + usageCompletion)) : 0;
+		        if (typeof recordBookTokenUsage === 'function') {
+		            recordBookTokenUsage({
+		                operationName,
+		                originTab: requestLog.originTab || (tabElement && tabElement.id) || null,
+		                model,
+		                prompt_tokens: usagePrompt,
+		                completion_tokens: usageCompletion,
+		                total_tokens: usageTotal,
+		                prompt_tokens_details: httpUsage && httpUsage.prompt_tokens_details ? httpUsage.prompt_tokens_details : { text_tokens: usagePrompt, audio_tokens: 0, image_tokens: 0, cached_tokens: 0 },
+		                contextPackChars: requestLog.contextPackChars != null ? requestLog.contextPackChars : null
+		            });
+		        }
+		        requestLog.contextPackChars = null;
 		        let content = jsonResponse.choices && jsonResponse.choices[0] && jsonResponse.choices[0].message ?
 		                      jsonResponse.choices[0].message.content : text;
 
@@ -2462,6 +2580,436 @@ Synced: 2026-04-19
 			render(header);
 			return !failed;
 		}
+
+		// ---- #120 C3: Prose quality heuristics + optional LLM judge (scores attach to current book) ----
+		/**
+		 * Local heuristics for prose quality (0-100 ints).
+		 * Signals (documented):
+		 * - interest: sentence-length variance, proper-noun/concrete density, dialogue presence, low filler ratio
+		 * - readability: avg sentence length in a comfortable band (~12-22 words), paragraph breaks, low exclamation spam
+		 * - aiSlopRisk: hedge/stock-phrase hits ("in today's world", "a testament to", "delve", "tapestry", "nestled",
+		 *   "moreover", "furthermore", "it is important to note"), repeated transition stacks, vague fillers
+		 * - humanLikeness: inverse of slop + specificity + natural variance (not metronomic sentence lengths)
+		 */
+		function scoreProseQuality(text) {
+			const notes = [];
+			const raw = (text || '').toString();
+			const cleaned = raw.replace(/\s+/g, ' ').trim();
+			if (!cleaned || cleaned.length < 40) {
+				return { interest: 0, readability: 0, aiSlopRisk: 100, humanLikeness: 0, notes: ['empty or too short'] };
+			}
+			const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(s => s.replace(/[^a-zA-Z0-9]/g, '').length > 0);
+			const words = cleaned.split(/\s+/).filter(Boolean);
+			const wordCount = words.length || 1;
+			const sentCount = Math.max(1, sentences.length);
+			const lengths = sentences.map(s => s.split(/\s+/).filter(Boolean).length);
+			const avgLen = lengths.reduce((a, b) => a + b, 0) / sentCount;
+			const variance = lengths.reduce((a, b) => a + Math.pow(b - avgLen, 2), 0) / sentCount;
+			const stdev = Math.sqrt(variance);
+
+			const stockPhrases = [
+				"in today's world", "a testament to", "delve", "tapestry", "nestled",
+				"moreover", "furthermore", "it is important to note", "in conclusion",
+				"a myriad of", "stands as a", "beacon of", "underscore the", "navigate the complexities",
+				"at the end of the day", "only time will tell", "in the realm of", "shed light on",
+				"vibrant tapestry", "rich tapestry", "delve deeper", "delve into", "pivotal role"
+			];
+			const lower = cleaned.toLowerCase();
+			let stockHits = 0;
+			stockPhrases.forEach(p => {
+				const re = new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+				const m = lower.match(re);
+				if (m) stockHits += m.length;
+			});
+			const transitionWords = ['however', 'therefore', 'moreover', 'furthermore', 'additionally', 'consequently', 'thus', 'hence'];
+			let transitionHits = 0;
+			transitionWords.forEach(t => {
+				const m = lower.match(new RegExp('\\b' + t + '\\b', 'gi'));
+				if (m) transitionHits += m.length;
+			});
+			const exclamations = (cleaned.match(/!/g) || []).length;
+			const properNouns = (cleaned.match(/\b[A-Z][a-z]{2,}\b/g) || []).length;
+			const dialogueMarks = (raw.match(/["\u201C\u201D']/g) || []).length;
+			const vagueFillers = (lower.match(/\b(things?|stuff|various|numerous|significant|unique|innovative|cutting-edge|seamless|robust|leverage)\b/gi) || []).length;
+
+			let interest = 45;
+			interest += Math.min(25, stdev * 2.5);
+			interest += Math.min(15, (properNouns / wordCount) * 400);
+			interest += Math.min(10, dialogueMarks > 2 ? 10 : dialogueMarks * 3);
+			interest -= Math.min(20, stockHits * 6);
+			interest -= Math.min(10, (vagueFillers / wordCount) * 200);
+			interest = Math.max(0, Math.min(100, Math.round(interest)));
+			if (stdev < 3) notes.push('low sentence-length variance');
+			if (stockHits) notes.push('stockPhraseHits=' + stockHits);
+			if (dialogueMarks > 2) notes.push('has dialogue cues');
+
+			let readability = 70;
+			if (avgLen >= 12 && avgLen <= 22) readability += 15;
+			else if (avgLen >= 8 && avgLen <= 28) readability += 5;
+			else readability -= Math.min(30, Math.abs(avgLen - 17) * 2);
+			readability -= Math.min(20, Math.max(0, exclamations - 2) * 5);
+			const paraBreaks = (raw.match(/\n\s*\n/g) || []).length;
+			if (paraBreaks >= 1) readability += 5;
+			readability = Math.max(0, Math.min(100, Math.round(readability)));
+			notes.push('avgSentenceLen=' + avgLen.toFixed(1) + ' stdev=' + stdev.toFixed(1));
+
+			let aiSlopRisk = 15;
+			aiSlopRisk += Math.min(40, stockHits * 10);
+			aiSlopRisk += Math.min(20, transitionHits * 4);
+			aiSlopRisk += Math.min(15, (vagueFillers / Math.max(1, wordCount / 100)) * 3);
+			if (stdev < 2.5 && sentCount > 4) aiSlopRisk += 10;
+			aiSlopRisk = Math.max(0, Math.min(100, Math.round(aiSlopRisk)));
+			if (transitionHits >= 3) notes.push('transitionStacks=' + transitionHits);
+
+			let humanLikeness = Math.round((interest * 0.35) + (readability * 0.25) + ((100 - aiSlopRisk) * 0.40));
+			humanLikeness = Math.max(0, Math.min(100, humanLikeness));
+
+			return { interest, readability, aiSlopRisk, humanLikeness, notes, meta: { wordCount, sentCount, avgLen: +avgLen.toFixed(2), stdev: +stdev.toFixed(2), stockHits, transitionHits, exclamations } };
+		}
+
+		/**
+		 * Optional one-shot LLM judge. Fail-soft to heuristics-only on missing key/error.
+		 * Uses small max_tokens (~400). Uses Tab1 model today (FUTURE: per-agent model tiers).
+		 */
+		async function judgeProseQualityLLM(text, tabEl) {
+			const sample = (text || '').toString().slice(0, 3500);
+			const heuristics = scoreProseQuality(sample);
+			const key = (document.getElementById('apiKey') || {}).value || '';
+			if (!key.trim()) {
+				return Object.assign({}, heuristics, { source: 'heuristics', rationale: 'no api key; heuristics only' });
+			}
+			const tab = tabEl || document.getElementById('tab1') || document.body;
+			const messages = [
+				{ role: 'system', content: 'You are a terse literary quality rater. Return ONLY compact JSON. Scores are integers 0-100.' },
+				{
+					role: 'user',
+					content: [
+						'Score this prose sample for: interest, readability, aiSlopRisk (higher=more AI cliche/slop), humanLikeness.',
+						'Return JSON exactly: {"interest":0,"readability":0,"aiSlopRisk":0,"humanLikeness":0,"rationale":"short"}',
+						'Sample:',
+						sample
+					].join('\n')
+				}
+			];
+			try {
+				requestLog.originTab = (tab && tab.id) || 'tab1';
+				requestLog.contextPackChars = (messages[1].content || '').length;
+				const resp = await callAI(messages, tab, { max_tokens: 400, operationName: 'judgeProseQualityLLM' });
+				let parsed = resp;
+				if (resp && typeof resp.chapter === 'string') {
+					try {
+						parsed = JSON.parse(resp.chapter.replace(/^```json\s*/i, '').replace(/\s*```$/i, ''));
+					} catch (e) {
+						parsed = null;
+					}
+				}
+				if (parsed && typeof parsed === 'object' && parsed.interest != null) {
+					const clamp = (n) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+					return {
+						interest: clamp(parsed.interest),
+						readability: clamp(parsed.readability),
+						aiSlopRisk: clamp(parsed.aiSlopRisk),
+						humanLikeness: clamp(parsed.humanLikeness),
+						notes: heuristics.notes,
+						rationale: parsed.rationale || '',
+						source: 'llm+heuristics',
+						heuristics: heuristics
+					};
+				}
+				return Object.assign({}, heuristics, { source: 'heuristics', rationale: 'LLM response unparseable; heuristics only' });
+			} catch (err) {
+				return Object.assign({}, heuristics, { source: 'heuristics', rationale: 'LLM judge failed: ' + (err && err.message ? err.message : err) });
+			}
+		}
+
+		function pushQualitySample(label, scores, textLen) {
+			const samples = ensureBookQualitySamples();
+			const sample = {
+				label: label,
+				ts: new Date().toISOString(),
+				textLen: textLen || 0,
+				interest: scores.interest,
+				readability: scores.readability,
+				aiSlopRisk: scores.aiSlopRisk,
+				humanLikeness: scores.humanLikeness,
+				source: scores.source || 'heuristics',
+				rationale: scores.rationale || '',
+				notes: scores.notes || []
+			};
+			samples.push(sample);
+			return sample;
+		}
+
+		window.scoreProseQuality = scoreProseQuality;
+		window.judgeProseQualityLLM = judgeProseQualityLLM;
+
+		// ---- #120 C3: Lean tracked E2E (2 chapters / 500 words / 3 chars / 2 subplots) ----
+		function _trackedLog(lines, msg) {
+			lines.push(msg);
+			const el = document.getElementById('trackedE2EResult');
+			if (el) el.textContent = lines.join('\n');
+			console.log('[TrackedE2E]', msg);
+		}
+
+		async function runTrackedE2E() {
+			const lines = [];
+			const log = (m) => _trackedLog(lines, m);
+			const report = {
+				ok: false,
+				startedAt: new Date().toISOString(),
+				finishedAt: null,
+				config: {
+					genre: 'scifi',
+					title: 'Tracked E2E Lean ' + new Date().toISOString().slice(0, 16),
+					numChapters: 2,
+					chapterLength: 500,
+					numCharacters: 3,
+					minSubplots: 2,
+					maxTokens: 2000
+				},
+				steps: [],
+				sessionUsage: null,
+				sessionQuality: null,
+				errors: []
+			};
+			const step = async (name, fn) => {
+				const row = { name, ok: false, error: null, startedAt: new Date().toISOString(), finishedAt: null };
+				log('STEP start: ' + name);
+				try {
+					const result = await fn();
+					row.ok = true;
+					row.result = result === undefined ? null : result;
+					log('STEP pass: ' + name);
+				} catch (err) {
+					row.ok = false;
+					row.error = (err && err.message) ? err.message : String(err);
+					report.errors.push({ step: name, error: row.error });
+					log('STEP FAIL: ' + name + ' â€” ' + row.error);
+				}
+				row.finishedAt = new Date().toISOString();
+				report.steps.push(row);
+				return row;
+			};
+
+			log('Tracked E2E (lean) startingâ€¦');
+			resetBookTokenUsage();
+			novelData.qualitySamples = [];
+
+			// Preserve API key across resetState (resetState prompts if empty â€” keep existing)
+			const savedKey = (document.getElementById('apiKey') || {}).value || '';
+			if (!savedKey.trim()) {
+				log('FATAL: #apiKey empty â€” paste key before running');
+				report.errors.push({ step: 'init', error: 'apiKey missing' });
+				report.finishedAt = new Date().toISOString();
+				report.sessionUsage = getSessionUsage(); report.bookTokenUsage = report.sessionUsage;
+				report.sessionQuality = getSessionQuality(); report.qualitySamples = (novelData.qualitySamples || []).slice();
+				const el0 = document.getElementById('trackedE2EResult');
+				if (el0) el0.textContent = lines.join('\n') + '\n\n' + JSON.stringify(report, null, 2);
+				return report;
+			}
+
+			try {
+				// Soft reset without prompt: mimic lean config on current form
+				if (typeof resetState === 'function') {
+					// Avoid prompt by ensuring key stays set
+					document.getElementById('apiKey').value = savedKey;
+					try {
+						// resetState prompts only if key empty; key is set
+						resetState();
+					} catch (e) {
+						log('resetState warning: ' + (e.message || e));
+					}
+				}
+				document.getElementById('apiKey').value = savedKey;
+				document.getElementById('genre').value = report.config.genre;
+				document.getElementById('title').value = report.config.title;
+				document.getElementById('numChapters').value = String(report.config.numChapters);
+				document.getElementById('chapterLength').value = String(report.config.chapterLength);
+				document.getElementById('numCharacters').value = String(report.config.numCharacters);
+				document.getElementById('minSubplots').value = String(report.config.minSubplots);
+				document.getElementById('maxTokens').value = String(report.config.maxTokens);
+				if (typeof updateChapterSubpages === 'function') updateChapterSubpages();
+				if (typeof syncCharacterEntries === 'function') syncCharacterEntries();
+				if (typeof syncSubplotEntries === 'function') syncSubplotEntries();
+				if (typeof collectData === 'function') collectData();
+				log('Config: 2 ch / 500 words / 3 chars / 2 subplots / maxTokens=2000 / genre=scifi');
+
+				// Prefer grok-4.7 if present
+				const modelSel = document.getElementById('model');
+				if (modelSel) {
+					const opts = Array.from(modelSel.options || []);
+					const grok47 = opts.find(o => /grok-4\.7/i.test(o.value) || /grok-4\.7/i.test(o.textContent));
+					if (grok47) modelSel.value = grok47.value;
+					else if (opts.length) {
+						// keep selected or first
+						if (!modelSel.value) modelSel.value = opts[0].value;
+					}
+					report.config.model = modelSel.value;
+					log('Model: ' + modelSel.value);
+				}
+
+				await step('c1Smoke', async () => {
+					if (typeof runC1Smoke === 'function') {
+						const ok = await runC1Smoke();
+						return { passed: !!ok, note: 'api skip ignored if any' };
+					}
+					return { skipped: true };
+				});
+
+				await step('fetchAuthors', async () => {
+					if (typeof fetchAuthors !== 'function') throw new Error('fetchAuthors missing');
+					await fetchAuthors();
+					const sel = document.getElementById('authorStyle');
+					const options = Array.from(sel.options || []).filter(o => o.value && o.value !== '');
+					if (options.length) {
+						sel.value = options[0].value;
+						if (typeof updateStyleGuide === 'function') updateStyleGuide();
+					}
+					return { author: sel.value || null, optionCount: options.length };
+				});
+
+				await step('fetchStyleGuide', async () => {
+					const author = (document.getElementById('authorStyle') || {}).value || '';
+					if (!author) return { skipped: true, reason: 'no author' };
+					if (typeof fetchStyleGuide !== 'function') throw new Error('fetchStyleGuide missing');
+					await fetchStyleGuide();
+					return { author, styleGuideLen: ((document.getElementById('styleGuide') || {}).value || '').length };
+				});
+
+				await step('suggestStoryInfo', async () => {
+					document.getElementById('title').value = report.config.title;
+					await suggestStoryInfo();
+					return { title: document.getElementById('title').value };
+				});
+
+				await step('suggestCharacters', async () => {
+					await suggestCharacters();
+					return { count: (novelData.characters || []).length };
+				});
+
+				await step('suggestSubplots', async () => {
+					await suggestSubplots();
+					return { count: (novelData.subplots || []).length };
+				});
+
+				await step('generateNovelOutlines', async () => {
+					await generateNovelOutlines();
+					return {
+						novelOutlineLen: (novelData.novelOutline || '').length,
+						plotOutlineLen: (novelData.plotOutline || '').length
+					};
+				});
+
+				await step('generateChapterOutline1', async () => {
+					await generateChapterOutline(1);
+					return { len: (novelData.chapterOutlines[0] || '').length };
+				});
+
+				await step('generateChapterOutline2', async () => {
+					await generateChapterOutline(2);
+					return { len: (novelData.chapterOutlines[1] || '').length };
+				});
+
+				await step('generateChapter1+quality', async () => {
+					await generateChapter(1);
+					const text = novelData.chapters[0] || '';
+					const heur = scoreProseQuality(text);
+					pushQualitySample('chapter1-heuristics', heur, text.length);
+					const judged = await judgeProseQualityLLM(text, document.getElementById('tab5') || document.getElementById('tab1'));
+					pushQualitySample('chapter1-llmJudge', judged, text.length);
+					return { textLen: text.length, heuristics: heur, judged: { interest: judged.interest, readability: judged.readability, aiSlopRisk: judged.aiSlopRisk, humanLikeness: judged.humanLikeness, source: judged.source } };
+				});
+
+				await step('generateChapter2+quality', async () => {
+					await generateChapter(2);
+					const text = novelData.chapters[1] || '';
+					const heur = scoreProseQuality(text);
+					pushQualitySample('chapter2-heuristics', heur, text.length);
+					return { textLen: text.length, heuristics: heur };
+				});
+
+				await step('updateChapter1', async () => {
+					const editEl = document.getElementById('chapterEditContent1');
+					const improvEl = document.getElementById('chapterEditImprovement1');
+					if (!editEl) throw new Error('chapterEditContent1 missing â€” ensure chapter subpages exist');
+					if (!editEl.value && novelData.chapters[0]) editEl.value = novelData.chapters[0];
+					if (improvEl) improvEl.value = 'Tighten opening; add one concrete sensory detail; keep under target length.';
+					// Ensure tab6 edit surfaces exist
+					if (typeof showTab === 'function') showTab(6);
+					await updateChapter(1);
+					const text = novelData.chapters[0] || '';
+					const heur = scoreProseQuality(text);
+					pushQualitySample('chapter1-afterUpdate', heur, text.length);
+					return { textLen: text.length, heuristics: heur };
+				});
+
+				await step('suggestBookImprovements', async () => {
+					if (typeof showTab === 'function') showTab(7);
+					const beforeCalls = ensureBookTokenUsage().calls.length;
+					// Record payload size expectation via digests path
+					const packProbe = typeof buildPromptContextPack === 'function'
+						? buildPromptContextPack({ includePacket: false })
+						: null;
+					const packChars = packProbe ? ((packProbe._approxChars) || JSON.stringify(packProbe).length) : null;
+					await suggestBookImprovements();
+					const lastCall = ensureBookTokenUsage().calls[ensureBookTokenUsage().calls.length - 1] || null;
+					return {
+						packChars,
+						improvementCount: (novelData.bookImprovements || []).length,
+						lastCallTokens: lastCall ? lastCall.total_tokens : null,
+						callsAdded: ensureBookTokenUsage().calls.length - beforeCalls
+					};
+				});
+
+				ensureBookTokenUsage().updatedAt = new Date().toISOString();
+				report.ok = report.steps.every(s => s.ok);
+				report.finishedAt = new Date().toISOString();
+				report.sessionUsage = getSessionUsage(); report.bookTokenUsage = report.sessionUsage;
+				report.sessionQuality = getSessionQuality(); report.qualitySamples = (novelData.qualitySamples || []).slice();
+				report.summary = {
+					callCount: report.ensureBookTokenUsage().calls.length,
+					totals: report.sessionUsage.totals,
+					contextPackCharsSum: report.sessionUsage.contextPackCharsSum,
+					qualitySamples: report.sessionQuality.samples.length,
+					failedSteps: report.steps.filter(s => !s.ok).map(s => s.name)
+				};
+				log('==== FINAL ' + (report.ok ? 'PASS' : 'PARTIAL/FAIL') + ' ====');
+				log('Calls: ' + report.summary.callCount +
+					' | tokens prompt/comp/total: ' +
+					report.summary.totals.prompt_tokens + '/' +
+					report.summary.totals.completion_tokens + '/' +
+					report.summary.totals.total_tokens);
+				report.sessionQuality.samples.forEach(s => {
+					log('Quality[' + s.label + ']: interest=' + s.interest +
+						' readability=' + s.readability +
+						' aiSlopRisk=' + s.aiSlopRisk +
+						' humanLikeness=' + s.humanLikeness +
+						' (' + s.source + ')');
+				});
+				if (report.summary.failedSteps.length) {
+					log('Failed steps: ' + report.summary.failedSteps.join(', '));
+				}
+			} catch (fatal) {
+				report.ok = false;
+				report.errors.push({ step: 'fatal', error: fatal && fatal.message ? fatal.message : String(fatal) });
+				report.finishedAt = new Date().toISOString();
+				ensureBookTokenUsage().updatedAt = report.finishedAt;
+				report.sessionUsage = getSessionUsage(); report.bookTokenUsage = report.sessionUsage;
+				report.sessionQuality = getSessionQuality(); report.qualitySamples = (novelData.qualitySamples || []).slice();
+				log('FATAL: ' + (fatal && fatal.message ? fatal.message : fatal));
+			}
+
+			const el = document.getElementById('trackedE2EResult');
+			if (el) {
+				el.textContent = lines.join('\n') + '\n\n--- REPORT JSON ---\n' + JSON.stringify(report, null, 2);
+			}
+			try {
+				window.__lastTrackedE2EReport = report;
+			} catch (e) {}
+			return report;
+		}
+
+		window.runTrackedE2E = runTrackedE2E;
 
 		function getTrimmedContext(text, maxChars = 1200) {
 			if (!text || typeof text !== 'string') return '';
@@ -4113,7 +4661,8 @@ Synced: 2026-04-19
 
 		    const chapterLength = novelData.chapterLength || 4000;
 		    const targetWordsPerPart = Math.floor((chapterLength / 2) + 1500) / 2;
-		    const maxTokens = 30000;
+		    		    // Prefer UI maxTokens (lean E2E sets ~2000); fall back to 30000 for unrestricted runs
+		    const maxTokens = parseInt(document.getElementById('maxTokens')?.value, 10) || 30000;
 
 		    if (!Array.isArray(novelData.chapters)) {
 		        novelData.chapters = [];
@@ -4656,9 +5205,14 @@ Synced: 2026-04-19
 				autoContinuityAudit: true,
 				chapterContinuityPackets: [],
 				continuityTracker: { chapters: [], characterArcProgress: [], storyArcProgress: {} },
-				continuityFindings: []
+				continuityFindings: [],
+				tokenUsage: null,
+				qualitySamples: []
 		    };
 		    requestLog = { lastPrompt: 'No requests made yet.', status: 'Idle', returnedInfo: 'No response yet.', tokenUsage: 'Not available', cost: 'Not available', originTab: null };
+		    // PRODUCT RULE: clear book-level token rollup for a fresh book/session test
+		    if (typeof resetBookTokenUsage === 'function') resetBookTokenUsage();
+		    novelData.qualitySamples = [];
 		    // API key is not persisted to localStorage per NW.GEN8
 		    document.getElementById('model').value = 'grok-4.20-0309-reasoning';
 		    document.getElementById('maxTokens').value = '6000';
