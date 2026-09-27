@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Build single multi-section Tracked E2E report with executive summary + costs.
-Also patch run-tracked-e2e.mjs to emit the same shape on future runs.
+"""Build ONE Tracked E2E markdown deliverable: exec summary + full inlined annexes.
+
+Canonical output: TRACKED_E2E_REPORT.md only (no UNIFIED twin; annexes folded in).
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from pathlib import Path
 
 PLAN = Path(r"C:\Users\brian\grok-build-queue\plans\ai-book-tools-2026-09-27\novelwriter")
 RUNNER = Path(r"C:\Users\brian\OneDrive\Documents\GitHubRepos\AI-Book-Tools\scripts\run-tracked-e2e.mjs")
-OUT = PLAN / "TRACKED_E2E_UNIFIED_REPORT.md"
+OUT = PLAN / "TRACKED_E2E_REPORT.md"
 REPORT_JSON = PLAN / "TRACKED_E2E_REPORT.json"
 ANNEX_JSON = PLAN / "TRACKED_E2E_ANNEX_NOVELDATA.json"
 
@@ -119,7 +120,7 @@ def build_report(report: dict, nd: dict) -> str:
     quality = report.get("qualitySamples") or []
 
     lines: list[str] = []
-    lines.append("# NovelWriter Tracked E2E — Unified Report")
+    lines.append("# NovelWriter Tracked E2E — Complete Report (single file)")
     lines.append("")
     lines.append(f"- **Result:** {'PASS' if report.get('ok') else 'FAIL / partial'}")
     lines.append(f"- **Finished:** {report.get('finishedAt') or ''}")
@@ -433,45 +434,212 @@ def build_report(report: dict, nd: dict) -> str:
     lines.append("")
     lines.append("---")
     lines.append("")
-    lines.append("## 6. Story annex (cast + chapter excerpts)")
+    lines.append("## 6. Story annexes (full prose — inlined)")
     lines.append("")
-    lines.append(f"Full sanitized `novelData`: `TRACKED_E2E_ANNEX_NOVELDATA.json`")
+    lines.append(
+        "This section is the readable book deliverable. Full chapter text, cast, "
+        "subplots, outlines, and world digests are inlined below. "
+        "Optional machine sidecar: `TRACKED_E2E_ANNEX_NOVELDATA.json` (not required to read the book)."
+    )
     lines.append("")
-    lines.append("### Cast detail")
+
+    # --- Annex A: World / digests ---
+    lines.append("### Annex A — World & digests")
     lines.append("")
-    for c in chars:
-        lines.append(f"#### {c.get('name') or 'Unnamed'}")
+    if nd.get("setting"):
+        lines.append("#### Setting")
         lines.append("")
-        if c.get("backstory"):
-            lines.append(trunc(c["backstory"], 600))
-            lines.append("")
-        if c.get("arc"):
-            lines.append(f"_Arc:_ {trunc(c['arc'], 400)}")
-            lines.append("")
-    chapters = nd.get("chapters") or []
-    for i, body in enumerate(chapters):
-        body = body or ""
-        lines.append(f"### Chapter {i + 1} ({len(body)} chars)")
+        lines.append(str(nd["setting"]).strip())
         lines.append("")
-        lines.append(trunc(body, 2500))
+    plot = nd.get("generalPlot") or nd.get("plotOutline") or ""
+    if isinstance(plot, (dict, list)):
+        plot = json.dumps(plot, indent=2)
+    if str(plot).strip():
+        lines.append("#### Plot")
+        lines.append("")
+        lines.append(str(plot).strip())
         lines.append("")
     if nd.get("storyArc"):
-        lines.append("### Story arc (full)")
+        lines.append("#### Story arc")
         lines.append("")
-        lines.append(trunc(nd["storyArc"], 4000))
+        lines.append(str(nd["storyArc"]).strip())
         lines.append("")
+    if nd.get("novelOutline"):
+        no = nd["novelOutline"]
+        if isinstance(no, (dict, list)):
+            no = json.dumps(no, indent=2)
+        lines.append("#### Novel outline")
+        lines.append("")
+        lines.append(str(no).strip())
+        lines.append("")
+    if nd.get("styleGuide"):
+        lines.append("#### Style guide")
+        lines.append("")
+        lines.append(str(nd["styleGuide"]).strip())
+        lines.append("")
+    if not any(
+        [
+            nd.get("setting"),
+            str(plot).strip() if plot else "",
+            nd.get("storyArc"),
+            nd.get("novelOutline"),
+            nd.get("styleGuide"),
+        ]
+    ):
+        lines.append("(No world/digest fields populated.)")
+        lines.append("")
+
+    # --- Annex B: Cast (full) ---
+    lines.append("### Annex B — Cast (full)")
+    lines.append("")
+    if not chars:
+        lines.append("(No characters in novelData.)")
+        lines.append("")
+    else:
+        for c in chars:
+            lines.append(f"#### {c.get('name') or 'Unnamed'}")
+            lines.append("")
+            role = c.get("role") or c.get("Role") or ""
+            if role:
+                lines.append(f"- **Role:** {role}")
+            for key, label in (
+                ("backstory", "Backstory"),
+                ("arc", "Arc"),
+                ("personality", "Personality"),
+                ("appearance", "Appearance"),
+                ("goals", "Goals"),
+                ("conflicts", "Conflicts"),
+                ("notes", "Notes"),
+            ):
+                val = c.get(key)
+                if val:
+                    if isinstance(val, (dict, list)):
+                        val = json.dumps(val, indent=2)
+                    lines.append(f"- **{label}:**")
+                    lines.append("")
+                    lines.append(str(val).strip())
+                    lines.append("")
+            # dump remaining scalar fields briefly
+            skip = {
+                "name",
+                "Name",
+                "role",
+                "Role",
+                "backstory",
+                "arc",
+                "personality",
+                "appearance",
+                "goals",
+                "conflicts",
+                "notes",
+            }
+            extras = []
+            for k, v in c.items():
+                if k in skip or v in (None, "", [], {}):
+                    continue
+                if isinstance(v, (dict, list)):
+                    continue
+                extras.append(f"{k}={v}")
+            if extras:
+                lines.append(f"- _Other:_ {', '.join(extras)}")
+                lines.append("")
+
+    # --- Annex C: Subplots ---
+    lines.append("### Annex C — Subplots")
+    lines.append("")
+    subs = nd.get("subplots") or []
+    if not subs:
+        lines.append("(None.)")
+        lines.append("")
+    else:
+        for i, sp in enumerate(subs, 1):
+            if isinstance(sp, dict):
+                title = sp.get("title") or sp.get("name") or f"Subplot {i}"
+                body = sp.get("description") or sp.get("text") or sp.get("summary") or json.dumps(sp, indent=2)
+                lines.append(f"#### {i}. {title}")
+                lines.append("")
+                lines.append(str(body).strip())
+                lines.append("")
+            else:
+                lines.append(f"{i}. {str(sp).strip()}")
+                lines.append("")
+
+    # --- Annex D: Chapter outlines ---
+    lines.append("### Annex D — Chapter outlines")
+    lines.append("")
+    outlines = nd.get("chapterOutlines") or []
+    if not outlines:
+        lines.append("(None.)")
+        lines.append("")
+    else:
+        for i, o in enumerate(outlines):
+            o = o or ""
+            if not str(o).strip():
+                continue
+            lines.append(f"#### Chapter {i + 1} outline ({len(str(o))} chars)")
+            lines.append("")
+            if isinstance(o, (dict, list)):
+                lines.append(json.dumps(o, indent=2))
+            else:
+                lines.append(str(o).strip())
+            lines.append("")
+
+    # --- Annex E: Full chapter prose (THE BOOK) ---
+    lines.append("### Annex E — Full chapter prose")
+    lines.append("")
+    lines.append(
+        "Complete chapter text as stored in novelData after the run "
+        "(including Tab6 automated edit on Ch1 when present). Not truncated."
+    )
+    lines.append("")
+    chapters = nd.get("chapters") or []
+    nonempty = [(i, body or "") for i, body in enumerate(chapters) if (body or "").strip()]
+    if not nonempty:
+        lines.append("(No chapter prose in novelData.)")
+        lines.append("")
+    else:
+        for i, body in nonempty:
+            lines.append(f"#### Chapter {i + 1} — full text ({len(body)} chars)")
+            lines.append("")
+            lines.append(body.strip())
+            lines.append("")
+            lines.append(f"_End Chapter {i + 1}_")
+            lines.append("")
+
+    # edited chapters note if different
+    edited = nd.get("editedChapters") or []
+    if edited and any((e or "").strip() for e in edited):
+        lines.append("##### Edited-chapter lengths (reference)")
+        lines.append("")
+        for i, e in enumerate(edited):
+            if (e or "").strip():
+                lines.append(f"- editedChapters[{i}]: {len(e)} chars")
+        lines.append("")
+
     lines.append("---")
     lines.append("")
     lines.append("## 7. Artifacts")
     lines.append("")
-    lines.append("- `TRACKED_E2E_UNIFIED_REPORT.md` — this document")
+    lines.append(
+        "- **`TRACKED_E2E_REPORT.md`** — **this document** (canonical human deliverable: summary + full annexes)"
+    )
     lines.append("- `TRACKED_E2E_REPORT.json` — machine-readable steps, tokensByPrompt, tokensByStage, cost meta")
-    lines.append("- `TRACKED_E2E_ANNEX_NOVELDATA.json` — full novelData dump")
-    lines.append("- `TRACKED_E2E_PROGRESS.md` — live tab stream")
+    lines.append(
+        "- `TRACKED_E2E_ANNEX_NOVELDATA.json` — optional machine sidecar (full novelData); prose above is already complete"
+    )
+    lines.append("- `TRACKED_E2E_PROGRESS.md` — live tab stream (run log, not the book)")
+    lines.append("- `TRACKED_E2E_TOKENS_BY_STAGE.md` — optional tokens-only companion")
+    lines.append("")
+    lines.append(
+        "_Deprecated / no longer emitted as a second main report: `TRACKED_E2E_UNIFIED_REPORT.md`, "
+        "`TRACKED_E2E_ANNEXES.md` (content folded into this file)._"
+    )
     lines.append("")
     lines.append(f"_Generated {datetime.now().astimezone().isoformat()}_")
     lines.append("")
+
     return "\n".join(lines)
+
 
 
 def main() -> None:
@@ -531,10 +699,34 @@ def main() -> None:
 
     md = build_report(report, nd)
     OUT.write_text(md, encoding="utf-8")
-    # Also replace TRACKED_E2E_REPORT.md as the human primary (single report)
-    (PLAN / "TRACKED_E2E_REPORT.md").write_text(md, encoding="utf-8")
-    print("wrote", OUT)
-    print("also wrote TRACKED_E2E_REPORT.md")
+    # Remove deprecated second "main" report if present
+    unified = PLAN / "TRACKED_E2E_UNIFIED_REPORT.md"
+    if unified.exists():
+        unified.unlink()
+        print("removed deprecated", unified.name)
+    annexes_md = PLAN / "TRACKED_E2E_ANNEXES.md"
+    if annexes_md.exists():
+        # Leave a one-line pointer so old links don't 404-empty; book is in REPORT.md
+        annexes_md.write_text(
+            "# Deprecated\n\n"
+            "Annex content (full chapter prose, cast, digests) is now inlined in "
+            "`TRACKED_E2E_REPORT.md`. Open that single file.\n",
+            encoding="utf-8",
+        )
+        print("stubbed deprecated", annexes_md.name)
+    # Verify chapters landed in full
+    ch = (nd.get("chapters") or [])
+    for i, body in enumerate(ch):
+        body = body or ""
+        if not body.strip():
+            continue
+        needle = body.strip()[:80]
+        if needle not in md:
+            raise SystemExit(f"Chapter {i+1} prose missing from single report (start not found)")
+        if f"({len(body)} chars)" not in md:
+            print("warn: length label missing for ch", i + 1)
+    print("wrote", OUT, "bytes", OUT.stat().st_size)
+    print("chapters_inlined", [len(c or "") for c in ch if (c or "").strip()])
     print("total_cost_usd", cost["total_cost_usd"])
     print("blended_per_token", cost["blended_per_token_usd"])
 

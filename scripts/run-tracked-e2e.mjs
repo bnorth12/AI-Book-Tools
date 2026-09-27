@@ -587,8 +587,8 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   mdLines.push('');
   mdLines.push('## Annexes');
   mdLines.push('');
-  mdLines.push('- `TRACKED_E2E_ANNEX_NOVELDATA.json` — full sanitized novelData dump');
-  mdLines.push('- `TRACKED_E2E_ANNEXES.md` — per-tab story summary');
+  mdLines.push('- Canonical human deliverable after builder: `TRACKED_E2E_REPORT.md` (summary + full annexes)');
+  mdLines.push('- Optional sidecar: `TRACKED_E2E_ANNEX_NOVELDATA.json`');
   mdLines.push('- `TRACKED_E2E_TOKENS_BY_STAGE.md` — tokens-only view');
   mdLines.push('- `TRACKED_E2E_REPORT.json` — machine-readable (includes tokensByPrompt / tokensByStage)');
   fs.writeFileSync(REPORT_MD, mdLines.join('\n') + '\n');
@@ -615,45 +615,13 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   }
   fs.writeFileSync(TOKENS_MD, tokMd.join('\n') + '\n');
 
-  // Human annex summary
-  const annexLines = [
-    '# Tracked E2E Annexes (full novelData run)',
-    '',
-    '- Finished: ' + report.finishedAt,
-    '- Title: ' + (report.annexNovelDataMeta.title || '(none)'),
-    '- Genre: ' + (report.annexNovelDataMeta.genre || ''),
-    '- Characters: ' + report.annexNovelDataMeta.characters,
-    '- Subplots: ' + report.annexNovelDataMeta.subplots,
-    '- Chapter lengths (chars): ' + (report.annexNovelDataMeta.chapters || []).join(', '),
-    '',
-    'Full dump: `TRACKED_E2E_ANNEX_NOVELDATA.json`',
-    '',
-    '## Cast',
-    ''
-  ];
-  for (const ch of (annexNovel.characters || [])) {
-    const name = (typeof ch === 'string') ? ch : (ch.name || ch.Name || JSON.stringify(ch).slice(0, 80));
-    const role = (typeof ch === 'object' && ch) ? (ch.role || ch.Role || '') : '';
-    annexLines.push('- **' + name + '**' + (role ? (' — ' + role) : ''));
-  }
-  annexLines.push('');
-  annexLines.push('## Chapters (full text in JSON)');
-  annexLines.push('');
-  const chapters = annexNovel.chapters || [];
-  for (let i = 0; i < chapters.length; i++) {
-    const body = chapters[i] || '';
-    annexLines.push('### Chapter ' + (i + 1) + ' (' + body.length + ' chars)');
-    annexLines.push('');
-    annexLines.push(body.slice(0, 4000) + (body.length > 4000 ? '\n\n…(truncated; see JSON)' : ''));
-    annexLines.push('');
-  }
-  if (annexNovel.storyArc) {
-    annexLines.push('## Story arc');
-    annexLines.push('');
-    annexLines.push(String(annexNovel.storyArc).slice(0, 3000));
-    annexLines.push('');
-  }
-  fs.writeFileSync(ANNEX_MD, annexLines.join('\n') + '\n');
+  // Deprecated: TRACKED_E2E_ANNEXES.md is no longer the book deliverable.
+  // Full prose is inlined into TRACKED_E2E_REPORT.md by build_unified_report.py.
+  fs.writeFileSync(
+    ANNEX_MD,
+    '# Deprecated\n\nAnnex content is inlined in `TRACKED_E2E_REPORT.md` (single-file deliverable).\n'
+  );
+
 
   appendProgress(
     '### Phase — lean E2E — final\n' +
@@ -673,7 +641,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       if (r.status !== 0) {
         console.error('unified report builder failed', r.stderr || r.stdout);
       } else {
-        appendProgress('### Phase — unified report\n- Status: pass\n- Eval: TRACKED_E2E_REPORT.md / TRACKED_E2E_UNIFIED_REPORT.md regenerated with exec summary + costs.\n');
+        appendProgress('### Phase — unified report\n- Status: pass\n- Eval: TRACKED_E2E_REPORT.md regenerated as single-file deliverable (summary + full inlined annexes).\n');
       }
     }
   } catch (e) {
