@@ -255,6 +255,8 @@ Synced: 2026-04-19
                         <label for="kbEnabled" title="C2: local EvidencePack from novelData only (not series KG yet)" style="margin-left:8px;"><input type="checkbox" id="kbEnabled" onchange="setKbEnabled(this.checked)"> KB / EvidencePack</label>
                         <button type="button" id="c2SmokeBtn" onclick="runC2Smoke()" title="#120 C2 EvidencePack smoke">C2 Smoke</button>
                         <button type="button" id="c3SmokeBtn" onclick="runC3Smoke()" title="#120 C3 quality gate smoke">C3 Smoke</button>
+			<button type="button" onclick="runQe123Smoke()">QE 1/2/3 Smoke</button>
+			<pre id="qe123SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
                         <pre id="c2SmokeResult" style="margin:8px 0 4px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7fff7;border:1px solid #cde;white-space:pre-wrap;"></pre>
                         <pre id="c3SmokeResult" style="margin:4px 0 4px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#fff7f0;border:1px solid #edc;white-space:pre-wrap;"></pre>
                         <pre id="qualityGateResult" style="margin:4px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f5f5ff;border:1px solid #ccd;white-space:pre-wrap;">Quality gate: (none yet)</pre>
@@ -456,6 +458,7 @@ Synced: 2026-04-19
 		    <textarea id="bookContent" readonly placeholder="All chapters will appear here concatenated"></textarea>
 		    <button onclick="exportBook()">Export Book</button>
 		    <button onclick="suggestBookImprovements()">Suggest Improvements</button>
+	        <button onclick="applyTopBookCritiques(1).then(r=>alert('Applied '+(r.applied||[]).length+' critique(s)')).catch(e=>alert(e.message||e))">Apply Top Critique</button>
 		    <table id="improvementsTable">
 		        <thead>
 		            <tr>
@@ -2306,7 +2309,7 @@ let activeAICallCount = 0;
 		            <textarea id="chapterEditContent${i}" placeholder="Edit chapter content" oninput="syncChapterContent(${i}, 'edit')">${novelData.chapters[i-1]}</textarea>
 		            <label>Improvements to Implement:</label>
 		            <textarea id="chapterEditImprovement${i}" placeholder="Enter improvements to incorporate into this chapter">${novelData.chapterImprovements[i-1]}</textarea>
-		            <button onclick="updateChapter(${i})">Update Chapter</button>
+		            <button onclick="applyStagedChapterImprovements(${i}).catch(e=>console.error(e))">Update Chapter</button>
 		            <button onclick="checkSpellingAndGrammar(${i}, 'edit')">Check Spelling & Grammar</button>
 		        `;
 		        editContainer.appendChild(subpage);
@@ -3033,6 +3036,254 @@ let activeAICallCount = 0;
 		window.runC3Smoke = runC3Smoke;
 
 
+		// ---- #120 QE 1/2/3: apply-critique, fail-closed revise, chapter improvement apply ----
+		const NW_QUALITY_REVISE = { maxAttempts: 1 };
+
+		function ensureChapterImprovementsArray() {
+			const n = Math.max(1, Number(novelData.numChapters) || (novelData.chapters || []).length || 1);
+			if (!Array.isArray(novelData.chapterImprovements)) novelData.chapterImprovements = [];
+			while (novelData.chapterImprovements.length < n) novelData.chapterImprovements.push('');
+			if (novelData.chapterImprovements.length > n) novelData.chapterImprovements.length = n;
+			return novelData.chapterImprovements;
+		}
+
+		function inferChapterFromCritiqueText(text) {
+			const s = String(text || '');
+			let m = s.match(/Chapter\(s\)\s*([0-9]+)/i) || s.match(/Chapters?\s+([0-9]+)/i) || s.match(/\bCh\.?\s*([0-9]+)\b/i);
+			if (m) {
+				const n = parseInt(m[1], 10);
+				if (n >= 1 && n <= (novelData.numChapters || novelData.chapters.length || 99)) return n;
+			}
+			return 1;
+		}
+
+		function stageChapterImprovement(chapterNum, text, opts) {
+			opts = opts || {};
+			ensureChapterImprovementsArray();
+			const idx = chapterNum - 1;
+			const incoming = String(text || '').trim();
+			if (!incoming) throw new Error('stageChapterImprovement: empty improvement text');
+			const mode = opts.mode || 'replace';
+			const prev = String(novelData.chapterImprovements[idx] || '').trim();
+			let next = incoming;
+			if (mode === 'append' && prev) next = prev + '\n\n' + incoming;
+			novelData.chapterImprovements[idx] = next;
+			const el = document.getElementById('chapterEditImprovement' + chapterNum);
+			if (el) el.value = next;
+			const contentEl = document.getElementById('chapterEditContent' + chapterNum);
+			if (contentEl && !(contentEl.value || '').trim() && novelData.chapters[idx]) {
+				contentEl.value = novelData.chapters[idx];
+			}
+			if (!Array.isArray(novelData.chapterImprovementLog)) novelData.chapterImprovementLog = [];
+			novelData.chapterImprovementLog.push({
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				source: opts.source || 'manual',
+				mode: mode,
+				chars: next.length
+			});
+			return next;
+		}
+
+		function buildQualityReviseBrief(gateResult) {
+			const failures = (gateResult && gateResult.failures) || [];
+			const scores = (gateResult && gateResult.scores) || {};
+			return [
+				'QUALITY GATE FAIL-CLOSED REVISE — fix these failures without changing plot facts:',
+				failures.map(f => '- ' + f).join('\n') || '- (unspecified gate failure)',
+				'Current scores: interest=' + (scores.interest ?? '?') +
+					' readability=' + (scores.readability ?? '?') +
+					' aiSlopRisk=' + (scores.aiSlopRisk ?? '?') +
+					' humanLikeness=' + (scores.humanLikeness ?? '?'),
+				'Requirements: cut AI-slop / stock phrases; add concrete sensory detail and specific verbs; keep near target length; preserve continuity.'
+			].join('\n');
+		}
+
+		async function reviseChapterForQuality(chapterNum, gateResult, opts) {
+			opts = opts || {};
+			const maxAttempts = (opts.maxAttempts != null) ? opts.maxAttempts : NW_QUALITY_REVISE.maxAttempts;
+			const before = gateResult || runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-preRevise' });
+			if (before.passed) return { revised: false, attempts: 0, gateBefore: before, gateAfter: before };
+			let gateAfter = before;
+			let attempts = 0;
+			for (let a = 0; a < maxAttempts; a++) {
+				attempts++;
+				const brief = buildQualityReviseBrief(gateAfter);
+				stageChapterImprovement(chapterNum, brief, { mode: 'replace', source: 'quality-revise' });
+				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityRevise' });
+				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-afterRevise' + attempts });
+				pushQualitySample('chapter' + chapterNum + '-afterRevise', Object.assign({}, gateAfter.scores || {}, {
+					source: 'heuristics-revise',
+					rationale: gateAfter.passed ? 'revise pass' : 'revise still fail: ' + (gateAfter.failures || []).join(',')
+				}), (novelData.chapters[chapterNum - 1] || '').length);
+				if (gateAfter.passed) break;
+			}
+			// Fail-closed: last gate result stays on novelData.lastQualityGate (set by runQualityGate)
+			if (!Array.isArray(novelData.qualityReviseLog)) novelData.qualityReviseLog = [];
+			novelData.qualityReviseLog.push({
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				attempts: attempts,
+				passedBefore: before.passed,
+				passedAfter: gateAfter.passed,
+				failuresBefore: (before.failures || []).slice(),
+				failuresAfter: (gateAfter.failures || []).slice()
+			});
+			return { revised: true, attempts: attempts, gateBefore: before, gateAfter: gateAfter };
+		}
+
+		async function ensureQualityAfterGenerate(chapterNum) {
+			const text = novelData.chapters[chapterNum - 1] || '';
+			let gate = runQualityGate(text, { label: 'chapter' + chapterNum + '-generate' });
+			console.log('[C3 qualityGate]', gate.passed, gate.scores);
+			if (gate.passed) return { gate: gate, revise: null };
+			console.warn('[QE2] gate FAIL — auto-revise', gate.failures);
+			const revise = await reviseChapterForQuality(chapterNum, gate, { maxAttempts: NW_QUALITY_REVISE.maxAttempts });
+			return { gate: revise.gateAfter, revise: revise };
+		}
+
+		async function applyBookCritiqueItem(index, opts) {
+			opts = opts || {};
+			collectData();
+			ensureChapterImprovementsArray();
+			if (!Array.isArray(novelData.bookImprovementsWithStatus) || !novelData.bookImprovementsWithStatus[index]) {
+				throw new Error('applyBookCritiqueItem: missing item at index ' + index);
+			}
+			const item = novelData.bookImprovementsWithStatus[index];
+			if (item.status === 'Ignored') throw new Error('Item is Ignored');
+			const text = String(item.text || '').trim();
+			if (!text) throw new Error('Critique item text empty');
+			const chNum = opts.chapterNum || inferChapterFromCritiqueText(text);
+			const beforeScores = scoreProseQuality(novelData.chapters[chNum - 1] || '');
+			stageChapterImprovement(chNum, text, { mode: opts.mode || 'replace', source: 'book-critique:' + index });
+			await updateChapter(chNum, { requireImprovements: true, operationTag: 'applyCritique' });
+			const afterScores = scoreProseQuality(novelData.chapters[chNum - 1] || '');
+			pushQualitySample('chapter' + chNum + '-afterCritiqueApply', Object.assign({}, afterScores, {
+				source: 'heuristics-critique-apply',
+				rationale: 'applied book critique #' + index
+			}), (novelData.chapters[chNum - 1] || '').length);
+			item.status = 'Incorporated';
+			item.appliedAt = new Date().toISOString();
+			item.appliedChapter = chNum;
+			item.applyDelta = {
+				interest: afterScores.interest - beforeScores.interest,
+				readability: afterScores.readability - beforeScores.readability,
+				aiSlopRisk: afterScores.aiSlopRisk - beforeScores.aiSlopRisk,
+				humanLikeness: afterScores.humanLikeness - beforeScores.humanLikeness
+			};
+			if (!Array.isArray(novelData.critiqueApplyLog)) novelData.critiqueApplyLog = [];
+			novelData.critiqueApplyLog.push({
+				ts: item.appliedAt,
+				index: index,
+				chapter: chNum,
+				delta: item.applyDelta
+			});
+			// Refresh table if present
+			if (typeof updateBookImprovementsTable === 'function' && Array.isArray(novelData.bookImprovements)) {
+				updateBookImprovementsTable(novelData.bookImprovements.join('\n'));
+			}
+			return { chapter: chNum, beforeScores: beforeScores, afterScores: afterScores, item: item };
+		}
+
+		async function applyTopBookCritiques(maxItems, opts) {
+			opts = opts || {};
+			const max = maxItems != null ? maxItems : 1;
+			collectData();
+			const list = novelData.bookImprovementsWithStatus || [];
+			const pending = list
+				.map((item, idx) => ({ item, idx }))
+				.filter(x => x.item && x.item.status === 'To Incorporate' && String(x.item.text || '').trim());
+			if (!pending.length) {
+				alert('No "To Incorporate" critique items to apply. Run Suggest Book Improvements first.');
+				return { applied: [] };
+			}
+			const applied = [];
+			for (let i = 0; i < Math.min(max, pending.length); i++) {
+				applied.push(await applyBookCritiqueItem(pending[i].idx, opts));
+			}
+			return { applied: applied };
+		}
+
+		async function applyStagedChapterImprovements(chapterNum) {
+			collectData();
+			ensureChapterImprovementsArray();
+			const el = document.getElementById('chapterEditImprovement' + chapterNum);
+			const fromEl = el ? String(el.value || '').trim() : '';
+			const fromData = String(novelData.chapterImprovements[chapterNum - 1] || '').trim();
+			const text = fromEl || fromData;
+			if (!text) {
+				const msg = 'Chapter ' + chapterNum + ' has no improvement notes. Stage a critique or enter notes before applying.';
+				alert(msg);
+				throw new Error(msg);
+			}
+			if (el) el.value = text;
+			novelData.chapterImprovements[chapterNum - 1] = text;
+			const beforeScores = scoreProseQuality(novelData.chapters[chapterNum - 1] || '');
+			await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'applyChapterImprovements' });
+			const afterScores = scoreProseQuality(novelData.chapters[chapterNum - 1] || '');
+			pushQualitySample('chapter' + chapterNum + '-afterChapterImprovements', Object.assign({}, afterScores, {
+				source: 'heuristics-chapter-improve',
+				rationale: 'applied staged chapterImprovements'
+			}), (novelData.chapters[chapterNum - 1] || '').length);
+			return { beforeScores: beforeScores, afterScores: afterScores };
+		}
+
+		async function runQe123Smoke() {
+			const el = document.getElementById('qe123SmokeResult') || document.getElementById('c3SmokeResult') || document.getElementById('c1SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\\n'); };
+			try {
+				ensureChapterImprovementsArray();
+				const n = novelData.numChapters || 2;
+				novelData.chapters = novelData.chapters || [];
+				while (novelData.chapters.length < n) novelData.chapters.push('');
+				novelData.chapters[0] = novelData.chapters[0] || 'Smoke chapter one with a bolt and a wet dock plank.';
+				stageChapterImprovement(1, 'Add one concrete sensory detail about rust.', { mode: 'replace', source: 'qe-smoke' });
+				if (!String(novelData.chapterImprovements[0] || '').includes('rust')) throw new Error('stage failed');
+				say('stageChapterImprovement OK');
+				let threw = false;
+				const saved = novelData.chapterImprovements[0];
+				novelData.chapterImprovements[0] = '';
+				const elImp = document.getElementById('chapterEditImprovement1');
+				const savedEl = elImp ? elImp.value : null;
+				if (elImp) elImp.value = '';
+				try {
+					await applyStagedChapterImprovements(1);
+				} catch (e) {
+					threw = true;
+					say('empty apply correctly rejected');
+				}
+				novelData.chapterImprovements[0] = saved;
+				if (elImp && savedEl != null) elImp.value = saved;
+				if (!threw) throw new Error('expected empty apply to throw');
+				const brief = buildQualityReviseBrief({
+					passed: false,
+					failures: ['aiSlopRisk>=55'],
+					scores: { interest: 40, readability: 50, aiSlopRisk: 70, humanLikeness: 40 }
+				});
+				if (!/FAIL-CLOSED REVISE/.test(brief)) throw new Error('revise brief missing');
+				say('buildQualityReviseBrief OK');
+				const ch = inferChapterFromCritiqueText('Pacing in Chapter 2 lags due to exposition.');
+				if (ch !== 2) throw new Error('inferChapter expected 2 got ' + ch);
+				say('inferChapterFromCritiqueText OK');
+				say('QE 1/2/3 Smoke PASS (structure; live apply/revise needs API)');
+				return true;
+			} catch (e) {
+				say('QE 1/2/3 Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			}
+		}
+
+		window.stageChapterImprovement = stageChapterImprovement;
+		window.applyBookCritiqueItem = applyBookCritiqueItem;
+		window.applyTopBookCritiques = applyTopBookCritiques;
+		window.applyStagedChapterImprovements = applyStagedChapterImprovements;
+		window.reviseChapterForQuality = reviseChapterForQuality;
+		window.ensureQualityAfterGenerate = ensureQualityAfterGenerate;
+		window.runQe123Smoke = runQe123Smoke;
+
+
+
 		// ---- #120 C3: Lean tracked E2E (2 chapters / 500 words / 3 chars / 2 subplots) ----
 		function _trackedLog(lines, msg) {
 			lines.push(msg);
@@ -3698,7 +3949,7 @@ let activeAICallCount = 0;
 			                </select>
 			            </td>
 			            <td>${improvement}</td>
-			            <td><button onclick="breakdownImprovement(${index})">Break Down</button></td>
+			            <td><button onclick="breakdownImprovement(${index})">Break Down</button> <button onclick="applyBookCritiqueItem(${index}).then(r=>alert('Applied to Ch.'+r.chapter)).catch(e=>alert(e.message||e))">Apply</button></td>
 			        `;
 			        const breakdownRow = document.createElement('tr');
 			        breakdownRow.innerHTML = `
@@ -5133,9 +5384,8 @@ let activeAICallCount = 0;
 			}
 		    console.log('Post-final updateRequestLog - chapterContent Length:', chapterContent.length);
 		    try {
-		        const _qg = runQualityGate(novelData.chapters[chapterNum-1] || '', { label: 'chapter' + chapterNum + '-generate' });
-		        console.log('[C3 qualityGate]', _qg.passed, _qg.scores);
-		    } catch (qgErr) { console.warn('qualityGate after generateChapter', qgErr); }
+		        await ensureQualityAfterGenerate(chapterNum);
+		    } catch (qgErr) { console.warn('qualityGate/revise after generateChapter', qgErr); }
 		    console.log(`Completed generateChapter for Chapter ${chapterNum}, Total Tokens: ${totalTokens}`);
 }
 
@@ -5150,14 +5400,32 @@ let activeAICallCount = 0;
 	    // NW.T6.F1: updateChapter() SHALL send the current chapter text plus improvement notes to the LLM and replace the chapter textarea content with the revised text.
 	    // NW.T6.F2: checkSpellingAndGrammar() SHALL send the current chapter text to the LLM for proofreading and apply the corrected version back to the chapter textarea.
 	    // Update an existing chapter with improvements
-	    async function updateChapter(chapterNum) {
+	    async function updateChapter(chapterNum, opts) {
+		    opts = opts || {};
 		    collectData();
+		    ensureChapterImprovementsArray();
 		    const prevContent = chapterNum > 1 ? novelData.chapters.slice(0, chapterNum-1).join('\n') : '';
 		    const contextLimit = 1000;
 		    const trimmedContext = prevContent.slice(-contextLimit * 4);
 		    const currentContent = document.getElementById(`chapterEditContent${chapterNum}`).value;
-		    const improvements = document.getElementById(`chapterEditImprovement${chapterNum}`).value;
+		    let improvements = document.getElementById(`chapterEditImprovement${chapterNum}`).value;
+		    if (!(String(improvements || '').trim())) {
+		        improvements = String((novelData.chapterImprovements || [])[chapterNum-1] || '');
+		    }
 		    novelData.chapterImprovements[chapterNum-1] = improvements;
+		    if (opts.requireImprovements !== false) {
+		        // QE3: do not silently edit with empty improvement notes (allow explicit opt-out)
+		        const require = (opts.requireImprovements === true) || (opts.operationTag === 'applyCritique') || (opts.operationTag === 'qualityRevise') || (opts.operationTag === 'applyChapterImprovements');
+		        // Default Tab6 button: warn but allow if user confirms empty? — hard-block when requireImprovements true; soft-block default
+		        if (!(String(improvements || '').trim())) {
+		            if (require || opts.requireImprovements === true) {
+		                const msg = 'Chapter ' + chapterNum + ': improvement notes are empty. Stage a critique or enter notes before updating.';
+		                alert(msg);
+		                throw new Error(msg);
+		            }
+		            console.warn('[QE3] updateChapter with empty improvements (soft allow)');
+		        }
+		    }
 
 		    const messages = [
 		        { role: 'system', content: getAgentPrompt('tab6', 'updateChapter', 'You are a creative writing assistant.') },
@@ -5202,6 +5470,11 @@ let activeAICallCount = 0;
 		        }
 		        novelData.chapters[chapterNum-1] = response.chapter || '';
 		        syncChapterContent(chapterNum, 'edit');
+		        try {
+		            const _heur = scoreProseQuality(novelData.chapters[chapterNum-1] || '');
+		            pushQualitySample('chapter' + chapterNum + '-afterUpdate', Object.assign({}, _heur, { source: 'heuristics', rationale: (opts.operationTag || 'updateChapter') }), (novelData.chapters[chapterNum-1] || '').length);
+		            if (Array.isArray(novelData.editedChapters)) novelData.editedChapters[chapterNum-1] = novelData.chapters[chapterNum-1];
+		        } catch (e) { console.warn('post-updateChapter quality sample', e); }
 		    });
 }
 
