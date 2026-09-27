@@ -632,7 +632,7 @@ def build_report(report: dict, nd: dict) -> str:
     lines.append("")
     lines.append(
         "_Deprecated / no longer emitted as a second main report: `TRACKED_E2E_UNIFIED_REPORT.md`, "
-        "`TRACKED_E2E_ANNEXES.md` (content folded into this file)._"
+        "former `TRACKED_E2E_ANNEXES.md` (removed; content folded into this file)._"
     )
     lines.append("")
     lines.append(f"_Generated {datetime.now().astimezone().isoformat()}_")
@@ -706,14 +706,9 @@ def main() -> None:
         print("removed deprecated", unified.name)
     annexes_md = PLAN / "TRACKED_E2E_ANNEXES.md"
     if annexes_md.exists():
-        # Leave a one-line pointer so old links don't 404-empty; book is in REPORT.md
-        annexes_md.write_text(
-            "# Deprecated\n\n"
-            "Annex content (full chapter prose, cast, digests) is now inlined in "
-            "`TRACKED_E2E_REPORT.md`. Open that single file.\n",
-            encoding="utf-8",
-        )
-        print("stubbed deprecated", annexes_md.name)
+        # Do not stub: skip/delete leftover so there is no second report file
+        annexes_md.unlink()
+        print("removed deprecated", annexes_md.name)
     # Verify chapters landed in full
     ch = (nd.get("chapters") or [])
     for i, body in enumerate(ch):

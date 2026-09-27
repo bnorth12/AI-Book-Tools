@@ -615,12 +615,10 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   }
   fs.writeFileSync(TOKENS_MD, tokMd.join('\n') + '\n');
 
-  // Deprecated: TRACKED_E2E_ANNEXES.md is no longer the book deliverable.
-  // Full prose is inlined into TRACKED_E2E_REPORT.md by build_unified_report.py.
-  fs.writeFileSync(
-    ANNEX_MD,
-    '# Deprecated\n\nAnnex content is inlined in `TRACKED_E2E_REPORT.md` (single-file deliverable).\n'
-  );
+  // Do not write TRACKED_E2E_ANNEXES.md — book annexes live only in TRACKED_E2E_REPORT.md.
+  if (fs.existsSync(ANNEX_MD)) {
+    fs.unlinkSync(ANNEX_MD);
+  }
 
 
   appendProgress(
