@@ -1,4 +1,4 @@
-NovelWriter — attributes / fields used per page (tab)
+NovelWriter â€” attributes / fields used per page (tab)
 Source: NovelWriter/NovelWriter.html (UI + novelData)
 Date: 2026-09-27
 
@@ -10,25 +10,25 @@ USER NOTES (2026-09-27)
   relationships, and why the character acts as they do in chapter beats.
 
 ==============================================================================
-COUNT / STRUCTURE GUIDANCE (working — revise when you pick numbers)
+COUNT / STRUCTURE GUIDANCE (working â€” revise when you pick numbers)
 ==============================================================================
 Concept                         | UI / data                         | Default     | Status
 --------------------------------|-----------------------------------|-------------|--------
 Number of chapters              | numChapters                       | 10          | OPEN
 Target chapter length (words)   | chapterLength                     | 2000*       | OPEN
 Number of characters            | numCharacters                     | user-set    | OPEN
-Character fields per person     | name, backstory, arc              | —           | LOCKED shape
+Character fields per person     | name, backstory, arc              | â€”           | LOCKED shape
 Minimum subplots                | minSubplots                       | 2           | OPEN
-Major conflicts                 | NOT a separate tab field          | —           | OPEN (usually storyArc / generalPlot)
-Minor conflicts                 | NOT a separate tab field          | —           | OPEN (usually subplots / secondary friction)
-Related arcs                    | storyArc, characters[].arc,       | —           | OPEN counts; fields exist
+Major conflicts                 | NOT a separate tab field          | â€”           | OPEN (usually storyArc / generalPlot)
+Minor conflicts                 | NOT a separate tab field          | â€”           | OPEN (usually subplots / secondary friction)
+Related arcs                    | storyArc, characters[].arc,       | â€”           | OPEN counts; fields exist
                                 | chapterArcs, storyArcOutline      |             |
 
 * Some generation prompts also mention ~4000 words; UI/state default is 2000.
 
 Prompt hints already in agents (NOT locked book targets):
-- Character suggest prompt mentions ~3–4 conflicts/events tied to plot chapters
-- Refine-with-subplots prompt mentions ~2–3 events/conflicts from the subplot
+- Character suggest prompt mentions ~3â€“4 conflicts/events tied to plot chapters
+- Refine-with-subplots prompt mentions ~2â€“3 events/conflicts from the subplot
 
 Fill in later when you decide:
   Target cast size (numCharacters): ________
@@ -39,7 +39,7 @@ Fill in later when you decide:
   Target chapter words (chapterLength): ________
 
 ==============================================================================
-TAB 1 — API & Story Info
+TAB 1 â€” API & Story Info
 ==============================================================================
 Purpose: Config + high-level story spine.
 
@@ -55,7 +55,7 @@ novelData: apiKey, model, maxTokens, genre, title, storyArc, generalPlot,
 setting, numChapters, chapterLength, authorStyle, styleGuide, authors, author
 
 ==============================================================================
-TAB 2 — Characters
+TAB 2 â€” Characters
 ==============================================================================
 Purpose: Cast list sized by numCharacters.
 
@@ -71,22 +71,22 @@ extra LLM characters beyond numCharacters dropped; name-only rows get
 backstory+arc from book context.
 
 BACKSTORY RULE (LOCKED): backstory must support the character and their
-chapter roles — motives, wounds, relationships, why they act in beats.
+chapter roles â€” motives, wounds, relationships, why they act in beats.
 
 novelData: characters[] = { name, backstory, arc, ... }
 
 ==============================================================================
-TAB 3 — Subplots
+TAB 3 â€” Subplots
 ==============================================================================
 Purpose: Secondary threads (often minor conflicts / side arcs).
 
 Controls: minSubplots, one textarea per subplot
 AI: AI Suggest Subplots, Add Another Subplot
-Generated subplot target length: ~300–400 words (when AI fills)
+Generated subplot target length: ~300â€“400 words (when AI fills)
 novelData: subplots[]
 
 ==============================================================================
-TAB 4 — Outlines
+TAB 4 â€” Outlines
 ==============================================================================
 Controls: novelOutline, plotOutline, storyArcOutline, chapterBlueprints,
 outlineImprovements; per-chapter chapterOutlines[i], chapterArcs[i]
@@ -96,7 +96,7 @@ novelData: novelOutline, plotOutline, storyArcOutline, chapterBlueprints,
 chapterOutlines, chapterArcs, outlineImprovements, chapterImprovements
 
 ==============================================================================
-TAB 5 — Generate Chapters
+TAB 5 â€” Generate Chapters
 ==============================================================================
 Controls: per-chapter Generate; continuityStrictMode; autoContinuityAudit;
 continuityStatusPanel; packets / tracker / findings
@@ -106,38 +106,38 @@ novelData: chapters, continuityStrictMode, autoContinuityAudit,
 chapterContinuityPackets, continuityTracker, continuityFindings
 
 ==============================================================================
-TAB 6 — Edit Chapters
+TAB 6 â€” Edit Chapters
 ==============================================================================
 Controls: edited chapter text, Improvements to Implement,
 Update Chapter, Check Spelling & Grammar
 novelData: editedChapters, chapterImprovements
 
 ==============================================================================
-TAB 7 — Book
+TAB 7 â€” Book
 ==============================================================================
 Controls: bookContent (full view), Suggest Improvements table + status,
 Breakdown, Export Book (.txt), Export Session
 novelData: bookText, bookImprovements, bookImprovementsWithStatus
 
 ==============================================================================
-TAB 8 — Consolidated Breakdown Suggestions
+TAB 8 â€” Consolidated Breakdown Suggestions
 ==============================================================================
 Derived view of Tab 7 breakdowns with status "To Incorporate".
 No separate primary authoring fields.
 
 ==============================================================================
-TAB 9 — Request Log
+TAB 9 â€” Request Log
 ==============================================================================
 Display: last prompt, response, tokens, cost estimate, status, originating tab
 
 ==============================================================================
-TAB 10 — Element Values
+TAB 10 â€” Element Values
 ==============================================================================
 Debug dump of key novelData fields. MUST NOT show API key in plain text.
 Control: elementValues
 
 ==============================================================================
-TAB 11 — Agent Prompts
+TAB 11 â€” Agent Prompts
 ==============================================================================
 Editable agent name + systemPrompt overrides; Save; Reset To Defaults;
 Export / Import Prompt Profile (promptImportFile)
@@ -152,9 +152,14 @@ Backstory support      -> characters[].backstory (LOCKED to support chars + chap
 
 End of file.
 
-AUTHOR SELECTION PREFERENCE (2026-09-27, user-locked)
-- Fetch Authors must rank by interest for the selected genre, not fame alone.
-- Prefer writers who bend / hybridize / subvert genre conventions.
-- Dystopian settings that mash unexpected tones are especially welcome when relevant.
-- Implemented in Tab 1 fetchAuthors agent systemPrompt + user ranking instructions.
 
+AUTHOR SELECTION (2026-09-27)
+Product rule (generic): Fetch Authors ranks voices by interest as style models for the
+SELECTED genre / type of book being drafted — not fame alone. Prefer distinctive writers
+within or thoughtfully against that genre's conventions. Do not hard-wire a subgenre
+(e.g. dystopian mashups) into the prompt; those follow only when the user picks that genre.
+
+User taste note (not a product hard-wire): owner finds genre-bending and dystopian
+hybrids especially interesting when writing in those spaces.
+
+End of file.
