@@ -69,10 +69,19 @@ def trunc(s: str, n: int) -> str:
 
 
 def char_blurb(c: dict) -> str:
-    name = c.get("name") or "Unnamed"
+    name = (c.get("name") or "").strip() or None
+    role = (c.get("role") or "").strip()
+    if not name:
+        name = role.split("/")[0].strip() if role else "Unnamed"
+        if name and name != "Unnamed" and role:
+            name = f"{name} (role)"
+        elif not name:
+            name = "Unnamed"
     back = trunc(c.get("backstory") or "", 220)
     arc = trunc(c.get("arc") or "", 180)
     parts = [f"**{name}**"]
+    if role and role not in name:
+        parts.append(f"_Role:_ {role}")
     if back:
         parts.append(back)
     if arc:

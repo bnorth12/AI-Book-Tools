@@ -185,11 +185,26 @@ const report = {
       set('storyArc', novelData.storyArc);
       set('styleGuide', novelData.styleGuide);
       if (typeof updateChapterSubpages === 'function') updateChapterSubpages();
-      // populate character UI if helpers exist
-      if (typeof renderCharacters === 'function') renderCharacters();
-      else if (Array.isArray(novelData.characters)) {
+      // populate character UI from novelData (names/roles must survive collectData)
+      if (Array.isArray(novelData.characters) && novelData.characters.length) {
+        const n = document.getElementById('numCharacters');
+        if (n) n.value = String(novelData.characters.length);
+      }
+      if (typeof renderCharacters === 'function') {
+        renderCharacters();
+      } else if (Array.isArray(novelData.characters)) {
+        // fallback: expand slots then fill .charName/.charBackstory/.charArc
+        if (typeof syncCharacterEntries === 'function') syncCharacterEntries();
+        const cards = document.querySelectorAll('#characterList .character');
         novelData.characters.forEach((c, i) => {
-          set('characterName' + (i + 1), c.name);
+          const card = cards[i];
+          if (!card) return;
+          const nameEl = card.querySelector('.charName');
+          const backEl = card.querySelector('.charBackstory');
+          const arcEl = card.querySelector('.charArc');
+          if (nameEl) nameEl.value = c.name || '';
+          if (backEl) backEl.value = c.backstory || '';
+          if (arcEl) arcEl.value = c.arc || '';
         });
       }
       window.__NW_FIXTURE_LOADED = { id: seedObj.fixtureId, regenBible: doRegen, chars: (novelData.characters || []).length };

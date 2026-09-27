@@ -268,7 +268,31 @@ Synced: 2026-04-19
 			        <button type="button" id="trackedE2EBtn" onclick="runTrackedE2E()" title="Lean start-to-finish tracked E2E: tokens + prose quality (#120 C3)">Tracked E2E (lean)</button>
 			        <pre id="c1SmokeResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7f7f7;border:1px solid #ddd;border-radius:4px;white-space:pre-wrap;max-height:220px;overflow:auto;">C1 smoke idle — click to validate digests (no full manuscript dump).</pre>
 			        <pre id="trackedE2EResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f0f4ff;border:1px solid #b8c7e8;border-radius:4px;white-space:pre-wrap;max-height:360px;overflow:auto;">Tracked E2E idle - click for lean 2-chapter token+quality run.</pre>
+
+			        <div id="tokenCostDiagnostics" class="ui-subpanel" data-testid="nw-token-cost-diagnostics" style="margin:12px 0;padding:10px 12px;border:1px solid #b8c7e8;border-radius:6px;background:#f7f9ff;">
+			        	<h3 style="margin:0 0 8px;font-size:15px;">Token &amp; cost diagnostics (book ledger)</h3>
+			        	<p style="margin:0 0 8px;font-size:12px;color:#555;">Per-prompt tokens + est. $ from <code>novelData.tokenUsage</code> (same ledger / rate card as Tracked E2E reports). Not a parallel counter.</p>
+			        	<pre id="tokenCostTotals" style="margin:0 0 8px;padding:8px;font-size:12px;background:#fff;border:1px solid #dde;white-space:pre-wrap;">No token usage yet.</pre>
+			        	<div style="overflow:auto;max-height:280px;">
+			        		<table id="tokenCostByPromptTable" data-testid="nw-token-cost-table" style="width:100%;border-collapse:collapse;font-size:12px;">
+			        			<thead><tr>
+			        				<th style="text-align:left;border-bottom:1px solid #ccc;padding:4px;">#</th>
+			        				<th style="text-align:left;border-bottom:1px solid #ccc;padding:4px;">Operation</th>
+			        				<th style="text-align:right;border-bottom:1px solid #ccc;padding:4px;">Prompt</th>
+			        				<th style="text-align:right;border-bottom:1px solid #ccc;padding:4px;">Completion</th>
+			        				<th style="text-align:right;border-bottom:1px solid #ccc;padding:4px;">Total</th>
+			        				<th style="text-align:right;border-bottom:1px solid #ccc;padding:4px;">Est. $</th>
+			        			</tr></thead>
+			        			<tbody id="tokenCostByPromptBody"><tr><td colspan="6" style="padding:6px;color:#777;">(no calls yet)</td></tr></tbody>
+			        		</table>
+			        	</div>
+			        	<button type="button" id="refreshTokenCostBtn" onclick="refreshTokenCostDiagnostics()" style="margin-top:8px;">Refresh token/cost table</button>
+			        	<button type="button" id="tokenCostSmokeBtn" onclick="runTokenCostSmoke()" title="Offline assert rate card + table render">Token/Cost Smoke</button>
+			        	<button type="button" id="castSyncSmokeBtn" onclick="runCastSyncSmoke()" title="Offline fixture cast → DOM → collectData">Cast Sync Smoke</button>
+			        	<pre id="tokenCostSmokeResult" style="margin:8px 0 0;padding:8px;font-size:12px;background:#f5f5f5;border:1px solid #ddd;white-space:pre-wrap;"></pre>
+			        </div>
 			        <label for="genre">Genre:</label>
+
 			        <select id="genre" onchange="enableAuthorFetch()">
 			            <option value="scifi">Science Fiction</option>
 			            <option value="fantasy">Fantasy</option>
@@ -677,6 +701,130 @@ Synced: 2026-04-19
 		}
 
 		/** Record one API usage onto the current book's ledger + refresh requestLog.tokenUsage (last + book totals). */
+
+		// NW.GEN3c / item1: rate card mirrors scripts/build_unified_report.py (grok-4.3 list rates)
+		const NW_RATE_CARD = {
+			model_requested: 'grok-4-1-fast-non-reasoning',
+			billing_model: 'grok-4.3',
+			note: 'Requested slug may redirect to grok-4.3; costs use official grok-4.3 list rates (<200k prompt band).',
+			source: 'https://docs.x.ai/docs/models',
+			as_of: '2026-09-27',
+			input_per_1m_usd: 1.25,
+			output_per_1m_usd: 2.50,
+			cached_input_per_1m_usd: 0.20
+		};
+
+		function computeTokenCost(prompt, completion, cached) {
+			prompt = Number(prompt) || 0;
+			completion = Number(completion) || 0;
+			cached = Math.max(0, Math.min(Number(cached) || 0, prompt));
+			const uncached = Math.max(0, prompt - cached);
+			const input_cost_usd = (uncached / 1e6) * NW_RATE_CARD.input_per_1m_usd;
+			const cached_cost_usd = (cached / 1e6) * NW_RATE_CARD.cached_input_per_1m_usd;
+			const output_cost_usd = (completion / 1e6) * NW_RATE_CARD.output_per_1m_usd;
+			const total_cost_usd = input_cost_usd + cached_cost_usd + output_cost_usd;
+			const total_tokens = prompt + completion;
+			return {
+				input_cost_usd, cached_cost_usd, output_cost_usd, total_cost_usd,
+				blended_per_token_usd: total_tokens ? (total_cost_usd / total_tokens) : 0
+			};
+		}
+
+		function formatUsd(n) {
+			const x = Number(n) || 0;
+			if (x === 0) return '$0';
+			if (x < 0.0001) return '$' + x.toExponential(2);
+			if (x < 0.01) return '$' + x.toFixed(4);
+			return '$' + x.toFixed(4);
+		}
+
+		function refreshTokenCostDiagnostics() {
+			const ledger = (typeof ensureBookTokenUsage === 'function') ? ensureBookTokenUsage() : (novelData.tokenUsage || {});
+			const calls = Array.isArray(ledger.calls) ? ledger.calls : [];
+			const cachedTotal = (ledger.prompt_tokens_details && ledger.prompt_tokens_details.cached_tokens) || 0;
+			const bookCost = computeTokenCost(ledger.prompt_tokens || 0, ledger.completion_tokens || 0, cachedTotal);
+			const totalsEl = document.getElementById('tokenCostTotals');
+			if (totalsEl) {
+				totalsEl.textContent =
+					'Book totals: prompt ' + (ledger.prompt_tokens || 0) +
+					' · completion ' + (ledger.completion_tokens || 0) +
+					' · total ' + (ledger.total_tokens || 0) +
+					' · calls ' + calls.length +
+					' · cached ' + cachedTotal +
+					' · est. ' + formatUsd(bookCost.total_cost_usd) +
+					'\nRate card: ' + NW_RATE_CARD.billing_model +
+					' (input $' + NW_RATE_CARD.input_per_1m_usd + '/1M · output $' + NW_RATE_CARD.output_per_1m_usd +
+					'/1M · cached $' + NW_RATE_CARD.cached_input_per_1m_usd + '/1M)';
+			}
+			const body = document.getElementById('tokenCostByPromptBody');
+			if (body) {
+				if (!calls.length) {
+					body.innerHTML = '<tr><td colspan="6" style="padding:6px;color:#777;">(no calls yet)</td></tr>';
+				} else {
+					body.innerHTML = calls.map((c, i) => {
+						const pc = computeTokenCost(c.prompt_tokens, c.completion_tokens, c.cached_tokens || 0);
+						const op = (c.operationName || 'AI Operation').replace(/</g, '&lt;');
+						return '<tr>' +
+							'<td style="padding:4px;border-bottom:1px solid #eee;">' + (i + 1) + '</td>' +
+							'<td style="padding:4px;border-bottom:1px solid #eee;">' + op + '</td>' +
+							'<td style="padding:4px;border-bottom:1px solid #eee;text-align:right;">' + (c.prompt_tokens || 0) + '</td>' +
+							'<td style="padding:4px;border-bottom:1px solid #eee;text-align:right;">' + (c.completion_tokens || 0) + '</td>' +
+							'<td style="padding:4px;border-bottom:1px solid #eee;text-align:right;">' + (c.total_tokens || 0) + '</td>' +
+							'<td style="padding:4px;border-bottom:1px solid #eee;text-align:right;">' + formatUsd(pc.total_cost_usd) + '</td>' +
+							'</tr>';
+					}).join('');
+				}
+			}
+			// Keep Tab9 Cost in sync with book ledger estimate
+			requestLog.cost =
+				'Last call est. ' + (calls.length
+					? formatUsd(computeTokenCost(calls[calls.length - 1].prompt_tokens, calls[calls.length - 1].completion_tokens, calls[calls.length - 1].cached_tokens || 0).total_cost_usd)
+					: 'n/a') +
+				' | Book est. ' + formatUsd(bookCost.total_cost_usd) +
+				' (' + NW_RATE_CARD.billing_model + ')';
+			return { calls: calls.length, total_cost_usd: bookCost.total_cost_usd };
+		}
+
+		function runTokenCostSmoke() {
+			const el = document.getElementById('tokenCostSmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			try {
+				const c = computeTokenCost(1_000_000, 1_000_000, 0);
+				if (Math.abs(c.input_cost_usd - 1.25) > 1e-9) throw new Error('input rate');
+				if (Math.abs(c.output_cost_usd - 2.50) > 1e-9) throw new Error('output rate');
+				if (Math.abs(c.total_cost_usd - 3.75) > 1e-9) throw new Error('total');
+				const c2 = computeTokenCost(1_000_000, 0, 1_000_000);
+				if (Math.abs(c2.cached_cost_usd - 0.20) > 1e-9) throw new Error('cached rate');
+				say('rate card OK (1.25/2.50/0.20)');
+				const ledger = ensureBookTokenUsage();
+				const before = (ledger.calls || []).length;
+				recordBookTokenUsage({
+					operationName: 'TokenCostSmoke',
+					originTab: 'tab1',
+					model: 'grok-4-1-fast-non-reasoning',
+					prompt_tokens: 1000,
+					completion_tokens: 500,
+					total_tokens: 1500,
+					prompt_tokens_details: { text_tokens: 1000, audio_tokens: 0, image_tokens: 0, cached_tokens: 0 }
+				});
+				const r = refreshTokenCostDiagnostics();
+				if (!r || r.calls < before + 1) throw new Error('diagnostics refresh');
+				const body = document.getElementById('tokenCostByPromptBody');
+				if (!body || !/TokenCostSmoke/.test(body.textContent)) throw new Error('table missing smoke row');
+				say('diagnostics table OK (' + r.calls + ' calls, book est. ' + formatUsd(r.total_cost_usd) + ')');
+				say('Token/Cost Smoke PASS');
+				return true;
+			} catch (e) {
+				say('Token/Cost Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			}
+		}
+		window.NW_RATE_CARD = NW_RATE_CARD;
+		window.computeTokenCost = computeTokenCost;
+		window.refreshTokenCostDiagnostics = refreshTokenCostDiagnostics;
+		window.runTokenCostSmoke = runTokenCostSmoke;
+
 		function recordBookTokenUsage(entry) {
 			const ledger = ensureBookTokenUsage();
 			if (!ledger.startedAt) ledger.startedAt = new Date().toISOString();
@@ -711,6 +859,9 @@ Synced: 2026-04-19
 				' | Book: ' + ledger.prompt_tokens + '/' + ledger.completion_tokens + '/' + ledger.total_tokens +
 				' across ' + ledger.calls.length + ' call(s)' +
 				(packChars != null ? ('; packChars=' + packChars) : '');
+			if (typeof refreshTokenCostDiagnostics === 'function') {
+				try { refreshTokenCostDiagnostics(); } catch (e) { console.warn('refreshTokenCostDiagnostics', e); }
+			}
 			return row;
 		}
 
@@ -1952,10 +2103,13 @@ let activeAICallCount = 0;
 
 		        novelData.characters = Array.from(charList.getElementsByClassName('character')).map((c, i) => {
 		            const existing = novelData.characters[i] || {};
+		            const domName = (c.querySelector('.charName') && c.querySelector('.charName').value) || '';
+		            const domBack = (c.querySelector('.charBackstory') && c.querySelector('.charBackstory').value) || '';
+		            const domArc = (c.querySelector('.charArc') && c.querySelector('.charArc').value) || '';
 		            return {
-		                name: c.querySelector('.charName').value,
-		                backstory: c.querySelector('.charBackstory').value,
-		                arc: c.querySelector('.charArc').value,
+		                name: domName || existing.name || '',
+		                backstory: domBack || existing.backstory || '',
+		                arc: domArc || existing.arc || '',
 		                ...(existing.role !== undefined ? { role: existing.role } : {}),
 		                ...(existing.notes !== undefined ? { notes: existing.notes } : {})
 		            };
@@ -2046,10 +2200,13 @@ let activeAICallCount = 0;
 		        });
 		        novelData.characters = Array.from(charList.getElementsByClassName('character')).map((c, i) => {
 		            const existing = novelData.characters[i] || {};
+		            const domName = (c.querySelector('.charName') && c.querySelector('.charName').value) || '';
+		            const domBack = (c.querySelector('.charBackstory') && c.querySelector('.charBackstory').value) || '';
+		            const domArc = (c.querySelector('.charArc') && c.querySelector('.charArc').value) || '';
 		            return {
-		                name: c.querySelector('.charName').value,
-		                backstory: c.querySelector('.charBackstory').value,
-		                arc: c.querySelector('.charArc').value,
+		                name: domName || existing.name || '',
+		                backstory: domBack || existing.backstory || '',
+		                arc: domArc || existing.arc || '',
 		                ...(existing.role !== undefined ? { role: existing.role } : {}),
 		                ...(existing.notes !== undefined ? { notes: existing.notes } : {})
 		            };
@@ -6072,6 +6229,63 @@ let activeAICallCount = 0;
 		}
 
 		// Sync the number of character entry boxes to match the numCharacters input value
+
+		/** Push novelData.characters into Tab2 DOM (names/backstory/arc). Used by fixture inject + import. */
+		function renderCharacters() {
+			const chars = Array.isArray(novelData.characters) ? novelData.characters : [];
+			const numEl = document.getElementById('numCharacters');
+			if (numEl) numEl.value = String(Math.max(1, chars.length || parseInt(numEl.value, 10) || 1));
+			const charList = document.getElementById('characterList');
+			if (!charList) return 0;
+			charList.innerHTML = '';
+			const list = chars.length ? chars : [{ name: '', backstory: '', arc: '' }];
+			list.forEach((char) => {
+				const div = document.createElement('div');
+				div.className = 'character ui-subpanel';
+				div.setAttribute('data-testid', 'nw-character-card');
+				div.innerHTML =
+					'<label>Name:</label><input type="text" class="charName" placeholder="e.g., Character">' +
+					'<label>Backstory:</label><textarea class="charBackstory" placeholder="e.g., background details"></textarea>' +
+					'<label>Arc:</label><textarea class="charArc" placeholder="e.g., development path"></textarea>';
+				div.querySelector('.charName').value = (char && char.name) || '';
+				div.querySelector('.charBackstory').value = (char && char.backstory) || '';
+				div.querySelector('.charArc').value = (char && char.arc) || '';
+				if (char && char.role != null) div.dataset.role = String(char.role);
+				charList.appendChild(div);
+			});
+			if (typeof updateCharacterCounter === 'function') updateCharacterCounter();
+			return list.length;
+		}
+		window.renderCharacters = renderCharacters;
+
+		function runCastSyncSmoke() {
+			const el = document.getElementById('tokenCostSmokeResult') || document.getElementById('c1SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = (el.textContent ? el.textContent + '\n' : '') + log[log.length - 1]; };
+			try {
+				const fixtureLike = [
+					{ name: 'Dr. Lumen Kwan', role: 'forensic latency auditor / protagonist', backstory: 'Bitung docks', arc: 'cynic → steward' },
+					{ name: 'Rook Velasquez', role: 'contract-law hacker / deuteragonist', backstory: 'Memory Market', arc: 'opportunist → loyalty' },
+					{ name: 'Sinta Aguirre', role: 'ghost identity / absent catalyst', backstory: 'cubesat', arc: 'absence → pattern' }
+				];
+				novelData.characters = JSON.parse(JSON.stringify(fixtureLike));
+				const n = renderCharacters();
+				if (n !== 3) throw new Error('renderCharacters count ' + n);
+				const domNames = Array.from(document.querySelectorAll('#characterList .charName')).map(i => i.value);
+				if (domNames.join('|') !== 'Dr. Lumen Kwan|Rook Velasquez|Sinta Aguirre') throw new Error('DOM names ' + domNames.join('|'));
+				// simulate wipe risk then collectData must preserve
+				collectData();
+				const after = (novelData.characters || []).map(c => c.name + '/' + (c.role || ''));
+				if (after[0] !== 'Dr. Lumen Kwan/forensic latency auditor / protagonist') throw new Error('collectData wiped: ' + after.join(';'));
+				say('Cast sync smoke PASS: ' + after.join(' · '));
+				return true;
+			} catch (e) {
+				say('Cast sync smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			}
+		}
+		window.runCastSyncSmoke = runCastSyncSmoke;
+
 		function syncCharacterEntries() {
 		    const desired = Math.max(1, parseInt(document.getElementById('numCharacters').value, 10) || 1);
 		    const charList = document.getElementById('characterList');
@@ -6156,10 +6370,14 @@ let activeAICallCount = 0;
 	       novelData.styleGuide = document.getElementById('styleGuide').value;
 	       novelData.characters = Array.from(document.getElementsByClassName('character')).map((c, i) => {
 	           const existing = novelData.characters[i] || {};
+	           const domName = (c.querySelector('.charName') && c.querySelector('.charName').value) || '';
+	           const domBack = (c.querySelector('.charBackstory') && c.querySelector('.charBackstory').value) || '';
+	           const domArc = (c.querySelector('.charArc') && c.querySelector('.charArc').value) || '';
+	           // Prefer DOM when filled; keep novelData values when DOM blank (fixture inject / race).
 	           return {
-	               name: c.querySelector('.charName').value,
-	               backstory: c.querySelector('.charBackstory').value,
-	               arc: c.querySelector('.charArc').value,
+	               name: domName || existing.name || '',
+	               backstory: domBack || existing.backstory || '',
+	               arc: domArc || existing.arc || '',
 	               ...(existing.role !== undefined ? { role: existing.role } : {}),
 	               ...(existing.notes !== undefined ? { notes: existing.notes } : {})
 	           };
