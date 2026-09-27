@@ -256,10 +256,13 @@ Synced: 2026-04-19
                         <button type="button" id="c2SmokeBtn" onclick="runC2Smoke()" title="#120 C2 EvidencePack smoke">C2 Smoke</button>
                         <button type="button" id="c3SmokeBtn" onclick="runC3Smoke()" title="#120 C3 quality gate smoke">C3 Smoke</button>
 			<button type="button" onclick="runQe123Smoke()">QE 1/2/3 Smoke</button>
+			<button type="button" onclick="runQe4Smoke()">QE4 Judge↔Gate Smoke</button>
+			<pre id="qe4SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
 			<pre id="qe123SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
                         <pre id="c2SmokeResult" style="margin:8px 0 4px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7fff7;border:1px solid #cde;white-space:pre-wrap;"></pre>
                         <pre id="c3SmokeResult" style="margin:4px 0 4px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#fff7f0;border:1px solid #edc;white-space:pre-wrap;"></pre>
                         <pre id="qualityGateResult" style="margin:4px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f5f5ff;border:1px solid #ccd;white-space:pre-wrap;">Quality gate: (none yet)</pre>
+			<pre id="qualityJudgeAlignResult" style="white-space:pre-wrap;font-size:12px;"></pre>
 			        <button type="button" id="trackedE2EBtn" onclick="runTrackedE2E()" title="Lean start-to-finish tracked E2E: tokens + prose quality (#120 C3)">Tracked E2E (lean)</button>
 			        <pre id="c1SmokeResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7f7f7;border:1px solid #ddd;border-radius:4px;white-space:pre-wrap;max-height:220px;overflow:auto;">C1 smoke idle — click to validate digests (no full manuscript dump).</pre>
 			        <pre id="trackedE2EResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f0f4ff;border:1px solid #b8c7e8;border-radius:4px;white-space:pre-wrap;max-height:360px;overflow:auto;">Tracked E2E idle - click for lean 2-chapter token+quality run.</pre>
@@ -2764,6 +2767,18 @@ let activeAICallCount = 0;
 			maxAiSlopRisk: 55,
 			minChars: 40
 		};
+		// QE4: fail-closed driver is always heuristics. LLM judge is advisory-only unless explicitly opted in.
+		const NW_QUALITY_ROLES = {
+			failClosedDriver: 'heuristics',
+			advisory: 'llmJudge',
+			reviseOnJudgeAdvisory: false // do not auto-revise solely on LLM disagree (cost + noise)
+		};
+		const NW_QUALITY_JUDGE_ADVISORY = {
+			minInterest: 45,
+			minHumanLikeness: 45,
+			maxAiSlopRisk: 65,
+			minReadability: 45
+		};
 
 		function isKbEnabled() {
 			if (typeof novelData.kbEnabled === 'boolean') return novelData.kbEnabled;
@@ -2947,7 +2962,9 @@ let activeAICallCount = 0;
 				scores: scores,
 				thresholds: thr,
 				ts: new Date().toISOString(),
-				label: opts.label || 'qualityGate'
+				label: opts.label || 'qualityGate',
+				driver: NW_QUALITY_ROLES.failClosedDriver,
+				advisoryRole: NW_QUALITY_ROLES.advisory
 			};
 			novelData.lastQualityGate = result;
 			if (!Array.isArray(novelData.qualityFindings)) novelData.qualityFindings = [];
@@ -2970,6 +2987,123 @@ let activeAICallCount = 0;
 			}
 			return result;
 		}
+
+
+		function judgeWouldFailGate(judgeScores, thresholds) {
+			const thr = Object.assign({}, NW_QUALITY_JUDGE_ADVISORY, thresholds || {});
+			const s = judgeScores || {};
+			const failures = [];
+			if (s.interest != null && s.interest < thr.minInterest) failures.push('judge:interest<' + thr.minInterest);
+			if (s.humanLikeness != null && s.humanLikeness < thr.minHumanLikeness) failures.push('judge:humanLikeness<' + thr.minHumanLikeness);
+			if (s.aiSlopRisk != null && s.aiSlopRisk >= thr.maxAiSlopRisk) failures.push('judge:aiSlopRisk>=' + thr.maxAiSlopRisk);
+			if (thr.minReadability != null && s.readability != null && s.readability < thr.minReadability) failures.push('judge:readability<' + thr.minReadability);
+			return { wouldFail: failures.length > 0, failures: failures, thresholds: thr };
+		}
+
+		/**
+		 * QE4: compare heuristic fail-closed gate to LLM judge (advisory).
+		 * Does NOT change gate.passed. Records divergence for report / UI.
+		 */
+		function alignJudgeWithGate(gateResult, judgeScores, opts) {
+			opts = opts || {};
+			const gate = gateResult || novelData.lastQualityGate || null;
+			const judge = judgeScores || null;
+			const jFail = judge ? judgeWouldFailGate(judge, opts.judgeThresholds) : { wouldFail: null, failures: [], thresholds: NW_QUALITY_JUDGE_ADVISORY };
+			const divergences = [];
+			if (gate && judge) {
+				if (gate.passed && jFail.wouldFail) divergences.push('heuristics_pass_judge_fail');
+				if (!gate.passed && jFail.wouldFail === false) divergences.push('heuristics_fail_judge_pass');
+				const delta = {
+					interest: (judge.interest != null && gate.scores) ? judge.interest - gate.scores.interest : null,
+					readability: (judge.readability != null && gate.scores) ? judge.readability - gate.scores.readability : null,
+					aiSlopRisk: (judge.aiSlopRisk != null && gate.scores) ? judge.aiSlopRisk - gate.scores.aiSlopRisk : null,
+					humanLikeness: (judge.humanLikeness != null && gate.scores) ? judge.humanLikeness - gate.scores.humanLikeness : null
+				};
+				const alignment = {
+					ts: new Date().toISOString(),
+					label: opts.label || (gate && gate.label) || 'judgeGateAlign',
+					driver: NW_QUALITY_ROLES.failClosedDriver,
+					advisory: NW_QUALITY_ROLES.advisory,
+					gatePassed: !!gate.passed,
+					gateFailures: (gate.failures || []).slice(),
+					gateScores: gate.scores || null,
+					judgeScores: {
+						interest: judge.interest,
+						readability: judge.readability,
+						aiSlopRisk: judge.aiSlopRisk,
+						humanLikeness: judge.humanLikeness,
+						source: judge.source || 'llm',
+						rationale: (judge.rationale || '').slice(0, 240)
+					},
+					judgeWouldFail: jFail.wouldFail,
+					judgeFailures: jFail.failures.slice(),
+					divergences: divergences,
+					delta: delta,
+					aligned: divergences.length === 0,
+					reviseOnJudgeAdvisory: !!NW_QUALITY_ROLES.reviseOnJudgeAdvisory
+				};
+				novelData.lastJudgeGateAlignment = alignment;
+				if (!Array.isArray(novelData.judgeGateAlignments)) novelData.judgeGateAlignments = [];
+				novelData.judgeGateAlignments.push(alignment);
+				if (!Array.isArray(novelData.qualityFindings)) novelData.qualityFindings = [];
+				novelData.qualityFindings.push({
+					label: alignment.label + '-judgeAdvisory',
+					passed: gate.passed, // fail-closed unchanged
+					advisory: true,
+					judgeWouldFail: jFail.wouldFail,
+					divergences: divergences.slice(),
+					interest: judge.interest,
+					readability: judge.readability,
+					aiSlopRisk: judge.aiSlopRisk,
+					humanLikeness: judge.humanLikeness,
+					ts: alignment.ts
+				});
+				const el = document.getElementById('qualityJudgeAlignResult');
+				if (el) {
+					el.textContent = (alignment.aligned ? 'ALIGNED' : 'DIVERGE') +
+						' gate=' + (gate.passed ? 'PASS' : 'FAIL') +
+						' judgeWouldFail=' + jFail.wouldFail +
+						(divergences.length ? (' | ' + divergences.join(',')) : '') +
+						' | judge i/r/s/h=' + judge.interest + '/' + judge.readability + '/' + judge.aiSlopRisk + '/' + judge.humanLikeness;
+				}
+				return alignment;
+			}
+			return {
+				ts: new Date().toISOString(),
+				aligned: null,
+				driver: NW_QUALITY_ROLES.failClosedDriver,
+				advisory: NW_QUALITY_ROLES.advisory,
+				note: 'missing gate or judge'
+			};
+		}
+
+		/**
+		 * Optional post-generate advisory judge. Never flips fail-closed gate.
+		 * If reviseOnJudgeAdvisory is true AND gate passed AND judge would fail, caller may revise — default off.
+		 */
+		async function runJudgeAdvisoryAfterGate(text, gateResult, tabEl, opts) {
+			opts = opts || {};
+			const gate = gateResult || novelData.lastQualityGate;
+			let judge = null;
+			try {
+				judge = await judgeProseQualityLLM(text, tabEl);
+				pushQualitySample((opts.label || (gate && gate.label) || 'chapter') + '-llmJudge', Object.assign({}, judge, {
+					source: judge.source || 'llm+heuristics',
+					rationale: (judge.rationale || '').slice(0, 200)
+				}), (text || '').length);
+			} catch (e) {
+				console.warn('runJudgeAdvisoryAfterGate judge failed', e);
+				return { alignment: null, judge: null, error: String(e && e.message ? e.message : e) };
+			}
+			const alignment = alignJudgeWithGate(gate, judge, { label: opts.label || (gate && gate.label) || 'judgeGateAlign' });
+			return { alignment: alignment, judge: judge };
+		}
+
+		window.alignJudgeWithGate = alignJudgeWithGate;
+		window.judgeWouldFailGate = judgeWouldFailGate;
+		window.runJudgeAdvisoryAfterGate = runJudgeAdvisoryAfterGate;
+		window.NW_QUALITY_ROLES = NW_QUALITY_ROLES;
+
 
 		async function runC2Smoke() {
 			const el = document.getElementById('c2SmokeResult') || document.getElementById('c1SmokeResult');
@@ -3133,13 +3267,45 @@ let activeAICallCount = 0;
 		}
 
 		async function ensureQualityAfterGenerate(chapterNum) {
-			const text = novelData.chapters[chapterNum - 1] || '';
-			let gate = runQualityGate(text, { label: 'chapter' + chapterNum + '-generate' });
-			console.log('[C3 qualityGate]', gate.passed, gate.scores);
-			if (gate.passed) return { gate: gate, revise: null };
-			console.warn('[QE2] gate FAIL — auto-revise', gate.failures);
-			const revise = await reviseChapterForQuality(chapterNum, gate, { maxAttempts: NW_QUALITY_REVISE.maxAttempts });
-			return { gate: revise.gateAfter, revise: revise };
+			const text0 = novelData.chapters[chapterNum - 1] || '';
+			let gate = runQualityGate(text0, { label: 'chapter' + chapterNum + '-generate' });
+			console.log('[C3 qualityGate]', gate.passed, gate.scores, 'driver=', gate.driver);
+			let revise = null;
+			if (!gate.passed) {
+				console.warn('[QE2] gate FAIL — auto-revise', gate.failures);
+				revise = await reviseChapterForQuality(chapterNum, gate, { maxAttempts: NW_QUALITY_REVISE.maxAttempts });
+				gate = revise.gateAfter;
+			}
+			// QE4: advisory LLM judge — never overrides fail-closed heuristics
+			let advisory = null;
+			try {
+				const tabEl = document.getElementById('tab5') || document.getElementById('tab1');
+				const text = novelData.chapters[chapterNum - 1] || '';
+				// Only auto-judge chapter 1 by default to limit cost; opts via novelData.qualityJudgeEveryChapter
+				const every = !!novelData.qualityJudgeEveryChapter;
+				if (chapterNum === 1 || every) {
+					advisory = await runJudgeAdvisoryAfterGate(text, gate, tabEl, { label: 'chapter' + chapterNum + '-generate' });
+					if (
+						NW_QUALITY_ROLES.reviseOnJudgeAdvisory &&
+						gate.passed &&
+						advisory && advisory.alignment &&
+						advisory.alignment.judgeWouldFail &&
+						!revise
+					) {
+						console.warn('[QE4] advisory judge would fail — optional revise enabled');
+						const fake = {
+							passed: false,
+							failures: (advisory.alignment.judgeFailures || []).slice(),
+							scores: gate.scores
+						};
+						revise = await reviseChapterForQuality(chapterNum, fake, { maxAttempts: 1 });
+						gate = revise.gateAfter || gate;
+					}
+				}
+			} catch (advErr) {
+				console.warn('[QE4] advisory judge skipped', advErr);
+			}
+			return { gate: gate, revise: revise, advisory: advisory };
 		}
 
 		async function applyBookCritiqueItem(index, opts) {
@@ -3269,8 +3435,18 @@ let activeAICallCount = 0;
 				const ch = inferChapterFromCritiqueText('Pacing in Chapter 2 lags due to exposition.');
 				if (ch !== 2) throw new Error('inferChapter expected 2 got ' + ch);
 				say('inferChapterFromCritiqueText OK');
-				say('QE 1/2/3 Smoke PASS (structure; live apply/revise needs API)');
-				return true;
+				// QE4 structure
+					if (!NW_QUALITY_ROLES || NW_QUALITY_ROLES.failClosedDriver !== 'heuristics') throw new Error('QE4 roles driver');
+					if (NW_QUALITY_ROLES.advisory !== 'llmJudge') throw new Error('QE4 roles advisory');
+					const fakeGate = { passed: true, failures: [], scores: { interest: 90, readability: 80, aiSlopRisk: 20, humanLikeness: 80 }, label: 'qe4-smoke' };
+					const harshJudge = { interest: 40, readability: 40, aiSlopRisk: 80, humanLikeness: 30, source: 'llm+heuristics', rationale: 'smoke diverge' };
+					const align = alignJudgeWithGate(fakeGate, harshJudge, { label: 'qe4-smoke' });
+					if (!align || align.aligned !== false) throw new Error('expected diverge');
+					if (!(align.divergences || []).includes('heuristics_pass_judge_fail')) throw new Error('expected heuristics_pass_judge_fail');
+					if (align.gatePassed !== true) throw new Error('gate must stay pass under advisory');
+					say('QE4 alignJudgeWithGate diverge OK (gate stays pass)');
+					say('QE 1/2/3 Smoke PASS (structure; live apply/revise needs API)');
+					return true;
 			} catch (e) {
 				say('QE 1/2/3 Smoke FAIL: ' + (e && e.message ? e.message : e));
 				return false;
@@ -3283,6 +3459,37 @@ let activeAICallCount = 0;
 		window.applyStagedChapterImprovements = applyStagedChapterImprovements;
 		window.reviseChapterForQuality = reviseChapterForQuality;
 		window.ensureQualityAfterGenerate = ensureQualityAfterGenerate;
+
+		async function runQe4Smoke() {
+			const el = document.getElementById('qe4SmokeResult') || document.getElementById('qe123SmokeResult') || document.getElementById('c3SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			try {
+				if (NW_QUALITY_ROLES.failClosedDriver !== 'heuristics') throw new Error('driver must be heuristics');
+				if (NW_QUALITY_ROLES.advisory !== 'llmJudge') throw new Error('advisory must be llmJudge');
+				if (NW_QUALITY_ROLES.reviseOnJudgeAdvisory !== false) throw new Error('default reviseOnJudgeAdvisory must be false');
+				say('roles OK: fail-closed=heuristics, advisory=llmJudge, reviseOnJudgeAdvisory=false');
+				const passGate = runQualityGate('Concrete sensory prose with a bolt on a wet dock plank and a named character Mira.', { label: 'qe4-gate-pass' });
+				if (!passGate.passed) throw new Error('expected heur pass on concrete sample');
+				if (passGate.driver !== 'heuristics') throw new Error('driver field missing');
+				say('heuristics gate PASS + driver field OK');
+				const align = alignJudgeWithGate(passGate, {
+					interest: 35, readability: 40, aiSlopRisk: 75, humanLikeness: 30,
+					source: 'llm+heuristics', rationale: 'synthetic harsh judge'
+				}, { label: 'qe4-align' });
+				if (align.aligned !== false) throw new Error('expected divergence');
+				if (novelData.lastQualityGate && novelData.lastQualityGate.passed !== true) throw new Error('advisory must not flip gate');
+				say('divergence logged; fail-closed gate unchanged');
+				say('QE4 Smoke PASS');
+				return true;
+			} catch (e) {
+				say('QE4 Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			}
+		}
+		window.runQe4Smoke = runQe4Smoke;
+
+
 		window.runQe123Smoke = runQe123Smoke;
 
 

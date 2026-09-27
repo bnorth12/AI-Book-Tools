@@ -268,24 +268,38 @@ const report = {
       if (!text || text.trim().length < 50) throw new Error('generateChapter(1) produced empty/short text len=' + text.length);
       const heur = scoreProseQuality(text);
       pushQualitySample('chapter1-heuristics', heur, text.length);
-      const judged = await judgeProseQualityLLM(text, document.getElementById('tab5') || document.getElementById('tab1'));
-      pushQualitySample('chapter1-llmJudge', judged, text.length);
+      // QE4: generate path already ran advisory judge via ensureQualityAfterGenerate — reuse alignment
+      let judged = null;
+      const align = novelData.lastJudgeGateAlignment || null;
+      if (align && align.judgeScores) {
+        judged = align.judgeScores;
+      } else if (typeof judgeProseQualityLLM === 'function') {
+        judged = await judgeProseQualityLLM(text, document.getElementById('tab5') || document.getElementById('tab1'));
+        pushQualitySample('chapter1-llmJudge', judged, text.length);
+        if (typeof alignJudgeWithGate === 'function' && novelData.lastQualityGate) {
+          alignJudgeWithGate(novelData.lastQualityGate, judged, { label: 'chapter1-generate-e2e' });
+        }
+      }
       const gate = novelData.lastQualityGate || null;
       const reviseLog = (novelData.qualityReviseLog || []).slice();
+      const alignNow = novelData.lastJudgeGateAlignment || align;
       return {
         textLen: text.length,
         heur: heur,
-        judged: {
+        judged: judged ? {
           interest: judged.interest,
           readability: judged.readability,
           aiSlopRisk: judged.aiSlopRisk,
           humanLikeness: judged.humanLikeness,
           source: judged.source,
           rationale: (judged.rationale || '').slice(0, 180)
-        },
+        } : null,
         gatePassed: gate ? !!gate.passed : null,
         gateFailures: gate && gate.failures ? gate.failures.slice(0, 6) : [],
-        reviseAttempts: reviseLog.length
+        reviseAttempts: reviseLog.length,
+        judgeAligned: alignNow ? alignNow.aligned : null,
+        judgeDivergences: alignNow && alignNow.divergences ? alignNow.divergences.slice() : [],
+        gateDriver: gate && gate.driver
       };
     });
   }, (a, r) => {
@@ -295,7 +309,9 @@ const report = {
     const js = j ? [j.interest, j.readability, j.aiSlopRisk, j.humanLikeness].join('/') + ' (' + j.source + ')' : 'n/a';
     const gp = r && r.gatePassed;
     const ra = r && r.reviseAttempts;
-    return 'Ch1 ' + a.ch1Len + ' chars. Heuristics interest/read/slop/human=' + hs + '. LLM judge=' + js + '. Gate=' + gp + ' reviseLog=' + ra + '. Snippet: "' + a.ch1Snippet + '".';
+    const al = r && r.judgeAligned;
+    const div = (r && r.judgeDivergences && r.judgeDivergences.length) ? r.judgeDivergences.join(',') : 'none';
+    return 'Ch1 ' + a.ch1Len + ' chars. Heuristics interest/read/slop/human=' + hs + '. LLM judge=' + js + '. Gate=' + gp + ' driver=' + (r && r.gateDriver) + ' reviseLog=' + ra + ' judgeAlign=' + al + ' diverge=' + div + '. Snippet: "' + a.ch1Snippet + '".';
   }, { minChars: 200, contentFromResult: true });
 
   await doStep(5, 'Generate Chapters', 'generateChapter2+quality', async () => {
