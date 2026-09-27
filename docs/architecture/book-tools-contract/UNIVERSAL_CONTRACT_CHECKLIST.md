@@ -2,17 +2,17 @@
 
 **Status:** tracking (docs only)  
 **Date:** 2026-09-27  
-**Owners:** Fiction — NovelWriter, BookEditor, BookDecomposer; Nonfiction — HerbalBookForge; shared KB contracts with Engineering as needed.
+**Owners:** Fiction — NovelWriter, BookEditor, BookDecomposer; Nonfiction — HerbalBookForge; TechProjectForge — Book Tools joint (Fiction+Nonfiction docs; Engineering for new shared KB types); shared KB contracts with Engineering as needed.
 
 ## Rules (standing)
 
-1. **Separate codebases** — each app stays its own tree (`NovelWriter/`, `BookEditor/`, `BookDecomposer/`, `HerbalBookForge/`). No mega-merge.
+1. **Separate codebases** — each app stays its own tree (`NovelWriter/`, `BookEditor/`, `BookDecomposer/`, `HerbalBookForge/`, `TechProjectForge/`). No mega-merge.
 2. **Universal concepts** — digests/packets, RAG → EvidencePack, quality / human readability / no AI-slot, provider modes. Same meaning in every tool.
 3. **Vendored copies only** — if helpers are shared in spirit, **each tool keeps its own copy**. No runtime import from a central `shared/` package for these contracts.
 4. **One shared KB schema** — do not fork two knowledge bases; fiction vs herbal = different entity lenses on the same graph contracts (Phase 0 locks).
 5. **Runtime host** — live pages serve from `C:\NovelWriterSite` on BNLaptop (future RPi); GitHubRepos is source. Deploy/sync after merges.
 
-Related: Phase 0 RAG docs (`docs/architecture/rag/` when landed), NW packing matrix / PR #117, models/routing PR #118, `EVIDENCEPACK_PACKING_POLICY.md` / story-framing packs.
+Related: Phase 0 RAG docs (`docs/architecture/rag/` when landed), NW packing matrix / PR #117, models/routing PR #118, TechProjectForge docs #115, `EVIDENCEPACK_PACKING_POLICY.md` / story-framing packs.
 
 ## Contract columns (apply to every tool)
 
@@ -34,6 +34,7 @@ Update status only: `not started` · `in progress` · `done` · `n/a` (with note
 | **BookEditor** | Fiction | not started (#121) | not started | not started | not started | not started | Kill full-book upload first |
 | **BookDecomposer** | Fiction | not started (#122) | not started (Phase 2 ingest candidate) | n/a for ingest-only; apply when LLM called | not started | not started | Prefer graph export + slim LLM calls |
 | **HerbalBookForge** | Nonfiction | not started (#123) | not started (Phase 5; safety/citations lens) | partial (safety/quality sprints; not universal C3 yet) | not started | not started | Evidence/safety packets ≠ story arcs; same C1–C5 shape |
+| **TechProjectForge** | Book Tools joint | not started (#124) | not started (repo-ingest → EvidencePack; no full-tree dump) | not started (cite-the-repo + anti-slop before promote) | not started (`mode: none` / paste-bridge default) | not started | Docs framing #115; SHARED_CORE_ALIGNMENT — same contracts, tech ReferenceDoc kinds; runtime still thin |
 
 ## Tool touch lists (must visit each)
 
@@ -70,11 +71,21 @@ Update status only: `not started` · `in progress` · `done` · `n/a` (with note
 - [ ] C4 — Provider / paste-bridge; multi-agent Responses routing already aligned (#118)
 - [ ] C5 — Vendored copies inside HBF; coordinate with Fiction on contract text only
 
+
+### TechProjectForge (Book Tools joint)
+
+- [ ] C1 — Tech digests / packets (L1+L2 + optional L3); never default full repo tree or full manuscript dump (`SHARED_CORE_ALIGNMENT.md`)
+- [ ] C2 — Repo-ingest index → shared EvidencePack / ReferenceDoc shapes; goalFacets as tags not new entityTypes
+- [ ] C3 — Cite-the-repo + interest/readability + human-vs-AI gates before promote L3→L2→L1
+- [ ] C4 — Default `providerConfig.mode: "none"` / paste-bridge; no TBF-only provider stack
+- [ ] C5 — Helpers vendored inside `TechProjectForge/` when runtime lands; twin of NW/HBF copies only
+- [ ] Keep docs PR #115 framing in sync with this checklist
+
 ## Acceptance for “we touched every tool”
 
 - [ ] This matrix has no silent blanks — every cell is `not started` / `in progress` / `done` / `n/a`+note
 - [ ] Each tool has at least one GitHub issue (or linked PR) referencing C1–C5
-- [ ] NW C1 smoke exists and BE/BD/HBF either have a twin smoke or an explicit deferred issue
+- [ ] NW C1 smoke exists and BE/BD/HBF/TPF either have a twin smoke or an explicit deferred issue
 - [ ] No tool gains a runtime dependency on another tool’s folder for these helpers
 
 ## Out of scope here
@@ -92,4 +103,5 @@ Update status only: `not started` · `in progress` · `done` · `n/a` (with note
 | BookEditor | #121 |
 | BookDecomposer | #122 |
 | HerbalBookForge | #123 |
+| TechProjectForge | #124 |
 | Checklist docs PR | #119 |
