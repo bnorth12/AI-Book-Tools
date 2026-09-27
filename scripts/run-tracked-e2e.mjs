@@ -214,6 +214,22 @@ const report = {
     appendProgress('### Phase - fixture seed\n- Status: loaded\n- Eval: fixtureId=' + (seed.fixtureId || '?') + ' chars=' + ((seed.characters || []).length) + ' chapters=' + (seed.numChapters || '?') + ' kbEnabled=' + !!seed.kbEnabled + '\n');
   }
 
+
+  // Item 3/4: chapter count + optional force multipass
+  // NW_E2E_CHAPTERS overrides; fixture stress defaults to min(fixture numChapters, NW_E2E_CHAPTER_CAP||4)
+  {
+    const envCh = parseInt(process.env.NW_E2E_CHAPTERS || '', 10);
+    const cap = parseInt(process.env.NW_E2E_CHAPTER_CAP || '4', 10) || 4;
+    let n = report.config.numChapters || 2;
+    if (Number.isFinite(envCh) && envCh > 0) n = envCh;
+    else if (fixturePath) n = Math.min(Math.max(1, n), cap);
+    else n = Math.min(Math.max(1, n), 2); // lean stays 2
+    report.config.numChapters = n;
+    report.config.chaptersToGenerate = n;
+    report.config.forceMultipass = process.env.NW_E2E_FORCE_MULTIPASS === '1';
+    appendProgress('### Phase - chapter plan\n- Status: ready\n- Eval: chaptersToGenerate=' + n + ' forceMultipass=' + report.config.forceMultipass + ' fixture=' + (fixturePath || 'none') + '\n');
+  }
+
 report.config.model = await page.evaluate(() => document.getElementById('model').value);
 
   async function doStep(tab, name, stepLabel, fn, evalFn, assertOpts) {
@@ -316,12 +332,42 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     });
   }, (a, r) => 'Ch1 outline len ' + ((r && r.len) || 0) + '. Should name scenes/beats with concrete locations.');
 
-  await doStep(4, 'Outlines', 'generateChapterOutline2', async () => {
-    return page.evaluate(async () => {
-      await generateChapterOutline(2);
-      return { len: (novelData.chapterOutlines[1] || '').length };
+  // Outlines + generates for chapters 2..N (ch1 outline already done above when present)
+  const chaptersToGenerate = report.config.chaptersToGenerate || report.config.numChapters || 2;
+
+  // Ensure ch1 outline exists (lean path already ran generateChapterOutline1)
+  for (let ch = 2; ch <= chaptersToGenerate; ch++) {
+    await doStep(4, 'Outlines', 'generateChapterOutline' + ch, async () => {
+      return page.evaluate(async (chapterNum) => {
+        await generateChapterOutline(chapterNum);
+        return { len: (novelData.chapterOutlines[chapterNum - 1] || '').length, chapter: chapterNum };
+      }, ch);
+    }, (a, r) => 'Ch' + ch + ' outline len ' + ((r && r.len) || 0) + '.');
+  }
+
+  // Item 3: optionally seed continuity + raise gate bar so pass1 gate-fail + pass2 continuity fire
+  if (report.config.forceMultipass) {
+    await page.evaluate(() => {
+      novelData.continuityFindings = novelData.continuityFindings || [];
+      if (!novelData.continuityFindings.length) {
+        novelData.continuityFindings.push('Chapter 1: timeline drift on dock clocks (E2E force multipass)');
+      }
+      if (!novelData.continuityTracker) novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
+      novelData.continuityTracker.chapters = novelData.continuityTracker.chapters || [];
+      novelData.continuityTracker.chapters[0] = {
+        chapter: 1,
+        continuityRisks: ['Unnamed child status restated without update (E2E force multipass)']
+      };
+      if (typeof NW_QUALITY_GATE === 'object' && NW_QUALITY_GATE) {
+        window.__NW_GATE_BACKUP = Object.assign({}, NW_QUALITY_GATE);
+        // High bar so first draft fails closed → pass1 revise; continuity still open → pass2
+        NW_QUALITY_GATE.minInterest = Math.max(NW_QUALITY_GATE.minInterest || 0, 92);
+        NW_QUALITY_GATE.minHumanLikeness = Math.max(NW_QUALITY_GATE.minHumanLikeness || 0, 90);
+      }
+      window.__NW_FORCE_MULTIPASS = true;
     });
-  }, (a, r) => 'Ch2 outline len ' + ((r && r.len) || 0) + '. Continuity with Ch1 stakes matters more than length.');
+    appendProgress('### Phase - force multipass\n- Status: seeded\n- Eval: continuity findings + raised gate thresholds for Ch1\n');
+  }
 
   await doStep(5, 'Generate Chapters', 'generateChapter1+quality', async () => {
     return page.evaluate(async () => {
@@ -330,7 +376,6 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       if (!text || text.trim().length < 50) throw new Error('generateChapter(1) produced empty/short text len=' + text.length);
       const heur = scoreProseQuality(text);
       pushQualitySample('chapter1-heuristics', heur, text.length);
-      // QE4: generate path already ran advisory judge via ensureQualityAfterGenerate — reuse alignment
       let judged = null;
       const align = novelData.lastJudgeGateAlignment || null;
       if (align && align.judgeScores) {
@@ -344,7 +389,13 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       }
       const gate = novelData.lastQualityGate || null;
       const reviseLog = (novelData.qualityReviseLog || []).slice();
+      const multi = (novelData.qualityMultiPassLog || []).slice();
       const alignNow = novelData.lastJudgeGateAlignment || align;
+      // restore gate thresholds after Ch1 multipass attempt
+      if (window.__NW_GATE_BACKUP && typeof NW_QUALITY_GATE === 'object') {
+        Object.assign(NW_QUALITY_GATE, window.__NW_GATE_BACKUP);
+        window.__NW_GATE_BACKUP = null;
+      }
       return {
         textLen: text.length,
         heur: heur,
@@ -359,6 +410,8 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         gatePassed: gate ? !!gate.passed : null,
         gateFailures: gate && gate.failures ? gate.failures.slice(0, 6) : [],
         reviseAttempts: reviseLog.length,
+        multiPassLog: multi,
+        multiPassCount: multi.length,
         judgeAligned: alignNow ? alignNow.aligned : null,
         judgeDivergences: alignNow && alignNow.divergences ? alignNow.divergences.slice() : [],
         gateDriver: gate && gate.driver
@@ -371,25 +424,30 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     const js = j ? [j.interest, j.readability, j.aiSlopRisk, j.humanLikeness].join('/') + ' (' + j.source + ')' : 'n/a';
     const gp = r && r.gatePassed;
     const ra = r && r.reviseAttempts;
+    const mc = r && r.multiPassCount;
     const al = r && r.judgeAligned;
     const div = (r && r.judgeDivergences && r.judgeDivergences.length) ? r.judgeDivergences.join(',') : 'none';
-    return 'Ch1 ' + a.ch1Len + ' chars. Heuristics interest/read/slop/human=' + hs + '. LLM judge=' + js + '. Gate=' + gp + ' driver=' + (r && r.gateDriver) + ' reviseLog=' + ra + ' judgeAlign=' + al + ' diverge=' + div + '. Snippet: "' + a.ch1Snippet + '".';
+    const kinds = (r && r.multiPassLog) ? r.multiPassLog.map(x => 'p' + x.pass + ':' + x.kind).join(',') : '';
+    return 'Ch1 ' + ((r && r.textLen) || a.ch1Len) + ' chars. Heuristics interest/read/slop/human=' + hs + '. LLM judge=' + js + '. Gate=' + gp + ' driver=' + (r && r.gateDriver) + ' reviseLog=' + ra + ' multiPass=' + mc + '(' + kinds + ') judgeAlign=' + al + ' diverge=' + div + '.';
   }, { minChars: 200, contentFromResult: true });
 
-  await doStep(5, 'Generate Chapters', 'generateChapter2+quality', async () => {
-    return page.evaluate(async () => {
-      await generateChapter(2);
-      const text = novelData.chapters[1] || '';
-      if (!text || text.trim().length < 50) throw new Error('generateChapter(2) produced empty/short text len=' + text.length);
-      const heur = scoreProseQuality(text);
-      pushQualitySample('chapter2-heuristics', heur, text.length);
-      return { textLen: text.length, heur: heur };
-    });
-  }, (a, r) => {
-    const h = r && r.heur;
-    const hs = h ? [h.interest, h.readability, h.aiSlopRisk, h.humanLikeness].join('/') : '?';
-    return 'Ch2 ' + a.ch2Len + ' chars. Heuristics ' + hs + '. Snippet: "' + a.ch2Snippet + '". (Skipped 2nd LLM judge to save tokens.)';
-  }, { minChars: 200, contentFromResult: true });
+  for (let ch = 2; ch <= chaptersToGenerate; ch++) {
+    await doStep(5, 'Generate Chapters', 'generateChapter' + ch + '+quality', async () => {
+      return page.evaluate(async (chapterNum) => {
+        await generateChapter(chapterNum);
+        const text = novelData.chapters[chapterNum - 1] || '';
+        if (!text || text.trim().length < 50) throw new Error('generateChapter(' + chapterNum + ') produced empty/short text len=' + text.length);
+        const heur = scoreProseQuality(text);
+        pushQualitySample('chapter' + chapterNum + '-heuristics', heur, text.length);
+        const multi = (novelData.qualityMultiPassLog || []).filter(e => e && e.chapter === chapterNum);
+        return { textLen: text.length, heur: heur, chapter: chapterNum, multiPassCount: multi.length };
+      }, ch);
+    }, (a, r) => {
+      const h = r && r.heur;
+      const hs = h ? [h.interest, h.readability, h.aiSlopRisk, h.humanLikeness].join('/') : '?';
+      return 'Ch' + ch + ' ' + ((r && r.textLen) || 0) + ' chars. Heuristics ' + hs + '. multiPassCh=' + ((r && r.multiPassCount) || 0) + '.';
+    }, { minChars: 200, contentFromResult: true });
+  }
 
   await doStep(6, 'Edit Chapters', 'applyStagedChapterImprovements1', async () => {
     return page.evaluate(async () => {
