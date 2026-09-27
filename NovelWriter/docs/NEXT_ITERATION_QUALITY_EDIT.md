@@ -1,6 +1,6 @@
 # Next iteration — quality editing & review (NovelWriter)
 
-Status: **1–6 implemented** (2026-09-27). Per-prompt cost in-product (Tab1 diagnostics) done.
+Status: **1–6 implemented** (2026-09-27). **QE6 attributes** (consistency/flow/pacing + stronger readability/slop → revise briefs) shipped — see `QUALITY_ATTRIBUTES.md` + `UNIVERSAL_QUALITY_CONTRACT.md`.
 
 ## Why
 Lean Tracked E2E now reports quality gate scores, heuristic samples, Ch1 `updateChapter` delta, book critique items, and continuity findings in the unified report. Existing review/edit paths still need product-strength improvements.
@@ -13,6 +13,8 @@ Lean Tracked E2E now reports quality gate scores, heuristic samples, Ch1 `update
 4. **Judge ↔ gate alignment** ✅ — heuristics = fail-closed driver; LLM judge = advisory + divergence log (`QUALITY_JUDGE_GATE.md`). `reviseOnJudgeAdvisory` default false.
 5. **Multi-pass quality editing** ✅ — second targeted pass (continuity / still-fail / residual staged); cap `maxAutoPasses=2`; `qualityMultiPassLog` pass1→pass2 (`QUALITY_MULTI_PASS.md`).
 6. **Per-prompt cost in-product** ✅ — Tab1 diagnostics table from `novelData.tokenUsage` + rate card (same as report).
+
+7. **QE6 quality attributes** ✅ — readability/slop/consistency/flow/pacing in heuristics + revise/continuity briefs; fail-closed remains heuristics.
 
 ## Related future (not this backlog)
 - **Rich fixture Track B:** `NovelWriter/fixtures/rich-scifi-v1/` + `NW_E2E_FIXTURE` runner flag (stress E2E; lean stays default).

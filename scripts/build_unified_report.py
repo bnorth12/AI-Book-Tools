@@ -68,6 +68,22 @@ def trunc(s: str, n: int) -> str:
     return s[: n - 1].rstrip() + "…"
 
 
+
+def fmt_attr_scores(s: dict | None) -> str:
+    """QE6: interest/read/slop/human + consistency/flow/pacing when present."""
+    if not isinstance(s, dict):
+        return "?"
+    base = (
+        f"interest={s.get('interest')} readability={s.get('readability')} "
+        f"aiSlopRisk={s.get('aiSlopRisk')} humanLikeness={s.get('humanLikeness')}"
+    )
+    extras = []
+    for k in ("consistency", "flow", "pacing"):
+        if s.get(k) is not None:
+            extras.append(f"{k}={s.get(k)}")
+    return base + ((" · " + " ".join(extras)) if extras else "")
+
+
 def char_blurb(c: dict) -> str:
     name = (c.get("name") or "").strip() or None
     role = (c.get("role") or "").strip()
@@ -206,7 +222,8 @@ def build_report(report: dict, nd: dict) -> str:
     continuity = nd.get("continuityFindings") or []
 
     def _score_line(s):
-        return (
+        return fmt_attr_scores(s if isinstance(s, dict) else None)
+
             f"interest={s.get('interest')} readability={s.get('readability')} "
             f"aiSlopRisk={s.get('aiSlopRisk')} humanLikeness={s.get('humanLikeness')}"
         )
@@ -217,7 +234,9 @@ def build_report(report: dict, nd: dict) -> str:
     ch1_after = q_by.get("chapter1-afterUpdate")
     ch2_gen = q_by.get("chapter2-generate") or q_by.get("chapter2-heuristics")
 
-    lines.append("### Quality & automated editing (separate from cost)")
+    lines.append("### Quality & automated editing (separate from cost)
+
+_QE6 attributes:_ when present on samples/gates, scores include `consistency` / `flow` / `pacing` alongside interest/readability/aiSlopRisk/humanLikeness.")
     lines.append("")
     if gate:
         passed = gate.get("passed")

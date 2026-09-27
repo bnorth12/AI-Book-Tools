@@ -258,6 +258,8 @@ Synced: 2026-04-19
 			<button type="button" onclick="runQe123Smoke()">QE 1/2/3 Smoke</button>
 			<button type="button" onclick="runQe4Smoke()">QE4 Judge↔Gate Smoke</button>
 			<button type="button" onclick="runQe5Smoke()">QE5 Multi-Pass Smoke</button>
+			<button type="button" onclick="runQe6Smoke()">QE6 Attributes Smoke</button>
+			<pre id="qe6SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
 			<pre id="qe5SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
 			<pre id="qe4SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
 			<pre id="qe123SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
@@ -2765,13 +2767,18 @@ let activeAICallCount = 0;
 		 *   "moreover", "furthermore", "it is important to note"), repeated transition stacks, vague fillers
 		 * - humanLikeness: inverse of slop + specificity + natural variance (not metronomic sentence lengths)
 		 */
-		function scoreProseQuality(text) {
+		function scoreProseQuality(text, opts) {
+			opts = opts || {};
 			const notes = [];
 			const raw = (text || '').toString();
 			const cleaned = raw.replace(/\s+/g, ' ').trim();
-			if (!cleaned || cleaned.length < 40) {
-				return { interest: 0, readability: 0, aiSlopRisk: 100, humanLikeness: 0, notes: ['empty or too short'] };
-			}
+			const emptyScores = {
+				interest: 0, readability: 0, aiSlopRisk: 100, humanLikeness: 0,
+				consistency: 0, flow: 0, pacing: 0,
+				notes: ['empty or too short'],
+				meta: { wordCount: 0, sentCount: 0 }
+			};
+			if (!cleaned || cleaned.length < 40) return emptyScores;
 			const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(s => s.replace(/[^a-zA-Z0-9]/g, '').length > 0);
 			const words = cleaned.split(/\s+/).filter(Boolean);
 			const wordCount = words.length || 1;
@@ -2786,7 +2793,11 @@ let activeAICallCount = 0;
 				"moreover", "furthermore", "it is important to note", "in conclusion",
 				"a myriad of", "stands as a", "beacon of", "underscore the", "navigate the complexities",
 				"at the end of the day", "only time will tell", "in the realm of", "shed light on",
-				"vibrant tapestry", "rich tapestry", "delve deeper", "delve into", "pivotal role"
+				"vibrant tapestry", "rich tapestry", "delve deeper", "delve into", "pivotal role",
+				"as soft as", "in the heart of", "little did they know", "against all odds",
+				"a double-edged sword", "time stood still", "bated breath", "crystal clear",
+				"dive into", "embark on a journey", "game changer", "only to realize",
+				"whispered secrets", "unbreakable bond", "ever-evolving", "paradigm shift"
 			];
 			const lower = cleaned.toLowerCase();
 			let stockHits = 0;
@@ -2795,7 +2806,7 @@ let activeAICallCount = 0;
 				const m = lower.match(re);
 				if (m) stockHits += m.length;
 			});
-			const transitionWords = ['however', 'therefore', 'moreover', 'furthermore', 'additionally', 'consequently', 'thus', 'hence'];
+			const transitionWords = ['however', 'therefore', 'moreover', 'furthermore', 'additionally', 'consequently', 'thus', 'hence', 'meanwhile', 'nevertheless', 'nonetheless'];
 			let transitionHits = 0;
 			transitionWords.forEach(t => {
 				const m = lower.match(new RegExp('\\b' + t + '\\b', 'gi'));
@@ -2804,7 +2815,9 @@ let activeAICallCount = 0;
 			const exclamations = (cleaned.match(/!/g) || []).length;
 			const properNouns = (cleaned.match(/\b[A-Z][a-z]{2,}\b/g) || []).length;
 			const dialogueMarks = (raw.match(/["\u201C\u201D']/g) || []).length;
-			const vagueFillers = (lower.match(/\b(things?|stuff|various|numerous|significant|unique|innovative|cutting-edge|seamless|robust|leverage)\b/gi) || []).length;
+			const vagueFillers = (lower.match(/\b(things?|stuff|various|numerous|significant|unique|innovative|cutting-edge|seamless|robust|leverage|utilize|facilitate)\b/gi) || []).length;
+			const adverbly = (lower.match(/\b\w+ly\b/gi) || []).length;
+			const passiveHints = (lower.match(/\b(was|were|been|being)\s+\w+ed\b/gi) || []).length;
 
 			let interest = 45;
 			interest += Math.min(25, stdev * 2.5);
@@ -2817,13 +2830,18 @@ let activeAICallCount = 0;
 			if (stockHits) notes.push('stockPhraseHits=' + stockHits);
 			if (dialogueMarks > 2) notes.push('has dialogue cues');
 
+			// Readability: sentence length band + syllable-ish long-word density + paragraphing
 			let readability = 70;
 			if (avgLen >= 12 && avgLen <= 22) readability += 15;
 			else if (avgLen >= 8 && avgLen <= 28) readability += 5;
 			else readability -= Math.min(30, Math.abs(avgLen - 17) * 2);
 			readability -= Math.min(20, Math.max(0, exclamations - 2) * 5);
+			const longWords = words.filter(w => w.replace(/[^a-zA-Z]/g, '').length >= 12).length;
+			readability -= Math.min(15, Math.round((longWords / wordCount) * 180));
+			readability -= Math.min(10, Math.round((adverbly / wordCount) * 120));
 			const paraBreaks = (raw.match(/\n\s*\n/g) || []).length;
 			if (paraBreaks >= 1) readability += 5;
+			if (paraBreaks === 0 && wordCount > 180) { readability -= 8; notes.push('no paragraph breaks'); }
 			readability = Math.max(0, Math.min(100, Math.round(readability)));
 			notes.push('avgSentenceLen=' + avgLen.toFixed(1) + ' stdev=' + stdev.toFixed(1));
 
@@ -2831,15 +2849,79 @@ let activeAICallCount = 0;
 			aiSlopRisk += Math.min(40, stockHits * 10);
 			aiSlopRisk += Math.min(20, transitionHits * 4);
 			aiSlopRisk += Math.min(15, (vagueFillers / Math.max(1, wordCount / 100)) * 3);
+			aiSlopRisk += Math.min(10, Math.round((passiveHints / Math.max(1, sentCount)) * 8));
 			if (stdev < 2.5 && sentCount > 4) aiSlopRisk += 10;
 			aiSlopRisk = Math.max(0, Math.min(100, Math.round(aiSlopRisk)));
 			if (transitionHits >= 3) notes.push('transitionStacks=' + transitionHits);
 
-			let humanLikeness = Math.round((interest * 0.35) + (readability * 0.25) + ((100 - aiSlopRisk) * 0.40));
+			// Consistency: cast/world name presence vs novelData (create-path); unnamed pronoun soup
+			let consistency = 70;
+			const cast = Array.isArray(novelData.characters) ? novelData.characters : [];
+			const castNames = cast.map(c => (c && c.name) ? String(c.name).trim() : '').filter(Boolean);
+			let castHits = 0;
+			castNames.forEach(n => {
+				const parts = n.split(/\s+/).filter(p => p.length >= 3);
+				const hit = parts.some(p => new RegExp('\\b' + p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(cleaned));
+				if (hit) castHits++;
+			});
+			if (castNames.length >= 2) {
+				const ratio = castHits / castNames.length;
+				if (ratio < 0.15 && wordCount > 200) { consistency -= 25; notes.push('castUnderMentioned'); }
+				else if (ratio >= 0.25) consistency += 10;
+			}
+			const heShe = (lower.match(/\b(he|she|they)\b/gi) || []).length;
+			if (properNouns < 2 && heShe > 12 && wordCount > 150) { consistency -= 15; notes.push('pronounHeavyNoNames'); }
+			const timeResets = (lower.match(/\b(earlier that (day|morning|night)|the next (day|morning)|suddenly|all at once)\b/gi) || []).length;
+			if (timeResets >= 4) { consistency -= 10; notes.push('timelineResets=' + timeResets); }
+			consistency = Math.max(0, Math.min(100, Math.round(consistency)));
+
+			// Flow: rhythm + transition overuse + short-sentence stacks + paragraph glue
+			let flow = 65;
+			flow += Math.min(20, stdev * 2);
+			if (stdev < 2.5 && sentCount > 5) flow -= 15;
+			flow -= Math.min(25, Math.max(0, transitionHits - 2) * 5);
+			let shortStacks = 0;
+			for (let i = 1; i < lengths.length; i++) {
+				if (lengths[i] <= 5 && lengths[i - 1] <= 5) shortStacks++;
+			}
+			flow -= Math.min(15, shortStacks * 3);
+			if (paraBreaks >= 2 && wordCount > 250) flow += 5;
+			flow = Math.max(0, Math.min(100, Math.round(flow)));
+			if (shortStacks >= 3) notes.push('shortSentenceStacks=' + shortStacks);
+
+			// Pacing: dialogue/narration balance + beat density vs monologue stretches
+			let pacing = 65;
+			const dialogueRatio = Math.min(1, dialogueMarks / Math.max(8, wordCount / 12));
+			if (dialogueRatio >= 0.08 && dialogueRatio <= 0.55) pacing += 15;
+			else if (dialogueRatio < 0.02 && wordCount > 300) { pacing -= 15; notes.push('lowDialogueDensity'); }
+			else if (dialogueRatio > 0.7) { pacing -= 10; notes.push('dialogueHeavy'); }
+			const beatMarkers = (lower.match(/\b(then|next|after|before|until|when|as soon as|later|finally)\b/gi) || []).length;
+			const beatPer100 = (beatMarkers / wordCount) * 100;
+			if (beatPer100 < 0.8 && wordCount > 250) { pacing -= 12; notes.push('lowBeatDensity'); }
+			else if (beatPer100 > 6) { pacing -= 10; notes.push('rushedBeats'); }
+			else pacing += 8;
+			const longest = Math.max.apply(null, lengths);
+			if (longest >= 45) { pacing -= 10; notes.push('longSentenceStretch=' + longest); }
+			pacing = Math.max(0, Math.min(100, Math.round(pacing)));
+
+			let humanLikeness = Math.round(
+				(interest * 0.22) + (readability * 0.18) + ((100 - aiSlopRisk) * 0.28) +
+				(consistency * 0.12) + (flow * 0.10) + (pacing * 0.10)
+			);
 			humanLikeness = Math.max(0, Math.min(100, humanLikeness));
 
-			return { interest, readability, aiSlopRisk, humanLikeness, notes, meta: { wordCount, sentCount, avgLen: +avgLen.toFixed(2), stdev: +stdev.toFixed(2), stockHits, transitionHits, exclamations } };
+			return {
+				interest, readability, aiSlopRisk, humanLikeness,
+				consistency, flow, pacing,
+				notes,
+				meta: {
+					wordCount, sentCount, avgLen: +avgLen.toFixed(2), stdev: +stdev.toFixed(2),
+					stockHits, transitionHits, exclamations, castHits, castNamed: castNames.length,
+					shortStacks, beatMarkers, dialogueMarks, adverbly, passiveHints
+				}
+			};
 		}
+
 
 		/**
 		 * Optional one-shot LLM judge. Fail-soft to heuristics-only on missing key/error.
@@ -2924,8 +3006,14 @@ let activeAICallCount = 0;
 			minInterest: 40,
 			minHumanLikeness: 50,
 			maxAiSlopRisk: 55,
+			minReadability: 40,
+			minConsistency: 35,
+			minFlow: 35,
+			minPacing: 35,
 			minChars: 40
 		};
+		// QE6 attribute roles: interest/readability/aiSlop/human/consistency/flow/pacing
+		// Fail-closed via heuristics gate; LLM judge remains advisory (see NW_QUALITY_ROLES).
 		// QE4: fail-closed driver is always heuristics. LLM judge is advisory-only unless explicitly opted in.
 		const NW_QUALITY_ROLES = {
 			failClosedDriver: 'heuristics',
@@ -3115,6 +3203,10 @@ let activeAICallCount = 0;
 			if (scores.aiSlopRisk >= thr.maxAiSlopRisk) failures.push('aiSlopRisk>=' + thr.maxAiSlopRisk);
 			if (scores.humanLikeness < thr.minHumanLikeness) failures.push('humanLikeness<' + thr.minHumanLikeness);
 			if (scores.interest < thr.minInterest) failures.push('interest<' + thr.minInterest);
+			if (thr.minReadability != null && scores.readability < thr.minReadability) failures.push('readability<' + thr.minReadability);
+			if (thr.minConsistency != null && (scores.consistency ?? 100) < thr.minConsistency) failures.push('consistency<' + thr.minConsistency);
+			if (thr.minFlow != null && (scores.flow ?? 100) < thr.minFlow) failures.push('flow<' + thr.minFlow);
+			if (thr.minPacing != null && (scores.pacing ?? 100) < thr.minPacing) failures.push('pacing<' + thr.minPacing);
 			const result = {
 				passed: failures.length === 0,
 				failures: failures,
@@ -3142,6 +3234,7 @@ let activeAICallCount = 0;
 			if (el) {
 				el.textContent = (result.passed ? 'PASS' : 'FAIL') +
 					' interest/read/slop/human=' + scores.interest + '/' + scores.readability + '/' + scores.aiSlopRisk + '/' + scores.humanLikeness +
+					' cons/flow/pace=' + (scores.consistency ?? '?') + '/' + (scores.flow ?? '?') + '/' + (scores.pacing ?? '?') +
 					(failures.length ? (' | ' + failures.join(', ')) : '');
 			}
 			return result;
@@ -3381,16 +3474,49 @@ let activeAICallCount = 0;
 		function buildQualityReviseBrief(gateResult) {
 			const failures = (gateResult && gateResult.failures) || [];
 			const scores = (gateResult && gateResult.scores) || {};
+			const craft = [];
+			const failStr = failures.join(' ').toLowerCase();
+			if (failStr.includes('aislop') || (scores.aiSlopRisk != null && scores.aiSlopRisk >= (NW_QUALITY_GATE.maxAiSlopRisk || 55))) {
+				craft.push('AI-SLOP: delete stock/filler phrases (delve, tapestry, pivotal role, paradigm shift); prefer concrete verbs and specific nouns.');
+			}
+			if (failStr.includes('readability') || (scores.readability != null && scores.readability < (NW_QUALITY_GATE.minReadability || 40))) {
+				craft.push('READABILITY: split overlong sentences; cut stacked adverbs; add paragraph breaks every ~2–4 beats.');
+			}
+			if (failStr.includes('interest') || (scores.interest != null && scores.interest < (NW_QUALITY_GATE.minInterest || 40))) {
+				craft.push('INTEREST: add one concrete sensory detail and one unexpected specific (name, tool, measurement); vary sentence length.');
+			}
+			if (failStr.includes('consistency') || (scores.consistency != null && scores.consistency < (NW_QUALITY_GATE.minConsistency || 35))) {
+				const names = (novelData.characters || []).map(c => c && c.name).filter(Boolean).slice(0, 6);
+				craft.push('CONSISTENCY: keep cast/timeline coherent' + (names.length ? (' — use established names (' + names.join(', ') + ')') : '') + '; do not reset clocks/locations without cause; advance prior continuity risks.');
+			}
+			if (failStr.includes('flow') || (scores.flow != null && scores.flow < (NW_QUALITY_GATE.minFlow || 35))) {
+				craft.push('FLOW: reduce transition stacks (however/moreover/furthermore); avoid three short choppy sentences in a row; glue paragraphs with causal links, not throat-clearing.');
+			}
+			if (failStr.includes('pacing') || (scores.pacing != null && scores.pacing < (NW_QUALITY_GATE.minPacing || 35))) {
+				craft.push('PACING: balance scene beats — if rushed, expand one action with consequence; if stretched, cut summary and land a beat sooner; keep dialogue/narration from monopolizing.');
+			}
+			if (failStr.includes('humanlikeness') || (scores.humanLikeness != null && scores.humanLikeness < (NW_QUALITY_GATE.minHumanLikeness || 50))) {
+				craft.push('HUMAN-LIKENESS: prefer imperfect specific observation over polished abstraction; one grounded body/place detail beats three thematic statements.');
+			}
+			if (!craft.length) {
+				craft.push('General polish: cut AI-slop; add concrete sensory detail; preserve continuity; keep near target length.');
+			}
 			return [
 				'QUALITY GATE FAIL-CLOSED REVISE — fix these failures without changing plot facts:',
 				failures.map(f => '- ' + f).join('\n') || '- (unspecified gate failure)',
 				'Current scores: interest=' + (scores.interest ?? '?') +
 					' readability=' + (scores.readability ?? '?') +
 					' aiSlopRisk=' + (scores.aiSlopRisk ?? '?') +
-					' humanLikeness=' + (scores.humanLikeness ?? '?'),
-				'Requirements: cut AI-slop / stock phrases; add concrete sensory detail and specific verbs; keep near target length; preserve continuity.'
+					' humanLikeness=' + (scores.humanLikeness ?? '?') +
+					' consistency=' + (scores.consistency ?? '?') +
+					' flow=' + (scores.flow ?? '?') +
+					' pacing=' + (scores.pacing ?? '?'),
+				'Craft instructions:',
+				craft.map(c => '- ' + c).join('\n'),
+				'Requirements: preserve continuity and plot facts; keep near target length.'
 			].join('\n');
 		}
+
 
 
 		// ---- #120 QE5: multi-pass quality editing (cap + continuity second pass) ----
@@ -3413,11 +3539,19 @@ let activeAICallCount = 0;
 			const items = (c.risks.length ? c.risks : c.findings.map(function (f) {
 				return String(f).replace(/^Chapter\s+\d+:\s*/i, '');
 			})).filter(Boolean).slice(0, 8);
+			const names = (novelData.characters || []).map(function (ch) { return ch && ch.name; }).filter(Boolean).slice(0, 8);
+			const settingBits = [novelData.setting, novelData.worldBible || novelData.world].filter(Boolean).map(function (s) {
+				return String(s).replace(/\s+/g, ' ').trim().slice(0, 160);
+			});
+			const scores = scoreProseQuality((novelData.chapters || [])[chapterNum - 1] || '');
 			return [
 				'CONTINUITY-FOCUSED QUALITY PASS — fix these continuity issues without changing core plot facts:',
 				(items.length ? items.map(function (x) { return '- ' + x; }).join('\n') : '- (unspecified continuity risk)'),
-				'Requirements: resolve or explicitly advance each listed risk; keep names/timeline consistent; preserve concrete sensory detail; keep near target length; do not invent contradictory lore.'
-			].join('\n');
+				names.length ? ('Cast anchors: ' + names.join(', ')) : 'Cast anchors: (none named yet)',
+				settingBits.length ? ('World/setting anchors: ' + settingBits[0]) : '',
+				'Attribute snapshot: consistency=' + scores.consistency + ' flow=' + scores.flow + ' pacing=' + scores.pacing + ' readability=' + scores.readability + ' aiSlopRisk=' + scores.aiSlopRisk,
+				'Requirements: resolve or explicitly advance each listed risk; keep names/timeline/world consistent; fix flow/pacing only where it supports continuity; preserve concrete sensory detail; keep near target length; do not invent contradictory lore.'
+			].filter(Boolean).join('\n');
 		}
 
 		function needsQualityMultiPass(chapterNum, gate, ctx) {
@@ -3892,6 +4026,49 @@ let activeAICallCount = 0;
 			}
 		}
 		window.runQe5Smoke = runQe5Smoke;
+
+		function runQe6Smoke() {
+			const el = document.getElementById('qe6SmokeResult') || document.getElementById('qe5SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			try {
+				if (!NW_QUALITY_GATE || NW_QUALITY_GATE.minConsistency == null) throw new Error('minConsistency missing');
+				if (NW_QUALITY_GATE.minFlow == null || NW_QUALITY_GATE.minPacing == null) throw new Error('flow/pacing thresholds missing');
+				if (NW_QUALITY_ROLES.failClosedDriver !== 'heuristics') throw new Error('fail-closed must stay heuristics');
+				if (NW_QUALITY_REVISE.maxAutoPasses !== 2) throw new Error('maxAutoPasses must stay 2');
+				say('thresholds OK');
+				novelData.characters = [
+					{ name: 'Dr. Lumen Kwan', role: 'lead', backstory: 'x', arc: 'y' },
+					{ name: 'Rook Velasquez', role: 'foil', backstory: 'x', arc: 'y' }
+				];
+				const slop = scoreProseQuality('In today\'s world, we must delve into the rich tapestry of life. Moreover, furthermore, it is important to note a pivotal role.');
+				if (slop.aiSlopRisk < 40) throw new Error('expected elevated aiSlopRisk got ' + slop.aiSlopRisk);
+				if (slop.flow == null || slop.pacing == null || slop.consistency == null) throw new Error('QE6 attrs missing');
+				say('slop/attrs OK slop=' + slop.aiSlopRisk + ' flow=' + slop.flow + ' pace=' + slop.pacing + ' cons=' + slop.consistency);
+				const good = scoreProseQuality([
+					'Kwan checked the Bitung dock chronometer twice.',
+					'Rook sold a clean block that never existed.',
+					'"Twelve milliseconds," Kwan said.',
+					'The freighter light stuttered, then held.',
+					'They walked the parasol planks without speaking.'
+				].join('\n\n'));
+				const gateFail = runQualityGate(slop.meta && false ? '' : 'In today\'s world, we must delve into the rich tapestry. Moreover, furthermore, additionally, consequently, thus we navigate the complexities of a vibrant tapestry and pivotal role in the realm of progress.', { label: 'qe6-slop' });
+				const brief = buildQualityReviseBrief(gateFail);
+				if (!/AI-SLOP|READABILITY|FLOW|PACING|CONSISTENCY|INTEREST|HUMAN/i.test(brief)) throw new Error('revise brief lacks craft dims');
+				if (!/consistency=|flow=|pacing=/.test(brief)) throw new Error('revise brief lacks attr scores');
+				say('revise brief OK');
+				const cbrief = buildContinuityReviseBrief(1);
+				if (!/Cast anchors:/.test(cbrief) || !/Kwan/.test(cbrief)) throw new Error('continuity brief missing cast');
+				say('continuity brief OK');
+				say('QE6 Attributes Smoke PASS');
+				return true;
+			} catch (e) {
+				say('QE6 Attributes Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			}
+		}
+		window.runQe6Smoke = runQe6Smoke;
+
 
 
 
