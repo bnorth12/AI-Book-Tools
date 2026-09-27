@@ -80,6 +80,39 @@ function assertApiStep(label, beforeCalls, after, opts) {
   }
 }
 
+/** Fail-closed workflow gate: early stages must be dense + not sloppy before later stages multiply defects. */
+function assertStageGate(label, checks) {
+  const fails = [];
+  (checks || []).forEach((c) => {
+    if (!c) return;
+    if (!c.ok) fails.push(c.msg || 'unspecified gate failure');
+  });
+  if (fails.length) {
+    throw new Error('STAGE GATE FAIL-CLOSED [' + label + ']: ' + fails.join(' | '));
+  }
+}
+
+function subplotRichness(subplots) {
+  const rich = (subplots || []).filter((s) => {
+    if (!s) return false;
+    if (typeof s === 'string') return s.trim().length >= 40;
+    return !!(s.title || s.name) && !!(s.summary || s.description || s.text);
+  });
+  return {
+    count: rich.length,
+    sample: rich[0]
+      ? (typeof rich[0] === 'string'
+        ? rich[0].slice(0, 80)
+        : String((rich[0].title || '') + ': ' + (rich[0].summary || '')).slice(0, 80))
+      : ''
+  };
+}
+
+function outlineWordCount(text) {
+  const t = String(text || '').trim();
+  return t ? t.split(/\s+/).length : 0;
+}
+
 function tokLine(snap, beforeCalls) {
   const last = snap.last;
   const thisCall = last && snap.totals.calls > beforeCalls
@@ -119,7 +152,7 @@ const report = {
   ok: false,
   steps: [],
   startedAt: new Date().toISOString(),
-  config: { numChapters: 2, chapterLength: 500, numCharacters: 3, minSubplots: 2, maxTokens: 2000, genre: 'scifi' }
+  config: { numChapters: 2, chapterLength: 500, numCharacters: 3, minSubplots: 2, maxTokens: 6000, genre: 'scifi' }
 };
 
 (async () => {
@@ -184,6 +217,8 @@ const report = {
       set('numChapters', novelData.numChapters);
       set('storyArc', novelData.storyArc);
       set('styleGuide', novelData.styleGuide);
+      set('maxTokens', Math.max(parseInt(novelData.maxTokens || '0', 10) || 0, 6000));
+      novelData.maxTokens = Math.max(parseInt(novelData.maxTokens || '0', 10) || 0, 6000);
       if (typeof updateChapterSubpages === 'function') updateChapterSubpages();
       // populate character UI from novelData (names/roles must survive collectData)
       if (Array.isArray(novelData.characters) && novelData.characters.length) {
@@ -207,7 +242,32 @@ const report = {
           if (arcEl) arcEl.value = c.arc || '';
         });
       }
-      window.__NW_FIXTURE_LOADED = { id: seedObj.fixtureId, regenBible: doRegen, chars: (novelData.characters || []).length };
+      // populate subplot UI from novelData so collectData does not wipe object/string subplots
+      if (Array.isArray(novelData.subplots) && novelData.subplots.length) {
+        const ms = document.getElementById('minSubplots');
+        if (ms) ms.value = String(Math.max(2, novelData.subplots.length));
+      }
+      if (typeof renderSubplots === 'function') {
+        renderSubplots();
+      } else if (typeof syncSubplotEntries === 'function') {
+        syncSubplotEntries();
+        const areas = document.querySelectorAll('#subplotList .subplot');
+        (novelData.subplots || []).forEach((s, i) => {
+          if (!areas[i]) return;
+          if (typeof s === 'string') areas[i].value = s;
+          else if (s && typeof s === 'object') {
+            const title = s.title || s.name || '';
+            const summary = s.summary || s.description || '';
+            areas[i].value = title && summary ? (title + ': ' + summary) : (title || summary || '');
+          }
+        });
+      }
+      window.__NW_FIXTURE_LOADED = {
+        id: seedObj.fixtureId,
+        regenBible: doRegen,
+        chars: (novelData.characters || []).length,
+        subplots: (novelData.subplots || []).length
+      };
     }, { seedObj: seed, doRegen: regenBible });
     report.config.lean = false;
     report.config.numChapters = seed.numChapters || report.config.numChapters;
@@ -246,11 +306,13 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
           contentLen: contentLen,
           allowNoCall: !!assertOpts.allowNoCall
         });
+        if (typeof assertOpts.stageGate === 'function') {
+          assertOpts.stageGate(r.result, r.after);
+        }
       } catch (assertErr) {
         r.ok = false;
         r.err = assertErr.message;
-        // rewrite last progress as fail
-        appendProgress('### Tab ' + tab + ' — ' + name + ' — ' + stepLabel + ' (assert)\n- Status: fail — ' + assertErr.message + '\n- Tokens this call / book cumulative: ' + tokLine(r.after, beforeCalls) + '\n- Eval: Treated as fail: empty content or no book token growth despite API-intended step.\n');
+        appendProgress('### Tab ' + tab + ' — ' + name + ' — ' + stepLabel + ' (assert)\n- Status: fail — ' + assertErr.message + '\n- Tokens this call / book cumulative: ' + tokLine(r.after, beforeCalls) + '\n- Eval: FAIL-CLOSED stage gate (empty/stub-thin/sloppy early input must not multiply into later stages).\n');
         writeStatus(tab, stepLabel, 'fail');
       }
     }
@@ -310,27 +372,122 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   }, (a, r) => (r && r.skipped) ? ('Fixture cast reused: ' + ((r && r.count) || a.chars) + ' characters.') : ('Got ' + ((r && r.count) || a.chars) + ' characters (target 3). Prefer named agents with concrete backstory.'), { allowNoCall: true });
 
   await doStep(3, 'Subplots', 'suggestSubplots', async () => {
-    if (useFixture) return page.evaluate(() => ({ count: (novelData.subplots || []).length, skipped: true }));
+    if (useFixture) {
+      return page.evaluate(() => {
+        const subs = novelData.subplots || [];
+        const joined = subs.map((s) => {
+          if (!s) return '';
+          if (typeof s === 'string') return s;
+          return String((s.title || s.name || '') + ': ' + (s.summary || s.description || ''));
+        }).filter(Boolean).join('\n');
+        const slop = (typeof scoreProseQuality === 'function' && joined.length >= 40)
+          ? scoreProseQuality(joined)
+          : { aiSlopRisk: joined.length ? 0 : 100, consistency: joined.length ? 50 : 0, notes: ['no-text'] };
+        return { count: subs.length, skipped: true, joinedLen: joined.length, aiSlopRisk: slop.aiSlopRisk, consistency: slop.consistency, slopNotes: (slop.notes || []).slice(0, 4) };
+      });
+    }
     return page.evaluate(async () => {
       await suggestSubplots();
-      return { count: (novelData.subplots || []).length };
+      const subs = novelData.subplots || [];
+      const joined = subs.map((s) => typeof s === 'string' ? s : String((s && s.title) || '') + ': ' + String((s && s.summary) || '')).filter(Boolean).join('\n');
+      const slop = (typeof scoreProseQuality === 'function' && joined.length >= 40)
+        ? scoreProseQuality(joined)
+        : { aiSlopRisk: 100, consistency: 0, notes: ['empty'] };
+      return { count: subs.length, skipped: false, joinedLen: joined.length, aiSlopRisk: slop.aiSlopRisk, consistency: slop.consistency, slopNotes: (slop.notes || []).slice(0, 4) };
     });
-  }, (a, r) => (r && r.skipped) ? ('Fixture subplots reused: ' + ((r && r.count) || a.subplots) + '.') : ('Subplots: ' + ((r && r.count) || a.subplots) + ' (target >=2). Should braid into main conflict.'), { allowNoCall: true });
+  }, (a, r) => {
+    const base = (r && r.skipped)
+      ? ('Fixture subplots reused: ' + ((r && r.count) || a.subplots) + '.')
+      : ('Subplots: ' + ((r && r.count) || a.subplots) + ' (target >=2).');
+    return base + ' joinedLen=' + ((r && r.joinedLen) || 0) + ' slopRisk=' + ((r && r.aiSlopRisk) != null ? r.aiSlopRisk : '?') + ' consistency=' + ((r && r.consistency) != null ? r.consistency : '?') + '. Empty/stub/sloppy subplots fail-closed (they multiply into outlines/chapters).';
+  }, {
+    allowNoCall: true,
+    stageGate: (res) => {
+      assertStageGate('Tab3-subplots', [
+        { ok: !!res && (res.count || 0) >= 2, msg: 'need >=2 subplots, got ' + ((res && res.count) || 0) },
+        { ok: !!res && (res.joinedLen || 0) >= 80, msg: 'subplot text stub-thin joinedLen=' + ((res && res.joinedLen) || 0) + ' (empty/[object Object] wipe not allowed)' },
+        { ok: !!res && (res.aiSlopRisk == null || res.aiSlopRisk <= 70), msg: 'subplot AI-slop risk too high: ' + ((res && res.aiSlopRisk)) + ' notes=' + ((res && res.slopNotes) || []).join(';') }
+      ]);
+    }
+  });
 
   await doStep(4, 'Outlines', 'generateNovelOutlines', async () => {
-    if (useFixture) return page.evaluate(() => ({ skipped: true, outlines: (novelData.chapterOutlines || []).length, arcLen: (novelData.storyArc || '').length }));
+    // Always run macro outline agent (fixture previously skipped → empty novelOutline/plotOutline/blueprints).
     return page.evaluate(async () => {
       await generateNovelOutlines();
-      return { novel: (novelData.novelOutline || '').length, plot: (novelData.plotOutline || '').length };
+      const richSubs = (novelData.subplots || []).filter((s) => {
+        if (!s) return false;
+        if (typeof s === 'string') return s.trim().length > 0;
+        return !!(s.title || s.summary || s.description);
+      });
+      const novel = novelData.novelOutline || '';
+      const plot = novelData.plotOutline || '';
+      const arc = novelData.storyArcOutline || '';
+      const pack = [novel, plot, arc].filter(Boolean).join('\n\n');
+      const slop = (typeof scoreProseQuality === 'function' && pack.length >= 40)
+        ? scoreProseQuality(pack)
+        : { aiSlopRisk: 100, consistency: 0, notes: ['empty-macros'] };
+      return {
+        novel: novel.length,
+        plot: plot.length,
+        arc: arc.length,
+        novelWords: novel.trim() ? novel.trim().split(/\s+/).length : 0,
+        plotWords: plot.trim() ? plot.trim().split(/\s+/).length : 0,
+        blueprints: Array.isArray(novelData.chapterBlueprints) ? novelData.chapterBlueprints.length : 0,
+        subplots: richSubs.length,
+        worldPacked: !!(novelData.worldBible || novelData.world),
+        aiSlopRisk: slop.aiSlopRisk,
+        consistency: slop.consistency,
+        slopNotes: (slop.notes || []).slice(0, 5)
+      };
     });
-  }, (a, r) => 'Novel/plot outline lens: ' + ((r && r.novel) || 0) + '/' + ((r && r.plot) || 0) + '. Want chapter roles + escalation, not buzzword tapestry.');
+  }, (a, r) => 'Tab4 macros: novel/plot/arc lens ' + ((r && r.novel) || 0) + '/' + ((r && r.plot) || 0) + '/' + ((r && r.arc) || 0) + ' words~' + ((r && r.novelWords) || 0) + '/' + ((r && r.plotWords) || 0) + '; blueprints=' + ((r && r.blueprints) || 0) + '; subplots=' + ((r && r.subplots) || 0) + '; world=' + !!(r && r.worldPacked) + '; slopRisk=' + ((r && r.aiSlopRisk) != null ? r.aiSlopRisk : '?') + ' consistency=' + ((r && r.consistency) != null ? r.consistency : '?') + '. Empty/stub macros fail-closed.', {
+    stageGate: (res) => {
+      assertStageGate('Tab4-generateNovelOutlines', [
+        { ok: !!res && (res.novel || 0) >= 400, msg: 'novelOutline stub-thin len=' + ((res && res.novel) || 0) },
+        { ok: !!res && (res.plot || 0) >= 400, msg: 'plotOutline stub-thin/empty len=' + ((res && res.plot) || 0) + ' (must not proceed to chapters with empty plot)' },
+        { ok: !!res && (res.arc || 0) >= 300, msg: 'storyArcOutline stub-thin len=' + ((res && res.arc) || 0) },
+        { ok: !!res && (res.subplots || 0) >= 2, msg: 'subplots missing at macro stage count=' + ((res && res.subplots) || 0) },
+        { ok: !!res && (res.blueprints || 0) >= 1, msg: 'chapterBlueprints missing (macro spine incomplete)' },
+        { ok: !!res && (res.worldPacked === true), msg: 'worldBible not packed/present for macro stage' },
+        { ok: !!res && (res.aiSlopRisk == null || res.aiSlopRisk <= 65), msg: 'macro outline AI-slop risk too high: ' + (res && res.aiSlopRisk) + ' notes=' + ((res && res.slopNotes) || []).join(';') },
+        { ok: !!res && (res.consistency == null || res.consistency >= 35), msg: 'macro outline consistency too low: ' + (res && res.consistency) }
+      ]);
+    }
+  });
 
   await doStep(4, 'Outlines', 'generateChapterOutline1', async () => {
     return page.evaluate(async () => {
       await generateChapterOutline(1);
-      return { len: (novelData.chapterOutlines[0] || '').length };
+      const outline = novelData.chapterOutlines[0] || '';
+      const arc = (novelData.chapterArcs && novelData.chapterArcs[0]) || '';
+      const words = outline.trim() ? outline.trim().split(/\s+/).length : 0;
+      const pack = (outline + '\n' + arc).trim();
+      const slop = (typeof scoreProseQuality === 'function' && pack.length >= 40)
+        ? scoreProseQuality(pack)
+        : { aiSlopRisk: 100, consistency: 0, notes: ['empty-ch-outline'] };
+      return {
+        len: outline.length,
+        words,
+        arcLen: arc.length,
+        hasWorldHookHint: /Bitung|Conduit|Lofoten|Seattle|bridge|faction|dock|location|world/i.test(outline + ' ' + arc),
+        hasNamedBeat: /\b(Kwan|Rook|Sinta|Okafor|Yen|Theo|Cassian|Mireya|Aoi)\b/i.test(outline + ' ' + arc) || /\b[A-Z][a-z]+\b.*\b(beat|realiz|confront|decid|discover)/i.test(outline),
+        aiSlopRisk: slop.aiSlopRisk,
+        consistency: slop.consistency,
+        slopNotes: (slop.notes || []).slice(0, 5)
+      };
     });
-  }, (a, r) => 'Ch1 outline len ' + ((r && r.len) || 0) + '. Should name scenes/beats with concrete locations.');
+  }, (a, r) => 'Tab4 Ch1 outline: len=' + ((r && r.len) || 0) + ' words~' + ((r && r.words) || 0) + ' arcLen=' + ((r && r.arcLen) || 0) + ' worldHint=' + !!(r && r.hasWorldHookHint) + ' namedBeat=' + !!(r && r.hasNamedBeat) + ' slopRisk=' + ((r && r.aiSlopRisk) != null ? r.aiSlopRisk : '?') + ' consistency=' + ((r && r.consistency) != null ? r.consistency : '?') + '. Target >=300w; fail-closed if stub/sloppy.', {
+    stageGate: (res) => {
+      assertStageGate('Tab4-generateChapterOutline1', [
+        { ok: !!res && (res.words || 0) >= 180, msg: 'Ch1 outline stub-thin words=' + ((res && res.words) || 0) + ' (floor 180; target 300)' },
+        { ok: !!res && (res.arcLen || 0) >= 200, msg: 'Ch1 arc stub-thin len=' + ((res && res.arcLen) || 0) },
+        { ok: !!res && !!res.hasWorldHookHint, msg: 'Ch1 outline missing world/location hooks (world packing not reflected)' },
+        { ok: !!res && (res.aiSlopRisk == null || res.aiSlopRisk <= 65), msg: 'Ch1 outline AI-slop risk too high: ' + (res && res.aiSlopRisk) + ' notes=' + ((res && res.slopNotes) || []).join(';') },
+        { ok: !!res && (res.consistency == null || res.consistency >= 35), msg: 'Ch1 outline consistency too low: ' + (res && res.consistency) }
+      ]);
+    }
+  });
 
   // Outlines + generates for chapters 2..N (ch1 outline already done above when present)
   const chaptersToGenerate = report.config.chaptersToGenerate || report.config.numChapters || 2;
@@ -340,9 +497,77 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     await doStep(4, 'Outlines', 'generateChapterOutline' + ch, async () => {
       return page.evaluate(async (chapterNum) => {
         await generateChapterOutline(chapterNum);
-        return { len: (novelData.chapterOutlines[chapterNum - 1] || '').length, chapter: chapterNum };
+        const outline = novelData.chapterOutlines[chapterNum - 1] || '';
+        const words = outline.trim() ? outline.trim().split(/\s+/).length : 0;
+        const slop = (typeof scoreProseQuality === 'function' && outline.length >= 40)
+          ? scoreProseQuality(outline)
+          : { aiSlopRisk: 100, consistency: 0, notes: ['empty'] };
+        return { len: outline.length, words, chapter: chapterNum, aiSlopRisk: slop.aiSlopRisk, consistency: slop.consistency, slopNotes: (slop.notes || []).slice(0, 4) };
       }, ch);
-    }, (a, r) => 'Ch' + ch + ' outline len ' + ((r && r.len) || 0) + '.');
+    }, (a, r) => 'Tab4 Ch' + ch + ' outline: len=' + ((r && r.len) || 0) + ' words~' + ((r && r.words) || 0) + ' slopRisk=' + ((r && r.aiSlopRisk) != null ? r.aiSlopRisk : '?') + '.', {
+      stageGate: (res) => {
+        assertStageGate('Tab4-generateChapterOutline' + ch, [
+          { ok: !!res && (res.words || 0) >= 150, msg: 'Ch' + ch + ' outline stub-thin words=' + ((res && res.words) || 0) },
+          { ok: !!res && (res.aiSlopRisk == null || res.aiSlopRisk <= 70), msg: 'Ch' + ch + ' outline AI-slop risk too high: ' + (res && res.aiSlopRisk) }
+        ]);
+      }
+    });
+  }
+
+  if (process.env.NW_E2E_OUTLINE_ONLY === '1') {
+    report.config.outlineOnly = true;
+    const outlineProof = await page.evaluate(() => {
+      const richSubs = (novelData.subplots || []).filter((s) => {
+        if (!s) return false;
+        if (typeof s === 'string') return s.trim().length > 0;
+        return !!(s.title || s.summary || s.description);
+      });
+      const ch1 = (novelData.chapterOutlines || [])[0] || '';
+      return {
+        novelOutlineLen: (novelData.novelOutline || '').length,
+        plotOutlineLen: (novelData.plotOutline || '').length,
+        storyArcOutlineLen: (novelData.storyArcOutline || '').length,
+        blueprints: Array.isArray(novelData.chapterBlueprints) ? novelData.chapterBlueprints.length : 0,
+        subplots: richSubs.length,
+        subplot0: richSubs[0] ? (typeof richSubs[0] === 'string' ? richSubs[0].slice(0, 100) : ((richSubs[0].title || '') + ': ' + (richSubs[0].summary || '')).slice(0, 100)) : '',
+        ch1OutlineLen: ch1.length,
+        ch1Words: ch1.trim() ? ch1.trim().split(/\s+/).length : 0,
+        worldBible: !!(novelData.worldBible || novelData.world),
+        lastPromptHasWorld: String(requestLog && requestLog.lastPrompt || '').includes('World Bible')
+      };
+    });
+    report.outlineProof = outlineProof;
+    // Also score early-spine slop for outline-only runs (stop multiplication even without prose).
+    const earlyPack = await page.evaluate(() => {
+      const pack = [novelData.novelOutline || '', novelData.plotOutline || '', (novelData.chapterOutlines || [])[0] || ''].join('\n\n');
+      const slop = (typeof scoreProseQuality === 'function' && pack.trim().length >= 40)
+        ? scoreProseQuality(pack)
+        : { aiSlopRisk: 100, consistency: 0, notes: ['empty'] };
+      return { aiSlopRisk: slop.aiSlopRisk, consistency: slop.consistency, slopNotes: (slop.notes || []).slice(0, 5) };
+    });
+    outlineProof.aiSlopRisk = earlyPack.aiSlopRisk;
+    outlineProof.consistency = earlyPack.consistency;
+    outlineProof.slopNotes = earlyPack.slopNotes;
+    let outlineOnlyOk = true;
+    let outlineOnlyErr = null;
+    try {
+      assertStageGate('outline-only-proof', [
+        { ok: outlineProof.novelOutlineLen >= 400, msg: 'novelOutline stub-thin ' + outlineProof.novelOutlineLen },
+        { ok: outlineProof.plotOutlineLen >= 400, msg: 'plotOutline stub-thin/empty ' + outlineProof.plotOutlineLen },
+        { ok: outlineProof.subplots >= 2, msg: 'subplots empty ' + outlineProof.subplots },
+        { ok: outlineProof.ch1Words >= 180, msg: 'ch1 outline stub-thin words=' + outlineProof.ch1Words },
+        { ok: outlineProof.worldBible, msg: 'worldBible missing' },
+        { ok: outlineProof.blueprints >= 1, msg: 'chapterBlueprints missing' },
+        { ok: outlineProof.lastPromptHasWorld, msg: 'chapter outline prompt missing World Bible packing' },
+        { ok: earlyPack.aiSlopRisk == null || earlyPack.aiSlopRisk <= 65, msg: 'early outline AI-slop risk too high: ' + earlyPack.aiSlopRisk + ' notes=' + (earlyPack.slopNotes || []).join(';') }
+      ]);
+    } catch (e) {
+      outlineOnlyOk = false;
+      outlineOnlyErr = e.message;
+    }
+    appendProgress('### Phase - outline-only proof\n- Status: ' + (outlineOnlyOk ? 'ok' : 'fail') + (outlineOnlyErr ? (' — ' + outlineOnlyErr) : '') + '\n- Eval: novel=' + outlineProof.novelOutlineLen + ' plot=' + outlineProof.plotOutlineLen + ' arc=' + outlineProof.storyArcOutlineLen + ' bp=' + outlineProof.blueprints + ' subplots=' + outlineProof.subplots + ' ch1words=' + outlineProof.ch1Words + ' world=' + outlineProof.worldBible + ' promptWorld=' + outlineProof.lastPromptHasWorld + ' slopRisk=' + outlineProof.aiSlopRisk + ' consistency=' + outlineProof.consistency + ' sample=\"' + String(outlineProof.subplot0 || '').replace(/\n/g, ' ') + '\"\n');
+    report.steps.push({ tab: 5, name: 'Chapters', step: 'outline-only-skip', ok: outlineOnlyOk, error: outlineOnlyErr, eval: outlineOnlyOk ? 'Skipped prose generation (outline-only); early-stage gates passed.' : ('outline-only gates failed: ' + outlineOnlyErr) });
+    if (!outlineOnlyOk) throw new Error(outlineOnlyErr || 'outline-only stage gates failed');
   }
 
   // Item 3: optionally seed continuity + raise gate bar so pass1 gate-fail + pass2 continuity fire
@@ -369,6 +594,53 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     appendProgress('### Phase - force multipass\n- Status: seeded\n- Eval: continuity findings + raised gate thresholds for Ch1\n');
   }
 
+  // Hard product rule: never write chapters on empty/stub/sloppy early spine (plot/subplots/outlines/world).
+  {
+    const spine = await page.evaluate(() => {
+      const richSubs = (novelData.subplots || []).filter((s) => {
+        if (!s) return false;
+        if (typeof s === 'string') return s.trim().length >= 40;
+        return !!(s.title || s.name) && !!(s.summary || s.description);
+      });
+      const novel = novelData.novelOutline || '';
+      const plot = novelData.plotOutline || '';
+      const ch1 = (novelData.chapterOutlines || [])[0] || '';
+      const pack = [novel, plot, ch1].filter(Boolean).join('\n\n');
+      const slop = (typeof scoreProseQuality === 'function' && pack.length >= 40)
+        ? scoreProseQuality(pack)
+        : { aiSlopRisk: 100, consistency: 0, notes: ['empty-spine'] };
+      return {
+        subplots: richSubs.length,
+        novelLen: novel.length,
+        plotLen: plot.length,
+        ch1Words: ch1.trim() ? ch1.trim().split(/\s+/).length : 0,
+        world: !!(novelData.worldBible || novelData.world),
+        blueprints: Array.isArray(novelData.chapterBlueprints) ? novelData.chapterBlueprints.length : 0,
+        aiSlopRisk: slop.aiSlopRisk,
+        consistency: slop.consistency,
+        slopNotes: (slop.notes || []).slice(0, 5)
+      };
+    });
+    try {
+      assertStageGate('pre-prose-spine', [
+        { ok: spine.subplots >= 2, msg: 'subplots empty/stub before prose count=' + spine.subplots },
+        { ok: spine.plotLen >= 400, msg: 'plotOutline empty/stub before prose len=' + spine.plotLen },
+        { ok: spine.novelLen >= 400, msg: 'novelOutline empty/stub before prose len=' + spine.novelLen },
+        { ok: spine.ch1Words >= 180, msg: 'Ch1 outline stub-thin before prose words=' + spine.ch1Words },
+        { ok: spine.world, msg: 'worldBible missing before prose' },
+        { ok: spine.aiSlopRisk == null || spine.aiSlopRisk <= 65, msg: 'early-spine AI-slop risk too high before prose: ' + spine.aiSlopRisk + ' notes=' + (spine.slopNotes || []).join(';') }
+      ]);
+      appendProgress('### Phase - pre-prose spine gate\n- Status: ok\n- Eval: subplots=' + spine.subplots + ' plot=' + spine.plotLen + ' novel=' + spine.novelLen + ' ch1words=' + spine.ch1Words + ' bp=' + spine.blueprints + ' world=' + spine.world + ' slopRisk=' + spine.aiSlopRisk + ' consistency=' + spine.consistency + '. Early inputs dense enough to avoid multiplying slop into chapters.\n');
+      report.preProseSpine = spine;
+    } catch (gateErr) {
+      appendProgress('### Phase - pre-prose spine gate\n- Status: fail\n- Eval: ' + gateErr.message + '\n');
+      report.steps.push({ tab: 5, name: 'Chapters', step: 'pre-prose-spine-gate', ok: false, error: gateErr.message });
+      report.preProseSpine = spine;
+      throw gateErr;
+    }
+  }
+
+  if (!report.config.outlineOnly) {
   await doStep(5, 'Generate Chapters', 'generateChapter1+quality', async () => {
     return page.evaluate(async () => {
       await generateChapter(1);
@@ -548,6 +820,8 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     return 'Applied top critique to Ch.' + (r && r.chapter) + ' status=' + (r && r.status) + ' delta i/r/s/h=' + ds + ' log=' + (r && r.critiqueApplyLog) + '.';
   }, { minChars: 200, contentFromResult: true });
 
+  } // end outlineOnly skip of chapter generation
+
   const finalUsage = await page.evaluate(() => getSessionUsage());
   const finalQuality = await page.evaluate(() => getSessionQuality());
   report.ok = report.steps.every(s => s.ok);
@@ -583,6 +857,17 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     genre: annexNovel.genre || '',
     characters: (annexNovel.characters || []).length,
     subplots: (annexNovel.subplots || []).length,
+    subplotSample: (function () {
+      const s = (annexNovel.subplots || [])[0];
+      if (!s) return '';
+      if (typeof s === 'string') return s.slice(0, 80);
+      return String((s.title || '') + ': ' + (s.summary || '')).slice(0, 80);
+    })(),
+    novelOutlineLen: (annexNovel.novelOutline || '').length,
+    plotOutlineLen: (annexNovel.plotOutline || '').length,
+    storyArcOutlineLen: (annexNovel.storyArcOutline || '').length,
+    chapterBlueprintCount: Array.isArray(annexNovel.chapterBlueprints) ? annexNovel.chapterBlueprints.length : 0,
+    ch1OutlineLen: ((annexNovel.chapterOutlines || [])[0] || '').length,
     chapters: (annexNovel.chapters || []).map(c => (c || '').length),
     hasTokenUsage: !!(annexNovel.tokenUsage && annexNovel.tokenUsage.calls),
     hasQuality: !!(annexNovel.qualitySamples && annexNovel.qualitySamples.length)

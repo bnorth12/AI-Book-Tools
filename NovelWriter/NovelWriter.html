@@ -997,8 +997,8 @@ let activeAICallCount = 0;
 				suggestSubplots: { name: 'Subplot Design Agent', systemPrompt: 'You are a subplot strategist. Design subplots that reinforce central themes, cross-pressure character goals, and pay off through tangible chapter-level consequences.' }
 			},
 			tab4: {
-				generateNovelOutlines: { name: 'Novel Outline Agent', systemPrompt: 'You are a structural narrative planner for full-length novels. Produce coherent macro-structure with clear phase transitions, rising stakes, subplot placement, and thematic throughline.' },
-				generateChapterOutline: { name: 'Chapter Outline Agent', systemPrompt: 'You are a chapter planning specialist. Convert macro outline goals into focused chapter events and emotional beats that clearly advance plot, arcs, and unresolved threads.' },
+				generateNovelOutlines: { name: 'Novel Outline Agent', systemPrompt: 'You are a structural narrative planner for full-length novels. Produce coherent macro-structure (novelOutline/plotOutline/storyArcOutline) with clear phase transitions, rising stakes, named subplot placement, and thematic throughline. Always emit chapterBlueprints with role, arcStep, subplotPressure, characterBeats (named), allowedPayoffs, deferredThreads, and worldHooks (factions/locations from the world bible). Meet stated word floors; never return empty shells.' },
+				generateChapterOutline: { name: 'Chapter Outline Agent', systemPrompt: 'You are a chapter planning specialist. Convert macro outline goals into a 300-400 word outline and 200-300 word arc with structured beats tied to named characters, the chapter blueprint arcStep, active subplot pressure, and concrete worldHooks (factions/locations from the world bible). Advance plot and unresolved threads; never return soft one-liner beats or ignore the world bible when provided.' },
 				updateChapterOutline: { name: 'Outline Update Agent', systemPrompt: 'You are an outline revision editor. Integrate requested changes while preserving continuity, causality, and role of the chapter in the broader narrative sequence.' },
 				incorporateOutlineSuggestions: { name: 'Outline Incorporation Agent', systemPrompt: 'You are a narrative restructuring assistant. Apply improvement notes across all outline layers without breaking thematic consistency or story logic.' }
 			},
@@ -2570,11 +2570,39 @@ let activeAICallCount = 0;
 			return (list || []).filter(c => c && c.name).slice(0, limit).map(digestCharacter).filter(Boolean);
 		}
 
+		function subplotToPlainText(s) {
+			if (s == null || s === '') return '';
+			if (typeof s === 'string') return s.trim();
+			if (typeof s === 'object') {
+				const title = String(s.title || s.name || '').trim();
+				const summary = String(s.summary || s.description || s.text || '').trim();
+				if (title && summary) return title + ': ' + summary;
+				return title || summary || '';
+			}
+			return String(s);
+		}
+
 		function digestSubplots(subplots, n = 3, maxEach = 180) {
-			return (subplots || []).filter(Boolean).slice(0, n).map((s, i) => ({
+			return (subplots || []).map(subplotToPlainText).filter(Boolean).slice(0, n).map((text, i) => ({
 				id: i + 1,
-				summary: digestText(typeof s === 'string' ? s : String(s), maxEach)
+				summary: digestText(text, maxEach)
 			}));
+		}
+
+		function digestWorldBible(wb, maxSummary = 320) {
+			if (!wb) return '';
+			if (typeof wb === 'string') return digestText(wb, maxSummary + 80);
+			if (typeof wb !== 'object') return '';
+			const parts = [];
+			if (wb.name) parts.push('World: ' + String(wb.name));
+			if (wb.summary) parts.push(digestText(String(wb.summary), maxSummary));
+			if (Array.isArray(wb.factions) && wb.factions.length) {
+				parts.push('Factions: ' + wb.factions.slice(0, 6).map(String).join('; '));
+			}
+			if (Array.isArray(wb.locations) && wb.locations.length) {
+				parts.push('Locations: ' + wb.locations.slice(0, 8).map(String).join('; '));
+			}
+			return parts.join(' | ');
 		}
 
 		function digestStyleGuide(text) {
@@ -2593,6 +2621,7 @@ let activeAICallCount = 0;
 				storyArcDigest: digestText(novelData.storyArc || '', 280),
 				plotDigest: digestText(novelData.generalPlot || '', 320),
 				settingDigest: digestText(novelData.setting || '', 280),
+				worldBibleDigest: digestWorldBible(novelData.worldBible || novelData.world),
 				characters: digestCharacters(charSource),
 				subplots: digestSubplots(novelData.subplots, 3, 180)
 			};
@@ -2709,6 +2738,15 @@ let activeAICallCount = 0;
 					const ds = digestSubplots(['p'.repeat(1000), 'q'.repeat(1000), 'r'.repeat(1000), 's'.repeat(1000)], 3, 180);
 					if (Array.isArray(ds) && ds.length === 3 && ds.every(x => x.summary && x.summary.length <= 181)) pass('digestSubplots returns compact structures');
 					else { fail('digestSubplots not compact'); failed = true; }
+					const dObj = digestSubplots([{ title: 'Alpha', summary: 'beta detail here' }, { title: 'Gamma', summary: 'delta' }], 3, 180);
+					if (Array.isArray(dObj) && dObj.length === 2 && dObj.every(x => x.summary && x.summary.indexOf('[object Object]') < 0 && /Alpha|Gamma/.test(x.summary))) pass('digestSubplots accepts title/summary objects');
+					else { fail('digestSubplots object form broken'); failed = true; }
+				}
+				if (typeof digestWorldBible !== 'function') { fail('digestWorldBible missing'); failed = true; }
+				else {
+					const wb = digestWorldBible({ name: 'X', summary: 'Y'.repeat(500), factions: ['A'], locations: ['B'] });
+					if (wb && wb.indexOf('World: X') >= 0 && wb.indexOf('Factions:') >= 0 && wb.indexOf('Locations:') >= 0) pass('digestWorldBible packs factions/locations');
+					else { fail('digestWorldBible incomplete'); failed = true; }
 				}
 				if (typeof buildPromptContextPack !== 'function') { fail('buildPromptContextPack missing'); failed = true; }
 				else {
@@ -5614,20 +5652,14 @@ let activeAICallCount = 0;
 		        {
 		            role: 'user',
 		            content: [
-		                `Generate comprehensive outlines for a ${novelData.genre} novel with ${novelData.numChapters || 10} chapters, using title "${novelData.title || 'Untitled'}", story arc "${digestText(novelData.storyArc || 'No arc provided', 200)}", plot "${novelData.generalPlot || 'No plot provided'}", setting "${novelData.setting || 'No setting provided'}", characters "${JSON.stringify(digestCharacters(novelData.characters))}", subplots "${novelData.subplots.join('\n\n') || 'No subplots provided'}", in the style of ${novelData.authorStyle || 'generic'} with style guide digest "${digestStyleGuide(novelData.styleGuide)}", existing novel outline "${novelData.novelOutline || 'None'}", plot outline "${novelData.plotOutline || 'None'}", arc outline "${novelData.storyArcOutline || 'None'}".`,
+		                `Generate comprehensive outlines for a ${novelData.genre} novel with ${novelData.numChapters || 10} chapters, using title "${novelData.title || 'Untitled'}", story arc "${digestText(novelData.storyArc || 'No arc provided', 200)}", plot "${novelData.generalPlot || 'No plot provided'}", setting "${novelData.setting || 'No setting provided'}", characters "${JSON.stringify(digestCharacters(novelData.characters))}", subplots "${JSON.stringify(digestSubplots(novelData.subplots, 4, 200)) || 'No subplots provided'}", world bible "${digestWorldBible(novelData.worldBible || novelData.world) || 'No world bible provided'}", in the style of ${novelData.authorStyle || 'generic'} with style guide digest "${digestStyleGuide(novelData.styleGuide)}", existing novel outline "${novelData.novelOutline || 'None'}", plot outline "${novelData.plotOutline || 'None'}", arc outline "${novelData.storyArcOutline || 'None'}".`,
 		                '- Novel Outline: 500-600 words, a sweeping summary of all chapters, detailing arc progression (beginning, middle, end) with 4-6 turning points, 3-4 subplot integrations, and 2-3 thematic pillars (e.g., hope, betrayal), rich with evocative stakes and tone.',
 		                '- Annotated Plot Outline: 600-750 words, chapter-by-chapter (1-2 events each) with escalating stakes, 4-6 subplot connections, and sensory details, ensuring narrative flow and tension in the selected style.',
 		                '- Annotated Story Arc Outline: 500-600 words, a thematic odyssey with 4-6 emotional beats per act (beginning, middle, end), linked to character arcs and subplots, no names, emphasizing universal resonance.',
 		                'Minimum word counts for depth, reflecting style’s tone, structure, and prose for a novel with vivid world, plot, and character synergy.',
-		                `- Chapter Blueprints: one entry per chapter (1 through ${novelData.numChapters || 10}). For each chapter specify: role (e.g. 'opening setup', 'midpoint reversal', 'climax'), arcStep (the story-arc beat this chapter must advance), subplotPressure (subplots active and what they must accomplish), characterBeats (named characters and the internal shift they undergo), allowedPayoffs (what may be resolved this chapter), and deferredThreads (what must remain open for later chapters). Enforce escalation discipline: early chapters seed and complicate; middle chapters escalate and reframe; late chapters execute payoffs only. Never allow climax-grade resolutions in opening chapters.`,
-		                'Return as JSON: {"novelOutline": "<outline>", "plotOutline": "<plot outline>", "storyArcOutline": "<arc outline>", "chapterBlueprints": [{"chapter": 1, "role": "...", "arcStep": "...", "subplotPressure": ["..."], "characterBeats": [{"name": "...", "beat": "..."}], "allowedPayoffs": ["..."], "deferredThreads": ["..."]}]}.',
-		                'Use the following example only as a format guide; do not replicate its specific content (e.g., settings, events):',
-		                'Example:',
-		                '{',
-		                `    "novelOutline": "In ${novelData.authorStyle || 'generic'}’s ${novelData.styleGuide || 'default'}-etched ${novelData.genre} lens, ${novelData.title || 'Untitled'} spans ${novelData.numChapters || 10} chapters as ${novelData.generalPlot || 'the plot'} unfolds—perhaps a rift tears reality, per ${novelData.storyArc || 'the arc'}. Early chapters spark chaos, midpoints twist with subplots’ betrayals, and the end forges peace, weaving hope and loss in evocative strokes.",`,
-		                `    "plotOutline": "Ch. 1: ${novelData.generalPlot || 'the plot'} begins with a ${novelData.setting || 'setting'} quake—${novelData.styleGuide || 'default'}’s stark prose paints panic. Ch. 5: subplots collide, stakes soar. Ch. ${novelData.numChapters || 10}: ${novelData.authorStyle || 'generic'}’s climax resolves ${novelData.storyArc || 'the arc'}, rich with sensory weight.",`,
-		                `    "storyArcOutline": "The ${novelData.storyArc || 'arc'} odyssey, in ${novelData.authorStyle || 'generic'}’s ${novelData.styleGuide || 'default'} vein, arcs from despair’s dawn through revelation’s storm—beats of doubt, defiance, unity, sacrifice—to a ${novelData.generalPlot || 'plot'}-echoed renewal, threading subplots’ themes."`,
-		                '}'
+		                `- Chapter Blueprints: one entry per chapter (1 through ${novelData.numChapters || 10}). For each chapter specify: role (e.g. 'opening setup', 'midpoint reversal', 'climax'), arcStep (the story-arc beat this chapter must advance), subplotPressure (subplots active and what they must accomplish), characterBeats (named characters and the internal shift they undergo), worldHooks (1-2 factions or locations from the world bible that must appear), allowedPayoffs (what may be resolved this chapter), and deferredThreads (what must remain open for later chapters). Enforce escalation discipline: early chapters seed and complicate; middle chapters escalate and reframe; late chapters execute payoffs only. Never allow climax-grade resolutions in opening chapters.`,
+		                'Return as JSON: {"novelOutline": "<outline>", "plotOutline": "<plot outline>", "storyArcOutline": "<arc outline>", "chapterBlueprints": [{"chapter": 1, "role": "...", "arcStep": "...", "subplotPressure": ["..."], "characterBeats": [{"name": "...", "beat": "..."}], "worldHooks": ["..."], "allowedPayoffs": ["..."], "deferredThreads": ["..."]}]}.',
+		                'Do not imitate short stub outlines. Meet the word floors above with concrete chapter roles, named subplot pressure, and worldHooks from the world bible.'
 		            ].join('\n')
 		        }
 		    ];
@@ -5787,6 +5819,7 @@ let activeAICallCount = 0;
 		            `  Arc Step: ${blueprint.arcStep || structuralRule}`,
 		            `  Subplot Pressure: ${(blueprint.subplotPressure || []).join('; ') || 'See subplots above'}`,
 		            `  Character Beats: ${(blueprint.characterBeats || []).map(b => `${b.name}: ${b.beat}`).join('; ') || 'See characters above'}`,
+		            `  World Hooks: ${(blueprint.worldHooks || []).join('; ') || 'Use world bible locations/factions'}`,
 		            `  Allowed Payoffs This Chapter: ${(blueprint.allowedPayoffs || []).join('; ') || 'none specified'}`,
 		            `  Deferred Threads (must remain unresolved): ${(blueprint.deferredThreads || []).join('; ') || 'none specified'}`,
 		        ].join('\n')
@@ -5804,6 +5837,7 @@ let activeAICallCount = 0;
 		                `- Story Arc (digest): ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
 		                `- Plot (digest): ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
 		                `- Setting (digest): ${digestText(novelData.setting || 'No setting provided', 280)}`,
+		                `- World Bible: ${digestWorldBible(novelData.worldBible || novelData.world) || 'No world bible provided'}`,
 		                `- Characters: ${JSON.stringify(digestCharacters(novelData.characters.filter(c => c.name && c.backstory && c.arc)))}`,
 		                `- Subplots: ${JSON.stringify(digestSubplots(novelData.subplots, 3, 180))}`,
 		                `- Novel Outline (digest): ${digestText(novelData.novelOutline || 'No outline provided', 400)}`,
@@ -5814,20 +5848,15 @@ let activeAICallCount = 0;
 		                structuralContext,
 		                '',
 		                'Include:',
-		                '- Outline: 300-400 words, detailing 2-3 key events with 3-4 sensory details (e.g., glowing tech, echoing ruins) tied to the setting, integrating the main plot and 1-2 specific subplots with clear stakes (e.g., survival, betrayal) and progression that advances the novel’s momentum.',
-		                '- Arc: 200-300 words, detailing the chapter’s emotional tone (e.g., tense, hopeful) and 2-3 character-driven beats (e.g., conflict, revelation, growth) involving named characters, tied to the story arc’s themes (e.g., identity, redemption) and subplot threads, enhancing the novel’s depth.',
+		                '- Outline: 300-400 words with structured beats. Detail 2-3 key events with 3-4 sensory details tied to named locations/factions from the world bible, integrating the main plot and 1-2 specific named subplots with clear stakes and progression.',
+		                '- Arc: 200-300 words with 2-3 character-driven beats involving NAMED characters, tied to arcStep/blueprint role, story-arc themes, and subplot threads.',
+		                '- Explicit fields inside the prose: name at least two characters with beats; cite arcStep (or chapter role); include 1-2 worldHooks (faction or location) from the world bible.',
 		                'Ensure:',
 					'- Respect chapter-window pacing: early chapters seed and complicate; middle chapters escalate and reframe; late chapters execute major payoffs.',
 					'- Explicitly preserve at least one unresolved thread for the next chapter unless this is the final chapter.',
-		                '- Cohesion with the novel’s overarching arc, plot, subplots, and character arcs, using evocative, style-specific language to reflect the setting’s atmosphere and the chapter’s role in the narrative.',
-		                '- Minimum 300/200 words for the outline and arc, prioritizing vivid detail, emotional stakes, and thematic resonance over brevity.',
-		                'Return as JSON: {"outline": "<outline>", "arc": "<arc>"}, ensuring world, plot, and character depth.',
-		                'Use the following example only as a format guide; do not replicate its specific content (e.g., names, events):',
-		                'Example:',
-		                '{',
-		                `    "outline": "In Ch. ${chapterNum}, styled by ${novelData.authorStyle || 'generic'} per ${novelData.styleGuide || 'default'}, ${novelData.generalPlot || 'the plot'} surges in ${novelData.setting || 'a vast setting'}—tech hums, shadows flicker, air tastes of rust. Two events unfold: a subplot-driven find ignites conflict, and a confrontation escalates stakes—perhaps a world’s fate hangs in balance—pushing ${novelData.storyArc || 'the arc'} toward a tense crest.",`,
-		                `    "arc": "The chapter’s ${novelData.storyArc || 'arc'}-echoed pulse, per ${novelData.styleGuide || 'default'}, begins with unease—beats of doubt, defiance, then resolve—mirroring ${novelData.generalPlot || 'the threat'}’s stakes, ending with a ${novelData.authorStyle || 'generic'}-styled glimmer of hope amid chaos."`,
-		                '}'
+		                '- Cohesion with the novel’s overarching arc, plot, subplots, world bible, and character arcs; use evocative, style-specific language.',
+		                '- Minimum 300/200 words for the outline and arc. Do NOT imitate short stub outlines; meet the word floors with concrete beats.',
+		                'Return as JSON: {"outline": "<outline>", "arc": "<arc>"}. No short few-shot bias — meet the word floors above.'
 		            ].join('\n')
 		        }
 		    ];
@@ -5930,7 +5959,8 @@ let activeAICallCount = 0;
 		    const storyArc = novelData.storyArc || "No arc provided";
 		    const generalPlot = novelData.generalPlot || "No plot provided";
 		    const setting = novelData.setting || "No setting provided";
-		    const subplots = novelData.subplots.join(", ") || "No subplots provided";
+		    const subplots = (digestSubplots(novelData.subplots, 4, 200).map(s => s.summary).join('; ')) || "No subplots provided";
+		    const worldBiblePack = digestWorldBible(novelData.worldBible || novelData.world) || "No world bible provided";
 		    const novelOutline = novelData.novelOutline || "No outline provided";
 		    const plotOutline = novelData.plotOutline || "No plot outline provided";
 		    const arcOutline = novelData.storyArcOutline || "No arc outline provided";
@@ -5947,6 +5977,7 @@ let activeAICallCount = 0;
 		                `- Story Arc: ${storyArc}`,
 		                `- Plot: ${generalPlot}`,
 		                `- Setting: ${setting}`,
+		                `- World Bible: ${worldBiblePack}`,
 		                `- Characters: ${JSON.stringify(digestCharacters(novelData.characters.filter(c => c.name && c.backstory && c.arc)))}`,
 		                `- Subplots: ${subplots}`,
 		                `- Novel Outline: ${novelOutline}`,
@@ -5996,6 +6027,35 @@ let activeAICallCount = 0;
 		    console.log('Pre-collectData - novelData.chapters:', novelData.chapters);
 		    collectData();
 		    console.log('Post-collectData - novelData.chapters:', novelData.chapters);
+			// Fail-closed workflow gate: empty/stub/sloppy early spine multiplies into chapter prose.
+			(function assertPreProseSpineGate(ch) {
+				const fails = [];
+				const richSubs = (novelData.subplots || []).filter(function (s) {
+					if (!s) return false;
+					if (typeof s === 'string') return s.trim().length >= 40;
+					return !!(s.title || s.name) && !!(s.summary || s.description);
+				});
+				const plot = String(novelData.plotOutline || novelData.generalPlot || '').trim();
+				const novel = String(novelData.novelOutline || '').trim();
+				const chOutline = String((novelData.chapterOutlines || [])[ch - 1] || '').trim();
+				const chWords = chOutline ? chOutline.split(/\s+/).length : 0;
+				if (richSubs.length < 1) fails.push('subplots empty/stub');
+				if (plot.length < 80) fails.push('plot/plotOutline empty/stub');
+				if (chWords < 80) fails.push('chapter outline stub-thin words=' + chWords);
+				const pack = [plot, novel, chOutline].filter(Boolean).join('\n');
+				if (typeof scoreProseQuality === 'function' && pack.length >= 40) {
+					const slop = scoreProseQuality(pack);
+					if (slop && slop.aiSlopRisk != null && slop.aiSlopRisk > 75) {
+						fails.push('early-spine AI-slop risk=' + slop.aiSlopRisk + ' (would multiply into chapter)');
+					}
+				}
+				if (fails.length) {
+					const msg = 'STAGE GATE FAIL-CLOSED [generateChapter ' + ch + ']: ' + fails.join(' | ') + '. Fix plot/subplots/chapter outline before prose.';
+					console.error(msg);
+					alert(msg);
+					throw new Error(msg);
+				}
+			})(chapterNum);
 			const continuityPacket = buildChapterContinuityPacket(chapterNum);
 			const strictMode = !!novelData.continuityStrictMode;
 
@@ -6487,6 +6547,28 @@ let activeAICallCount = 0;
 		    updateCharacterCounter();
 		}
 
+		function renderSubplots() {
+			const subs = Array.isArray(novelData.subplots) ? novelData.subplots : [];
+			const minEl = document.getElementById('minSubplots');
+			if (minEl) minEl.value = String(Math.max(1, subs.length || parseInt(minEl.value, 10) || 1));
+			const subplotList = document.getElementById('subplotList');
+			if (!subplotList) return 0;
+			subplotList.innerHTML = '';
+			const list = subs.length ? subs : [''];
+			list.forEach((s, idx) => {
+				const div = document.createElement('div');
+				div.className = 'subplot-section';
+				const textVal = (typeof subplotToPlainText === 'function') ? subplotToPlainText(s) : (typeof s === 'string' ? s : '');
+				div.innerHTML =
+					'<label>Subplot ' + (idx + 1) + ':</label>' +
+					'<textarea class="subplot" placeholder="e.g., a hidden conspiracy" style="height: 300px;"></textarea>';
+				div.querySelector('.subplot').value = textVal || '';
+				subplotList.appendChild(div);
+			});
+			if (typeof updateSubplotCounter === 'function') updateSubplotCounter();
+			return list.length;
+		}
+
 		// Sync the number of subplot entry boxes to match the minSubplots input value
 		function syncSubplotEntries() {
 		    const desired = Math.max(1, parseInt(document.getElementById('minSubplots').value, 10) || 1);
@@ -6559,7 +6641,21 @@ let activeAICallCount = 0;
 	               ...(existing.notes !== undefined ? { notes: existing.notes } : {})
 	           };
 	       });
-	       novelData.subplots = Array.from(document.getElementsByClassName('subplot')).map(s => s.value);
+	       {
+	           const existingSubs = Array.isArray(novelData.subplots) ? novelData.subplots : [];
+	           const domSubs = Array.from(document.getElementsByClassName('subplot'));
+	           if (domSubs.length) {
+	               novelData.subplots = domSubs.map((el, i) => {
+	                   const domVal = (el && el.value != null) ? String(el.value).trim() : '';
+	                   if (domVal) return domVal;
+	                   const existing = existingSubs[i];
+	                   // Prefer DOM when filled; keep novelData (string or {title,summary}) when DOM blank (fixture inject / race).
+	                   if (existing == null || existing === '') return '';
+	                   return existing;
+	               });
+	           }
+	           // If DOM has no subplot nodes yet, leave novelData.subplots untouched.
+	       }
 	       novelData.novelOutline = document.getElementById('novelOutline').value;
 	       novelData.plotOutline = document.getElementById('plotOutline').value;
 	       novelData.storyArcOutline = document.getElementById('storyArcOutline').value;
