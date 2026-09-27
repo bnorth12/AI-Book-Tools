@@ -167,7 +167,7 @@ const report = {
     const absFix = path.isAbsolute(fixturePath) ? fixturePath : path.join(path.dirname(fileURLToPath(import.meta.url)), '..', fixturePath);
     const seed = JSON.parse(fs.readFileSync(absFix, 'utf8'));
     appendProgress('### Phase - fixture seed\n- Status: loading\n- Eval: ' + absFix + '\n');
-    await page.evaluate((seedObj, doRegen) => {
+    await page.evaluate(({ seedObj, doRegen }) => {
       const keep = ['apiKey'];
       Object.keys(seedObj).forEach((k) => {
         if (k === 'notes' || k === 'fixtureId' || k === 'schemaHint' || k === 'world' || k === 'motifs') return;
@@ -193,7 +193,7 @@ const report = {
         });
       }
       window.__NW_FIXTURE_LOADED = { id: seedObj.fixtureId, regenBible: doRegen, chars: (novelData.characters || []).length };
-    }, seed, regenBible);
+    }, { seedObj: seed, doRegen: regenBible });
     report.config.lean = false;
     report.config.numChapters = seed.numChapters || report.config.numChapters;
     appendProgress('### Phase - fixture seed\n- Status: loaded\n- Eval: fixtureId=' + (seed.fixtureId || '?') + ' chars=' + ((seed.characters || []).length) + ' chapters=' + (seed.numChapters || '?') + ' kbEnabled=' + !!seed.kbEnabled + '\n');
