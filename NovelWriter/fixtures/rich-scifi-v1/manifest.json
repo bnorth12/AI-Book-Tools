@@ -1,0 +1,20 @@
+{
+  "id": "rich-scifi-v1",
+  "title": "Negotiated Opacity (Rich Fixture v1)",
+  "genre": "scifi",
+  "counts": {
+    "characters": 10,
+    "subplots": 4,
+    "motifs": 6,
+    "chapterOutlines": 8,
+    "seededChapterDigests": 2,
+    "plannedChapters": 8
+  },
+  "reuse": "Load seed into novelData before Tracked E2E stress mode; lean smoke stays 2ch/3chars.",
+  "files": [
+    "README.md",
+    "manifest.json",
+    "novelData.seed.json",
+    "world.md"
+  ]
+}

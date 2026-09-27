@@ -158,7 +158,48 @@ const report = {
     if (typeof collectData === 'function') collectData();
   }, { key: apiKey, cfg: Object.assign({}, report.config, { title: 'Tracked E2E Lean ' + new Date().toISOString().slice(0, 16) }) });
 
-  report.config.model = await page.evaluate(() => document.getElementById('model').value);
+  
+  // Track B: optional rich fixture seed (skip bible regen unless NW_E2E_REGEN_BIBLE=1)
+  const fixturePath = process.env.NW_E2E_FIXTURE || '';
+  const regenBible = process.env.NW_E2E_REGEN_BIBLE === '1';
+  report.config.fixture = fixturePath || null;
+  if (fixturePath) {
+    const absFix = path.isAbsolute(fixturePath) ? fixturePath : path.join(path.dirname(fileURLToPath(import.meta.url)), '..', fixturePath);
+    const seed = JSON.parse(fs.readFileSync(absFix, 'utf8'));
+    appendProgress('### Phase - fixture seed\n- Status: loading\n- Eval: ' + absFix + '\n');
+    await page.evaluate((seedObj, doRegen) => {
+      const keep = ['apiKey'];
+      Object.keys(seedObj).forEach((k) => {
+        if (k === 'notes' || k === 'fixtureId' || k === 'schemaHint' || k === 'world' || k === 'motifs') return;
+        novelData[k] = seedObj[k];
+      });
+      novelData.worldBible = seedObj.world || novelData.worldBible;
+      novelData.motifs = seedObj.motifs || novelData.motifs;
+      novelData.kbEnabled = seedObj.kbEnabled !== false;
+      const kb = document.getElementById('kbEnabled');
+      if (kb) kb.checked = !!novelData.kbEnabled;
+      const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+      set('title', novelData.title);
+      set('genre', novelData.genre);
+      set('numChapters', novelData.numChapters);
+      set('storyArc', novelData.storyArc);
+      set('styleGuide', novelData.styleGuide);
+      if (typeof updateChapterSubpages === 'function') updateChapterSubpages();
+      // populate character UI if helpers exist
+      if (typeof renderCharacters === 'function') renderCharacters();
+      else if (Array.isArray(novelData.characters)) {
+        novelData.characters.forEach((c, i) => {
+          set('characterName' + (i + 1), c.name);
+        });
+      }
+      window.__NW_FIXTURE_LOADED = { id: seedObj.fixtureId, regenBible: doRegen, chars: (novelData.characters || []).length };
+    }, seed, regenBible);
+    report.config.lean = false;
+    report.config.numChapters = seed.numChapters || report.config.numChapters;
+    appendProgress('### Phase - fixture seed\n- Status: loaded\n- Eval: fixtureId=' + (seed.fixtureId || '?') + ' chars=' + ((seed.characters || []).length) + ' chapters=' + (seed.numChapters || '?') + ' kbEnabled=' + !!seed.kbEnabled + '\n');
+  }
+
+report.config.model = await page.evaluate(() => document.getElementById('model').value);
 
   async function doStep(tab, name, stepLabel, fn, evalFn, assertOpts) {
     const beforeSnap = await bookSnap(page);
@@ -191,6 +232,8 @@ const report = {
     return r;
   }
 
+  const useFixture = !!fixturePath && !regenBible;
+
   await doStep(1, 'API & Story Info', 'c1Smoke', async () => {
     return page.evaluate(async () => (typeof runC1Smoke === 'function' ? await runC1Smoke() : false));
   }, (a, r, ok) => ok && r
@@ -220,27 +263,31 @@ const report = {
   }, (a, r) => (r && r.skipped) ? 'Skipped — no author set.' : ('Style guide length ' + ((r && r.len) || 0) + '. Prefer concrete craft notes over vague cheerleading.'));
 
   await doStep(1, 'API & Story Info', 'suggestStoryInfo', async () => {
+    if (useFixture) return page.evaluate(() => ({ title: novelData.title || '', skipped: true, reason: 'fixture' }));
     return page.evaluate(async () => {
       await suggestStoryInfo();
       return { title: document.getElementById('title').value };
     });
-  }, (a) => 'Title/arc filled. Snippet: "' + (a.storyArcSnippet || '…') + '". Looking for concrete stakes vs stock openers.', { minChars: 0 });
+  }, (a, r) => (r && r.skipped) ? ('Fixture title/arc reused: "' + (a.storyArcSnippet || a.title || '…') + '".') : ('Title/arc filled. Snippet: "' + (a.storyArcSnippet || '…') + '". Looking for concrete stakes vs stock openers.'), { minChars: 0, allowNoCall: true });
 
   await doStep(2, 'Characters', 'suggestCharacters', async () => {
+    if (useFixture) return page.evaluate(() => ({ count: (novelData.characters || []).length, skipped: true }));
     return page.evaluate(async () => {
       await suggestCharacters();
       return { count: (novelData.characters || []).length };
     });
-  }, (a, r) => 'Got ' + ((r && r.count) || a.chars) + ' characters (target 3). Prefer named agents with concrete backstory.');
+  }, (a, r) => (r && r.skipped) ? ('Fixture cast reused: ' + ((r && r.count) || a.chars) + ' characters.') : ('Got ' + ((r && r.count) || a.chars) + ' characters (target 3). Prefer named agents with concrete backstory.'), { allowNoCall: true });
 
   await doStep(3, 'Subplots', 'suggestSubplots', async () => {
+    if (useFixture) return page.evaluate(() => ({ count: (novelData.subplots || []).length, skipped: true }));
     return page.evaluate(async () => {
       await suggestSubplots();
       return { count: (novelData.subplots || []).length };
     });
-  }, (a, r) => 'Subplots: ' + ((r && r.count) || a.subplots) + ' (target >=2). Should braid into main conflict.');
+  }, (a, r) => (r && r.skipped) ? ('Fixture subplots reused: ' + ((r && r.count) || a.subplots) + '.') : ('Subplots: ' + ((r && r.count) || a.subplots) + ' (target >=2). Should braid into main conflict.'), { allowNoCall: true });
 
   await doStep(4, 'Outlines', 'generateNovelOutlines', async () => {
+    if (useFixture) return page.evaluate(() => ({ skipped: true, outlines: (novelData.chapterOutlines || []).length, arcLen: (novelData.storyArc || '').length }));
     return page.evaluate(async () => {
       await generateNovelOutlines();
       return { novel: (novelData.novelOutline || '').length, plot: (novelData.plotOutline || '').length };

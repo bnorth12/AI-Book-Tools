@@ -15,6 +15,7 @@ Lean Tracked E2E now reports quality gate scores, heuristic samples, Ch1 `update
 6. **Per-prompt cost in-product** — surface tokensByPrompt / est. $ in Tab1 diagnostics (report already has it).
 
 ## Related future (not this backlog)
+- **Rich fixture Track B:** `NovelWriter/fixtures/rich-scifi-v1/` + `NW_E2E_FIXTURE` runner flag (stress E2E; lean stays default).
 - Series concepts via RAG + knowledge graph (L1 SeriesBible / cross-book EvidencePack) — documented in `C2_RAG_HOOKS.md`.
 - #120 C4 provider / paste-bridge; C5 remaining checklist items.
 - Per-agent model tier selection (Tab1 today is single-model).

@@ -1,0 +1,177 @@
+{
+  "fixtureId": "rich-scifi-v1",
+  "schemaHint": "novelData-seed-0.1",
+  "title": "Negotiated Opacity (Rich Fixture v1)",
+  "genre": "scifi",
+  "numChapters": 8,
+  "targetWordsPerChapter": 900,
+  "kbEnabled": true,
+  "seriesId": "conduit-cycle",
+  "authorStyle": "nealstephenson",
+  "styleGuide": "Prefer concrete sensory detail (wet plank, phase noise, RFID sting). Short clauses. Named places and objects. Avoid tapestry/delve/whispered destiny stock. Tech must have physical consequence. Humor via Theo's over-logged jokes, not narrator wink.",
+  "storyArc": "Begin in total-recall Conduit life. A twelve-millisecond freighter latency spike exposes hidden fragility. Middle: forks, patches, and counter-patches while physical infrastructure degrades under unlogged entropy; Kwan, Rook, and Marshal Okafor collide over whether opacity is treason. End: negotiated opacity treaty \u2014 deliberate dark windows \u2014 not victory, a priced mercy. Sinta's absence becomes a permanent clause; the Unlogged Child crosses one bridge free.",
+  "world": {
+    "name": "Pan-Pacific Ledger Conduit",
+    "summary": "Physical-data hybrid infrastructure: ~14,000 LEO cubesats coated in retroreflective metamaterial plus ground ceramic sensor posts every ~400m along ports, rail, and highways. Every object and many human actions are registered, timestamped, and monetized. Themes: systemic trust, engineered obsolescence, price of perfect recall.",
+    "factions": [
+      "Conduit Consensus Triad (three competing algorithms)",
+      "Municipal Traffic AI guilds",
+      "Lofoten data haven brokers",
+      "Harbor chaplaincy networks (unlogged rituals)",
+      "Mesh ops (cubesat coats)"
+    ],
+    "locations": [
+      "Bitung parasol docks",
+      "Philippine Sea freighter lanes",
+      "Seattle Memory Market",
+      "Lofoten black-market haven",
+      "Pan-Pacific bridge corridors"
+    ]
+  },
+  "motifs": [
+    "night sky as moving barcode (retroreflective cubesats)",
+    "heartbeat as priced telemetry",
+    "twelve milliseconds as civilizational crack",
+    "negotiated opacity vs total recall",
+    "wet dock planks / Bitung rain on graphene",
+    "Faraday nostalgia (Rook's cage)"
+  ],
+  "characters": [
+    {
+      "name": "Dr. Lumen Kwan",
+      "role": "forensic latency auditor / protagonist",
+      "goal": "prove the Conduit can tolerate negotiated opacity without civil collapse",
+      "flaw": "treats belonging as a system override she can revoke",
+      "backstory": "Raised under Bitung parasol docks; teenage exploit rerouted municipal sensors; blacklisted from three consensus firms.",
+      "arc": "cynic auditor \u2192 reluctant steward of a negotiated opacity treaty"
+    },
+    {
+      "name": "Rook Velasquez",
+      "role": "contract-law hacker / deuteragonist",
+      "goal": "remain the only unpriced variable in any room",
+      "flaw": "smuggles nostalgia as contraband and mistakes it for freedom",
+      "backstory": "Grew up inside Seattle Memory Market Faraday cage; sold clean blocks that never existed.",
+      "arc": "pure opportunist \u2192 chooses a priced loyalty once"
+    },
+    {
+      "name": "Sinta Aguirre",
+      "role": "ghost identity / absent catalyst",
+      "goal": "keep final uplink calibration from being overwritten",
+      "flaw": "exists only as shards; cannot speak without hijacking living credentials",
+      "backstory": "Orbital debris tracker pilot killed by microwave burst; name persists on decommissioned cubesat manifest.",
+      "arc": "absence \u2192 pattern that forces the living to choose recall vs mercy"
+    },
+    {
+      "name": "Marshal Ife Okafor",
+      "role": "Pan-Pacific Conduit enforcement",
+      "goal": "keep shipping lanes hash-stable during solar weather",
+      "flaw": "equates downtime with moral failure",
+      "backstory": "Ex-navy logistics; lost a sister when a false NOTAM locked a bridge during evacuation.",
+      "arc": "rigid enforcer \u2192 learns to authorize intentional dark windows"
+    },
+    {
+      "name": "Yen Park",
+      "role": "municipal traffic AI liaison",
+      "goal": "keep bridges open without starving sensor uptime budgets",
+      "flaw": "over-trusts dashboards that omit human-in-the-loop overrides",
+      "backstory": "Wrote the first civic SLA that priced heartbeat telemetry.",
+      "arc": "dashboard believer \u2192 smuggles offline maps to neighborhoods"
+    },
+    {
+      "name": "Cassian Holt",
+      "role": "black-market data haven broker (Lofoten)",
+      "goal": "auction fork insurance before the Conduit notices",
+      "flaw": "romanticizes pre-ledger cities he never lived in",
+      "backstory": "Former cubesat metamaterial chemist; sold coatings that made night sky a barcode.",
+      "arc": "profiteer \u2192 burns one ledger to free a coastal town"
+    },
+    {
+      "name": "Sister Mireya",
+      "role": "harbor chaplain / civilian witness",
+      "goal": "protect unlogged grief rituals on the docks",
+      "flaw": "refuses to carry a personal sensor post",
+      "backstory": "Buried three generations under Bitung without Conduit death certificates.",
+      "arc": "quiet resistance \u2192 public refusal that becomes treaty language"
+    },
+    {
+      "name": "Aoi Nakamura",
+      "role": "cubesat mesh ops lead",
+      "goal": "keep 14k LEO nodes from cascading phase noise",
+      "flaw": "speaks only in latency budgets",
+      "backstory": "Designed retroreflective metamaterial coats; regrets the night-sky barcode.",
+      "arc": "mesh absolutist \u2192 designs intentional blind spots"
+    },
+    {
+      "name": "Theo Bramble",
+      "role": "junior continuity clerk (comic pressure)",
+      "goal": "survive audits without becoming a hash",
+      "flaw": "over-explains jokes into the log",
+      "backstory": "Intern who labeled coffee as PlotBeat once; somehow promoted.",
+      "arc": "comic relief \u2192 accidental witness to the treaty signing"
+    },
+    {
+      "name": "The Unlogged Child",
+      "role": "motif personified / mystery",
+      "goal": "cross a bridge without a heartbeat price",
+      "flaw": "may be a rumor, a virus, or Rook's smuggled nostalgia",
+      "backstory": "Appears in three municipal camera gaps after the twelve-millisecond spike.",
+      "arc": "rumor \u2192 clause in the opacity treaty"
+    }
+  ],
+  "subplots": [
+    {
+      "title": "The Twelve-Millisecond Freighter",
+      "summary": "Philippine Sea container transmits RFID twelve ms late; experimental human-in-the-loop sub-ledger forks; cargo AI reroutes mid-ocean."
+    },
+    {
+      "title": "Lofoten Clean Blocks",
+      "summary": "Cassian's haven auctions blocks that never existed; Kwan must decide whether forged opacity is mercy or sabotage."
+    },
+    {
+      "title": "Bridge Lock NOTAM",
+      "summary": "Yen and Marshal Okafor clash when sensor uptime budgets demand locking bridges during a real evacuation drill."
+    },
+    {
+      "title": "Sinta's Final Uplink",
+      "summary": "Shards of Sinta's calibration hijack living credentials; the living argue whether to overwrite her or grant a permanent dark slot."
+    }
+  ],
+  "chapterOutlines": [
+    "Ch1 \u2014 Latency Spike: freighter NOTAM; Kwan called to Bitung sub-ledger; first sight of twelve-ms crack; Rook sells a rumor.",
+    "Ch2 \u2014 Fork Weather: solar-storm warning (maybe forged); mesh phase noise; Marshal locks a bridge; Yen refuses.",
+    "Ch3 \u2014 Clean Blocks: Kwan infiltrates Lofoten auction; Cassian offers forged opacity as product; Sinta shard speaks once.",
+    "Ch4 \u2014 Evacuation Drill: real panic meets sensor SLA; Sister Mireya holds unlogged vigil; Theo logs the wrong joke.",
+    "Ch5 \u2014 Blind Spot Design: Aoi proposes intentional dark windows; Triad threatens her clearance.",
+    "Ch6 \u2014 Treaty Draft: Kwan and Rook price a loyalty; Unlogged Child motif appears on camera gap.",
+    "Ch7 \u2014 Overwrite Vote: living credentials almost erase Sinta; harbor refuses.",
+    "Ch8 \u2014 Negotiated Opacity: treaty signing on wet dock plank; one bridge opens without heartbeat price."
+  ],
+  "chapters": [
+    "Ch1 digest: Rain on graphene. Kwan measures twelve ms on a freighter RFID. Sub-ledger lights red. Rook's message: 'I can sell you a cleaner past.' Dock plank smells of diesel and salt.",
+    "Ch2 digest: Phase noise on cubesat 4412. Marshal Okafor locks Bridge 9. Yen parks a bus mid-span in protest. Aoi whispers latency budgets like prayer.",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+  ],
+  "chapterImprovements": [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+  ],
+  "tokenUsage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0,
+    "calls": []
+  },
+  "qualitySamples": [],
+  "notes": "Reusable rich seed for stress E2E. Digests in chapters[0:2] only \u2014 generate remaining at test time."
+}
