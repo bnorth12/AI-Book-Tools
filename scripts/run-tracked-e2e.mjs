@@ -3,6 +3,8 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { spawnSync } from 'child_process';
+import { fileURLToPath } from 'url';
 import { chromium } from 'playwright';
 import dotenv from 'dotenv';
 
@@ -13,6 +15,9 @@ const REPORT_JSON = path.join(PLAN, 'TRACKED_E2E_REPORT.json');
 const REPORT_MD = path.join(PLAN, 'TRACKED_E2E_REPORT.md');
 const PROGRESS = path.join(PLAN, 'TRACKED_E2E_PROGRESS.md');
 const STATUS = path.join(PLAN, 'TRACKED_E2E_STATUS.json');
+const ANNEX_JSON = path.join(PLAN, 'TRACKED_E2E_ANNEX_NOVELDATA.json');
+const ANNEX_MD = path.join(PLAN, 'TRACKED_E2E_ANNEXES.md');
+const TOKENS_MD = path.join(PLAN, 'TRACKED_E2E_TOKENS_BY_STAGE.md');
 
 dotenv.config({ path: ENV });
 const apiKey = process.env.GROK_API_KEY || '';
@@ -353,7 +358,54 @@ const report = {
   };
   delete report.partial;
 
+  // Snapshot sanitized novelData for Annex E
+  const annexNovel = await page.evaluate(() => {
+    const nd = (typeof novelData !== 'undefined' && novelData) ? novelData : {};
+    const clone = JSON.parse(JSON.stringify(nd));
+    // strip secrets / huge binary-ish if any; keep story content
+    if (clone.apiKey) delete clone.apiKey;
+    if (clone.GROK_API_KEY) delete clone.GROK_API_KEY;
+    return clone;
+  });
+  report.annexNovelDataMeta = {
+    title: annexNovel.title || '',
+    genre: annexNovel.genre || '',
+    characters: (annexNovel.characters || []).length,
+    subplots: (annexNovel.subplots || []).length,
+    chapters: (annexNovel.chapters || []).map(c => (c || '').length),
+    hasTokenUsage: !!(annexNovel.tokenUsage && annexNovel.tokenUsage.calls),
+    hasQuality: !!(annexNovel.qualitySamples && annexNovel.qualitySamples.length)
+  };
+  fs.writeFileSync(ANNEX_JSON, JSON.stringify(annexNovel, null, 2));
+
+  const calls = (finalUsage && finalUsage.calls) ? finalUsage.calls : [];
+  // Per-stage rollup (by originTab + operationName)
+  const byStage = {};
+  for (const c of calls) {
+    const stage = (c.originTab || 'unknown') + ' / ' + (c.operationName || 'unnamed');
+    if (!byStage[stage]) {
+      byStage[stage] = { stage: stage, originTab: c.originTab || '', operationName: c.operationName || '', count: 0, prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+    }
+    byStage[stage].count += 1;
+    byStage[stage].prompt_tokens += (c.prompt_tokens || 0);
+    byStage[stage].completion_tokens += (c.completion_tokens || 0);
+    byStage[stage].total_tokens += (c.total_tokens || 0);
+  }
+  report.tokensByStage = Object.values(byStage);
+  report.tokensByPrompt = calls.map((c, i) => ({
+    i: i + 1,
+    operationName: c.operationName || '',
+    originTab: c.originTab || '',
+    model: c.model || '',
+    prompt_tokens: c.prompt_tokens || 0,
+    completion_tokens: c.completion_tokens || 0,
+    total_tokens: c.total_tokens || 0,
+    contextPackChars: c.contextPackChars == null ? null : c.contextPackChars,
+    ts: c.ts || null
+  }));
+
   fs.writeFileSync(REPORT_JSON, JSON.stringify(report, null, 2));
+
   const mdLines = [
     '# Tracked E2E Report (lean)',
     '',
@@ -364,12 +416,106 @@ const report = {
     '- Book tokens prompt/comp/total: ' + report.summary.totals.prompt_tokens + '/' + report.summary.totals.completion_tokens + '/' + report.summary.totals.total_tokens,
     '- Failed steps: ' + (report.summary.failedSteps.join(', ') || 'none'),
     '',
-    '## Quality samples'
+    '## Cost / efficiency (tokens) — not quality',
+    '',
+    'Token usage is a cost/efficiency product metric. Quality scores are separate (below).',
+    '',
+    '### Per prompt (each LLM call)',
+    '',
+    '| # | Stage (tab) | Operation / prompt | Prompt | Completion | Total | Pack chars |',
+    '| --- | --- | --- | ---: | ---: | ---: | ---: |'
   ];
+  for (const c of report.tokensByPrompt) {
+    mdLines.push('| ' + c.i + ' | ' + c.originTab + ' | ' + c.operationName + ' | ' + c.prompt_tokens + ' | ' + c.completion_tokens + ' | ' + c.total_tokens + ' | ' + (c.contextPackChars == null ? '—' : c.contextPackChars) + ' |');
+  }
+  mdLines.push('');
+  mdLines.push('### Per stage rollup');
+  mdLines.push('');
+  mdLines.push('| Stage | Calls | Prompt | Completion | Total |');
+  mdLines.push('| --- | ---: | ---: | ---: | ---: |');
+  for (const s of report.tokensByStage) {
+    mdLines.push('| ' + s.stage + ' | ' + s.count + ' | ' + s.prompt_tokens + ' | ' + s.completion_tokens + ' | ' + s.total_tokens + ' |');
+  }
+  mdLines.push('');
+  mdLines.push('### Book rollup');
+  mdLines.push('');
+  mdLines.push('- prompt/comp/total: **' + report.summary.totals.prompt_tokens + ' / ' + report.summary.totals.completion_tokens + ' / ' + report.summary.totals.total_tokens + '**');
+  mdLines.push('- calls: **' + report.summary.callCount + '**');
+  mdLines.push('');
+  mdLines.push('## Quality samples (prose — separate from tokens)');
   for (const s of report.qualitySamples) {
     mdLines.push('- ' + s.label + ': interest=' + s.interest + ' readability=' + s.readability + ' aiSlopRisk=' + s.aiSlopRisk + ' humanLikeness=' + s.humanLikeness + ' (' + s.source + ')');
   }
+  mdLines.push('');
+  mdLines.push('## Annexes');
+  mdLines.push('');
+  mdLines.push('- `TRACKED_E2E_ANNEX_NOVELDATA.json` — full sanitized novelData dump');
+  mdLines.push('- `TRACKED_E2E_ANNEXES.md` — per-tab story summary');
+  mdLines.push('- `TRACKED_E2E_TOKENS_BY_STAGE.md` — tokens-only view');
+  mdLines.push('- `TRACKED_E2E_REPORT.json` — machine-readable (includes tokensByPrompt / tokensByStage)');
   fs.writeFileSync(REPORT_MD, mdLines.join('\n') + '\n');
+
+  // Tokens-only companion
+  const tokMd = [
+    '# Tracked E2E — tokens by stage / prompt',
+    '',
+    'Cost/efficiency only. Not quality.',
+    '',
+    'Book: ' + report.summary.totals.prompt_tokens + '/' + report.summary.totals.completion_tokens + '/' + report.summary.totals.total_tokens + ' (' + report.summary.callCount + ' calls)',
+    '',
+    '## Per prompt',
+    ''
+  ];
+  for (const c of report.tokensByPrompt) {
+    tokMd.push('- #' + c.i + ' [' + c.originTab + '] ' + c.operationName + ': ' + c.prompt_tokens + '/' + c.completion_tokens + '/' + c.total_tokens);
+  }
+  tokMd.push('');
+  tokMd.push('## Per stage rollup');
+  tokMd.push('');
+  for (const s of report.tokensByStage) {
+    tokMd.push('- ' + s.stage + ' (x' + s.count + '): ' + s.prompt_tokens + '/' + s.completion_tokens + '/' + s.total_tokens);
+  }
+  fs.writeFileSync(TOKENS_MD, tokMd.join('\n') + '\n');
+
+  // Human annex summary
+  const annexLines = [
+    '# Tracked E2E Annexes (full novelData run)',
+    '',
+    '- Finished: ' + report.finishedAt,
+    '- Title: ' + (report.annexNovelDataMeta.title || '(none)'),
+    '- Genre: ' + (report.annexNovelDataMeta.genre || ''),
+    '- Characters: ' + report.annexNovelDataMeta.characters,
+    '- Subplots: ' + report.annexNovelDataMeta.subplots,
+    '- Chapter lengths (chars): ' + (report.annexNovelDataMeta.chapters || []).join(', '),
+    '',
+    'Full dump: `TRACKED_E2E_ANNEX_NOVELDATA.json`',
+    '',
+    '## Cast',
+    ''
+  ];
+  for (const ch of (annexNovel.characters || [])) {
+    const name = (typeof ch === 'string') ? ch : (ch.name || ch.Name || JSON.stringify(ch).slice(0, 80));
+    const role = (typeof ch === 'object' && ch) ? (ch.role || ch.Role || '') : '';
+    annexLines.push('- **' + name + '**' + (role ? (' — ' + role) : ''));
+  }
+  annexLines.push('');
+  annexLines.push('## Chapters (full text in JSON)');
+  annexLines.push('');
+  const chapters = annexNovel.chapters || [];
+  for (let i = 0; i < chapters.length; i++) {
+    const body = chapters[i] || '';
+    annexLines.push('### Chapter ' + (i + 1) + ' (' + body.length + ' chars)');
+    annexLines.push('');
+    annexLines.push(body.slice(0, 4000) + (body.length > 4000 ? '\n\n…(truncated; see JSON)' : ''));
+    annexLines.push('');
+  }
+  if (annexNovel.storyArc) {
+    annexLines.push('## Story arc');
+    annexLines.push('');
+    annexLines.push(String(annexNovel.storyArc).slice(0, 3000));
+    annexLines.push('');
+  }
+  fs.writeFileSync(ANNEX_MD, annexLines.join('\n') + '\n');
 
   appendProgress(
     '### Phase — lean E2E — final\n' +
@@ -377,6 +523,25 @@ const report = {
     '- Tokens this call / book cumulative: — / book ' + report.summary.totals.prompt_tokens + '/' + report.summary.totals.completion_tokens + '/' + report.summary.totals.total_tokens + ' (' + report.summary.callCount + ' calls)\n' +
     '- Eval: Lean run finished. Failed=[' + (report.summary.failedSteps.join(', ') || 'none') + ']. Reports at TRACKED_E2E_REPORT.json/.md.\n'
   );
+
+  // Rebuild single multi-section report (exec summary + cost) via plans helper
+  try {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const builderRepo = path.join(__dirname, 'build_unified_report.py');
+    const builderPlan = path.join(PLAN, 'build_unified_report.py');
+    const builder = fs.existsSync(builderRepo) ? builderRepo : builderPlan;
+    if (fs.existsSync(builder)) {
+      const r = spawnSync('py', ['-3', builder], { encoding: 'utf-8' });
+      if (r.status !== 0) {
+        console.error('unified report builder failed', r.stderr || r.stdout);
+      } else {
+        appendProgress('### Phase — unified report\n- Status: pass\n- Eval: TRACKED_E2E_REPORT.md / TRACKED_E2E_UNIFIED_REPORT.md regenerated with exec summary + costs.\n');
+      }
+    }
+  } catch (e) {
+    console.error('unified report hook error', e);
+  }
+
   writeStatus(7, 'final', report.ok ? 'pass' : 'fail');
 
   await browser.close();
