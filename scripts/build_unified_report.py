@@ -1,20 +1,43 @@
 # -*- coding: utf-8 -*-
 """Build ONE Tracked E2E markdown deliverable: exec summary + full inlined annexes.
 
-Canonical output: TRACKED_E2E_REPORT.md only (no UNIFIED twin; annexes folded in).
+Canonical output: TRACKED_E2E_REPORT_YYYY-MM-DD_HHMMSS.md (America/Chicago) + TRACKED_E2E_REPORT_LATEST.md copy; annexes folded in.
 """
 from __future__ import annotations
 
 import json
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 PLAN = Path(r"C:\Users\brian\grok-build-queue\plans\ai-book-tools-2026-09-27\novelwriter")
 RUNNER = Path(r"C:\Users\brian\OneDrive\Documents\GitHubRepos\AI-Book-Tools\scripts\run-tracked-e2e.mjs")
-OUT = PLAN / "TRACKED_E2E_REPORT.md"
 REPORT_JSON = PLAN / "TRACKED_E2E_REPORT.json"
 ANNEX_JSON = PLAN / "TRACKED_E2E_ANNEX_NOVELDATA.json"
+LATEST_MD = PLAN / "TRACKED_E2E_REPORT_LATEST.md"
+LEGACY_MD = PLAN / "TRACKED_E2E_REPORT.md"
+TZ = ZoneInfo("America/Chicago")
+
+
+def report_stamp(report: dict) -> str:
+    """Local Chicago stamp for report filenames: YYYY-MM-DD_HHMMSS."""
+    raw = (report or {}).get("finishedAt") or ""
+    dt = None
+    if raw:
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            dt = None
+    if dt is None:
+        dt = datetime.now(TZ)
+    else:
+        dt = dt.astimezone(TZ)
+    return dt.strftime("%Y-%m-%d_%H%M%S")
+
+
+def report_md_path(report: dict) -> Path:
+    return PLAN / f"TRACKED_E2E_REPORT_{report_stamp(report)}.md"
 
 # Official docs.x.ai (fetched 2026-09-27): grok-4-1-fast-non-reasoning retired / redirects to grok-4.3
 # grok-4.3 (<200k prompt): input $1.25 / 1M, output $2.50 / 1M, cached input $0.20 / 1M
@@ -700,7 +723,12 @@ def main() -> None:
     REPORT_JSON.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     md = build_report(report, nd)
-    OUT.write_text(md, encoding="utf-8")
+    out = report_md_path(report)
+    out.write_text(md, encoding="utf-8")
+    LATEST_MD.write_text(md, encoding="utf-8")
+    if LEGACY_MD.exists():
+        LEGACY_MD.unlink()
+        print("removed legacy undated", LEGACY_MD.name)
     # Remove deprecated second "main" report if present
     unified = PLAN / "TRACKED_E2E_UNIFIED_REPORT.md"
     if unified.exists():
@@ -722,7 +750,8 @@ def main() -> None:
             raise SystemExit(f"Chapter {i+1} prose missing from single report (start not found)")
         if f"({len(body)} chars)" not in md:
             print("warn: length label missing for ch", i + 1)
-    print("wrote", OUT, "bytes", OUT.stat().st_size)
+    print("wrote", out, "bytes", out.stat().st_size)
+    print("latest", LATEST_MD)
     print("chapters_inlined", [len(c or "") for c in ch if (c or "").strip()])
     print("total_cost_usd", cost["total_cost_usd"])
     print("blended_per_token", cost["blended_per_token_usd"])

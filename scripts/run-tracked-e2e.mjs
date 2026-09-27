@@ -12,7 +12,7 @@ const PLAN = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/nov
 const LIVE = 'file:///C:/NovelWriterSite/NovelWriter/NovelWriter.html';
 const ENV = 'C:/NovelWriterSite/.env';
 const REPORT_JSON = path.join(PLAN, 'TRACKED_E2E_REPORT.json');
-const REPORT_MD = path.join(PLAN, 'TRACKED_E2E_REPORT.md');
+const REPORT_MD_LATEST = path.join(PLAN, 'TRACKED_E2E_REPORT_LATEST.md');
 const PROGRESS = path.join(PLAN, 'TRACKED_E2E_PROGRESS.md');
 const STATUS = path.join(PLAN, 'TRACKED_E2E_STATUS.json');
 const ANNEX_JSON = path.join(PLAN, 'TRACKED_E2E_ANNEX_NOVELDATA.json');
@@ -587,11 +587,11 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   mdLines.push('');
   mdLines.push('## Annexes');
   mdLines.push('');
-  mdLines.push('- Canonical human deliverable after builder: `TRACKED_E2E_REPORT.md` (summary + full annexes)');
+  mdLines.push('- Canonical human deliverable after builder: `TRACKED_E2E_REPORT_YYYY-MM-DD_HHMMSS.md` (+ `TRACKED_E2E_REPORT_LATEST.md` copy)');
   mdLines.push('- Optional sidecar: `TRACKED_E2E_ANNEX_NOVELDATA.json`');
   mdLines.push('- `TRACKED_E2E_TOKENS_BY_STAGE.md` — tokens-only view');
   mdLines.push('- `TRACKED_E2E_REPORT.json` — machine-readable (includes tokensByPrompt / tokensByStage)');
-  fs.writeFileSync(REPORT_MD, mdLines.join('\n') + '\n');
+  fs.writeFileSync(REPORT_MD_LATEST, mdLines.join('\n') + '\n');
 
   // Tokens-only companion
   const tokMd = [
@@ -625,7 +625,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     '### Phase — lean E2E — final\n' +
     '- Status: ' + (report.ok ? 'pass' : 'partial/fail') + '\n' +
     '- Tokens this call / book cumulative: — / book ' + report.summary.totals.prompt_tokens + '/' + report.summary.totals.completion_tokens + '/' + report.summary.totals.total_tokens + ' (' + report.summary.callCount + ' calls)\n' +
-    '- Eval: Lean run finished. Failed=[' + (report.summary.failedSteps.join(', ') || 'none') + ']. Reports at TRACKED_E2E_REPORT.json/.md.\n'
+    '- Eval: Lean run finished. Failed=[' + (report.summary.failedSteps.join(', ') || 'none') + ']. Dated report via builder (TRACKED_E2E_REPORT_<stamp>.md).\n'
   );
 
   // Rebuild single multi-section report (exec summary + cost) via plans helper
@@ -639,7 +639,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       if (r.status !== 0) {
         console.error('unified report builder failed', r.stderr || r.stdout);
       } else {
-        appendProgress('### Phase — unified report\n- Status: pass\n- Eval: TRACKED_E2E_REPORT.md regenerated as single-file deliverable (summary + full inlined annexes).\n');
+        appendProgress('### Phase — unified report\n- Status: pass\n- Eval: Dated TRACKED_E2E_REPORT_<stamp>.md (+ LATEST copy) regenerated as single-file deliverable.\n');
       }
     }
   } catch (e) {
