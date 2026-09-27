@@ -126,6 +126,8 @@ def build_report(report: dict, nd: dict) -> str:
     lines.append(f"- **Finished:** {report.get('finishedAt') or ''}")
     lines.append(f"- **Model requested:** `{cfg.get('model') or RATE_CARD['model_requested']}`")
     lines.append(f"- **Lean config:** {cfg.get('numChapters')} chapters · {cfg.get('chapterLength')} words · {cfg.get('numCharacters')} characters · {cfg.get('minSubplots')} subplots · genre `{cfg.get('genre')}`")
+    lines.append(f"- **Total tokens:** **{total_tok:,}** (prompt {prompt:,} · completion {completion:,} · {calls} calls)")
+    lines.append(f"- **Total cost:** **{money(cost['total_cost_usd'])}**")
     lines.append("")
     lines.append("---")
     lines.append("")
