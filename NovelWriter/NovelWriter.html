@@ -257,6 +257,8 @@ Synced: 2026-04-19
                         <button type="button" id="c3SmokeBtn" onclick="runC3Smoke()" title="#120 C3 quality gate smoke">C3 Smoke</button>
 			<button type="button" onclick="runQe123Smoke()">QE 1/2/3 Smoke</button>
 			<button type="button" onclick="runQe4Smoke()">QE4 Judge↔Gate Smoke</button>
+			<button type="button" onclick="runQe5Smoke()">QE5 Multi-Pass Smoke</button>
+			<pre id="qe5SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
 			<pre id="qe4SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
 			<pre id="qe123SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
                         <pre id="c2SmokeResult" style="margin:8px 0 4px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7fff7;border:1px solid #cde;white-space:pre-wrap;"></pre>
@@ -3171,7 +3173,7 @@ let activeAICallCount = 0;
 
 
 		// ---- #120 QE 1/2/3: apply-critique, fail-closed revise, chapter improvement apply ----
-		const NW_QUALITY_REVISE = { maxAttempts: 1 };
+		const NW_QUALITY_REVISE = { maxAttempts: 1, maxAutoPasses: 2 }; // QE5: at most 2 auto revise/apply passes
 
 		function ensureChapterImprovementsArray() {
 			const n = Math.max(1, Number(novelData.numChapters) || (novelData.chapters || []).length || 1);
@@ -3233,6 +3235,130 @@ let activeAICallCount = 0;
 			].join('\n');
 		}
 
+
+		// ---- #120 QE5: multi-pass quality editing (cap + continuity second pass) ----
+		function getChapterContinuityFindings(chapterNum) {
+			const n = Number(chapterNum) || 1;
+			const prefix = 'Chapter ' + n + ':';
+			const fromList = (novelData.continuityFindings || []).filter(function (f) {
+				const s = String(f || '');
+				return s.indexOf(prefix) === 0 || s.indexOf('Chapter ' + n) >= 0;
+			});
+			const trackerCh = (novelData.continuityTracker && Array.isArray(novelData.continuityTracker.chapters))
+				? novelData.continuityTracker.chapters[n - 1]
+				: null;
+			const risks = (trackerCh && Array.isArray(trackerCh.continuityRisks)) ? trackerCh.continuityRisks.slice() : [];
+			return { chapter: n, findings: fromList, risks: risks, hasAny: fromList.length > 0 || risks.length > 0 };
+		}
+
+		function buildContinuityReviseBrief(chapterNum) {
+			const c = getChapterContinuityFindings(chapterNum);
+			const items = (c.risks.length ? c.risks : c.findings.map(function (f) {
+				return String(f).replace(/^Chapter\s+\d+:\s*/i, '');
+			})).filter(Boolean).slice(0, 8);
+			return [
+				'CONTINUITY-FOCUSED QUALITY PASS — fix these continuity issues without changing core plot facts:',
+				(items.length ? items.map(function (x) { return '- ' + x; }).join('\n') : '- (unspecified continuity risk)'),
+				'Requirements: resolve or explicitly advance each listed risk; keep names/timeline consistent; preserve concrete sensory detail; keep near target length; do not invent contradictory lore.'
+			].join('\n');
+		}
+
+		function needsQualityMultiPass(chapterNum, gate, ctx) {
+			ctx = ctx || {};
+			const maxP = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : 2;
+			const done = ctx.passesDone || 0;
+			if (done >= maxP) return { needed: false, reason: null };
+			if (gate && gate.passed === false) return { needed: true, reason: 'gate-still-fail' };
+			const cont = getChapterContinuityFindings(chapterNum);
+			if (cont.hasAny && !ctx.didContinuityPass) return { needed: true, reason: 'continuity-findings' };
+			if (ctx.afterApplyStaged) {
+				const notes = String((novelData.chapterImprovements || [])[chapterNum - 1] || '').trim();
+				if (
+					notes &&
+					!/^QUALITY GATE FAIL-CLOSED REVISE/i.test(notes) &&
+					!/^CONTINUITY-FOCUSED QUALITY PASS/i.test(notes)
+				) {
+					return { needed: true, reason: 'residual-staged-notes' };
+				}
+			}
+			return { needed: false, reason: null };
+		}
+
+		function pushQualityMultiPassLog(entry) {
+			if (!Array.isArray(novelData.qualityMultiPassLog)) novelData.qualityMultiPassLog = [];
+			novelData.qualityMultiPassLog.push(entry);
+			novelData.lastQualityMultiPass = entry;
+			return entry;
+		}
+
+		/**
+		 * QE5 targeted pass: continuity brief, residual staged apply, or gate-fail revise.
+		 * Fail-closed still driven by heuristics gate afterward.
+		 */
+		async function runTargetedQualityPass(chapterNum, gateResult, opts) {
+			opts = opts || {};
+			const pass = opts.pass != null ? opts.pass : 2;
+			const kind = opts.kind || 'gate-fail';
+			const before = gateResult || runQualityGate(novelData.chapters[chapterNum - 1] || '', {
+				label: 'chapter' + chapterNum + '-preMultiPass' + pass
+			});
+			let gateAfter = before;
+			if (kind === 'continuity' || kind === 'residual-staged') {
+				const brief = (kind === 'continuity')
+					? buildContinuityReviseBrief(chapterNum)
+					: String((novelData.chapterImprovements || [])[chapterNum - 1] || '').trim() || buildQualityReviseBrief(before);
+				stageChapterImprovement(chapterNum, brief, {
+					mode: 'replace',
+					source: kind === 'continuity' ? 'quality-multipass-continuity' : 'quality-multipass-residual'
+				});
+				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityMultiPass' });
+				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', {
+					label: 'chapter' + chapterNum + '-afterMultiPass' + pass
+				});
+				pushQualitySample('chapter' + chapterNum + '-afterMultiPass' + pass, Object.assign({}, gateAfter.scores || {}, {
+					source: 'heuristics-multipass',
+					rationale: (gateAfter.passed ? 'multipass pass' : 'multipass still fail') + ' kind=' + kind
+				}), (novelData.chapters[chapterNum - 1] || '').length);
+			} else {
+				const forced = before.passed
+					? { passed: false, failures: (before.failures || []).slice().concat(['qe5-gate-retry']), scores: before.scores || {} }
+					: before;
+				const r = await reviseChapterForQuality(chapterNum, forced, { maxAttempts: 1 });
+				gateAfter = r.gateAfter || before;
+			}
+			if (!Array.isArray(novelData.qualityReviseLog)) novelData.qualityReviseLog = [];
+			novelData.qualityReviseLog.push({
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				pass: pass,
+				kind: kind,
+				attempts: 1,
+				passedBefore: !!before.passed,
+				passedAfter: !!gateAfter.passed,
+				failuresBefore: (before.failures || []).slice(),
+				failuresAfter: (gateAfter.failures || []).slice(),
+				multiPass: true
+			});
+			pushQualityMultiPassLog({
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				pass: pass,
+				kind: kind,
+				passedBefore: !!before.passed,
+				passedAfter: !!gateAfter.passed,
+				failuresAfter: (gateAfter.failures || []).slice(),
+				scoresAfter: gateAfter.scores || null
+			});
+			return { revised: true, attempts: 1, gateBefore: before, gateAfter: gateAfter, pass: pass, kind: kind };
+		}
+
+		window.getChapterContinuityFindings = getChapterContinuityFindings;
+		window.buildContinuityReviseBrief = buildContinuityReviseBrief;
+		window.needsQualityMultiPass = needsQualityMultiPass;
+		window.runTargetedQualityPass = runTargetedQualityPass;
+		window.NW_QUALITY_REVISE = NW_QUALITY_REVISE;
+
+
 		async function reviseChapterForQuality(chapterNum, gateResult, opts) {
 			opts = opts || {};
 			const maxAttempts = (opts.maxAttempts != null) ? opts.maxAttempts : NW_QUALITY_REVISE.maxAttempts;
@@ -3271,10 +3397,48 @@ let activeAICallCount = 0;
 			let gate = runQualityGate(text0, { label: 'chapter' + chapterNum + '-generate' });
 			console.log('[C3 qualityGate]', gate.passed, gate.scores, 'driver=', gate.driver);
 			let revise = null;
-			if (!gate.passed) {
-				console.warn('[QE2] gate FAIL — auto-revise', gate.failures);
+			let multi = null;
+			const passResults = [];
+			const maxPasses = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : 2;
+			let passesDone = 0;
+			// Pass 1 (QE2): heuristics gate fail → auto-revise once
+			if (!gate.passed && passesDone < maxPasses) {
+				console.warn('[QE2] gate FAIL — auto-revise pass1', gate.failures);
 				revise = await reviseChapterForQuality(chapterNum, gate, { maxAttempts: NW_QUALITY_REVISE.maxAttempts });
+				passesDone++;
 				gate = revise.gateAfter;
+				if (Array.isArray(novelData.qualityReviseLog) && novelData.qualityReviseLog.length) {
+					const last = novelData.qualityReviseLog[novelData.qualityReviseLog.length - 1];
+					last.pass = 1;
+					last.kind = 'gate-fail';
+				}
+				pushQualityMultiPassLog({
+					ts: new Date().toISOString(),
+					chapter: chapterNum,
+					pass: 1,
+					kind: 'gate-fail',
+					passedBefore: false,
+					passedAfter: !!gate.passed,
+					failuresAfter: (gate.failures || []).slice(),
+					scoresAfter: gate.scores || null
+				});
+				passResults.push({ pass: 1, kind: 'gate-fail', passedAfter: !!gate.passed });
+			}
+			// Pass 2 (QE5): continuity findings and/or still-failing gate — capped
+			const need = needsQualityMultiPass(chapterNum, gate, {
+				passesDone: passesDone,
+				didContinuityPass: false,
+				afterApplyStaged: false
+			});
+			if (need.needed && passesDone < maxPasses) {
+				const kind = (need.reason === 'continuity-findings')
+					? 'continuity'
+					: (need.reason === 'residual-staged-notes' ? 'residual-staged' : 'gate-fail');
+				console.warn('[QE5] multi-pass', kind, 'as pass', passesDone + 1);
+				multi = await runTargetedQualityPass(chapterNum, gate, { pass: passesDone + 1, kind: kind });
+				passesDone++;
+				gate = multi.gateAfter || gate;
+				passResults.push({ pass: passesDone, kind: kind, passedAfter: !!gate.passed });
 			}
 			// QE4: advisory LLM judge — never overrides fail-closed heuristics
 			let advisory = null;
@@ -3290,7 +3454,7 @@ let activeAICallCount = 0;
 						gate.passed &&
 						advisory && advisory.alignment &&
 						advisory.alignment.judgeWouldFail &&
-						!revise
+						passesDone < maxPasses
 					) {
 						console.warn('[QE4] advisory judge would fail — optional revise enabled');
 						const fake = {
@@ -3298,14 +3462,17 @@ let activeAICallCount = 0;
 							failures: (advisory.alignment.judgeFailures || []).slice(),
 							scores: gate.scores
 						};
-						revise = await reviseChapterForQuality(chapterNum, fake, { maxAttempts: 1 });
-						gate = revise.gateAfter || gate;
+						const advRev = await reviseChapterForQuality(chapterNum, fake, { maxAttempts: 1 });
+						passesDone++;
+						if (!revise) revise = advRev;
+						else multi = advRev;
+						gate = advRev.gateAfter || gate;
 					}
 				}
 			} catch (advErr) {
 				console.warn('[QE4] advisory judge skipped', advErr);
 			}
-			return { gate: gate, revise: revise, advisory: advisory };
+			return { gate: gate, revise: revise, multi: multi, advisory: advisory, multiPass: passResults, passesDone: passesDone };
 		}
 
 		async function applyBookCritiqueItem(index, opts) {
@@ -3394,7 +3561,33 @@ let activeAICallCount = 0;
 				source: 'heuristics-chapter-improve',
 				rationale: 'applied staged chapterImprovements'
 			}), (novelData.chapters[chapterNum - 1] || '').length);
-			return { beforeScores: beforeScores, afterScores: afterScores };
+			// QE5: after first apply-staged, optional second targeted pass (cap 2)
+			let multi = null;
+			let gate = runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-afterApplyStaged' });
+			pushQualityMultiPassLog({
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				pass: 1,
+				kind: 'apply-staged',
+				passedBefore: null,
+				passedAfter: !!gate.passed,
+				failuresAfter: (gate.failures || []).slice(),
+				scoresAfter: gate.scores || null
+			});
+			const need = needsQualityMultiPass(chapterNum, gate, {
+				passesDone: 1,
+				didContinuityPass: false,
+				afterApplyStaged: true
+			});
+			if (need.needed) {
+				const kind = (need.reason === 'continuity-findings')
+					? 'continuity'
+					: (need.reason === 'residual-staged-notes' ? 'residual-staged' : 'gate-fail');
+				console.warn('[QE5] after apply-staged → second pass', kind);
+				multi = await runTargetedQualityPass(chapterNum, gate, { pass: 2, kind: kind });
+				gate = multi.gateAfter || gate;
+			}
+			return { beforeScores: beforeScores, afterScores: afterScores, multi: multi, gate: gate };
 		}
 
 		async function runQe123Smoke() {
@@ -3488,6 +3681,62 @@ let activeAICallCount = 0;
 			}
 		}
 		window.runQe4Smoke = runQe4Smoke;
+
+		async function runQe5Smoke() {
+			const el = document.getElementById('qe5SmokeResult') || document.getElementById('qe4SmokeResult') || document.getElementById('qe123SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			try {
+				if (!NW_QUALITY_REVISE || NW_QUALITY_REVISE.maxAutoPasses !== 2) throw new Error('maxAutoPasses must be 2');
+				if (NW_QUALITY_ROLES.reviseOnJudgeAdvisory !== false) throw new Error('reviseOnJudgeAdvisory must stay false');
+				say('cap OK: maxAutoPasses=2, reviseOnJudgeAdvisory=false');
+				novelData.continuityFindings = ['Chapter 1: timeline drift on dock clocks'];
+				if (!novelData.continuityTracker) novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
+				novelData.continuityTracker.chapters = novelData.continuityTracker.chapters || [];
+				novelData.continuityTracker.chapters[0] = { chapter: 1, continuityRisks: ['Unnamed child status restated without update'] };
+				const cont = getChapterContinuityFindings(1);
+				if (!cont.hasAny) throw new Error('expected continuity findings');
+				const brief = buildContinuityReviseBrief(1);
+				if (!/CONTINUITY-FOCUSED QUALITY PASS/.test(brief)) throw new Error('continuity brief missing');
+				say('continuity brief OK');
+				const passGate = { passed: true, failures: [], scores: { interest: 90, readability: 80, aiSlopRisk: 20, humanLikeness: 80 } };
+				const needCont = needsQualityMultiPass(1, passGate, { passesDone: 1, didContinuityPass: false });
+				if (!needCont.needed || needCont.reason !== 'continuity-findings') throw new Error('expected continuity-findings need');
+				const needCap = needsQualityMultiPass(1, { passed: false, failures: ['x'] }, { passesDone: 2 });
+				if (needCap.needed) throw new Error('cap must block pass>2');
+				say('needsQualityMultiPass OK (continuity + cap)');
+				pushQualityMultiPassLog({
+					ts: new Date().toISOString(),
+					chapter: 1,
+					pass: 1,
+					kind: 'gate-fail',
+					passedBefore: false,
+					passedAfter: true,
+					failuresAfter: [],
+					scoresAfter: passGate.scores
+				});
+				pushQualityMultiPassLog({
+					ts: new Date().toISOString(),
+					chapter: 1,
+					pass: 2,
+					kind: 'continuity',
+					passedBefore: true,
+					passedAfter: true,
+					failuresAfter: [],
+					scoresAfter: passGate.scores
+				});
+				if (!Array.isArray(novelData.qualityMultiPassLog) || novelData.qualityMultiPassLog.length < 2) throw new Error('multiPass log');
+				say('qualityMultiPassLog pass1→pass2 OK');
+				say('QE5 Smoke PASS (structure; live multipass needs API)');
+				return true;
+			} catch (e) {
+				say('QE5 Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			}
+		}
+		window.runQe5Smoke = runQe5Smoke;
+
+
 
 
 		window.runQe123Smoke = runQe123Smoke;

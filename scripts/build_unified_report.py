@@ -220,9 +220,14 @@ def build_report(report: dict, nd: dict) -> str:
     n_book = len(book_imps) if isinstance(book_imps, list) else 0
     lines.append(f"- **Automated book critique items:** {n_book}")
     lines.append(f"- **Continuity findings:** {len(continuity)}")
+    mp = nd.get("qualityMultiPassLog") or []
+    if mp:
+        kinds = " → ".join(f'pass{e.get("pass")}:{e.get("kind")}' for e in mp if isinstance(e, dict))
+        lines.append(f"- **Multi-pass quality (QE5):** {kinds}")
+    else:
+        lines.append("- **Multi-pass quality (QE5):** none this run (cap maxAutoPasses=2; continuity/second pass when needed)")
     lines.append(
-        "- **Next iteration (not this run):** deepen automated review/edit capabilities "
-        "(stronger revise loops, apply-critique wiring, multi-pass quality editing)."
+        "- **Remaining next:** per-prompt cost in-product (Tab1); series RAG/KG still future docs only."
     )
     lines.append("")
     lines.append("---")
@@ -396,13 +401,34 @@ def build_report(report: dict, nd: dict) -> str:
         for i, item in enumerate(continuity, 1):
             lines.append(f"{i}. {trunc(str(item), 350)}")
         lines.append("")
-    lines.append("### 5.4 Next iteration (deferred)")
+    mp_log = nd.get("qualityMultiPassLog") or []
+    lines.append("### 5.4 Multi-pass quality editing (QE5)")
     lines.append("")
     lines.append(
-        "Existing review/editing capabilities need improvement; **out of scope for this report slice**. "
-        "Candidates for the next iteration: multi-pass quality editing that applies critique items, "
-        "stronger revise loops tied to fail-closed gate, chapter-improvement application (not just list), "
-        "and better alignment between LLM judge and heuristic gate."
+        "Shipped: after first gate-fail revise or apply-staged, a **second targeted pass** may run "
+        "(continuity findings / still-failing heuristics gate / residual staged notes). "
+        f"Cap `maxAutoPasses={2}`; fail-closed remains heuristics; `reviseOnJudgeAdvisory` stays false."
+    )
+    lines.append("")
+    if not mp_log:
+        lines.append("(No `qualityMultiPassLog` entries this run.)")
+    else:
+        lines.append("| Pass | Kind | Chapter | Passed after |")
+        lines.append("| ---: | --- | ---: | --- |")
+        for e in mp_log:
+            if not isinstance(e, dict):
+                continue
+            lines.append(
+                f"| {e.get('pass')} | {e.get('kind')} | {e.get('chapter')} | "
+                f"{'yes' if e.get('passedAfter') else 'no'} |"
+            )
+        lines.append("")
+    lines.append("### 5.5 Next iteration (remaining)")
+    lines.append("")
+    lines.append(
+        "QE1–QE5 shipped. Remaining product backlog: **per-prompt cost in-product** (Tab1 diagnostics). "
+        "Series RAG/KG remains future docs only. Watchout: cast count in reports may show Unnamed vs rich fixture "
+        "cast densification — track separately."
     )
     lines.append("")
     lines.append("---")

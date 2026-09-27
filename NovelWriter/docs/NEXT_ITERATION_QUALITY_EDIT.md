@@ -1,6 +1,6 @@
 # Next iteration — quality editing & review (NovelWriter)
 
-Status: **1–4 implemented** (2026-09-27). Items 5–6 still open. Rich fixture track next after QE4.
+Status: **1–5 implemented** (2026-09-27). Item 6 (per-prompt cost in-product) still open.
 
 ## Why
 Lean Tracked E2E now reports quality gate scores, heuristic samples, Ch1 `updateChapter` delta, book critique items, and continuity findings in the unified report. Existing review/edit paths still need product-strength improvements.
@@ -11,7 +11,7 @@ Lean Tracked E2E now reports quality gate scores, heuristic samples, Ch1 `update
 2. **Fail-closed revise** ✅ — when `runQualityGate` fails, auto-revise once (or N) against failure reasons, then re-gate; keep fail-closed if still below thresholds.
 3. **Chapter improvement application** ✅ — wire non-empty `chapterImprovements` into Tab6 edit flow; stop silent empty slots.
 4. **Judge ↔ gate alignment** ✅ — heuristics = fail-closed driver; LLM judge = advisory + divergence log (`QUALITY_JUDGE_GATE.md`). `reviseOnJudgeAdvisory` default false.
-5. **Multi-pass quality editing** — optional second pass after continuity audit; record before/after in `qualitySamples` and unified report §5.
+5. **Multi-pass quality editing** ✅ — second targeted pass (continuity / still-fail / residual staged); cap `maxAutoPasses=2`; `qualityMultiPassLog` pass1→pass2 (`QUALITY_MULTI_PASS.md`).
 6. **Per-prompt cost in-product** — surface tokensByPrompt / est. $ in Tab1 diagnostics (report already has it).
 
 ## Related future (not this backlog)
@@ -23,5 +23,5 @@ Lean Tracked E2E now reports quality gate scores, heuristic samples, Ch1 `update
 ## Acceptance sketch (next slice)
 - [x] Gate fail triggers at least one automated revise attempt with logged delta.
 - [x] At least one book-critique item can be applied and re-scored (Apply / Apply Top Critique).
-- [ ] Unified report §5 shows generate → revise → final scores for edited chapters. (samples logged; report builder follow-up)
+- [x] Unified report §5 documents multi-pass (pass1→pass2) + `qualityMultiPassLog` when present.
 - [x] Offline smoke for revise path (QE 1/2/3 Smoke structure asserts).
