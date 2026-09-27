@@ -1,0 +1,167 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/bnorth12/AI-Book-Tools/schema/evidence-pack-0.1.json",
+  "title": "AI-Book-Tools EvidencePack 0.1",
+  "description": "Local retrieve contract. Remote LLM completes from pack excerpts only. Shared type EvidencePack \u2014 no aliases. kbEnabled is orthogonal to LLM provider.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "projectId",
+    "query",
+    "excerpts",
+    "graphPath",
+    "expandOrNarrow",
+    "tokenBudgetHint"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1",
+      "description": "EvidencePack schema version"
+    },
+    "projectId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "query": {
+      "type": "object",
+      "required": [
+        "goal"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "goal": {
+          "type": "string",
+          "description": "Natural-language retrieve goal"
+        },
+        "filters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "genre": {
+              "type": "string"
+            },
+            "chapter": {
+              "type": "number"
+            },
+            "characterIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "themes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "domain": {
+              "type": "string",
+              "enum": [
+                "fiction",
+                "nonfiction",
+                "shared"
+              ]
+            },
+            "safetyTopics": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "taxonIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "projectGoal": {
+              "type": "string",
+              "description": "Tagged query facet (not a graph node); project/outline intent text or id"
+            }
+          }
+        }
+      }
+    },
+    "excerpts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/excerpt"
+      }
+    },
+    "graphPath": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Ordered entity ids justifying inclusion"
+    },
+    "expandOrNarrow": {
+      "type": "string",
+      "enum": [
+        "expand",
+        "narrow",
+        "hold"
+      ]
+    },
+    "tokenBudgetHint": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Soft cap for total excerpt tokens injected into the prompt"
+    },
+    "kbEnabled": {
+      "type": "boolean",
+      "description": "Optional echo of toggle; orthogonal to provider"
+    }
+  },
+  "definitions": {
+    "excerptEntityType": {
+      "type": "string",
+      "description": "Phase 0 KB entity names for fiction (4) + shared ReferenceDoc + nonfiction (4). ChapterNode, QualityFinding, ProjectGoal are later/non-KB \u2014 not excerpt entityTypes.",
+      "enum": [
+        "Character",
+        "PlotBeat",
+        "Motif",
+        "StyleExemplar",
+        "ReferenceDoc",
+        "Taxon",
+        "Preparation",
+        "Contraindication",
+        "SafetyTopic"
+      ]
+    },
+    "excerpt": {
+      "type": "object",
+      "required": [
+        "refId",
+        "entityType",
+        "text",
+        "score"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "refId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entityType": {
+          "$ref": "#/definitions/excerptEntityType"
+        },
+        "text": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

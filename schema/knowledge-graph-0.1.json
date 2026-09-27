@@ -1,0 +1,627 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/bnorth12/AI-Book-Tools/schema/knowledge-graph-0.1.json",
+  "title": "AI-Book-Tools Knowledge Graph 0.1",
+  "description": "Shared project knowledge graph for fiction and nonfiction. One KB; domain tags filter. Shared graph entity type: ReferenceDoc only (EvidencePack is the retrieve contract, not a graph node). Ping Engineering before new shared types.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "projectId",
+    "entities",
+    "edges"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1",
+      "description": "Knowledge graph schema version"
+    },
+    "projectId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/entity"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/edge"
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "sourceTool": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "domain": {
+      "type": "string",
+      "enum": [
+        "fiction",
+        "nonfiction",
+        "shared"
+      ]
+    },
+    "entityType": {
+      "type": "string",
+      "enum": [
+        "Character",
+        "PlotBeat",
+        "Motif",
+        "StyleExemplar",
+        "ReferenceDoc",
+        "Taxon",
+        "Preparation",
+        "Contraindication",
+        "SafetyTopic"
+      ]
+    },
+    "edgeType": {
+      "type": "string",
+      "enum": [
+        "SUPPORTS",
+        "RELATES_TO",
+        "MOTIVATED_BY",
+        "PRECEDES",
+        "ADVANCES",
+        "ECHOES",
+        "INFORMS",
+        "HAS_PREP",
+        "CITED_IN",
+        "FOR_TAXON",
+        "SAFETY",
+        "APPLIES_TO",
+        "DOCUMENTED_BY"
+      ]
+    },
+    "edge": {
+      "type": "object",
+      "required": [
+        "type",
+        "from",
+        "to"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/edgeType"
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "meta": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "voiceCard": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "lexicon": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cadence": {
+          "type": "string"
+        },
+        "tabooPhrases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "emotionalBaseline": {
+          "type": "string"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "retrievedAt": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        }
+      }
+    },
+    "entity": {
+      "type": "object",
+      "required": [
+        "entityType",
+        "id"
+      ],
+      "properties": {
+        "entityType": {
+          "$ref": "#/definitions/entityType"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "domain": {
+          "$ref": "#/definitions/domain"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "Character"
+              }
+            },
+            "required": [
+              "entityType"
+            ]
+          },
+          "then": {
+            "$ref": "#/definitions/Character"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "PlotBeat"
+              }
+            },
+            "required": [
+              "entityType"
+            ]
+          },
+          "then": {
+            "$ref": "#/definitions/PlotBeat"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "Motif"
+              }
+            },
+            "required": [
+              "entityType"
+            ]
+          },
+          "then": {
+            "$ref": "#/definitions/Motif"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "StyleExemplar"
+              }
+            },
+            "required": [
+              "entityType"
+            ]
+          },
+          "then": {
+            "$ref": "#/definitions/StyleExemplar"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "ReferenceDoc"
+              }
+            },
+            "required": [
+              "entityType"
+            ]
+          },
+          "then": {
+            "$ref": "#/definitions/ReferenceDoc"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "Taxon"
+              }
+            },
+            "required": [
+              "entityType"
+            ]
+          },
+          "then": {
+            "$ref": "#/definitions/Taxon"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "Preparation"
+              }
+            },
+            "required": [
+              "entityType"
+            ]
+          },
+          "then": {
+            "$ref": "#/definitions/Preparation"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "Contraindication"
+              }
+            },
+            "required": [
+              "entityType"
+            ]
+          },
+          "then": {
+            "$ref": "#/definitions/Contraindication"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "entityType": {
+                "const": "SafetyTopic"
+              }
+            },
+            "required": [
+              "entityType"
+            ]
+          },
+          "then": {
+            "$ref": "#/definitions/SafetyTopic"
+          }
+        }
+      ]
+    },
+    "Character": {
+      "type": "object",
+      "required": [
+        "entityType",
+        "id",
+        "name"
+      ],
+      "properties": {
+        "entityType": {
+          "const": "Character"
+        },
+        "id": {
+          "type": "string"
+        },
+        "domain": {
+          "$ref": "#/definitions/domain"
+        },
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "voiceCard": {
+          "$ref": "#/definitions/voiceCard"
+        },
+        "arcSummary": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "PlotBeat": {
+      "type": "object",
+      "required": [
+        "entityType",
+        "id",
+        "label"
+      ],
+      "properties": {
+        "entityType": {
+          "const": "PlotBeat"
+        },
+        "id": {
+          "type": "string"
+        },
+        "domain": {
+          "$ref": "#/definitions/domain"
+        },
+        "label": {
+          "type": "string"
+        },
+        "arcStep": {
+          "type": "string"
+        },
+        "stakes": {
+          "type": "string"
+        },
+        "payoffStatus": {
+          "type": "string",
+          "enum": [
+            "open",
+            "paid",
+            "abandoned"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "Motif": {
+      "type": "object",
+      "required": [
+        "entityType",
+        "id",
+        "label"
+      ],
+      "properties": {
+        "entityType": {
+          "const": "Motif"
+        },
+        "id": {
+          "type": "string"
+        },
+        "domain": {
+          "$ref": "#/definitions/domain"
+        },
+        "label": {
+          "type": "string"
+        },
+        "imageryTokens": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "overuseThreshold": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": true
+    },
+    "StyleExemplar": {
+      "type": "object",
+      "required": [
+        "entityType",
+        "id"
+      ],
+      "properties": {
+        "entityType": {
+          "const": "StyleExemplar"
+        },
+        "id": {
+          "type": "string"
+        },
+        "domain": {
+          "$ref": "#/definitions/domain"
+        },
+        "title": {
+          "type": "string"
+        },
+        "excerpt": {
+          "type": "string"
+        },
+        "voiceTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sourceRef": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ReferenceDoc": {
+      "type": "object",
+      "required": [
+        "entityType",
+        "id",
+        "kind",
+        "text"
+      ],
+      "properties": {
+        "entityType": {
+          "const": "ReferenceDoc"
+        },
+        "id": {
+          "type": "string"
+        },
+        "domain": {
+          "$ref": "#/definitions/domain"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "citation",
+            "note",
+            "domain",
+            "safety"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/definitions/provenance"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "Taxon": {
+      "type": "object",
+      "required": [
+        "entityType",
+        "id",
+        "scientificName"
+      ],
+      "properties": {
+        "entityType": {
+          "const": "Taxon"
+        },
+        "id": {
+          "type": "string"
+        },
+        "domain": {
+          "$ref": "#/definitions/domain"
+        },
+        "scientificName": {
+          "type": "string"
+        },
+        "commonNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "family": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Preparation": {
+      "type": "object",
+      "required": [
+        "entityType",
+        "id",
+        "method"
+      ],
+      "properties": {
+        "entityType": {
+          "const": "Preparation"
+        },
+        "id": {
+          "type": "string"
+        },
+        "domain": {
+          "$ref": "#/definitions/domain"
+        },
+        "method": {
+          "type": "string"
+        },
+        "partUsed": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Contraindication": {
+      "type": "object",
+      "required": [
+        "entityType",
+        "id",
+        "severity",
+        "population"
+      ],
+      "properties": {
+        "entityType": {
+          "const": "Contraindication"
+        },
+        "id": {
+          "type": "string"
+        },
+        "domain": {
+          "$ref": "#/definitions/domain"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "moderate",
+            "high",
+            "critical"
+          ]
+        },
+        "population": {
+          "type": "string"
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "SafetyTopic": {
+      "type": "object",
+      "required": [
+        "entityType",
+        "id",
+        "label"
+      ],
+      "properties": {
+        "entityType": {
+          "const": "SafetyTopic"
+        },
+        "id": {
+          "type": "string"
+        },
+        "domain": {
+          "$ref": "#/definitions/domain"
+        },
+        "label": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
