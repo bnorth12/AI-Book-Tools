@@ -712,7 +712,7 @@ Synced: 2026-04-19
 
 		const defaultPromptCatalog = {
 			tab1: {
-				fetchAuthors: { name: 'Author Discovery Agent', systemPrompt: 'You are a literature researcher helping a novelist find high-signal author references by genre. Prioritize relevance, breadth across eras, and practical stylistic value for imitation prompts.' },
+				fetchAuthors: { name: 'Author Discovery Agent', systemPrompt: 'You are a literature researcher helping a novelist find high-signal author references for the type of book they are drafting (selected genre). Rank by how interesting and useful each voice is as a style model for that book type — not by fame alone. Prefer writers whose work is distinctive within or against that genre's conventions (including thoughtful genre-bending when it fits the selected genre). Cover recent and historical voices; keep guidance practical for imitation prompts.' },
 				fetchStyleGuide: { name: 'Style Guide Agent', systemPrompt: 'You are a literary style analyst. Produce concrete, reusable style guidance covering voice, sentence rhythm, pacing, imagery density, dialogue patterns, and narrative distance.' },
 				suggestStoryArc: { name: 'Story Arc Agent', systemPrompt: 'You are a story architect designing emotionally coherent long-form arcs. Emphasize escalating stakes, thematic progression, and act-level turning points that can sustain chapter-level execution.' },
 				suggestGeneralPlot: { name: 'General Plot Agent', systemPrompt: 'You are a plot designer for serialized novels. Build causally linked events, meaningful reversals, and clear consequence chains that keep momentum across the full chapter count.' },
@@ -1065,8 +1065,10 @@ Synced: 2026-04-19
 		        {
 		            role: 'user',
 		            content: [
-		                `List 100 notable authors known for writing in the ${genre} genre:`,
-		                '20 recent authors (active in the last 5 years) and 80 prolific authors over a longer historical period.',
+		                `List 100 authors suited to drafting a ${genre} book, ranked most interesting first as style models for that book type:`,
+		                'Stay generic to the selected genre / book type — do not force unrelated subgenres.',
+		                'Prioritize: (1) distinctive voices strongly associated with this genre/book type, (2) writers who thoughtfully bend or hybridize that genre when it still serves this book type, (3) practical stylistic value for imitation, (4) then broader notable coverage.',
+		                'Include about 20 recent authors (active in the last 5 years) and about 80 across a longer historical period, still ranked by interest for this book type not pure fame.',
 		                'Return the response as a JSON object with this exact structure, without markdown code block markers:',
 		                '{',
 		                '    "authors": [',
