@@ -252,6 +252,12 @@ Synced: 2026-04-19
 			        <label for="maxTokens">Max Tokens per Update:</label>
 			        <input type="number" id="maxTokens" min="500" value="6000">
 			        <button type="button" id="c1SmokeBtn" onclick="runC1Smoke()" title="Cheap C1 digest / no-full-dump smoke (#120)">C1 Smoke (cheap)</button>
+                        <label for="kbEnabled" title="C2: local EvidencePack from novelData only (not series KG yet)" style="margin-left:8px;"><input type="checkbox" id="kbEnabled" onchange="setKbEnabled(this.checked)"> KB / EvidencePack</label>
+                        <button type="button" id="c2SmokeBtn" onclick="runC2Smoke()" title="#120 C2 EvidencePack smoke">C2 Smoke</button>
+                        <button type="button" id="c3SmokeBtn" onclick="runC3Smoke()" title="#120 C3 quality gate smoke">C3 Smoke</button>
+                        <pre id="c2SmokeResult" style="margin:8px 0 4px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7fff7;border:1px solid #cde;white-space:pre-wrap;"></pre>
+                        <pre id="c3SmokeResult" style="margin:4px 0 4px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#fff7f0;border:1px solid #edc;white-space:pre-wrap;"></pre>
+                        <pre id="qualityGateResult" style="margin:4px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f5f5ff;border:1px solid #ccd;white-space:pre-wrap;">Quality gate: (none yet)</pre>
 			        <button type="button" id="trackedE2EBtn" onclick="runTrackedE2E()" title="Lean start-to-finish tracked E2E: tokens + prose quality (#120 C3)">Tracked E2E (lean)</button>
 			        <pre id="c1SmokeResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7f7f7;border:1px solid #ddd;border-radius:4px;white-space:pre-wrap;max-height:220px;overflow:auto;">C1 smoke idle — click to validate digests (no full manuscript dump).</pre>
 			        <pre id="trackedE2EResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f0f4ff;border:1px solid #b8c7e8;border-radius:4px;white-space:pre-wrap;max-height:360px;overflow:auto;">Tracked E2E idle - click for lean 2-chapter token+quality run.</pre>
@@ -611,7 +617,10 @@ Synced: 2026-04-19
 	        continuityFindings: [],
 	        // Book-level token rollup (PRODUCT RULE #120 C3) — exported with session
 	        tokenUsage: null,
-	        qualitySamples: []
+	        qualitySamples: [],
+	        kbEnabled: false,
+	        lastQualityGate: null,
+	        qualityFindings: []
 	    };
 
 	    let requestLog = {
@@ -2743,6 +2752,287 @@ let activeAICallCount = 0;
 		window.scoreProseQuality = scoreProseQuality;
 		window.judgeProseQualityLLM = judgeProseQualityLLM;
 
+		// ---- #120 C2: EvidencePack (project-local) + #120 C3: quality / no-AI-slot gate ----
+		// Series / cross-book KG retrieve is FUTURE (see NovelWriter/docs/C2_RAG_HOOKS.md). This slice is novelData-only.
+		const NW_EVIDENCE_ENTITY_TYPES = ['Character', 'PlotBeat', 'Motif', 'StyleExemplar', 'ReferenceDoc'];
+		const NW_QUALITY_GATE = {
+			minInterest: 40,
+			minHumanLikeness: 50,
+			maxAiSlopRisk: 55,
+			minChars: 40
+		};
+
+		function isKbEnabled() {
+			if (typeof novelData.kbEnabled === 'boolean') return novelData.kbEnabled;
+			const el = document.getElementById('kbEnabled');
+			if (el) return !!el.checked;
+			return false;
+		}
+
+		function setKbEnabled(on) {
+			novelData.kbEnabled = !!on;
+			const el = document.getElementById('kbEnabled');
+			if (el) el.checked = !!on;
+			return novelData.kbEnabled;
+		}
+
+		function _estimateTokens(text) {
+			return Math.ceil(String(text || '').length / 4);
+		}
+
+		function _trimExcerpt(text, maxChars) {
+			const t = String(text || '').replace(/\s+/g, ' ').trim();
+			if (t.length <= maxChars) return t;
+			return t.slice(0, Math.max(0, maxChars - 1)).trim() + '\u2026';
+		}
+
+		/**
+		 * Local retrieve from current novelData only (not series KB).
+		 * @param {{goal?: string, chapter?: number, tokenBudgetHint?: number}} query
+		 */
+		function buildEvidencePack(query) {
+			query = query || {};
+			const budget = Number(query.tokenBudgetHint) || 2000;
+			const excerpts = [];
+			const chars = Array.isArray(novelData.characters) ? novelData.characters : [];
+			chars.forEach((c, i) => {
+				if (!c || !c.name) return;
+				const text = _trimExcerpt(
+					[c.name, c.role, c.goal, c.flaw, c.backstory, c.arc].filter(Boolean).join(' | '),
+					420
+				);
+				if (!text) return;
+				excerpts.push({
+					refId: 'char-' + i + '-' + String(c.name).replace(/\s+/g, '_').slice(0, 24),
+					entityType: 'Character',
+					text: text,
+					score: 0.9 - Math.min(0.3, i * 0.05),
+					citations: []
+				});
+			});
+			const subplots = Array.isArray(novelData.subplots) ? novelData.subplots : [];
+			subplots.forEach((s, i) => {
+				const raw = typeof s === 'string' ? s : (s && (s.text || s.summary || s.description)) || JSON.stringify(s);
+				const text = _trimExcerpt(raw, 360);
+				if (!text) return;
+				excerpts.push({
+					refId: 'beat-subplot-' + i,
+					entityType: 'PlotBeat',
+					text: text,
+					score: 0.75 - Math.min(0.2, i * 0.04),
+					citations: []
+				});
+			});
+			if (novelData.storyArc) {
+				excerpts.push({
+					refId: 'beat-storyArc',
+					entityType: 'PlotBeat',
+					text: _trimExcerpt(novelData.storyArc, 400),
+					score: 0.8,
+					citations: []
+				});
+			}
+			if (novelData.styleGuide) {
+				excerpts.push({
+					refId: 'style-guide',
+					entityType: 'StyleExemplar',
+					text: _trimExcerpt(novelData.styleGuide, 500),
+					score: 0.7,
+					citations: []
+				});
+			}
+			const motifs = novelData.motifs || novelData.themes || [];
+			(Array.isArray(motifs) ? motifs : [motifs]).forEach((m, i) => {
+				const text = _trimExcerpt(typeof m === 'string' ? m : (m && (m.name || m.text)) || '', 240);
+				if (!text) return;
+				excerpts.push({
+					refId: 'motif-' + i,
+					entityType: 'Motif',
+					text: text,
+					score: 0.65,
+					citations: []
+				});
+			});
+			// Rank + greedy budget
+			excerpts.sort((a, b) => (b.score || 0) - (a.score || 0));
+			const kept = [];
+			let used = 0;
+			for (const ex of excerpts) {
+				const cost = _estimateTokens(ex.text);
+				if (kept.length && used + cost > budget) continue;
+				kept.push(ex);
+				used += cost;
+			}
+			return {
+				schemaVersion: '0.1',
+				projectId: novelData.title || 'untitled',
+				query: {
+					goal: query.goal || 'chapter-draft',
+					filters: {
+						genre: novelData.genre || '',
+						chapter: query.chapter || 0,
+						characterIds: chars.map(c => c && c.name).filter(Boolean),
+						themes: [],
+						domain: 'fiction',
+						projectGoal: '',
+						safetyTopics: [],
+						taxonIds: []
+					}
+				},
+				excerpts: kept,
+				graphPath: [],
+				expandOrNarrow: 'hold',
+				tokenBudgetHint: budget,
+				_meta: { estimatedTokens: used, kbEnabled: isKbEnabled(), source: 'novelData-local' }
+			};
+		}
+
+		function formatEvidencePackForPrompt(pack) {
+			if (!pack || !Array.isArray(pack.excerpts) || pack.excerpts.length === 0) return '';
+			const lines = ['## EvidencePack (local retrieve; do not invent sources outside this pack)'];
+			pack.excerpts.forEach((ex, i) => {
+				lines.push((i + 1) + '. [' + (ex.entityType || '?') + ' | score=' + (ex.score != null ? ex.score : '?') + '] ' + (ex.text || ''));
+			});
+			return lines.join('\n');
+		}
+
+		/** Returns '' when kb off or empty — callers must not inject empty Evidence headers. */
+		function evidencePackPromptBlock(query) {
+			if (!isKbEnabled()) return '';
+			const pack = buildEvidencePack(query || {});
+			const block = formatEvidencePackForPrompt(pack);
+			if (block) {
+				try { assertEvidencePackContract(pack); } catch (e) { console.warn('[C2 EvidencePack]', e); }
+				requestLog.lastEvidencePack = { excerptCount: pack.excerpts.length, estimatedTokens: (pack._meta && pack._meta.estimatedTokens) || 0 };
+			}
+			return block;
+		}
+
+		function assertEvidencePackContract(pack) {
+			const notes = [];
+			if (!pack || pack.schemaVersion !== '0.1') notes.push('schemaVersion must be 0.1');
+			if (!Array.isArray(pack.excerpts)) notes.push('excerpts must be array');
+			(pack.excerpts || []).forEach((ex, i) => {
+				if (!NW_EVIDENCE_ENTITY_TYPES.includes(ex.entityType)) notes.push('excerpt[' + i + '] bad entityType ' + ex.entityType);
+				if (typeof ex.text !== 'string' || !ex.text.trim()) notes.push('excerpt[' + i + '] empty text');
+				// Guard: no full manuscript join in an excerpt
+				if ((ex.text || '').length > 2500) notes.push('excerpt[' + i + '] oversized (possible dump)');
+			});
+			const joined = (pack.excerpts || []).map(e => e.text).join('\n');
+			if (joined.length > 12000) notes.push('pack total text too large');
+			if (notes.length) {
+				const err = new Error('assertEvidencePackContract failed: ' + notes.join('; '));
+				err.notes = notes;
+				throw err;
+			}
+			return true;
+		}
+
+		function runQualityGate(text, opts) {
+			opts = opts || {};
+			const scores = scoreProseQuality(text);
+			const thr = Object.assign({}, NW_QUALITY_GATE, opts.thresholds || {});
+			const raw = String(text || '');
+			const failures = [];
+			if (raw.trim().length < thr.minChars) failures.push('too_short');
+			if (scores.aiSlopRisk >= thr.maxAiSlopRisk) failures.push('aiSlopRisk>=' + thr.maxAiSlopRisk);
+			if (scores.humanLikeness < thr.minHumanLikeness) failures.push('humanLikeness<' + thr.minHumanLikeness);
+			if (scores.interest < thr.minInterest) failures.push('interest<' + thr.minInterest);
+			const result = {
+				passed: failures.length === 0,
+				failures: failures,
+				scores: scores,
+				thresholds: thr,
+				ts: new Date().toISOString(),
+				label: opts.label || 'qualityGate'
+			};
+			novelData.lastQualityGate = result;
+			if (!Array.isArray(novelData.qualityFindings)) novelData.qualityFindings = [];
+			novelData.qualityFindings.push({
+				label: result.label,
+				passed: result.passed,
+				failures: failures.slice(),
+				interest: scores.interest,
+				readability: scores.readability,
+				aiSlopRisk: scores.aiSlopRisk,
+				humanLikeness: scores.humanLikeness,
+				ts: result.ts
+			});
+			pushQualitySample(result.label, Object.assign({}, scores, { source: 'heuristics-gate', rationale: result.passed ? 'gate pass' : 'gate fail: ' + failures.join(',') }), raw.length);
+			const el = document.getElementById('qualityGateResult');
+			if (el) {
+				el.textContent = (result.passed ? 'PASS' : 'FAIL') +
+					' interest/read/slop/human=' + scores.interest + '/' + scores.readability + '/' + scores.aiSlopRisk + '/' + scores.humanLikeness +
+					(failures.length ? (' | ' + failures.join(', ')) : '');
+			}
+			return result;
+		}
+
+		async function runC2Smoke() {
+			const el = document.getElementById('c2SmokeResult') || document.getElementById('c1SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\\n'); };
+			try {
+				const prev = isKbEnabled();
+				setKbEnabled(false);
+				const offBlock = evidencePackPromptBlock({ goal: 'c2-smoke', chapter: 1 });
+				if (offBlock) throw new Error('kb OFF must yield empty evidence block');
+				say('kb OFF → empty block OK');
+				setKbEnabled(true);
+				// Ensure some local material
+				if (!Array.isArray(novelData.characters) || !novelData.characters.length) {
+					novelData.characters = [{ name: 'Smoke Protagonist', role: 'lead', goal: 'test', flaw: 'stub', backstory: 'C2 smoke backstory', arc: 'rise' }];
+				}
+				if (!novelData.styleGuide) novelData.styleGuide = 'Concrete sensory detail; short clauses; no tapestry/delve stock.';
+				const pack = buildEvidencePack({ goal: 'c2-smoke', chapter: 1, tokenBudgetHint: 1500 });
+				assertEvidencePackContract(pack);
+				if (!pack.excerpts.length) throw new Error('expected excerpts with kb ON + cast');
+				const block = formatEvidencePackForPrompt(pack);
+				if (!block) throw new Error('expected formatted block');
+				assertNoFullManuscriptDump();
+				say('kb ON → excerpts=' + pack.excerpts.length + ' estTokens=' + (pack._meta && pack._meta.estimatedTokens));
+				say('assertEvidencePackContract + assertNoFullManuscriptDump OK');
+				setKbEnabled(prev);
+				say('C2 Smoke PASS');
+				return true;
+			} catch (e) {
+				say('C2 Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			}
+		}
+
+		async function runC3Smoke() {
+			const el = document.getElementById('c3SmokeResult') || document.getElementById('c1SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\\n'); };
+			try {
+				const slop = "In todays world, it is important to note that a vibrant tapestry of innovation will delve deeper into the complexities. Moreover, furthermore, a testament to progress stands as a beacon of seamless robust leverage.";
+				const fail = runQualityGate(slop, { label: 'c3-smoke-slop' });
+				if (fail.passed) throw new Error('expected slop sample to FAIL gate');
+				say('slop stub FAIL gate OK: ' + fail.failures.join(','));
+				const okProse = 'Mara checked the load cell at Pier 46 twice. "One kilo short," she said. Rain ticked on the copper seals. She wrote 999.000 in the log and did not smile.';
+				const ok = runQualityGate(okProse + ' ' + okProse + ' ' + okProse, { label: 'c3-smoke-ok' });
+				if (!ok.passed) throw new Error('expected concrete sample to PASS; failures=' + ok.failures.join(','));
+				say('concrete stub PASS gate OK scores=' + ok.scores.interest + '/' + ok.scores.readability + '/' + ok.scores.aiSlopRisk + '/' + ok.scores.humanLikeness);
+				say('C3 Smoke PASS');
+				return true;
+			} catch (e) {
+				say('C3 Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			}
+		}
+
+		window.buildEvidencePack = buildEvidencePack;
+		window.formatEvidencePackForPrompt = formatEvidencePackForPrompt;
+		window.evidencePackPromptBlock = evidencePackPromptBlock;
+		window.assertEvidencePackContract = assertEvidencePackContract;
+		window.runQualityGate = runQualityGate;
+		window.isKbEnabled = isKbEnabled;
+		window.setKbEnabled = setKbEnabled;
+		window.runC2Smoke = runC2Smoke;
+		window.runC3Smoke = runC3Smoke;
+
+
 		// ---- #120 C3: Lean tracked E2E (2 chapters / 500 words / 3 chars / 2 subplots) ----
 		function _trackedLog(lines, msg) {
 			lines.push(msg);
@@ -3099,6 +3389,7 @@ let activeAICallCount = 0;
 		}
 
 		async function runChapterContinuityAudit(chapterNum, options = {}) {
+			const __c2ContEp = evidencePackPromptBlock({ goal: 'continuityAudit', chapter: chapterNum, tokenBudgetHint: 1200 });
 			collectData();
 			const chapterText = novelData.chapters[chapterNum - 1] || document.getElementById(`chapterGenContent${chapterNum}`)?.value || '';
 			if (!chapterText.trim()) {
@@ -3197,7 +3488,10 @@ let activeAICallCount = 0;
 		            ].join('\n')
 		        }
 		    ];
-		    requestLog.lastPrompt = messages[1].content;
+		    if (__c2ContEp && Array.isArray(messages) && messages[1] && typeof messages[1].content === 'string' && messages[1].content.indexOf('EvidencePack') < 0) {
+				messages[1].content = messages[1].content + '\n' + __c2ContEp;
+			}
+			requestLog.lastPrompt = messages[1].content;
 		    requestLog.status = 'Pending';
 		    requestLog.originTab = 'tab6';
 		    clearReturnedInfo();
@@ -3269,6 +3563,7 @@ let activeAICallCount = 0;
 	        // Suggest improvements for the entire book and update the table
 		    async function suggestBookImprovements() {
 			    collectData();
+			    var __c2BookEp = evidencePackPromptBlock({ goal: 'suggestBookImprovements', tokenBudgetHint: 1500 });
 			    const fullBook = novelData.chapters
 			        .filter(chapter => chapter.trim() !== '')
 			        .map((chapter, index) => `Chapter ${index + 1}\n\n${chapter}`)
@@ -3284,6 +3579,7 @@ let activeAICallCount = 0;
 			            content: [
 			                'Review the following book and suggest 7-10 detailed improvements (each 100-150 words) for coherence, pacing, character development, and plot consistency:',
 			                `${JSON.stringify({ chapterDigests: (novelData.chapters||[]).map((ch,i)=>({chapter:i+1,digest:getTrimmedContext(ch||'',400)})), openThreads: (novelData.continuityTracker?.chapters||[]).flatMap(c=>c?.unresolvedThreads||[]).slice(-12), storyArcDigest: digestText(novelData.storyArc||'',280), plotDigest: digestText(novelData.generalPlot||'',320), characters: digestCharacters(novelData.characters), continuityRisks: (novelData.continuityFindings||[]).slice(-20) })}`,
+			                ...(__c2BookEp ? ['- **EvidencePack:**', __c2BookEp] : []),
 			                'For each improvement:',
 			                '- Specify the aspect (e.g., coherence, pacing) and chapter(s) affected.',
 			                '- Provide a clear issue (e.g., uneven pacing in Chapter 2) with examples from the text.',
@@ -4690,6 +4986,7 @@ let activeAICallCount = 0;
 		                `- **Chapter Outline (digest):** ${digestText(novelData.chapterOutlines[chapterNum-1] || 'No outline provided', 500)}`,
 		                `- **Chapter Arc (digest):** ${digestText(novelData.chapterArcs[chapterNum-1] || 'No arc provided', 280)}`,
 			                `- **Continuity Packet:** ${JSON.stringify(continuityPacket)}`,
+		                ...(function(){ const _ep = evidencePackPromptBlock({ goal: 'generateChapter', chapter: chapterNum, tokenBudgetHint: 2000 }); return _ep ? ['- **EvidencePack:**', _ep] : []; })(),
 		                '',
 		                'Requirements:',
 		                '- **Structure:** Seamless narrative, no headers/markers. Use vivid prose, dialogue, pacing, and stakes, with 6-8 sensory details per phase (sights, sounds, smells, textures) tied to setting’s history, culture, or tech, amplifying tone and ambiguity.',
@@ -4760,6 +5057,7 @@ let activeAICallCount = 0;
 			            `- **Chapter Outline (digest):** ${digestText(novelData.chapterOutlines[chapterNum-1] || 'No outline provided', 500)}`,
 			            `- **Chapter Arc (digest):** ${digestText(novelData.chapterArcs[chapterNum-1] || 'No arc provided', 280)}`,
 			            `- **Continuity Packet:** ${JSON.stringify(continuityPacket)}`,
+		                ...(function(){ const _ep = evidencePackPromptBlock({ goal: 'generateChapter', chapter: chapterNum, tokenBudgetHint: 2000 }); return _ep ? ['- **EvidencePack:**', _ep] : []; })(),
 			            '',
 			            'Requirements:',
 			            '- **Structure:** Seamless narrative, no headers/markers. Use vivid prose, dialogue, pacing, and stakes, with 6-8 sensory details per phase tied to setting, amplifying tone and ambiguity.',
@@ -4834,6 +5132,10 @@ let activeAICallCount = 0;
 				await runChapterContinuityAudit(chapterNum, { silent: true });
 			}
 		    console.log('Post-final updateRequestLog - chapterContent Length:', chapterContent.length);
+		    try {
+		        const _qg = runQualityGate(novelData.chapters[chapterNum-1] || '', { label: 'chapter' + chapterNum + '-generate' });
+		        console.log('[C3 qualityGate]', _qg.passed, _qg.scores);
+		    } catch (qgErr) { console.warn('qualityGate after generateChapter', qgErr); }
 		    console.log(`Completed generateChapter for Chapter ${chapterNum}, Total Tokens: ${totalTokens}`);
 }
 
