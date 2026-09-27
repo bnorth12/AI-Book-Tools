@@ -270,6 +270,8 @@ const report = {
       pushQualitySample('chapter1-heuristics', heur, text.length);
       const judged = await judgeProseQualityLLM(text, document.getElementById('tab5') || document.getElementById('tab1'));
       pushQualitySample('chapter1-llmJudge', judged, text.length);
+      const gate = novelData.lastQualityGate || null;
+      const reviseLog = (novelData.qualityReviseLog || []).slice();
       return {
         textLen: text.length,
         heur: heur,
@@ -280,7 +282,10 @@ const report = {
           humanLikeness: judged.humanLikeness,
           source: judged.source,
           rationale: (judged.rationale || '').slice(0, 180)
-        }
+        },
+        gatePassed: gate ? !!gate.passed : null,
+        gateFailures: gate && gate.failures ? gate.failures.slice(0, 6) : [],
+        reviseAttempts: reviseLog.length
       };
     });
   }, (a, r) => {
@@ -288,7 +293,9 @@ const report = {
     const h = r && r.heur;
     const hs = h ? [h.interest, h.readability, h.aiSlopRisk, h.humanLikeness].join('/') : '?';
     const js = j ? [j.interest, j.readability, j.aiSlopRisk, j.humanLikeness].join('/') + ' (' + j.source + ')' : 'n/a';
-    return 'Ch1 ' + a.ch1Len + ' chars. Heuristics interest/read/slop/human=' + hs + '. LLM judge=' + js + '. Snippet: "' + a.ch1Snippet + '".';
+    const gp = r && r.gatePassed;
+    const ra = r && r.reviseAttempts;
+    return 'Ch1 ' + a.ch1Len + ' chars. Heuristics interest/read/slop/human=' + hs + '. LLM judge=' + js + '. Gate=' + gp + ' reviseLog=' + ra + '. Snippet: "' + a.ch1Snippet + '".';
   }, { minChars: 200, contentFromResult: true });
 
   await doStep(5, 'Generate Chapters', 'generateChapter2+quality', async () => {
@@ -306,25 +313,67 @@ const report = {
     return 'Ch2 ' + a.ch2Len + ' chars. Heuristics ' + hs + '. Snippet: "' + a.ch2Snippet + '". (Skipped 2nd LLM judge to save tokens.)';
   }, { minChars: 200, contentFromResult: true });
 
-  await doStep(6, 'Edit Chapters', 'updateChapter1', async () => {
+  await doStep(6, 'Edit Chapters', 'applyStagedChapterImprovements1', async () => {
     return page.evaluate(async () => {
       if (typeof showTab === 'function') showTab(6);
+      if (typeof applyStagedChapterImprovements !== 'function') throw new Error('applyStagedChapterImprovements missing — refresh live HTML');
       const editEl = document.getElementById('chapterEditContent1');
-      const improvEl = document.getElementById('chapterEditImprovement1');
       if (!editEl) throw new Error('chapterEditContent1 missing');
       if (!editEl.value && novelData.chapters[0]) editEl.value = novelData.chapters[0];
-      if (improvEl) improvEl.value = 'Tighten opening; add one concrete sensory detail; keep near target length.';
-      await updateChapter(1);
+      if (typeof stageChapterImprovement === 'function') {
+        stageChapterImprovement(1, 'Tighten opening; add one concrete sensory detail; keep near target length.', { mode: 'replace', source: 'e2e-staged' });
+      } else {
+        const improvEl = document.getElementById('chapterEditImprovement1');
+        if (improvEl) improvEl.value = 'Tighten opening; add one concrete sensory detail; keep near target length.';
+      }
+      const before = scoreProseQuality(novelData.chapters[0] || '');
+      const out = await applyStagedChapterImprovements(1);
       const text = novelData.chapters[0] || '';
-      const heur = scoreProseQuality(text);
-      pushQualitySample('chapter1-afterUpdate', heur, text.length);
-      return { textLen: text.length, heur: heur };
+      const heur = (out && out.afterScores) || scoreProseQuality(text);
+      return { textLen: text.length, heur: heur, before: before, delta: out && out.afterScores ? {
+        interest: out.afterScores.interest - before.interest,
+        readability: out.afterScores.readability - before.readability,
+        aiSlopRisk: out.afterScores.aiSlopRisk - before.aiSlopRisk,
+        humanLikeness: out.afterScores.humanLikeness - before.humanLikeness
+      } : null };
     });
   }, (a, r) => {
     const h = r && r.heur;
     const hs = h ? [h.interest, h.readability, h.aiSlopRisk, h.humanLikeness].join('/') : '?';
-    return 'Updated Ch1 (' + a.ch1Len + ' chars). Post-edit scores ' + hs + '. Prefer sharper concreteness without purple stock phrases.';
+    const d = r && r.delta;
+    const ds = d ? (' delta i/r/s/h=' + [d.interest, d.readability, d.aiSlopRisk, d.humanLikeness].join('/')) : '';
+    return 'Applied staged Ch1 improvements (' + a.ch1Len + ' chars). Scores ' + hs + ds + '.';
   }, { minChars: 200, contentFromResult: true });
+
+  await doStep(6, 'Edit Chapters', 'reviseChapterForQuality1', async () => {
+    return page.evaluate(async () => {
+      if (typeof reviseChapterForQuality !== 'function') throw new Error('reviseChapterForQuality missing — refresh live HTML');
+      const prior = (novelData.qualityReviseLog || []).slice();
+      const autoRevise = prior.length > 0;
+      let result;
+      if (autoRevise) {
+        const gate = runQualityGate(novelData.chapters[0] || '', { label: 'chapter1-e2e-postAutoRevise' });
+        result = { revised: false, skipped: true, reason: 'auto-revise already ran during generate', attempts: prior.length, gateAfter: gate, gateBefore: prior[prior.length - 1] };
+      } else {
+        const scores = scoreProseQuality(novelData.chapters[0] || '');
+        const fakeFail = { passed: false, failures: ['e2e-forced-revise-exercise', 'aiSlopRisk>=55'], scores: Object.assign({}, scores, { aiSlopRisk: Math.max(60, scores.aiSlopRisk || 0) }) };
+        result = await reviseChapterForQuality(1, fakeFail, { maxAttempts: 1 });
+        result.skipped = false;
+        result.reason = 'forced revise to exercise QE2 path';
+      }
+      return {
+        skipped: !!result.skipped,
+        reason: result.reason || '',
+        attempts: result.attempts || 0,
+        passedBefore: result.gateBefore ? !!result.gateBefore.passed : null,
+        passedAfter: result.gateAfter ? !!result.gateAfter.passed : null,
+        reviseLogLen: (novelData.qualityReviseLog || []).length,
+        textLen: (novelData.chapters[0] || '').length
+      };
+    });
+  }, (a, r) => {
+    return 'QE2 revise: skipped=' + (r && r.skipped) + ' reason=' + ((r && r.reason) || '') + ' attempts=' + ((r && r.attempts) || 0) + ' gate ' + (r && r.passedBefore) + '→' + (r && r.passedAfter) + ' log=' + (r && r.reviseLogLen) + '.';
+  }, { minChars: 200, contentFromResult: true, allowNoCall: true });
 
   await doStep(7, 'Book', 'suggestBookImprovements', async () => {
     return page.evaluate(async () => {
@@ -333,9 +382,35 @@ const report = {
       const packChars = pack ? ((pack._approxChars) || JSON.stringify(pack).length) : null;
       requestLog.contextPackChars = packChars;
       await suggestBookImprovements();
-      return { packChars: packChars, improvements: (novelData.bookImprovements || []).length };
+      return { packChars: packChars, improvements: (novelData.bookImprovements || []).length, withStatus: (novelData.bookImprovementsWithStatus || []).length };
     });
   }, (a, r) => 'Book critique returned ' + ((r && r.improvements) || 0) + ' items; packChars=' + (r && r.packChars) + '. Should use digests (not full dump).', { minChars: 0 });
+
+  await doStep(7, 'Book', 'applyTopBookCritique', async () => {
+    return page.evaluate(async () => {
+      if (typeof applyTopBookCritiques !== 'function') throw new Error('applyTopBookCritiques missing — refresh live HTML');
+      const pending = (novelData.bookImprovementsWithStatus || []).filter(x => x && x.status === 'To Incorporate' && String(x.text || '').trim());
+      if (!pending.length) throw new Error('No To Incorporate critique items to apply');
+      const before = scoreProseQuality(novelData.chapters[0] || '');
+      const out = await applyTopBookCritiques(1);
+      const applied = (out && out.applied) || [];
+      if (!applied.length) throw new Error('applyTopBookCritiques returned zero applied');
+      const a0 = applied[0];
+      return {
+        appliedCount: applied.length,
+        chapter: a0.chapter,
+        before: before,
+        after: a0.afterScores,
+        delta: a0.item && a0.item.applyDelta,
+        status: a0.item && a0.item.status,
+        critiqueApplyLog: (novelData.critiqueApplyLog || []).length
+      };
+    });
+  }, (a, r) => {
+    const d = r && r.delta;
+    const ds = d ? [d.interest, d.readability, d.aiSlopRisk, d.humanLikeness].join('/') : '?';
+    return 'Applied top critique to Ch.' + (r && r.chapter) + ' status=' + (r && r.status) + ' delta i/r/s/h=' + ds + ' log=' + (r && r.critiqueApplyLog) + '.';
+  }, { minChars: 200, contentFromResult: true });
 
   const finalUsage = await page.evaluate(() => getSessionUsage());
   const finalQuality = await page.evaluate(() => getSessionQuality());
