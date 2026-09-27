@@ -3052,7 +3052,7 @@ let activeAICallCount = 0;
 			let m = s.match(/Chapter\(s\)\s*([0-9]+)/i) || s.match(/Chapters?\s+([0-9]+)/i) || s.match(/\bCh\.?\s*([0-9]+)\b/i);
 			if (m) {
 				const n = parseInt(m[1], 10);
-				if (n >= 1 && n <= (novelData.numChapters || novelData.chapters.length || 99)) return n;
+				if (n >= 1) return n; // clamp at apply time, not here
 			}
 			return 1;
 		}
