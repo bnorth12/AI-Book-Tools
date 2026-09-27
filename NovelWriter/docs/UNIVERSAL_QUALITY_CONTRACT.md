@@ -24,6 +24,20 @@ This note lists **copy-ready seams** so a future BookEditor / BookDecomposer rew
 - NovelWriter-specific digests packing into chapter prompts.
 - Tracked E2E Playwright runner and plan-folder report filenames.
 
+## Future suite / KG (document only — not implemented)
+
+Likely eventual **multifunction suite** combining NovelWriter + BookEditor + BookDecomposer for reverse-engineer → rewrite → improve novels. Novel- and series-level knowledge graphs fit that path.
+
+**Near term unchanged:** separate codebases; universal concepts via this contract; each tool keeps vendored copies; **no** central shared runtime. C2 remains **local EvidencePack only**. Series RAG/KG stays future documentation.
+
+| Idea | Guidance |
+| --- | --- |
+| Suite | Product surface composed **over** contracts — not a shared library import graph |
+| KG | Attaches to reverse-engineer → rewrite → improve; not required for create-path NW gate/revise |
+| Boundaries | Unknown unknowns at suite edges (import units, decompose/recompose maps, cross-book identity) — do not over-abstract until a real consumer exists |
+
+Do **not** merge apps or wire series KG in the current NovelWriter milestone.
+
 ## Unknown unknowns (do not over-abstract yet)
 
 - **BookEditor:** imported manuscript units, selection-scoped edits, non-create bible — may need different continuity anchors and no `numCharacters` UI sync.
