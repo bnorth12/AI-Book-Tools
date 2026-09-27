@@ -1311,7 +1311,7 @@ Synced: 2026-04-19
 		        {
 		            role: 'user',
 		            content: [
-		                `Generate a robust story arc (300-400 words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}", crafting a thematic backbone for a compelling narrative in the style of ${novelData.authorStyle || 'generic'} with style guide "${novelData.styleGuide || 'default'}".`,
+		                `Generate a robust story arc (300-400 words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}", crafting a thematic backbone for a compelling narrative in the style of ${novelData.authorStyle || 'generic'} with style guide digest "${digestStyleGuide(novelData.styleGuide)}".`,
 		                'Detail:',
 		                '- Core Concept: A universal, evocative premise (e.g., a world’s collapse, a quest for truth) with high stakes and emotional hooks, free of specific characters or settings.',
 		                '- Progression: A clear beginning (e.g., a catalyst shattering the status quo), middle (e.g., escalating revelations or conflicts), and end (e.g., transformative resolution or bittersweet closure), using vivid, genre-fitting language to convey tone and momentum.',
@@ -1493,7 +1493,7 @@ Synced: 2026-04-19
 		        {
 		            role: "user",
 		            content: [
-		                `Generate a vivid setting (300-400 words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with story arc "${novelData.storyArc || 'No arc provided'}" and plot "${novelData.generalPlot || 'No plot provided'}", crafting an immersive, integral world in the style of ${novelData.authorStyle || 'generic'} with style guide "${novelData.styleGuide || 'default'}".`,
+		                `Generate a vivid setting (300-400 words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with story arc "${digestText(novelData.storyArc || 'No arc provided', 200)}" and plot "${novelData.generalPlot || 'No plot provided'}", crafting an immersive, integral world in the style of ${novelData.authorStyle || 'generic'} with style guide digest "${digestStyleGuide(novelData.styleGuide)}".`,
 		                'Include:',
 		                '- Backdrop: A scalable, evocative setting (e.g., city, galaxy) that anchors the arc and plot, blending intimacy and expanse with 4-6 sensory details (e.g., echoing winds, glowing tech, damp decay) tied to its history, culture, or environment.',
 		                '- Unique Features: 3-4 distinctive elements (e.g., societal rituals, ancient relics, alien tech) with rich descriptions, shaping stakes, tone, and character interactions.',
@@ -1669,14 +1669,14 @@ Synced: 2026-04-19
 		    console.log('Target:', targetCount, 'Complete:', completeCharacters.length, 'Name-only:', nameOnlyCharacters.length, 'Blank slots:', blankCount);
 
 		    let promptLines = [
-		        `You are creating characters for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" in the style of ${novelData.authorStyle || 'generic'} with style guide "${novelData.styleGuide || 'default'}":`,
-		        `- Story Arc: ${novelData.storyArc || 'No arc provided'}`,
-		        `- Plot: ${novelData.generalPlot || 'No plot provided'}`,
-		        `- Setting: ${novelData.setting || 'No setting provided'}`,
+		        `You are creating characters for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" in the style of ${novelData.authorStyle || 'generic'} with style guide digest "${digestStyleGuide(novelData.styleGuide)}":`,
+		        `- Story Arc (digest): ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
+		        `- Plot (digest): ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
+		        `- Setting (digest): ${digestText(novelData.setting || 'No setting provided', 280)}`,
 		        ...(completeCharacters.length > 0 ? [
 		            '',
 		            'FULLY DEFINED CHARACTERS — do NOT modify or duplicate these:',
-		            JSON.stringify(completeCharacters),
+		            JSON.stringify(digestCharacters(completeCharacters)),
 		        ] : []),
 		        ...(nameOnlyCharacters.length > 0 ? [
 		            '',
@@ -1857,13 +1857,13 @@ Synced: 2026-04-19
 
 		    const promptLines = [
 		        `Refine exactly ${numToRefine} existing characters for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with the following details:`,
-		        `- Story Arc: ${novelData.storyArc || 'No arc provided'}`,
-		        `- Plot: ${novelData.generalPlot || 'No plot provided'}`,
-		        `- Setting: ${novelData.setting || 'No setting provided'}`,
-		        `- Existing Characters: ${JSON.stringify(novelData.characters)}`,
-		        `- Subplots: ${novelData.subplots.join('\n\n') || 'No subplots provided'}`,
+		        `- Story Arc (digest): ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
+		        `- Plot (digest): ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
+		        `- Setting (digest): ${digestText(novelData.setting || 'No setting provided', 280)}`,
+		        `- Existing Characters: ${JSON.stringify(digestCharacters(novelData.characters))}`,
+		        `- Subplots: ${JSON.stringify(digestSubplots(novelData.subplots, 3, 180))}`,
 		        `- Style: ${novelData.authorStyle || 'generic'}`,
-		        `- Style Guide: ${novelData.styleGuide || 'default'}`,
+		        `- Style Guide (digest): ${digestStyleGuide(novelData.styleGuide)}`,
 		        '',
 		        'For each character:',
 		        '- Retain the existing name and backstory unchanged.',
@@ -1939,7 +1939,7 @@ Synced: 2026-04-19
 	           {
 	               role: 'user',
 	               content: [
-	                   `Generate ${numToGenerate} intricate subplots (300-400 words each) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with story arc "${novelData.storyArc || 'No arc provided'}", plot "${novelData.generalPlot || 'No plot provided'}", setting "${novelData.setting || 'No setting provided'}", characters "${JSON.stringify(novelData.characters.filter(c => c.name && c.backstory && c.arc))}", in the style of ${novelData.authorStyle || 'generic'} with style guide "${novelData.styleGuide || 'default'}".`,
+	                   `Generate ${numToGenerate} intricate subplots (300-400 words each) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with story arc "${digestText(novelData.storyArc || 'No arc provided', 200)}", plot "${novelData.generalPlot || 'No plot provided'}", setting "${novelData.setting || 'No setting provided'}", characters "${JSON.stringify(digestCharacters(novelData.characters.filter(c => c.name && c.backstory && c.arc)))}", in the style of ${novelData.authorStyle || 'generic'} with style guide digest "${digestStyleGuide(novelData.styleGuide)}".`,
 	                   'Each:',
 	                   '- Narrative Thread: Centers on named characters, expanding the main plot with a distinct arc (beginning, middle, resolution) across specific chapters (e.g., Ch. 3-6), enhancing stakes or emotional depth.',
 	                   '- Setting Immersion: Uses 4-6 sensory details (e.g., clanging machinery, glowing ruins) tied to the world’s culture, history, or tech, grounding the subplot with evocative imagery.',
@@ -2251,6 +2251,76 @@ Synced: 2026-04-19
 	        console.log(`Synced chapter${source === 'edit' ? 'Gen' : 'Edit'}Content${chapterNum} to:`, newContent);
 	    }
 
+
+		function digestText(text, maxChars = 200) {
+			if (!text || typeof text !== 'string') return '';
+			const normalized = text.replace(/\s+/g, ' ').trim();
+			if (normalized.length <= maxChars) return normalized;
+			return normalized.slice(0, Math.max(0, maxChars - 1)).trimEnd() + '…';
+		}
+
+		function digestCharacter(c) {
+			if (!c || !c.name) return null;
+			return {
+				name: c.name,
+				arc: digestText(c.arc || '', 120),
+				backstory: digestText(c.backstory || '', 320)
+			};
+		}
+
+		function digestCharacters(list, limit = 24) {
+			return (list || []).filter(c => c && c.name).slice(0, limit).map(digestCharacter).filter(Boolean);
+		}
+
+		function digestSubplots(subplots, n = 3, maxEach = 180) {
+			return (subplots || []).filter(Boolean).slice(0, n).map((s, i) => ({
+				id: i + 1,
+				summary: digestText(typeof s === 'string' ? s : String(s), maxEach)
+			}));
+		}
+
+		function digestStyleGuide(text) {
+			return digestText(text || '', 400);
+		}
+
+		function buildPromptContextPack(options = {}) {
+			const chapterNum = options.chapterNum || null;
+			const includePacket = options.includePacket !== false;
+			const charSource = options.characters || novelData.characters || [];
+			const pack = {
+				title: novelData.title || 'Untitled',
+				genre: novelData.genre || '',
+				authorStyle: novelData.authorStyle || '',
+				styleGuideDigest: digestStyleGuide(novelData.styleGuide),
+				storyArcDigest: digestText(novelData.storyArc || '', 280),
+				plotDigest: digestText(novelData.generalPlot || '', 320),
+				settingDigest: digestText(novelData.setting || '', 280),
+				characters: digestCharacters(charSource),
+				subplots: digestSubplots(novelData.subplots, 3, 180)
+			};
+			if (includePacket && chapterNum) {
+				pack.continuityPacket = buildChapterContinuityPacket(chapterNum);
+			}
+			if (options.extra && typeof options.extra === 'object') {
+				Object.assign(pack, options.extra);
+			}
+			const json = JSON.stringify(pack);
+			pack._approxChars = json.length;
+			return pack;
+		}
+
+		function mergeCharacterArcProgress(existing, incoming) {
+			const map = new Map();
+			(existing || []).forEach(e => {
+				if (e && e.name) map.set(String(e.name).toLowerCase(), e);
+			});
+			(incoming || []).forEach(e => {
+				if (e && e.name) map.set(String(e.name).toLowerCase(), e);
+			});
+			return Array.from(map.values());
+		}
+
+
 		function getTrimmedContext(text, maxChars = 1200) {
 			if (!text || typeof text !== 'string') return '';
 			const normalized = text.replace(/\s+/g, ' ').trim();
@@ -2272,10 +2342,10 @@ Synced: 2026-04-19
 			const packet = {
 				chapter: chapterNum,
 				mode: novelData.continuityStrictMode ? 'strict' : 'balanced',
-				storyArcAnchor: getTrimmedContext(`${novelData.storyArc || ''}\n\n${novelData.storyArcOutline || ''}`, 1400) || 'Not available',
+				storyArcAnchor: getTrimmedContext(`${novelData.storyArc || ''}\n\n${novelData.storyArcOutline || ''}`, 700) || 'Not available',
 				prevChapterSummary: prevChapterText ? getTrimmedContext(prevChapterText, 1200) : 'None (opening chapter)',
 				nextChapterIntent: nextChapterOutline ? getTrimmedContext(nextChapterOutline, 700) : 'No explicit next chapter outline yet',
-				activeSubplots: (novelData.subplots || []).filter(Boolean).slice(0, 8),
+				activeSubplots: digestSubplots(novelData.subplots, 3, 180),
 				unresolvedThreads: priorAuditThreads,
 				trackedCharacterStates: Array.isArray(novelData.continuityTracker?.characterArcProgress) ? novelData.continuityTracker.characterArcProgress : []
 			};
@@ -2353,11 +2423,8 @@ Synced: 2026-04-19
 					content: [
 						`Audit continuity for Chapter ${chapterNum} of a novel titled "${novelData.title || 'Untitled'}".`,
 						`Continuity mode: ${novelData.continuityStrictMode ? 'strict' : 'balanced'}`,
-						`Story arc: ${novelData.storyArc || 'N/A'}`,
-						`Plot: ${novelData.generalPlot || 'N/A'}`,
-						`Characters: ${JSON.stringify((novelData.characters || []).filter(c => c.name))}`,
-						`Continuity packet: ${JSON.stringify(packet)}`,
-						`Chapter text: ${chapterText}`,
+						`Context pack: ${JSON.stringify(buildPromptContextPack({ chapterNum, includePacket: false, extra: { continuityPacket: packet, chapterTextDigest: getTrimmedContext(chapterText, 4000) } }))}`,
+						`Chapter text (trimmed): ${getTrimmedContext(chapterText, 6000)}`,
 						'Return strict JSON only with this structure:',
 						'{',
 						'  "chapterSummary": "<120-220 words>",',
@@ -2385,7 +2452,7 @@ Synced: 2026-04-19
 			};
 			novelData.continuityTracker.chapters[chapterNum - 1] = chapterAudit;
 			novelData.continuityTracker.storyArcProgress = chapterAudit.storyArcProgress;
-			novelData.continuityTracker.characterArcProgress = chapterAudit.characterArcProgress;
+			novelData.continuityTracker.characterArcProgress = mergeCharacterArcProgress(novelData.continuityTracker.characterArcProgress, chapterAudit.characterArcProgress);
 			novelData.continuityFindings = [
 				...(novelData.continuityFindings || []).filter(Boolean),
 				...chapterAudit.continuityRisks.map(r => `Chapter ${chapterNum}: ${r}`)
@@ -2526,7 +2593,7 @@ Synced: 2026-04-19
 			            role: 'user',
 			            content: [
 			                'Review the following book and suggest 7-10 detailed improvements (each 100-150 words) for coherence, pacing, character development, and plot consistency:',
-			                `${fullBook}`,
+			                `${JSON.stringify({ chapterDigests: (novelData.chapters||[]).map((ch,i)=>({chapter:i+1,digest:getTrimmedContext(ch||'',400)})), openThreads: (novelData.continuityTracker?.chapters||[]).flatMap(c=>c?.unresolvedThreads||[]).slice(-12), storyArcDigest: digestText(novelData.storyArc||'',280), plotDigest: digestText(novelData.generalPlot||'',320), characters: digestCharacters(novelData.characters), continuityRisks: (novelData.continuityFindings||[]).slice(-20) })}`,
 			                'For each improvement:',
 			                '- Specify the aspect (e.g., coherence, pacing) and chapter(s) affected.',
 			                '- Provide a clear issue (e.g., uneven pacing in Chapter 2) with examples from the text.',
@@ -2703,15 +2770,19 @@ Synced: 2026-04-19
 
 			    const chapterMatch = improvement.text.match(/Chapter\(s\)\s+([\d,-]+|All)/i);
 			    const affectedChapters = chapterMatch ? chapterMatch[1] : 'All';
-			    const chaptersToSend = affectedChapters === 'All'
-			        ? novelData.chapters.join('\n\n---\n\n')
-			        : novelData.chapters
-			            .map((ch, i) => affectedChapters.split(',').flatMap(range => {
-			                const [start, end] = range.includes('-') ? range.split('-').map(Number) : [Number(range), Number(range)];
-			                return i + 1 >= start && i + 1 <= end ? `Chapter ${i + 1}\n\n${ch}` : null;
-			            }))
-			            .filter(ch => ch)
-			            .join('\n\n---\n\n');
+			    const chapterIndexes = (() => {
+			        if (affectedChapters === 'All') return novelData.chapters.map((_, i) => i);
+			        const idxs = new Set();
+			        affectedChapters.split(',').forEach(range => {
+			            const [start, end] = range.includes('-') ? range.split('-').map(Number) : [Number(range), Number(range)];
+			            for (let i = start; i <= end; i++) if (i >= 1 && i <= novelData.chapters.length) idxs.add(i - 1);
+			        });
+			        return [...idxs].sort((a,b)=>a-b);
+			    })();
+			    const chaptersToSend = JSON.stringify(chapterIndexes.map(i => ({
+			        chapter: i + 1,
+			        digest: getTrimmedContext(novelData.chapters[i] || '', 400)
+			    })));
 
 			    const messages = [
 			        { role: 'system', content: getAgentPrompt('tab7', 'breakdownImprovement', 'You are a literary editor specializing in actionable narrative breakdowns.') },
@@ -2720,11 +2791,11 @@ Synced: 2026-04-19
 			            content: [
 			                `Break down this suggested improvement for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" into specific, actionable edits for characters, subplots, novel outlines, chapter outlines, and chapter content:`,
 			                `- **Improvement**: ${improvement.text}`,
-			                `- **Current Book Content**: ${chaptersToSend || 'No chapters available'}`,
-			                `- **Characters**: ${JSON.stringify(novelData.characters.filter(c => c.name && c.backstory && c.arc))}`,
-			                `- **Subplots**: ${novelData.subplots.join('\n\n') || 'No subplots provided'}`,
-			                `- **Novel Outline**: ${novelData.novelOutline || 'No outline provided'}`,
-			                `- **Chapter Outlines**: ${affectedChapters === 'All' ? novelData.chapterOutlines.join('\n\n') : novelData.chapterOutlines.filter((_, i) => affectedChapters.split(',').flatMap(r => r.includes('-') ? [r.split('-')[0], r.split('-')[1]] : [r]).map(Number).includes(i + 1)).join('\n\n') || 'No outlines provided'}`,
+			                `- **Chapter Digests**: ${chaptersToSend || '[]'}`,
+			                `- **Characters**: ${JSON.stringify(digestCharacters(novelData.characters.filter(c => c.name && c.backstory && c.arc)))}`,
+			                `- **Subplots**: ${JSON.stringify(digestSubplots(novelData.subplots, 3, 180))}`,
+			                `- **Novel Outline (digest):** ${digestText(novelData.novelOutline || 'No outline provided', 400)}`,
+			                `- **Chapter Outlines (digest):** ${JSON.stringify(chapterIndexes.map(i => ({chapter:i+1, digest:digestText(novelData.chapterOutlines[i]||'', 280)})))}`,
 			                '',
 			                'Provide detailed suggestions for:',
 			                '- **Characters**: Adjustments to arcs, backstories, or interactions (e.g., "Elara: Add decision in Ch. 7").',
@@ -3513,7 +3584,7 @@ Synced: 2026-04-19
 		        {
 		            role: 'user',
 		            content: [
-		                `Generate comprehensive outlines for a ${novelData.genre} novel with ${novelData.numChapters || 10} chapters, using title "${novelData.title || 'Untitled'}", story arc "${novelData.storyArc || 'No arc provided'}", plot "${novelData.generalPlot || 'No plot provided'}", setting "${novelData.setting || 'No setting provided'}", characters "${JSON.stringify(novelData.characters)}", subplots "${novelData.subplots.join('\n\n') || 'No subplots provided'}", in the style of ${novelData.authorStyle || 'generic'} with style guide "${novelData.styleGuide || 'default'}", existing novel outline "${novelData.novelOutline || 'None'}", plot outline "${novelData.plotOutline || 'None'}", arc outline "${novelData.storyArcOutline || 'None'}".`,
+		                `Generate comprehensive outlines for a ${novelData.genre} novel with ${novelData.numChapters || 10} chapters, using title "${novelData.title || 'Untitled'}", story arc "${digestText(novelData.storyArc || 'No arc provided', 200)}", plot "${novelData.generalPlot || 'No plot provided'}", setting "${novelData.setting || 'No setting provided'}", characters "${JSON.stringify(digestCharacters(novelData.characters))}", subplots "${novelData.subplots.join('\n\n') || 'No subplots provided'}", in the style of ${novelData.authorStyle || 'generic'} with style guide digest "${digestStyleGuide(novelData.styleGuide)}", existing novel outline "${novelData.novelOutline || 'None'}", plot outline "${novelData.plotOutline || 'None'}", arc outline "${novelData.storyArcOutline || 'None'}".`,
 		                '- Novel Outline: 500-600 words, a sweeping summary of all chapters, detailing arc progression (beginning, middle, end) with 4-6 turning points, 3-4 subplot integrations, and 2-3 thematic pillars (e.g., hope, betrayal), rich with evocative stakes and tone.',
 		                '- Annotated Plot Outline: 600-750 words, chapter-by-chapter (1-2 events each) with escalating stakes, 4-6 subplot connections, and sensory details, ensuring narrative flow and tension in the selected style.',
 		                '- Annotated Story Arc Outline: 500-600 words, a thematic odyssey with 4-6 emotional beats per act (beginning, middle, end), linked to character arcs and subplots, no names, emphasizing universal resonance.',
@@ -3699,17 +3770,17 @@ Synced: 2026-04-19
 		        {
 		            role: 'user',
 		            content: [
-		                `Generate a detailed outline and arc for Chapter ${chapterNum} of a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with the following details (use provided info or generate where missing), in the style of ${novelData.authorStyle || 'generic'} with style guide "${novelData.styleGuide || 'default'}":`,
-		                `- Story Arc: ${novelData.storyArc || 'No arc provided'}`,
-		                `- Plot: ${novelData.generalPlot || 'No plot provided'}`,
-		                `- Setting: ${novelData.setting || 'No setting provided'}`,
-		                `- Characters: ${JSON.stringify(novelData.characters.filter(c => c.name && c.backstory && c.arc))}`,
-		                `- Subplots: ${novelData.subplots.length > 0 ? novelData.subplots.join(', ') : 'No subplots provided'}`,
-		                `- Novel Outline: ${novelData.novelOutline || 'No outline provided'}`,
-		                `- Annotated Plot Outline: ${novelData.plotOutline || 'No plot outline provided'}`,
-		                `- Annotated Story Arc Outline: ${novelData.storyArcOutline || 'No arc outline provided'}`,
-		                `- Existing Chapter Outline: ${novelData.chapterOutlines[chapterNum-1] || 'None'}`,
-		                `- Existing Chapter Arc: ${novelData.chapterArcs[chapterNum-1] || 'None'}`,
+		                `Generate a detailed outline and arc for Chapter ${chapterNum} of a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with the following details (use provided info or generate where missing), in the style of ${novelData.authorStyle || 'generic'} with style guide digest "${digestStyleGuide(novelData.styleGuide)}":`,
+		                `- Story Arc (digest): ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
+		                `- Plot (digest): ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
+		                `- Setting (digest): ${digestText(novelData.setting || 'No setting provided', 280)}`,
+		                `- Characters: ${JSON.stringify(digestCharacters(novelData.characters.filter(c => c.name && c.backstory && c.arc)))}`,
+		                `- Subplots: ${JSON.stringify(digestSubplots(novelData.subplots, 3, 180))}`,
+		                `- Novel Outline (digest): ${digestText(novelData.novelOutline || 'No outline provided', 400)}`,
+		                `- Annotated Plot Outline (digest): ${digestText(novelData.plotOutline || 'No plot outline provided', 400)}`,
+		                `- Annotated Story Arc Outline (digest): ${digestText(novelData.storyArcOutline || 'No arc outline provided', 400)}`,
+		                `- Existing Chapter Outline (digest): ${digestText(novelData.chapterOutlines[chapterNum-1] || 'None', 400)}`,
+		                `- Existing Chapter Arc (digest): ${digestText(novelData.chapterArcs[chapterNum-1] || 'None', 280)}`,
 		                structuralContext,
 		                '',
 		                'Include:',
@@ -3846,7 +3917,7 @@ Synced: 2026-04-19
 		                `- Story Arc: ${storyArc}`,
 		                `- Plot: ${generalPlot}`,
 		                `- Setting: ${setting}`,
-		                `- Characters: ${JSON.stringify(novelData.characters.filter(c => c.name && c.backstory && c.arc))}`,
+		                `- Characters: ${JSON.stringify(digestCharacters(novelData.characters.filter(c => c.name && c.backstory && c.arc)))}`,
 		                `- Subplots: ${subplots}`,
 		                `- Novel Outline: ${novelOutline}`,
 		                `- Annotated Plot Outline: ${plotOutline}`,
@@ -3919,13 +3990,14 @@ Synced: 2026-04-19
 		            role: 'user',
 		            content: [
 		                `Generate the first half of Chapter ${chapterNum} (~1600-2000 words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with the following details:`,
-		                `- **Story Arc:** ${novelData.storyArc || 'No arc provided'}`,
-		                `- **Plot:** ${novelData.generalPlot || 'No plot provided'}`,
-		                `- **Setting:** ${novelData.setting || 'No setting provided'}`,
-		                `- **Characters:** ${JSON.stringify(novelData.characters.filter(c => c.name && c.backstory && c.arc))}`,
-		                `- **Subplots:** ${novelData.subplots.length > 0 ? novelData.subplots.join(', ') : 'No subplots provided'}`,
-		                `- **Chapter Outline:** ${novelData.chapterOutlines[chapterNum-1] || 'No outline provided'}`,
-		                `- **Chapter Arc:** ${novelData.chapterArcs[chapterNum-1] || 'No arc provided'}`,
+		                `- **Story Arc (digest):** ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
+		                `- **Plot (digest):** ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
+		                `- **Setting (digest):** ${digestText(novelData.setting || 'No setting provided', 280)}`,
+		                `- **Style Guide (digest):** ${digestStyleGuide(novelData.styleGuide)}`,
+		                `- **Characters:** ${JSON.stringify(digestCharacters(novelData.characters.filter(c => c.name && c.backstory && c.arc)))}`,
+		                `- **Subplots:** ${JSON.stringify(digestSubplots(novelData.subplots, 3, 180))}`,
+		                `- **Chapter Outline (digest):** ${digestText(novelData.chapterOutlines[chapterNum-1] || 'No outline provided', 500)}`,
+		                `- **Chapter Arc (digest):** ${digestText(novelData.chapterArcs[chapterNum-1] || 'No arc provided', 280)}`,
 			                `- **Continuity Packet:** ${JSON.stringify(continuityPacket)}`,
 		                '',
 		                'Requirements:',
@@ -3947,6 +4019,7 @@ Synced: 2026-04-19
 		        }
 		    ];
 		    requestLog.lastPrompt = messagesPart1[1].content;
+					requestLog.contextPackChars = (messagesPart1[1].content || '').length;
 		    requestLog.status = 'Pending - Part 1';
 		    console.log('Pre-clearReturnedInfo - requestLog:', requestLog);
 		    clearReturnedInfo();
@@ -3987,13 +4060,14 @@ Synced: 2026-04-19
 			        content: [
 			            `Continue Chapter ${chapterNum} from this first half to complete the second half (~1600-2000 words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}":`,
 			            `- **First Half:** ${chapterContent}`,
-			            `- **Story Arc:** ${novelData.storyArc || 'No arc provided'}`,
-			            `- **Plot:** ${novelData.generalPlot || 'No plot provided'}`,
-			            `- **Setting:** ${novelData.setting || 'No setting provided'}`,
-			            `- **Characters:** ${JSON.stringify(novelData.characters.filter(c => c.name && c.backstory && c.arc))}`,
-			            `- **Subplots:** ${novelData.subplots.length > 0 ? novelData.subplots.join(', ') : 'No subplots provided'}`,
-			            `- **Chapter Outline:** ${novelData.chapterOutlines[chapterNum-1] || 'No outline provided'}`,
-			            `- **Chapter Arc:** ${novelData.chapterArcs[chapterNum-1] || 'No arc provided'}`,
+			            `- **Story Arc (digest):** ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
+			            `- **Plot (digest):** ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
+			            `- **Setting (digest):** ${digestText(novelData.setting || 'No setting provided', 280)}`,
+			            `- **Style Guide (digest):** ${digestStyleGuide(novelData.styleGuide)}`,
+			            `- **Characters:** ${JSON.stringify(digestCharacters(novelData.characters.filter(c => c.name && c.backstory && c.arc)))}`,
+			            `- **Subplots:** ${JSON.stringify(digestSubplots(novelData.subplots, 3, 180))}`,
+			            `- **Chapter Outline (digest):** ${digestText(novelData.chapterOutlines[chapterNum-1] || 'No outline provided', 500)}`,
+			            `- **Chapter Arc (digest):** ${digestText(novelData.chapterArcs[chapterNum-1] || 'No arc provided', 280)}`,
 			            `- **Continuity Packet:** ${JSON.stringify(continuityPacket)}`,
 			            '',
 			            'Requirements:',
@@ -4099,21 +4173,21 @@ Synced: 2026-04-19
 		            content: [
 		                `Update Chapter ${chapterNum} (~${novelData.chapterLength} words) of a ${novelData.genre} novel with the following details, incorporating the specified improvements:`,
 		                `- Title: ${novelData.title || 'Untitled'}`,
-		                `- Story Arc: ${novelData.storyArc || 'No arc provided'}`,
-		                `- Plot: ${novelData.generalPlot || 'No plot provided'}`,
-		                `- Setting: ${novelData.setting || 'No setting provided'}`,
-		                `- Characters: ${JSON.stringify(novelData.characters)}`,
-		                `- Subplots: ${novelData.subplots.join(', ') || 'No subplots provided'}`,
-		                `- Novel Outline: ${novelData.novelOutline || 'No outline provided'}`,
-		                `- Annotated Plot Outline: ${novelData.plotOutline || 'No plot outline provided'}`,
-		                `- Annotated Story Arc Outline: ${novelData.storyArcOutline || 'No arc outline provided'}`,
-		                `- Chapter Outline: ${novelData.chapterOutlines[chapterNum-1] || 'No chapter outline provided'}`,
-		                `- Chapter Arc: ${novelData.chapterArcs[chapterNum-1] || 'No chapter arc provided'}`,
+		                `- Story Arc (digest): ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
+		                `- Plot (digest): ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
+		                `- Setting (digest): ${digestText(novelData.setting || 'No setting provided', 280)}`,
+		                `- Characters: ${JSON.stringify(digestCharacters(novelData.characters))}`,
+		                `- Subplots: ${JSON.stringify(digestSubplots(novelData.subplots, 3, 180))}`,
+		                `- Novel Outline (digest): ${digestText(novelData.novelOutline || 'No outline provided', 400)}`,
+		                `- Annotated Plot Outline (digest): ${digestText(novelData.plotOutline || 'No plot outline provided', 400)}`,
+		                `- Annotated Story Arc Outline (digest): ${digestText(novelData.storyArcOutline || 'No arc outline provided', 400)}`,
+		                `- Chapter Outline (digest): ${digestText(novelData.chapterOutlines[chapterNum-1] || 'No chapter outline provided', 500)}`,
+		                `- Chapter Arc (digest): ${digestText(novelData.chapterArcs[chapterNum-1] || 'No chapter arc provided', 280)}`,
 		                `- Previous Chapters: ${trimmedContext || 'No previous content'}`,
 		                `- Current Chapter Content: ${currentContent || 'No current content'}`,
 		                `- Improvements to Incorporate: ${improvements || 'None'}`,
 		                `- Style: ${novelData.authorStyle || 'generic'}`,
-		                `- Style Guide: ${novelData.styleGuide || 'default'}`,
+		                `- Style Guide (digest): ${digestStyleGuide(novelData.styleGuide)}`,
 		                'Maintain consistency with the overall story arc, chapter outlines, and character arcs.',
 		                'Return the response as a JSON object with this exact structure, without markdown code block markers:',
 		                '{',
