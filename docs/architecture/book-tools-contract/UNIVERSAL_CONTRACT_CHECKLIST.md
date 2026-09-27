@@ -30,10 +30,10 @@ Update status only: `not started` · `in progress` · `done` · `n/a` (with note
 
 | Tool | Owner | C1 Digests | C2 RAG hooks | C3 Quality / no AI-slot | C4 Provider | C5 Vendored copy | Notes / PRs |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **NovelWriter** | Fiction | in progress (#117) | not started (hooks documented; runtime gated) | not started (editor signals documented) | not started (xAI Tab 1 key) | in progress (digests in `NovelWriter.html`) | Token packing PR #117; models #118 |
-| **BookEditor** | Fiction | not started (full-upload patterns) | not started | not started | not started | not started | Kill full-book upload first |
-| **BookDecomposer** | Fiction | not started (API paths) | not started (Phase 2 ingest candidate) | n/a for ingest-only; apply when LLM called | not started | not started | Prefer graph export + slim LLM calls |
-| **HerbalBookForge** | Nonfiction | not started (herbal packet shape) | not started (Phase 5; safety/citations lens) | partial (safety/quality sprints; not universal C3 yet) | not started | not started | Evidence/safety packets ≠ story arcs; same C1–C5 shape |
+| **NovelWriter** | Fiction | in progress (#117, #120) | not started (hooks documented; runtime gated) | not started (editor signals documented) | not started (xAI Tab 1 key) | in progress (digests in `NovelWriter.html`) | Token packing PR #117; models #118 |
+| **BookEditor** | Fiction | not started (#121) | not started | not started | not started | not started | Kill full-book upload first |
+| **BookDecomposer** | Fiction | not started (#122) | not started (Phase 2 ingest candidate) | n/a for ingest-only; apply when LLM called | not started | not started | Prefer graph export + slim LLM calls |
+| **HerbalBookForge** | Nonfiction | not started (#123) | not started (Phase 5; safety/citations lens) | partial (safety/quality sprints; not universal C3 yet) | not started | not started | Evidence/safety packets ≠ story arcs; same C1–C5 shape |
 
 ## Tool touch lists (must visit each)
 
@@ -82,3 +82,14 @@ Update status only: `not started` · `in progress` · `done` · `n/a` (with note
 - Implementing Phase 1 `shared/kb` runtime (separate go-ahead; if code is reused, **copy** into each consumer)
 - Merging HTML apps
 - New Phase 0 KB entityTypes
+
+
+## Tracking issues
+
+| Tool | Issue |
+| --- | --- |
+| NovelWriter | #120 |
+| BookEditor | #121 |
+| BookDecomposer | #122 |
+| HerbalBookForge | #123 |
+| Checklist docs PR | #119 |
