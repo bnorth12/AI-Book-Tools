@@ -6423,7 +6423,91 @@ return c && c.name && c.backstory && c.arc; });
 			return { revised: true, attempts: attempts, gateBefore: before, gateAfter: gateAfter };
 		}
 
+
+		/**
+		 * B4-1A E2E foul inject: splice known-foul span into chapter draft so anti-slop nest must see it.
+		 * Controlled by window.__NW_E2E_SLOP_INJECT = { enabled, spanText, targetChapter, afterContinuity, spanName }.
+		 * Default afterContinuity=true: wait until continuity pass done (or continuity idle) so anti-slop gets budget.
+		 */
+		function applyE2eSlopInject(chapterNum, phase) {
+			phase = phase || 'pre-nest';
+			const cfg = window.__NW_E2E_SLOP_INJECT;
+			if (!cfg || !cfg.enabled || cfg.applied) return false;
+			const target = cfg.targetChapter != null ? Number(cfg.targetChapter) : Number(chapterNum);
+			if (Number(chapterNum) !== target) return false;
+			const afterCont = cfg.afterContinuity !== false;
+			if (afterCont && phase === 'pre-nest') {
+				const cont = (typeof getChapterContinuityFindings === 'function')
+					? getChapterContinuityFindings(chapterNum)
+					: { hasAny: false };
+				if (cont && cont.hasAny) return false;
+			}
+			if (afterCont && phase === 'pre-antislope') {
+				/* fall through — inject just before anti-slop re-check */
+			} else if (afterCont && phase === 'post-continuity') {
+				/* fall through */
+			} else if (!afterCont && phase !== 'pre-nest') {
+				return false;
+			} else if (afterCont && phase !== 'pre-nest' && phase !== 'post-continuity' && phase !== 'pre-antislope') {
+				return false;
+			}
+			const foul = String(cfg.spanText || '').trim();
+			if (!foul) return false;
+			const idx = chapterNum - 1;
+			if (!Array.isArray(novelData.chapters)) novelData.chapters = [];
+			const before = String(novelData.chapters[idx] || '');
+			const marker = foul.slice(0, Math.min(96, foul.length));
+			if (marker && before.indexOf(marker) >= 0) {
+				cfg.applied = true;
+				cfg.appliedPhase = phase + ':already-present';
+				return false;
+			}
+			const injected = before ? (before.replace(/\s+$/, '') + '\n\n' + foul) : foul;
+			novelData.chapters[idx] = injected;
+			if (typeof syncChapterTextToDom === 'function') {
+				syncChapterTextToDom(chapterNum, injected);
+			} else {
+				const el = document.getElementById('chapterEditContent' + chapterNum)
+					|| document.getElementById('chapterGenContent' + chapterNum)
+					|| document.getElementById('chapterContent' + chapterNum);
+				if (el) el.value = injected;
+			}
+			const prior = (chapterNum >= 2 && Array.isArray(novelData.chapters))
+				? novelData.chapters.slice(0, idx).filter(function (t) { return String(t || '').trim(); })
+				: [];
+			const tellOpts = prior.length ? { priorChapters: prior } : undefined;
+			const preTell = (typeof scoreSlopTells === 'function') ? scoreSlopTells(injected, tellOpts) : null;
+			cfg.applied = true;
+			cfg.appliedPhase = phase;
+			cfg.preInjectLen = before.length;
+			cfg.postInjectLen = injected.length;
+			cfg.preTell = preTell ? {
+				passed: !!preTell.passed,
+				failures: (preTell.failures || []).slice(),
+				tells: preTell.tells
+			} : null;
+			novelData.lastSlopInject = {
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				phase: phase,
+				spanName: cfg.spanName || null,
+				preInjectLen: before.length,
+				postInjectLen: injected.length,
+				preTellPassed: preTell ? !!preTell.passed : null,
+				preTellFailures: preTell ? (preTell.failures || []).slice() : [],
+				preTellScores: preTell && preTell.tells ? Object.keys(preTell.tells).reduce(function (acc, k) {
+					acc[k] = { ok: preTell.tells[k].ok, score: preTell.tells[k].score };
+					return acc;
+				}, {}) : null
+			};
+			console.warn('[B4-1A] slop inject applied', novelData.lastSlopInject);
+			return true;
+		}
+		window.applyE2eSlopInject = applyE2eSlopInject;
+
 		async function ensureQualityAfterGenerate(chapterNum) {
+			// B4-1A: foul-inject before nest when continuity idle (else wait post-continuity)
+			if (typeof applyE2eSlopInject === 'function') applyE2eSlopInject(chapterNum, 'pre-nest');
 			const text0 = novelData.chapters[chapterNum - 1] || '';
 			let gate = runQualityGate(text0, { label: 'chapter' + chapterNum + '-generate', chapterNum: chapterNum });
 			console.log('[C3 qualityGate]', gate.passed, gate.scores, 'driver=', gate.driver);
@@ -6465,7 +6549,13 @@ return c && c.name && c.backstory && c.arc; });
 					didAntiSlopPass: didAntiSlopPass,
 					afterApplyStaged: false
 				});
-				if (!need.needed) break;
+				if (!need.needed) {
+					// B4-1A: if inject still pending (continuity idle path missed), splice then re-evaluate
+					if (typeof applyE2eSlopInject === 'function' && applyE2eSlopInject(chapterNum, 'pre-antislope')) {
+						continue;
+					}
+					break;
+				}
 				const kind = (need.reason === 'continuity-findings')
 					? 'continuity'
 					: (need.reason === 'residual-staged-notes'
@@ -6477,7 +6567,29 @@ return c && c.name && c.backstory && c.arc; });
 				gate = multi.gateAfter || gate;
 				if (kind === 'continuity') didContinuityPass = true;
 				if (kind === 'anti-slop') didAntiSlopPass = true;
+				// B4-1A: after continuity revise, splice foul so remaining nest budget can anti-slop
+				if (kind === 'continuity' && typeof applyE2eSlopInject === 'function') {
+					applyE2eSlopInject(chapterNum, 'post-continuity');
+				}
 				passResults.push({ pass: passesDone, kind: kind, passedAfter: !!gate.passed });
+			}
+			// B4-1A: capture post-nest tell scores when inject was applied this chapter
+			if (novelData.lastSlopInject && novelData.lastSlopInject.chapter === chapterNum && typeof scoreSlopTells === 'function') {
+				const _idx = chapterNum - 1;
+				const _prior = (chapterNum >= 2 && Array.isArray(novelData.chapters))
+					? novelData.chapters.slice(0, _idx).filter(function (t) { return String(t || '').trim(); })
+					: [];
+				const _post = scoreSlopTells(novelData.chapters[_idx] || '', _prior.length ? { priorChapters: _prior } : undefined);
+				novelData.lastSlopInject.postTellPassed = !!_post.passed;
+				novelData.lastSlopInject.postTellFailures = (_post.failures || []).slice();
+				novelData.lastSlopInject.postTellScores = _post.tells ? Object.keys(_post.tells).reduce(function (acc, k) {
+					acc[k] = { ok: _post.tells[k].ok, score: _post.tells[k].score };
+					return acc;
+				}, {}) : null;
+				novelData.lastSlopInject.multiPassKinds = (novelData.qualityMultiPassLog || [])
+					.filter(function (e) { return e && e.chapter === chapterNum; })
+					.map(function (e) { return e.kind; });
+				novelData.lastSlopInject.antiSlopCount = novelData.lastSlopInject.multiPassKinds.filter(function (k) { return k === 'anti-slop'; }).length;
 			}
 			// QE4: advisory LLM judge — never overrides fail-closed heuristics
 			let advisory = null;
@@ -6626,7 +6738,13 @@ return c && c.name && c.backstory && c.arc; });
 					didAntiSlopPass: didAntiSlopPass,
 					afterApplyStaged: true
 				});
-				if (!need.needed) break;
+				if (!need.needed) {
+					// B4-1A: if inject still pending (continuity idle path missed), splice then re-evaluate
+					if (typeof applyE2eSlopInject === 'function' && applyE2eSlopInject(chapterNum, 'pre-antislope')) {
+						continue;
+					}
+					break;
+				}
 				const kind = (need.reason === 'continuity-findings')
 					? 'continuity'
 					: (need.reason === 'residual-staged-notes'

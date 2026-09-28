@@ -198,6 +198,35 @@ const report = {
   const enrichMode = process.env.NW_E2E_ENRICH === '1' || regenBible;
   report.config.enrichMode = enrichMode;
   report.config.fixture = fixturePath || null;
+
+  // B4-1A foul-inject prove-out (detect → anti-slop nest). Span from catalog or basename under b4_inject_spans.
+  const slopInjectOn = process.env.NW_E2E_SLOP_INJECT === '1';
+  const SPANS_DIR = path.join(PLAN, 'b4_inject_spans');
+  const slopInjectSpanEnv = (process.env.NW_E2E_SLOP_INJECT_SPAN || 'span_b3r_ch2_overexplain.txt').trim();
+  let slopInjectSpanPath = '';
+  let slopInjectSpanText = '';
+  let slopInjectSpanName = '';
+  if (slopInjectOn) {
+    slopInjectSpanPath = path.isAbsolute(slopInjectSpanEnv)
+      ? slopInjectSpanEnv
+      : (fs.existsSync(path.join(SPANS_DIR, slopInjectSpanEnv))
+          ? path.join(SPANS_DIR, slopInjectSpanEnv)
+          : (fs.existsSync(slopInjectSpanEnv) ? path.resolve(slopInjectSpanEnv) : path.join(SPANS_DIR, slopInjectSpanEnv)));
+    if (!fs.existsSync(slopInjectSpanPath)) {
+      console.error('NW_E2E_SLOP_INJECT=1 but span not found:', slopInjectSpanPath);
+      process.exit(1);
+    }
+    slopInjectSpanText = fs.readFileSync(slopInjectSpanPath, 'utf8');
+    slopInjectSpanName = path.basename(slopInjectSpanPath);
+  }
+  const slopInjectChapter = parseInt(process.env.NW_E2E_SLOP_INJECT_CHAPTER || '2', 10) || 2;
+  report.config.slopInject = slopInjectOn ? {
+    enabled: true,
+    span: slopInjectSpanName,
+    spanPath: slopInjectSpanPath,
+    targetChapter: slopInjectChapter,
+    afterContinuity: process.env.NW_E2E_SLOP_INJECT_AFTER_CONTINUITY !== '0'
+  } : { enabled: false };
   if (fixturePath) {
     const absFix = path.isAbsolute(fixturePath) ? fixturePath : path.join(path.dirname(fileURLToPath(import.meta.url)), '..', fixturePath);
     const seed = JSON.parse(fs.readFileSync(absFix, 'utf8'));
@@ -899,6 +928,26 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     }
   });
 
+  // B4-1A: arm foul-inject before Tab5 generate so ensureQualityAfterGenerate nest sees foul text
+  if (slopInjectOn) {
+    appendProgress('### Phase - B4-1A slop inject armed\n- Status: ready\n- Eval: span=' + slopInjectSpanName + ' targetCh=' + slopInjectChapter + ' afterContinuity=' + (report.config.slopInject.afterContinuity) + ' chars=' + slopInjectSpanText.length + '\n');
+    await page.evaluate(({ spanText, spanName, targetChapter, afterContinuity }) => {
+      window.__NW_E2E_SLOP_INJECT = {
+        enabled: true,
+        spanText: spanText,
+        spanName: spanName,
+        targetChapter: targetChapter,
+        afterContinuity: afterContinuity !== false,
+        applied: false
+      };
+    }, {
+      spanText: slopInjectSpanText,
+      spanName: slopInjectSpanName,
+      targetChapter: slopInjectChapter,
+      afterContinuity: report.config.slopInject.afterContinuity
+    });
+  }
+
   await doStep(5, 'Generate Chapters', 'generateChapter1+quality', async () => {
     return page.evaluate(async () => {
       await generateChapter(1);
@@ -987,6 +1036,26 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       const hs = h ? [h.interest, h.readability, h.aiSlopRisk, h.humanLikeness].join('/') : '?';
       return 'Ch' + ch + ' ' + ((r && r.textLen) || 0) + ' chars. Heuristics ' + hs + '. multiPassCh=' + ((r && r.multiPassCount) || 0) + '.';
     }, { minChars: 200, contentFromResult: true });
+  }
+
+  // B4-1A: harvest inject / anti-slop evidence from live nest
+  if (slopInjectOn) {
+    const injEv = await page.evaluate(() => {
+      const inj = novelData.lastSlopInject || null;
+      const cfg = window.__NW_E2E_SLOP_INJECT || null;
+      const multi = (novelData.qualityMultiPassLog || []).slice();
+      const anti = multi.filter(e => e && e.kind === 'anti-slop');
+      return {
+        inject: inj,
+        cfgApplied: !!(cfg && cfg.applied),
+        cfgPhase: cfg && cfg.appliedPhase,
+        multiPassLog: multi,
+        antiSlopCount: anti.length,
+        antiSlopEntries: anti
+      };
+    });
+    report.slopInjectEvidence = injEv;
+    appendProgress('### Phase - B4-1A slop inject evidence\n- Status: ' + (injEv.cfgApplied ? 'applied' : 'NOT-applied') + '\n- Eval: anti-slop=' + injEv.antiSlopCount + ' phase=' + (injEv.cfgPhase || '?') + ' preFail=' + ((injEv.inject && injEv.inject.preTellFailures) || []).join('|') + ' postFail=' + ((injEv.inject && injEv.inject.postTellFailures) || []).join('|') + '\n');
   }
 
   await doStep(6, 'Edit Chapters', 'applyStagedChapterImprovements1', async () => {
