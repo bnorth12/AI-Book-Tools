@@ -5971,6 +5971,180 @@ return c && c.name && c.backstory && c.arc; });
 			].filter(Boolean).join('\n');
 		}
 
+
+		/** B2 anti-slop tells — revise-only multipass; does NOT fail-close runQualityGate. */
+		const NW_SLOP_TELLS = ['cadence', 'stockMetaphor', 'hedgeStack', 'nameEcho', 'emotionLabel', 'overExplain'];
+		const NW_SLOP_TELL_FLOORS = {
+			cadence: 60,
+			stockMetaphor: 55,
+			hedgeStack: 50,
+			nameEcho: 55,
+			emotionLabel: 50,
+			overExplain: 55
+		};
+		const NW_SLOP_METAPHOR_BANK = [
+			'heart of gold', 'cold as ice', 'time stood still', 'double-edged sword',
+			'light at the end of the tunnel', 'tip of the iceberg', 'calm before the storm',
+			'needle in a haystack', 'blessing in disguise', "pandora's box",
+			'crystal clear', 'unbreakable bond', 'whispered secrets', 'against all odds'
+		];
+		const NW_SLOP_HEDGES = ['maybe', 'perhaps', 'seemed', 'seems', 'as if', 'almost', 'somewhat', 'kind of', 'sort of', 'might', 'could have', 'appeared to'];
+		const NW_SLOP_EMOTION_RE = /\b(felt|was|were|seemed|appeared)\s+(very\s+)?(sad|angry|happy|afraid|scared|nervous|excited|lonely|guilty|ashamed|proud|anxious|relieved)\b/gi;
+		const NW_SLOP_TRANSITIONS = ['however', 'therefore', 'moreover', 'furthermore', 'additionally', 'consequently', 'thus', 'hence', 'meanwhile', 'nevertheless'];
+
+		function _slopSentences(t) {
+			return String(t || '').split(/(?<=[.!?])\s+/).map(function (s) { return s.trim(); }).filter(Boolean);
+		}
+		function _slopWords(t) {
+			return String(t || '').split(/\s+/).filter(Boolean);
+		}
+		function _slopClamp(n) { return Math.max(0, Math.min(100, Math.round(n))); }
+		/** Strip quoted dialogue so spoken address names do not trip nameEcho. */
+		function _slopStripDialogue(t) {
+			return String(t || '')
+				.replace(/"([^"\\]|\\.)*"/g, ' ')
+				.replace(/\u201C([^\u201D]*)\u201D/g, ' ')
+				.replace(/'([^'\\]|\\.)*'/g, ' ');
+		}
+
+		function _scoreCadenceTell(text) {
+			const sents = _slopSentences(text);
+			const hits = [];
+			if (sents.length < 3) return { score: 0, hits: hits };
+			const lens = sents.map(function (s) { return _slopWords(s).length; });
+			const avg = lens.reduce(function (a, b) { return a + b; }, 0) / lens.length;
+			const variance = lens.reduce(function (a, b) { return a + Math.pow(b - avg, 2); }, 0) / lens.length;
+			const stdev = Math.sqrt(variance);
+			const lower = text.toLowerCase();
+			let tHits = 0;
+			NW_SLOP_TRANSITIONS.forEach(function (tr) {
+				const m = lower.match(new RegExp('\\b' + tr + '\\b', 'gi'));
+				if (m) tHits += m.length;
+			});
+			let score = 0;
+			if (stdev < 2.5) { score += 40; hits.push('low_variance:' + stdev.toFixed(2)); }
+			score += Math.min(40, tHits * 12);
+			if (tHits >= 2) hits.push('transitionHits=' + tHits);
+			return { score: _slopClamp(score), hits: hits };
+		}
+		function _scoreStockMetaphorTell(text) {
+			const lower = text.toLowerCase();
+			const hits = [];
+			let n = 0;
+			NW_SLOP_METAPHOR_BANK.forEach(function (p) {
+				if (lower.indexOf(p) >= 0) { n++; hits.push(p); }
+			});
+			return { score: _slopClamp(n * 28), hits: hits };
+		}
+		function _scoreHedgeStackTell(text) {
+			const w = _slopWords(text.toLowerCase());
+			const hits = [];
+			let worst = 0;
+			for (let i = 0; i < w.length; i++) {
+				let c = 0;
+				const window = w.slice(i, i + 40).join(' ');
+				NW_SLOP_HEDGES.forEach(function (h) {
+					const re = new RegExp('\\b' + h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
+					const m = window.match(re);
+					if (m) c += m.length;
+				});
+				if (c > worst) worst = c;
+			}
+			if (worst >= 3) hits.push('hedgeWindow=' + worst);
+			return { score: _slopClamp(worst >= 3 ? 40 + worst * 15 : worst * 10), hits: hits };
+		}
+		function _scoreNameEchoTell(text) {
+			const narr = _slopStripDialogue(text);
+			const w = _slopWords(narr);
+			const hits = [];
+			let worst = 0;
+			let worstName = '';
+			for (let i = 0; i < w.length; i++) {
+				const window = w.slice(i, i + 25);
+				const counts = {};
+				window.forEach(function (tok) {
+					if (/^[A-Z][a-z]{2,}$/.test(tok)) counts[tok] = (counts[tok] || 0) + 1;
+				});
+				Object.keys(counts).forEach(function (name) {
+					const c = counts[name];
+					if (c > worst) { worst = c; worstName = name; }
+				});
+			}
+			if (worst >= 3) hits.push('nameEcho:' + worstName + 'x' + worst);
+			return { score: _slopClamp(worst >= 3 ? 35 + worst * 18 : 0), hits: hits };
+		}
+		function _scoreEmotionLabelTell(text) {
+			const hits = [];
+			const m = String(text).match(NW_SLOP_EMOTION_RE) || [];
+			m.forEach(function (x) { hits.push(x); });
+			return { score: _slopClamp(m.length * 35), hits: hits };
+		}
+		function _scoreOverExplainTell(text) {
+			const sents = _slopSentences(text);
+			const hits = [];
+			let worst = 0;
+			for (let i = 1; i < sents.length; i++) {
+				const a = {};
+				_slopWords(sents[i - 1].toLowerCase()).forEach(function (x) {
+					x = x.replace(/[^a-z]/g, '');
+					if (x.length > 3) a[x] = true;
+				});
+				const b = {};
+				_slopWords(sents[i].toLowerCase()).forEach(function (x) {
+					x = x.replace(/[^a-z]/g, '');
+					if (x.length > 3) b[x] = true;
+				});
+				const aKeys = Object.keys(a);
+				const bKeys = Object.keys(b);
+				if (!aKeys.length || !bKeys.length) continue;
+				let inter = 0;
+				aKeys.forEach(function (x) { if (b[x]) inter++; });
+				const union = aKeys.length + bKeys.length - inter;
+				const j = inter / union;
+				if (j > worst) worst = j;
+				if (j >= 0.55) hits.push('overlap=' + j.toFixed(2));
+			}
+			return { score: _slopClamp(worst >= 0.55 ? 40 + worst * 50 : worst * 40), hits: hits };
+		}
+		const _SLOP_SCORERS = {
+			cadence: _scoreCadenceTell,
+			stockMetaphor: _scoreStockMetaphorTell,
+			hedgeStack: _scoreHedgeStackTell,
+			nameEcho: _scoreNameEchoTell,
+			emotionLabel: _scoreEmotionLabelTell,
+			overExplain: _scoreOverExplainTell
+		};
+		function scoreSlopTells(text, floors) {
+			floors = Object.assign({}, NW_SLOP_TELL_FLOORS, floors || {});
+			const tells = {};
+			const failures = [];
+			NW_SLOP_TELLS.forEach(function (k) {
+				const r = _SLOP_SCORERS[k](text);
+				const ok = r.score < floors[k];
+				tells[k] = { score: r.score, hits: r.hits, ok: ok };
+				if (!ok) failures.push('tell_high:' + k + ':' + r.score + '>=' + floors[k]);
+			});
+			return { tells: tells, passed: failures.length === 0, failures: failures, floors: floors };
+		}
+		function buildAntiSlopReviseBrief(tellReport) {
+			const lines = ['ANTI-SLOP QUALITY PASS (revise-only; keep length bounded; do not pad):'];
+			const t = (tellReport && tellReport.tells) || {};
+			if (t.cadence && !t.cadence.ok) lines.push('CADENCE: break template rhythm; cut transition stacks (however/moreover/furthermore); vary sentence length.');
+			if (t.stockMetaphor && !t.stockMetaphor.ok) lines.push('STOCK METAPHOR: delete cliché figurative phrases; replace with concrete sensory detail from the scene.');
+			if (t.hedgeStack && !t.hedgeStack.ok) lines.push('HEDGE STACK: commit — cut stacked maybe/perhaps/seemed/as if; one hedge max per beat.');
+			if (t.nameEcho && !t.nameEcho.ok) lines.push('NAME-ECHO: in narration, use pronoun/role after first mention in a beat; keep spoken address in dialogue.');
+			if (t.emotionLabel && !t.emotionLabel.ok) lines.push('EMOTION-LABEL: show via action/gesture/dialogue; delete "felt/was [emotion]" labels.');
+			if (t.overExplain && !t.overExplain.ok) lines.push('OVER-EXPLAIN: delete adjacent restatement; let the paid beat stand once.');
+			if (tellReport && tellReport.failures && tellReport.failures.length) {
+				lines.push('Tells: ' + tellReport.failures.join('; '));
+			}
+			return lines.join('\n');
+		}
+		window.scoreSlopTells = scoreSlopTells;
+		window.buildAntiSlopReviseBrief = buildAntiSlopReviseBrief;
+		window.NW_SLOP_TELL_FLOORS = NW_SLOP_TELL_FLOORS;
+
+
 		function needsQualityMultiPass(chapterNum, gate, ctx) {
 			ctx = ctx || {};
 			const maxP = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : 2;
@@ -5984,10 +6158,16 @@ return c && c.name && c.backstory && c.arc; });
 				if (
 					notes &&
 					!/^QUALITY GATE FAIL-CLOSED REVISE/i.test(notes) &&
-					!/^CONTINUITY-FOCUSED QUALITY PASS/i.test(notes)
+					!/^CONTINUITY-FOCUSED QUALITY PASS/i.test(notes) &&
+					!/^ANTI-SLOP QUALITY PASS/i.test(notes)
 				) {
 					return { needed: true, reason: 'residual-staged-notes' };
 				}
+			}
+			// B2: revise-only anti-slop — nest under maxAutoPasses; do not fail-close gate
+			if (!ctx.didAntiSlopPass && typeof scoreSlopTells === 'function') {
+				const tell = scoreSlopTells(novelData.chapters[chapterNum - 1] || '');
+				if (!tell.passed) return { needed: true, reason: 'anti-slop-tells', tellReport: tell };
 			}
 			return { needed: false, reason: null };
 		}
@@ -6011,13 +6191,20 @@ return c && c.name && c.backstory && c.arc; });
 				label: 'chapter' + chapterNum + '-preMultiPass' + pass
 			});
 			let gateAfter = before;
-			if (kind === 'continuity' || kind === 'residual-staged') {
-				const brief = (kind === 'continuity')
-					? buildContinuityReviseBrief(chapterNum)
-					: String((novelData.chapterImprovements || [])[chapterNum - 1] || '').trim() || buildQualityReviseBrief(before);
+			if (kind === 'continuity' || kind === 'residual-staged' || kind === 'anti-slop') {
+				let brief;
+				if (kind === 'continuity') {
+					brief = buildContinuityReviseBrief(chapterNum);
+				} else if (kind === 'anti-slop') {
+					const tellR = (opts.tellReport) || scoreSlopTells(novelData.chapters[chapterNum - 1] || '');
+					brief = buildAntiSlopReviseBrief(tellR);
+				} else {
+					brief = String((novelData.chapterImprovements || [])[chapterNum - 1] || '').trim() || buildQualityReviseBrief(before);
+				}
 				stageChapterImprovement(chapterNum, brief, {
 					mode: 'replace',
-					source: kind === 'continuity' ? 'quality-multipass-continuity' : 'quality-multipass-residual'
+					source: kind === 'continuity' ? 'quality-multipass-continuity'
+						: (kind === 'anti-slop' ? 'quality-multipass-anti-slop' : 'quality-multipass-residual')
 				});
 				const __beforeMp = novelData.chapters[chapterNum - 1] || '';
 				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityMultiPass' });
@@ -6189,9 +6376,11 @@ return c && c.name && c.backstory && c.arc; });
 			if (need.needed && passesDone < maxPasses) {
 				const kind = (need.reason === 'continuity-findings')
 					? 'continuity'
-					: (need.reason === 'residual-staged-notes' ? 'residual-staged' : 'gate-fail');
+					: (need.reason === 'residual-staged-notes'
+						? 'residual-staged'
+						: (need.reason === 'anti-slop-tells' ? 'anti-slop' : 'gate-fail'));
 				console.warn('[QE5] multi-pass', kind, 'as pass', passesDone + 1);
-				multi = await runTargetedQualityPass(chapterNum, gate, { pass: passesDone + 1, kind: kind });
+				multi = await runTargetedQualityPass(chapterNum, gate, { pass: passesDone + 1, kind: kind, tellReport: need.tellReport || null });
 				passesDone++;
 				gate = multi.gateAfter || gate;
 				passResults.push({ pass: passesDone, kind: kind, passedAfter: !!gate.passed });
@@ -6340,9 +6529,11 @@ return c && c.name && c.backstory && c.arc; });
 			if (need.needed) {
 				const kind = (need.reason === 'continuity-findings')
 					? 'continuity'
-					: (need.reason === 'residual-staged-notes' ? 'residual-staged' : 'gate-fail');
+					: (need.reason === 'residual-staged-notes'
+						? 'residual-staged'
+						: (need.reason === 'anti-slop-tells' ? 'anti-slop' : 'gate-fail'));
 				console.warn('[QE5] after apply-staged → second pass', kind);
-				multi = await runTargetedQualityPass(chapterNum, gate, { pass: 2, kind: kind });
+				multi = await runTargetedQualityPass(chapterNum, gate, { pass: 2, kind: kind, tellReport: need.tellReport || null });
 				gate = multi.gateAfter || gate;
 			}
 			return { beforeScores: beforeScores, afterScores: afterScores, multi: multi, gate: gate };
@@ -6527,6 +6718,31 @@ return c && c.name && c.backstory && c.arc; });
 				const cbrief = buildContinuityReviseBrief(1);
 				if (!/Cast anchors:/.test(cbrief) || !/Kwan/.test(cbrief)) throw new Error('continuity brief missing cast');
 				say('continuity brief OK');
+				// B2 anti-slop tells (revise-only; nest under maxAutoPasses=2)
+				if (typeof scoreSlopTells !== 'function') throw new Error('scoreSlopTells missing');
+				if (typeof buildAntiSlopReviseBrief !== 'function') throw new Error('buildAntiSlopReviseBrief missing');
+				const cleanTell = scoreSlopTells([
+					'Kwan checked the twelve-millisecond spike against the freighter log.',
+					'Rook priced the fork once, then waited.',
+					'"If this deletes Sinta\'s uplink," she said, "the ledger becomes evidence."',
+					'Salt air hit Bridge Lock. Radar bloomed once and went dark.'
+				].join('\n'));
+				if (!cleanTell.passed) throw new Error('clean prose should pass tells: ' + cleanTell.failures.join('|'));
+				const foulHedge = scoreSlopTells('Maybe she perhaps seemed as if she almost kind of might sort of appeared to hesitate at the door.');
+				if (foulHedge.tells.hedgeStack.ok) throw new Error('expected hedgeStack foul');
+				const dialogueOnly = scoreSlopTells('"Kwan, Kwan, Kwan — listen," Rook said. The dock stayed quiet.');
+				if (!dialogueOnly.tells.nameEcho.ok) throw new Error('dialogue address should allowlist nameEcho');
+				const narrEcho = scoreSlopTells('Kwan told Kwan that Kwan would not sign what Kwan had refused.');
+				if (narrEcho.tells.nameEcho.ok) throw new Error('narration nameEcho should foul');
+				const briefSlop = buildAntiSlopReviseBrief(foulHedge);
+				if (!/^ANTI-SLOP QUALITY PASS/i.test(briefSlop) || !/HEDGE/i.test(briefSlop)) throw new Error('anti-slop brief weak');
+				novelData.chapters = [foulHedge.failures ? 'Maybe she perhaps seemed as if she almost kind of might sort of appeared to hesitate at the door.' : ''];
+				novelData.chapters[0] = 'Maybe she perhaps seemed as if she almost kind of might sort of appeared to hesitate at the door.';
+				const needSlop = needsQualityMultiPass(1, { passed: true, failures: [] }, { passesDone: 1, didAntiSlopPass: false });
+				if (!needSlop.needed || needSlop.reason !== 'anti-slop-tells') throw new Error('needsQualityMultiPass should request anti-slop');
+				const needCapped = needsQualityMultiPass(1, { passed: true, failures: [] }, { passesDone: 2, didAntiSlopPass: false });
+				if (needCapped.needed) throw new Error('anti-slop must nest under maxAutoPasses=2');
+				say('B2 anti-slop tells OK');
 				say('QE6 Attributes Smoke PASS');
 				return true;
 			} catch (e) {

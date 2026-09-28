@@ -78,8 +78,14 @@ function scoreHedgeStack(text) {
   return { score: clamp(worst >= 3 ? 40 + worst * 15 : worst * 10), hits };
 }
 
+function stripDialogue(text) {
+  return String(text || '')
+    .replace(/"([^"\\]|\\.)*"/g, ' ')
+    .replace(/\u201C([^\u201D]*)\u201D/g, ' ')
+    .replace(/'([^'\\]|\\.)*'/g, ' ');
+}
 function scoreNameEcho(text) {
-  const w = words(text);
+  const w = words(stripDialogue(text));
   const hits = [];
   let worst = 0;
   let worstName = '';
