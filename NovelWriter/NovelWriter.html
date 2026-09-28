@@ -6059,9 +6059,13 @@ let activeAICallCount = 0;
 			const continuityPacket = buildChapterContinuityPacket(chapterNum);
 			const strictMode = !!novelData.continuityStrictMode;
 
-		    const chapterLength = novelData.chapterLength || 4000;
-		    const targetWordsPerPart = Math.floor((chapterLength / 2) + 1500) / 2;
-		    		    // Prefer UI maxTokens (lean E2E sets ~2000); fall back to 30000 for unrestricted runs
+		    const chapterLength = Math.max(500, parseInt(novelData.chapterLength, 10) || 4000);
+		    // Half-chapter word band derived from product Target Chapter Length (words)
+		    const targetWordsPerPart = Math.max(1000, Math.round(chapterLength / 2));
+		    const halfLo = Math.max(800, Math.round(targetWordsPerPart * 0.9));
+		    const halfHi = Math.max(halfLo + 200, Math.round(targetWordsPerPart * 1.15));
+		    const halfBand = halfLo + '-' + halfHi;
+		    // Prefer UI maxTokens (lean E2E sets ~2000); fall back to 30000 for unrestricted runs
 		    const maxTokens = parseInt(document.getElementById('maxTokens')?.value, 10) || 30000;
 
 		    if (!Array.isArray(novelData.chapters)) {
@@ -6080,7 +6084,7 @@ let activeAICallCount = 0;
 		        {
 		            role: 'user',
 		            content: [
-		                `Generate the first half of Chapter ${chapterNum} (~1600-2000 words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with the following details:`,
+		                `Generate the first half of Chapter ${chapterNum} (~${halfBand} words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with the following details:`,
 		                `- **Story Arc (digest):** ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
 		                `- **Plot (digest):** ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
 		                `- **Setting (digest):** ${digestText(novelData.setting || 'No setting provided', 280)}`,
@@ -6105,7 +6109,7 @@ let activeAICallCount = 0;
 		                '',
 		                'Return as JSON:',
 		                '{',
-		                '    "chapter": "<first half text with \\n\\n between paragraphs, ~1600-2000 words>"',
+		                '    "chapter": "<first half text with \\n\\n between paragraphs, ~${halfBand} words>"',
 		                '}'
 		            ].join('\n')
 		        }
@@ -6150,7 +6154,7 @@ let activeAICallCount = 0;
 			    {
 			        role: 'user',
 			        content: [
-			            `Continue Chapter ${chapterNum} from this first half to complete the second half (~1600-2000 words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}":`,
+			            `Continue Chapter ${chapterNum} from this first half to complete the second half (~${halfBand} words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}":`,
 			            `- **First Half:** ${chapterContent}`,
 			            `- **Story Arc (digest):** ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
 			            `- **Plot (digest):** ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
@@ -6175,7 +6179,7 @@ let activeAICallCount = 0;
 			            '',
 			            'Return as JSON:',
 			            '{',
-			            '    "chapter": "<second half text with \\n\\n between paragraphs, ~1600-2000 words>"',
+			            '    "chapter": "<second half text with \\n\\n between paragraphs, ~${halfBand} words>"',
 			            '}'
 			        ].join('\n')
 			    }

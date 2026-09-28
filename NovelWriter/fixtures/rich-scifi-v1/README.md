@@ -30,3 +30,14 @@ Lean mode: omit `NW_E2E_FIXTURE` (default).
 
 ## Versioning
 Bump to `rich-scifi-v2` if cast/world changes break compare-across-runs. Keep v1 immutable once stress baselines exist.
+
+## Longer chapters (token-burn / quality)
+`ash
+set NW_E2E_FIXTURE=NovelWriter/fixtures/rich-scifi-v1/novelData.seed.json
+set NW_E2E_CHAPTERS=4
+set NW_E2E_CHAPTER_LENGTH=3200
+set NW_E2E_MAX_TOKENS=14000
+set NW_E2E_FORCE_MULTIPASS=1
+node scripts/run-tracked-e2e.mjs
+`
+NW_E2E_CHAPTER_LENGTH maps to product Target Chapter Length (words); half-chapter prompts use a derived band. NW_E2E_MAX_TOKENS raises UI maxTokens so completions are not truncated mid-half.

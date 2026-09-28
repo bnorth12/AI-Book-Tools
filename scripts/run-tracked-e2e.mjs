@@ -217,6 +217,14 @@ const report = {
       set('numChapters', novelData.numChapters);
       set('storyArc', novelData.storyArc);
       set('styleGuide', novelData.styleGuide);
+      // Map fixture targetWordsPerChapter onto product chapterLength (words) when present
+      if (seedObj.targetWordsPerChapter != null || seedObj.chapterLength != null) {
+        const tw = parseInt(seedObj.targetWordsPerChapter || seedObj.chapterLength, 10);
+        if (Number.isFinite(tw) && tw >= 500) {
+          novelData.chapterLength = tw;
+          set('chapterLength', tw);
+        }
+      }
       set('maxTokens', Math.max(parseInt(novelData.maxTokens || '0', 10) || 0, 6000));
       novelData.maxTokens = Math.max(parseInt(novelData.maxTokens || '0', 10) || 0, 6000);
       if (typeof updateChapterSubpages === 'function') updateChapterSubpages();
@@ -287,7 +295,34 @@ const report = {
     report.config.numChapters = n;
     report.config.chaptersToGenerate = n;
     report.config.forceMultipass = process.env.NW_E2E_FORCE_MULTIPASS === '1';
-    appendProgress('### Phase - chapter plan\n- Status: ready\n- Eval: chaptersToGenerate=' + n + ' forceMultipass=' + report.config.forceMultipass + ' fixture=' + (fixturePath || 'none') + '\n');
+    // Realistic chapter length knobs (product UI chapterLength + maxTokens). Prefer env; else fixture targetWordsPerChapter; else keep lean defaults.
+    {
+      const envLen = parseInt(process.env.NW_E2E_CHAPTER_LENGTH || '', 10);
+      const envMax = parseInt(process.env.NW_E2E_MAX_TOKENS || '', 10);
+      let chLen = report.config.chapterLength || 500;
+      let maxTok = report.config.maxTokens || 6000;
+      if (Number.isFinite(envLen) && envLen >= 500) chLen = envLen;
+      else if (fixturePath) {
+        try {
+          const absFix2 = path.isAbsolute(fixturePath) ? fixturePath : path.join(path.dirname(fileURLToPath(import.meta.url)), '..', fixturePath);
+          const seed2 = JSON.parse(fs.readFileSync(absFix2, 'utf8'));
+          const tw = parseInt(seed2.targetWordsPerChapter || seed2.chapterLength || '', 10);
+          if (Number.isFinite(tw) && tw >= 500) chLen = tw;
+        } catch (_) {}
+      }
+      if (Number.isFinite(envMax) && envMax >= 1000) maxTok = envMax;
+      else if (fixturePath && chLen >= 2000) maxTok = Math.max(maxTok, 12000);
+      report.config.chapterLength = chLen;
+      report.config.maxTokens = maxTok;
+      await page.evaluate(({ chLen, maxTok }) => {
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = String(val); };
+        set('chapterLength', chLen);
+        set('maxTokens', maxTok);
+        novelData.chapterLength = chLen;
+        novelData.maxTokens = maxTok;
+      }, { chLen, maxTok });
+    }
+    appendProgress('### Phase - chapter plan\n- Status: ready\n- Eval: chaptersToGenerate=' + n + ' forceMultipass=' + report.config.forceMultipass + ' chapterLength=' + report.config.chapterLength + ' maxTokens=' + report.config.maxTokens + ' fixture=' + (fixturePath || 'none') + '\n');
   }
 
 report.config.model = await page.evaluate(() => document.getElementById('model').value);
