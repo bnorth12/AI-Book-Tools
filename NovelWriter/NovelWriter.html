@@ -4276,6 +4276,8 @@ const messages = [
 			const d = digestChapterBlueprint(bp) || {};
 			const lines = [];
 			lines.push('OBLIGATION CHECKLIST (Draft executes these; success = dramatized obligations, NOT word quotas):');
+			// DRAFT_ENRICH_CHECKLIST
+			lines.push('- Prose densify: include spoken dialogue (3+ cues), real paragraph breaks, and distinct story beats — not one unbroken block.');
 			if (d.role) lines.push('- Role: ' + d.role);
 			if (d.arcStep) lines.push('- Arc step: ' + d.arcStep);
 			(d.characterBeats || []).forEach(function (b) {
@@ -4644,13 +4646,26 @@ const messages = [
 			if (misses.indexOf('arcStep') >= 0) failures.push('arcStep_missing');
 			if (ratio < 0.5) failures.push('obligation_coverage<0.5');
 			if (words < 120 && ratio < 0.75) failures.push('short_low_coverage');
+			// DRAFT_ENRICH_DENSIFY: dialogue / paragraph / beat coverage (line-control signals)
+			const dialogueHits = (raw.match(/["“”']|\b(said|asked|whispered|muttered|replied|snapped|murmured)\b/gi) || []).length;
+			mark('dialogueDensity', words < 220 || dialogueHits >= 3);
+			const paras = raw.split(/\n\s*\n/).filter(function (p) { return String(p || '').trim().length > 40; });
+			mark('paragraphBreaks', words < 220 || paras.length >= 3);
+			const sentences = raw.split(/[.!?]+/).filter(function (s) { return String(s || '').trim().length > 15; });
+			mark('beatDensity', words < 220 || sentences.length >= Math.max(6, Math.floor(words / 90)));
+			if (misses.indexOf('dialogueDensity') >= 0) failures.push('low_dialogue_density');
+			if (misses.indexOf('paragraphBreaks') >= 0) failures.push('no_paragraph_breaks');
+			if (misses.indexOf('beatDensity') >= 0) failures.push('low_beat_density');
 			return {
 				covered: covered,
-				total: total,
-				ratio: Math.round(ratio * 1000) / 1000,
+				total: required.length || total,
+				ratio: Math.round((hits.length / Math.max(1, required.length)) * 1000) / 1000,
 				hits: hits,
 				misses: misses,
 				words: words,
+				dialogueHits: dialogueHits,
+				paragraphCount: paras.length,
+				sentenceCount: sentences.length,
 				passed: failures.length === 0,
 				failures: failures,
 				blueprint: dig
@@ -5636,7 +5651,7 @@ return c && c.name && c.backstory && c.arc; });
 
 
 		// ---- #120 QE 1/2/3: apply-critique, fail-closed revise, chapter improvement apply ----
-		const NW_QUALITY_REVISE = { maxAttempts: 1, maxAutoPasses: 2 }; // QE5: at most 2 auto revise/apply passes
+		const NW_QUALITY_REVISE = { maxAttempts: 1, maxAutoPasses: 2, maxGrowthRatio: 1.35, maxGrowthChars: 3500, requireParagraphPreserve: true }; // QE5 + bounded revise
 
 		function ensureChapterImprovementsArray() {
 			const n = Math.max(1, Number(novelData.numChapters) || (novelData.chapters || []).length || 1);
@@ -5815,7 +5830,9 @@ return c && c.name && c.backstory && c.arc; });
 					mode: 'replace',
 					source: kind === 'continuity' ? 'quality-multipass-continuity' : 'quality-multipass-residual'
 				});
+				const __beforeMp = novelData.chapters[chapterNum - 1] || '';
 				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityMultiPass' });
+				guardChapterReviseGrowth(chapterNum, __beforeMp, novelData.chapters[chapterNum - 1] || '', { source: 'qualityMultiPass:' + kind });
 				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', {
 					label: 'chapter' + chapterNum + '-afterMultiPass' + pass
 				});
@@ -5863,6 +5880,47 @@ return c && c.name && c.backstory && c.arc; });
 		window.NW_QUALITY_REVISE = NW_QUALITY_REVISE;
 
 
+
+		function syncChapterTextToDom(chapterNum, text) {
+			const el = document.getElementById('chapterContent' + chapterNum) || document.getElementById('chapterEditContent' + chapterNum);
+			if (el) el.value = text;
+		}
+
+		/** BOUNDED_REVISE: reject runaway growth / lost paragraph structure; restore prior text. */
+		function guardChapterReviseGrowth(chapterNum, beforeText, afterText, meta) {
+			meta = meta || {};
+			const before = String(beforeText || '');
+			const after = String(afterText || '');
+			const cfg = NW_QUALITY_REVISE || {};
+			const maxRatio = cfg.maxGrowthRatio != null ? cfg.maxGrowthRatio : 1.35;
+			const maxExtra = cfg.maxGrowthChars != null ? cfg.maxGrowthChars : 3500;
+			const reasons = [];
+			if (before.length > 400 && after.length > before.length * maxRatio) {
+				reasons.push('growth_ratio>' + maxRatio + ' (' + before.length + '→' + after.length + ')');
+			}
+			if (before.length > 400 && (after.length - before.length) > maxExtra) {
+				reasons.push('growth_chars>' + maxExtra + ' (Δ' + (after.length - before.length) + ')');
+			}
+			const beforeParas = before.split(/\n\s*\n/).filter(function (p) { return p.trim().length > 40; }).length;
+			const afterParas = after.split(/\n\s*\n/).filter(function (p) { return p.trim().length > 40; }).length;
+			if (cfg.requireParagraphPreserve !== false && beforeParas >= 3 && afterParas < 2 && after.length > before.length * 0.8) {
+				reasons.push('lost_paragraph_breaks (' + beforeParas + '→' + afterParas + ')');
+			}
+			if (!reasons.length) {
+				return { ok: true, text: after, reasons: [] };
+			}
+			novelData.chapters[chapterNum - 1] = before;
+			syncChapterTextToDom(chapterNum, before);
+			if (!Array.isArray(novelData.boundedReviseLog)) novelData.boundedReviseLog = [];
+			novelData.boundedReviseLog.push({
+				chapter: chapterNum, ts: new Date().toISOString(), reasons: reasons,
+				beforeLen: before.length, afterLen: after.length, source: meta.source || 'revise'
+			});
+			console.warn('[BOUNDED_REVISE] restored chapter', chapterNum, reasons);
+			return { ok: false, text: before, reasons: reasons, reverted: true };
+		}
+
+
 		async function reviseChapterForQuality(chapterNum, gateResult, opts) {
 		    // Agent Skill I/O pack (tab5.reviseChapterForQuality)
 		    window.__lastSkillPack = packSkillInputs('tab5.reviseChapterForQuality', { novelData: novelData, chapterNum: chapterNum, updateBrief: (opts && opts.brief) || '', reviseBrief: (typeof buildQualityReviseBrief === 'function' ? buildQualityReviseBrief(gateResult) : '') });
@@ -5877,7 +5935,9 @@ return c && c.name && c.backstory && c.arc; });
 				attempts++;
 				const brief = buildQualityReviseBrief(gateAfter);
 				stageChapterImprovement(chapterNum, brief, { mode: 'replace', source: 'quality-revise' });
+				const __beforeRev = novelData.chapters[chapterNum - 1] || '';
 				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityRevise' });
+				guardChapterReviseGrowth(chapterNum, __beforeRev, novelData.chapters[chapterNum - 1] || '', { source: 'qualityRevise' });
 				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-afterRevise' + attempts });
 				pushQualitySample('chapter' + chapterNum + '-afterRevise', Object.assign({}, gateAfter.scores || {}, {
 					source: 'heuristics-revise',
@@ -6062,7 +6122,9 @@ return c && c.name && c.backstory && c.arc; });
 			if (el) el.value = text;
 			novelData.chapterImprovements[chapterNum - 1] = text;
 			const beforeScores = scoreProseQuality(novelData.chapters[chapterNum - 1] || '');
+			const __beforeStaged = novelData.chapters[chapterNum - 1] || '';
 			await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'applyChapterImprovements' });
+			guardChapterReviseGrowth(chapterNum, __beforeStaged, novelData.chapters[chapterNum - 1] || '', { source: 'applyStaged' });
 			const afterScores = scoreProseQuality(novelData.chapters[chapterNum - 1] || '');
 			pushQualitySample('chapter' + chapterNum + '-afterChapterImprovements', Object.assign({}, afterScores, {
 				source: 'heuristics-chapter-improve',
