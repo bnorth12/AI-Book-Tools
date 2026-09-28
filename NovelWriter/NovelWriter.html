@@ -3718,8 +3718,85 @@ const messages = [
 		    const numEl = document.getElementById('numCharacters');
 		    if (numEl) numEl.value = novelData.characters.length || 1;
 		    if (typeof updateCharacterCounter === 'function') updateCharacterCounter();
-		    const after = scoreCastDensity(novelData.characters, { novelData: novelData });
-		    novelData.lastCastEnrich = { before: before, after: after, ts: new Date().toISOString() };
+		    let after = scoreCastDensity(novelData.characters, { novelData: novelData });
+		    // TARGETED_ENRICH_RETRY: one pass for still-thin names (near-miss floors like 74<80)
+		    if (!after.passed) {
+		        const thin = (after.perChar || []).filter(function (r) { return r && (!r.backstoryOk || !r.arcOk); });
+		        const thinNames = thin.map(function (r) { return r.name; }).filter(Boolean);
+		        if (thinNames.length && !window.__enrichCastRetrying) {
+		            window.__enrichCastRetrying = true;
+		            try {
+		                const thinChars = (novelData.characters || []).filter(function (c) {
+		                    return thinNames.some(function (n) { return String((c && c.name) || '').trim().toLowerCase() === String(n).trim().toLowerCase(); });
+		                });
+		                const retryPrompt = [
+		                    'TARGETED DENSIFY RETRY — only these characters are still below floors:',
+		                    JSON.stringify(thinChars.map(function (c) {
+		                        return { name: c.name, backstoryWords: (String(c.backstory || '').trim().split(/\s+/).filter(Boolean).length), arcWords: (String(c.arc || '').trim().split(/\s+/).filter(Boolean).length), backstory: c.backstory || '', arc: c.arc || '' };
+		                    })),
+		                    'Floors: backstory >= ' + floors.backstory + ' words, arc >= ' + floors.arc + ' words.',
+		                    'Expand ONLY these names. Keep identity. Add motives/wounds/relationships/subplot pressure — no adjective pad.',
+		                    'Return JSON only: {"characters":[{"name":"...","backstory":"...","arc":"...","obligations":["..."]}, ...]}'
+		                ].join('\n');
+		                if (typeof schemaPromptLines === 'function') {
+		                    retryPrompt; // schema already in first pass
+		                }
+		                const retryMessages = [
+		                    { role: 'system', content: getSkillSystemPrompt('tab2.enrichCharacters', 'You are a cast densifier finishing thin rows only.') },
+		                    { role: 'user', content: retryPrompt }
+		                ];
+		                requestLog.lastPrompt = retryMessages[1].content;
+		                requestLog.status = 'Pending (targeted densify retry)';
+		                requestLog.originTab = 'tab2';
+		                updateRequestLog();
+		                const retryResp = await callAI(retryMessages, document.getElementById('tab2'), {
+		                    max_tokens: Math.max(8000, parseInt(document.getElementById('maxTokens')?.value || '0', 10) || 0),
+		                    operationName: 'enrichCharactersRetry'
+		                });
+		                const retryNorm = (typeof normalizeInbound === 'function')
+		                    ? normalizeInbound('tab2.enrichCharacters', retryResp, { novelData: novelData })
+		                    : retryResp;
+		                const retryChars = (retryNorm && retryNorm.characters) || (retryResp && retryResp.characters) || [];
+		                if (Array.isArray(retryChars) && retryChars.length) {
+		                    const byName2 = {};
+		                    retryChars.forEach(function (ch) {
+		                        if (ch && ch.name) byName2[String(ch.name).trim().toLowerCase()] = ch;
+		                    });
+		                    novelData.characters = (novelData.characters || []).map(function (existing) {
+		                        const key = String((existing && existing.name) || '').trim().toLowerCase();
+		                        const upd = byName2[key];
+		                        if (!upd) return existing;
+		                        return {
+		                            name: existing.name,
+		                            backstory: (upd.backstory && String(upd.backstory).trim()) || existing.backstory || '',
+		                            arc: (upd.arc && String(upd.arc).trim()) || existing.arc || '',
+		                            obligations: Array.isArray(upd.obligations) ? upd.obligations : (existing.obligations || [])
+		                        };
+		                    });
+		                    // sync DOM
+		                    const list = document.getElementById('characterList');
+		                    if (list) {
+		                        list.querySelectorAll('.character').forEach(function (div) {
+		                            const nameEl = div.querySelector('.charName');
+		                            const key = String((nameEl && nameEl.value) || '').trim().toLowerCase();
+		                            const char = (novelData.characters || []).find(function (c) {
+		                                return String((c && c.name) || '').trim().toLowerCase() === key;
+		                            });
+		                            if (!char) return;
+		                            const bsEl = div.querySelector('.charBackstory');
+		                            const arcEl = div.querySelector('.charArc');
+		                            if (bsEl && char.backstory) bsEl.value = char.backstory;
+		                            if (arcEl && char.arc) arcEl.value = char.arc;
+		                        });
+		                    }
+		                    after = scoreCastDensity(novelData.characters, { novelData: novelData });
+		                }
+		            } finally {
+		                window.__enrichCastRetrying = false;
+		            }
+		        }
+		    }
+		    novelData.lastCastEnrich = { before: before, after: after, ts: new Date().toISOString(), retried: !!(after && after.passed) };
 		    window.__lastEnrichCast = novelData.lastCastEnrich;
 		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below density floor)';
 		    updateRequestLog();
@@ -3810,7 +3887,54 @@ const messages = [
 		        });
 		    }
 		    if (typeof updateSubplotCounter === 'function') updateSubplotCounter();
-		    const after = scoreSubplotDensity(novelData.subplots, { novelData: novelData });
+		    let after = scoreSubplotDensity(novelData.subplots, { novelData: novelData });
+		    // TARGETED_SUBPLOT_RETRY: one pass for still-thin throughlines
+		    if (!after.passed && !window.__enrichSubRetrying) {
+		        window.__enrichSubRetrying = true;
+		        try {
+		            const thinIdx = (after.per || []).filter(function (r) { return r && !r.ok; }).map(function (r) { return r.index; });
+		            const thinSubs = thinIdx.map(function (i) { return (novelData.subplots || [])[i]; }).filter(function (s) { return s != null && String(s).trim(); });
+		            if (thinSubs.length) {
+		                const retryMessages = [
+		                    { role: 'system', content: getSkillSystemPrompt('tab3.enrichSubplots', 'You densify thin subplot throughlines only.') },
+		                    { role: 'user', content: [
+		                        'TARGETED SUBPLOT DENSIFY RETRY — deepen ONLY these still-thin throughlines (same order). Floor >= ' + floors.subplot + ' words each.',
+		                        'Cast: ' + JSON.stringify((typeof digestCharacters === 'function') ? digestCharacters(novelData.characters || []) : (novelData.characters || []).map(function(c){return c && c.name;})),
+		                        'Thin subplots: ' + JSON.stringify(thinSubs),
+		                        'Return JSON only: {"subplots":["<enriched>", ...]} same length/order as Thin subplots.'
+		                    ].join('\n') }
+		                ];
+		                requestLog.lastPrompt = retryMessages[1].content;
+		                requestLog.status = 'Pending (targeted subplot densify retry)';
+		                updateRequestLog();
+		                const retryResp = await callAI(retryMessages, document.getElementById('tab3'), {
+		                    max_tokens: Math.max(6000, parseInt(document.getElementById('maxTokens')?.value || '0', 10) || 0),
+		                    operationName: 'enrichSubplotsRetry'
+		                });
+		                const retryNorm = (typeof normalizeInbound === 'function')
+		                    ? normalizeInbound('tab3.enrichSubplots', retryResp, { novelData: novelData })
+		                    : retryResp;
+		                let enriched = (retryNorm && retryNorm.subplots) || (retryResp && retryResp.subplots) || [];
+		                if (!Array.isArray(enriched)) enriched = [];
+		                if (enriched.length) {
+		                    thinIdx.forEach(function (idx, j) {
+		                        if (enriched[j] && String(enriched[j]).trim()) novelData.subplots[idx] = enriched[j];
+		                    });
+		                    // sync DOM textareas if present
+		                    const list = document.getElementById('subplotList');
+		                    if (list) {
+		                        const areas = list.querySelectorAll('textarea');
+		                        (novelData.subplots || []).forEach(function (s, i) {
+		                            if (areas[i]) areas[i].value = typeof s === 'string' ? s : String(s || '');
+		                        });
+		                    }
+		                    after = scoreSubplotDensity(novelData.subplots, { novelData: novelData });
+		                }
+		            }
+		        } finally {
+		            window.__enrichSubRetrying = false;
+		        }
+		    }
 		    novelData.lastSubplotEnrich = { before: before, after: after, ts: new Date().toISOString() };
 		    window.__lastEnrichSubplots = novelData.lastSubplotEnrich;
 		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below density floor)';
