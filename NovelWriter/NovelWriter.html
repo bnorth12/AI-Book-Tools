@@ -3892,13 +3892,13 @@ const messages = [
 		    if (!after.passed && !window.__enrichSubRetrying) {
 		        window.__enrichSubRetrying = true;
 		        try {
-		            const thinIdx = (after.per || []).filter(function (r) { return r && !r.ok; }).map(function (r) { return r.index; });
+		            const thinIdx = (after.perSubplot || after.per || []).filter(function (r) { return r && !r.ok; }).map(function (r) { return r.index; });
 		            const thinSubs = thinIdx.map(function (i) { return (novelData.subplots || [])[i]; }).filter(function (s) { return s != null && String(s).trim(); });
 		            if (thinSubs.length) {
 		                const retryMessages = [
 		                    { role: 'system', content: getSkillSystemPrompt('tab3.enrichSubplots', 'You densify thin subplot throughlines only.') },
 		                    { role: 'user', content: [
-		                        'TARGETED SUBPLOT DENSIFY RETRY — deepen ONLY these still-thin throughlines (same order). Floor >= ' + floors.subplot + ' words each.',
+		                        'TARGETED SUBPLOT DENSIFY RETRY — deepen ONLY these still-thin throughlines (same order). Each MUST be at least ' + (floors.subplot + 20) + ' words (floor is ' + floors.subplot + '; leave margin — near-miss fails).',
 		                        'Cast: ' + JSON.stringify((typeof digestCharacters === 'function') ? digestCharacters(novelData.characters || []) : (novelData.characters || []).map(function(c){return c && c.name;})),
 		                        'Thin subplots: ' + JSON.stringify(thinSubs),
 		                        'Return JSON only: {"subplots":["<enriched>", ...]} same length/order as Thin subplots.'
