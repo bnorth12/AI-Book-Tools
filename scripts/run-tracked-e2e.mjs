@@ -638,6 +638,44 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     });
   }
 
+  // A3-fix: densify chapter blueprint beats (six obligations) before Tab5 readiness when enrich mode on
+  await doStep(4, 'Outlines', 'enrichChapterBlueprints', async () => {
+    if (!enrichMode) return page.evaluate(() => ({ skipped: true, reason: 'NW_E2E_ENRICH not set' }));
+    return page.evaluate(async () => {
+      if (typeof enrichChapterBlueprints !== 'function') return { error: 'enrichChapterBlueprints missing' };
+      const cap = Number(novelData.numChapters) || Math.max((novelData.chapterBlueprints || []).length, 1);
+      const before = (typeof scoreBeatCoverage === 'function') ? scoreBeatCoverage(novelData, { chapterCap: cap }) : null;
+      try {
+        const after = await enrichChapterBlueprints();
+        return {
+          skipped: false,
+          beforePassed: !!(before && before.passed),
+          afterPassed: !!(after && after.passed),
+          failures: (after && after.failures || []).slice(0, 8),
+          perChapter: (after && after.perChapter || []).slice(0, 8)
+        };
+      } catch (e) {
+        const mid = (typeof scoreBeatCoverage === 'function') ? scoreBeatCoverage(novelData, { chapterCap: cap }) : null;
+        return {
+          error: String(e && e.message || e),
+          beforePassed: !!(before && before.passed),
+          afterPassed: !!(mid && mid.passed),
+          failures: (mid && mid.failures || []).slice(0, 8)
+        };
+      }
+    });
+  }, (a, r) => (r && r.skipped)
+    ? 'Blueprint beat enrich skipped (enrich mode off).'
+    : ('Blueprint beat enrich passed=' + !!(r && r.afterPassed) + ' fails=' + (((r && r.failures) || []).join(' | ') || 'none')), {
+    allowNoCall: true,
+    stageGate: (res) => {
+      if (!enrichMode) return;
+      assertStageGate('Tab4-enrichChapterBlueprints', [
+        { ok: !!res && !res.error && res.afterPassed, msg: 'enrichChapterBlueprints failed: ' + ((res && res.error) || ((res && res.failures) || []).join(' | ')) }
+      ]);
+    }
+  });
+
   // Fail-closed readiness before Tab5 burn: fixture stubs (~6-7% of floors) need NW_E2E_ENRICH=1 or REGEN_BIBLE=1.
   {
     const readySnap = await page.evaluate(() => {

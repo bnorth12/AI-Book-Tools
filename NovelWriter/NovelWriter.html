@@ -2475,7 +2475,7 @@ let activeAICallCount = 0;
 						(__op && String(__op)) || (typeof window !== 'undefined' && window.__activeSkillId) || ''
 					) : null;
 					const __stageId = __stageGuess || (
-						/enrichChapterBlueprints/i.test(__op) ? 'tab4.generateNovelOutlines' :
+						/enrichChapterBlueprints/i.test(__op) ? 'tab4.enrichChapterBlueprints' :
 						/enrichCharacters|suggestCharacters|refineCharacters/i.test(__op) ? 'tab2.enrichCharacters' :
 						/enrichSubplots|suggestSubplots/i.test(__op) ? 'tab3.enrichSubplots' :
 						/generateChapter|reviseChapter/i.test(__op) ? 'tab5.generateChapter' :
@@ -8291,7 +8291,7 @@ return c && c.name && c.backstory && c.arc; });
 		        operationName: 'enrichChapterBlueprints'
 		    });
 		    const norm = (typeof normalizeInbound === 'function')
-		        ? normalizeInbound('tab4.generateNovelOutlines', response, { novelData: novelData })
+		        ? normalizeInbound('tab4.enrichChapterBlueprints', response, { novelData: novelData })
 		        : response;
 		    let refined = (norm && norm.chapterBlueprints) || (response && response.chapterBlueprints) || [];
 		    if (!Array.isArray(refined) || !refined.length) {
@@ -8353,7 +8353,7 @@ return c && c.name && c.backstory && c.arc; });
 		                    operationName: 'enrichChapterBlueprintsRetry'
 		                });
 		                const retryNorm = (typeof normalizeInbound === 'function')
-		                    ? normalizeInbound('tab4.generateNovelOutlines', retryResp, { novelData: novelData })
+		                    ? normalizeInbound('tab4.enrichChapterBlueprints', retryResp, { novelData: novelData })
 		                    : retryResp;
 		                const retryList = (retryNorm && retryNorm.chapterBlueprints) || (retryResp && retryResp.chapterBlueprints) || [];
 		                retryList.forEach(function (bp, i) {
@@ -8381,6 +8381,58 @@ return c && c.name && c.backstory && c.arc; });
 		    }
 		    const ta = document.getElementById('chapterBlueprints');
 		    if (ta) ta.value = JSON.stringify(novelData.chapterBlueprints, null, 2);
+		    
+		    // Dual densify retry (cast-enrich pattern): second targeted pass if still below floors
+		    if (!after.passed && !window.__enrichBpRetry2) {
+		        window.__enrichBpRetry2 = true;
+		        try {
+		            const thinCh2 = (after.perChapter || []).filter(function (r) { return r && !r.ok; }).map(function (r) { return r.chapter; });
+		            if (thinCh2.length) {
+		                const thinBps2 = novelData.chapterBlueprints.filter(function (bp, i) {
+		                    return thinCh2.indexOf(Number(bp.chapter) || (i + 1)) >= 0;
+		                });
+		                const retryPrompt2 = [
+		                    'SECOND BLUEPRINT BEAT RETRY - still failing six-beat floors. Fill EVERY missing/stub field (>=40 chars). dialogueTurn MUST be a spoken exchange obligation naming who speaks.',
+		                    'Failures: ' + (after.failures || []).slice(0, 12).join(' | '),
+		                    'Thin chapters: ' + JSON.stringify(thinBps2),
+		                    'Cast names: ' + JSON.stringify((novelData.characters || []).map(function (c) { return c && c.name; }).filter(Boolean)),
+		                    'Return JSON only: {"chapterBlueprints":[{"chapter":n,"sceneGoal":"...","castArcBeat":"...","subplotPressure":"...","dialogueTurn":"...","sensoryWorldHook":"...","turnOrPayoff":"..."}]}'
+		                ].join('\n');
+		                const retryResp2 = await callAI([
+		                    { role: 'system', content: 'Finish remaining thin chapter blueprint beats. All six fields required.' },
+		                    { role: 'user', content: retryPrompt2 }
+		                ], document.getElementById('tab4'), {
+		                    max_tokens: Math.max(10000, parseInt(document.getElementById('maxTokens')?.value || '0', 10) || 0),
+		                    operationName: 'enrichChapterBlueprintsRetry2'
+		                });
+		                const retryNorm2 = (typeof normalizeInbound === 'function')
+		                    ? normalizeInbound('tab4.enrichChapterBlueprints', retryResp2, { novelData: novelData })
+		                    : retryResp2;
+		                const retryList2 = (retryNorm2 && retryNorm2.chapterBlueprints) || (retryResp2 && retryResp2.chapterBlueprints) || [];
+		                retryList2.forEach(function (bp, i) {
+		                    const pack = normalizeChapterBeatPack(bp, (bp && bp.chapter) || thinCh2[i]);
+		                    if (!pack) return;
+		                    const ch = Number(pack.chapter) || thinCh2[i];
+		                    const bidx = Math.max(0, ch - 1);
+		                    if (bidx >= novelData.chapterBlueprints.length) return;
+		                    const existing = novelData.chapterBlueprints[bidx];
+		                    novelData.chapterBlueprints[bidx] = Object.assign({}, existing, {
+		                        chapter: ch,
+		                        sceneGoal: prefer(pack.sceneGoal, existing.sceneGoal),
+		                        castArcBeat: prefer(pack.castArcBeat, existing.castArcBeat),
+		                        subplotPressure: prefer(pack.subplotPressure, existing.subplotPressure),
+		                        dialogueTurn: prefer(pack.dialogueTurn, existing.dialogueTurn),
+		                        sensoryWorldHook: prefer(pack.sensoryWorldHook, existing.sensoryWorldHook),
+		                        turnOrPayoff: prefer(pack.turnOrPayoff, existing.turnOrPayoff)
+		                    });
+		                });
+		                after = scoreBeatCoverage(novelData, { chapterCap: cap });
+		            }
+		        } finally {
+		            window.__enrichBpRetry2 = false;
+		        }
+		    }
+		    
 		    novelData.lastBeatEnrich = { before: before, after: after, ts: new Date().toISOString() };
 		    window.__lastBeatEnrich = novelData.lastBeatEnrich;
 		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below beat floors)';
