@@ -5973,14 +5973,15 @@ return c && c.name && c.backstory && c.arc; });
 
 
 		/** B2 anti-slop tells — revise-only multipass; does NOT fail-close runQualityGate. */
-		const NW_SLOP_TELLS = ['cadence', 'stockMetaphor', 'hedgeStack', 'nameEcho', 'emotionLabel', 'overExplain'];
+		const NW_SLOP_TELLS = ['cadence', 'stockMetaphor', 'hedgeStack', 'nameEcho', 'emotionLabel', 'overExplain', 'chapterEcho'];
 		const NW_SLOP_TELL_FLOORS = {
 			cadence: 60,
 			stockMetaphor: 55,
 			hedgeStack: 50,
 			nameEcho: 55,
 			emotionLabel: 50,
-			overExplain: 55
+			overExplain: 55,
+			chapterEcho: 55
 		};
 		const NW_SLOP_METAPHOR_BANK = [
 			'heart of gold', 'cold as ice', 'time stood still', 'double-edged sword',
@@ -6110,6 +6111,66 @@ return c && c.name && c.backstory && c.arc; });
 			}
 			return { score: _slopClamp(worst >= 0.55 ? 40 + worst * 50 : worst * 40), hits: hits };
 		}
+
+		function _scoreChapterEchoTell(chapterText, priorChapterTexts) {
+			const priors = Array.isArray(priorChapterTexts) ? priorChapterTexts.filter(function (t) { return String(t || '').trim(); }) : [];
+			const hits = [];
+			if (!priors.length) return { score: 0, hits: hits };
+			function contentSet(sent) {
+				const o = {};
+				_slopWords(String(sent).toLowerCase()).forEach(function (x) {
+					x = x.replace(/[^a-z]/g, '');
+					if (x.length > 3) o[x] = true;
+				});
+				return o;
+			}
+			function jaccard(a, b) {
+				const aKeys = Object.keys(a);
+				const bKeys = Object.keys(b);
+				if (!aKeys.length || !bKeys.length) return 0;
+				let inter = 0;
+				aKeys.forEach(function (x) { if (b[x]) inter++; });
+				const union = aKeys.length + bKeys.length - inter;
+				return union ? inter / union : 0;
+			}
+			const curSents = _slopSentences(chapterText);
+			const priorSets = [];
+			priors.forEach(function (pt, pi) {
+				_slopSentences(pt).forEach(function (s, si) {
+					const set = contentSet(s);
+					if (Object.keys(set).length) priorSets.push({ pi: pi, si: si, set: set });
+				});
+			});
+			if (!priorSets.length) return { score: 0, hits: hits };
+			let worst = 0;
+			let matchingSentences = 0;
+			for (let ci = 0; ci < curSents.length; ci++) {
+				const b = contentSet(curSents[ci]);
+				if (!Object.keys(b).length) continue;
+				let sentWorst = 0;
+				let bestLabel = '';
+				for (let p = 0; p < priorSets.length; p++) {
+					const j = jaccard(priorSets[p].set, b);
+					if (j > sentWorst) {
+						sentWorst = j;
+						bestLabel = 'ch' + (priorSets[p].pi + 1) + 's' + priorSets[p].si + '@cur' + ci + '=' + j.toFixed(2);
+					}
+				}
+				if (sentWorst > worst) worst = sentWorst;
+				if (sentWorst >= 0.55) {
+					matchingSentences++;
+					if (hits.length < 6) hits.push('echo:' + bestLabel);
+				}
+			}
+			let score = 0;
+			if (worst >= 0.55) {
+				score = 40 + worst * 50 + Math.min(30, matchingSentences * 5);
+			} else {
+				score = worst * 40;
+			}
+			return { score: _slopClamp(score), hits: hits };
+		}
+
 		const _SLOP_SCORERS = {
 			cadence: _scoreCadenceTell,
 			stockMetaphor: _scoreStockMetaphorTell,
@@ -6118,12 +6179,21 @@ return c && c.name && c.backstory && c.arc; });
 			emotionLabel: _scoreEmotionLabelTell,
 			overExplain: _scoreOverExplainTell
 		};
-		function scoreSlopTells(text, floors) {
-			floors = Object.assign({}, NW_SLOP_TELL_FLOORS, floors || {});
+		function scoreSlopTells(text, floorsOrOpts) {
+			const opts = floorsOrOpts || {};
+			const priorChapters = Array.isArray(opts.priorChapters) ? opts.priorChapters : null;
+			const floorsIn = Object.assign({}, opts);
+			delete floorsIn.priorChapters;
+			const floors = Object.assign({}, NW_SLOP_TELL_FLOORS, floorsIn);
 			const tells = {};
 			const failures = [];
 			NW_SLOP_TELLS.forEach(function (k) {
-				const r = _SLOP_SCORERS[k](text);
+				let r;
+				if (k === 'chapterEcho') {
+					r = priorChapters ? _scoreChapterEchoTell(text, priorChapters) : { score: 0, hits: [] };
+				} else {
+					r = _SLOP_SCORERS[k](text);
+				}
 				const ok = r.score < floors[k];
 				tells[k] = { score: r.score, hits: r.hits, ok: ok };
 				if (!ok) failures.push('tell_high:' + k + ':' + r.score + '>=' + floors[k]);
@@ -6139,6 +6209,7 @@ return c && c.name && c.backstory && c.arc; });
 			if (t.nameEcho && !t.nameEcho.ok) lines.push('NAME-ECHO: in narration, use pronoun/role after first mention in a beat; keep spoken address in dialogue.');
 			if (t.emotionLabel && !t.emotionLabel.ok) lines.push('EMOTION-LABEL: show via action/gesture/dialogue; delete "felt/was [emotion]" labels.');
 			if (t.overExplain && !t.overExplain.ok) lines.push('OVER-EXPLAIN: delete adjacent restatement; let the paid beat stand once.');
+			if (t.chapterEcho && !t.chapterEcho.ok) lines.push('CHAPTER-ECHO: this chapter re-narrates a prior chapter beat; cut cross-chapter paraphrase/scene replay; keep only new paid progress.');
 			if (tellReport && tellReport.failures && tellReport.failures.length) {
 				lines.push('Tells: ' + tellReport.failures.join('; '));
 			}
@@ -6170,7 +6241,13 @@ return c && c.name && c.backstory && c.arc; });
 			}
 			// B2: revise-only anti-slop — nest under maxAutoPasses; do not fail-close gate
 			if (!ctx.didAntiSlopPass && typeof scoreSlopTells === 'function') {
-				const tell = scoreSlopTells(novelData.chapters[chapterNum - 1] || '');
+				const chIdx = chapterNum - 1;
+				const chText = (novelData.chapters && novelData.chapters[chIdx]) || '';
+				const prior = (chapterNum >= 2 && Array.isArray(novelData.chapters))
+					? novelData.chapters.slice(0, chIdx).filter(function (t) { return String(t || '').trim(); })
+					: [];
+				const tellOpts = prior.length ? { priorChapters: prior } : undefined;
+				const tell = scoreSlopTells(chText, tellOpts);
 				if (!tell.passed) return { needed: true, reason: 'anti-slop-tells', tellReport: tell };
 			}
 			return { needed: false, reason: null };
@@ -6200,7 +6277,14 @@ return c && c.name && c.backstory && c.arc; });
 				if (kind === 'continuity') {
 					brief = buildContinuityReviseBrief(chapterNum);
 				} else if (kind === 'anti-slop') {
-					const tellR = (opts.tellReport) || scoreSlopTells(novelData.chapters[chapterNum - 1] || '');
+					let tellR = opts.tellReport;
+					if (!tellR) {
+						const _chIdx = chapterNum - 1;
+						const _prior = (chapterNum >= 2 && Array.isArray(novelData.chapters))
+							? novelData.chapters.slice(0, _chIdx).filter(function (t) { return String(t || '').trim(); })
+							: [];
+						tellR = scoreSlopTells(novelData.chapters[_chIdx] || '', _prior.length ? { priorChapters: _prior } : undefined);
+					}
 					brief = buildAntiSlopReviseBrief(tellR);
 				} else {
 					brief = String((novelData.chapterImprovements || [])[chapterNum - 1] || '').trim() || buildQualityReviseBrief(before);
