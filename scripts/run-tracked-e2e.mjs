@@ -333,6 +333,13 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     const beforeSnap = await bookSnap(page);
     const beforeCalls = beforeSnap.totals.calls;
     const r = await runStep(page, tab, name, stepLabel, fn, evalFn);
+    // HARD_STOP_ENRICH_STEP: enrich evaluate/throw must abort before outlines
+    if (enrichMode && !r.ok && /enrichCharacters|enrichSubplots/.test(stepLabel)) {
+      report.steps.push({ name: stepLabel, ok: false, error: r.err });
+      fs.writeFileSync(REPORT_JSON, JSON.stringify(Object.assign({}, report, { partial: true }), null, 2));
+      throw new Error('ENRICH HARD-STOP [' + stepLabel + ']: ' + (r.err || 'failed'));
+    }
+
     if (r.ok && assertOpts) {
       try {
         const contentLen = assertOpts.contentFromResult
