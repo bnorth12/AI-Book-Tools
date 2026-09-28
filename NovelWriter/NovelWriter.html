@@ -1482,7 +1482,7 @@ let activeAICallCount = 0;
 			subplots: ['subplots', 'subplotList', 'threads', 'Subplots'],
 			name: ['name', 'Name', 'characterName', 'charName'],
 			backstory: ['backstory', 'Backstory', 'backStory', 'bio', 'history'],
-			arc: ['arc', 'Arc', 'characterArc', 'charArc', 'arcSummary'],
+			arc: ['arc', 'Arc', 'characterArc', 'charArc', 'arcSummary', 'character_arc', 'story_arc', 'arcText', 'throughline', 'ArcSummary'],
 			obligations: ['obligations', 'beats', 'dramatizableObligations', 'mustDramatize'],
 			novelOutline: ['novelOutline', 'outline', 'novel_outline'],
 			plotOutline: ['plotOutline', 'plot', 'generalPlotOutline'],
@@ -1656,6 +1656,18 @@ let activeAICallCount = 0;
 				}
 			}
 			return undefined;
+		}
+
+
+		function preferLongerField(a, b) {
+			const sa = String(a || '').trim();
+			const sb = String(b || '').trim();
+			if (!sa) return sb;
+			if (!sb) return sa;
+			const wa = sa.split(/\s+/).filter(Boolean).length;
+			const wb = sb.split(/\s+/).filter(Boolean).length;
+			if (wa !== wb) return wa > wb ? sa : sb;
+			return sa.length >= sb.length ? sa : sb;
 		}
 
 		function normalizeCharacterItem(raw) {
@@ -3697,8 +3709,12 @@ const messages = [
 		        if (!hit) return existing;
 		        return Object.assign({}, existing, {
 		            name: hit.name || existing.name || '',
-		            backstory: hit.backstory || existing.backstory || '',
-		            arc: hit.arc || existing.arc || ''
+		            backstory: (typeof preferLongerField === 'function')
+		                ? preferLongerField(hit.backstory, existing.backstory)
+		                : (hit.backstory || existing.backstory || ''),
+		            arc: (typeof preferLongerField === 'function')
+		                ? preferLongerField(hit.arc, existing.arc)
+		                : (hit.arc || existing.arc || '')
 		        });
 		    });
 		    const charList = document.getElementById('characterList');
@@ -3719,84 +3735,85 @@ const messages = [
 		    if (numEl) numEl.value = novelData.characters.length || 1;
 		    if (typeof updateCharacterCounter === 'function') updateCharacterCounter();
 		    let after = scoreCastDensity(novelData.characters, { novelData: novelData });
-		    // TARGETED_ENRICH_RETRY: one pass for still-thin names (near-miss floors like 74<80)
-		    if (!after.passed) {
-		        const thin = (after.perChar || []).filter(function (r) { return r && (!r.backstoryOk || !r.arcOk); });
-		        const thinNames = thin.map(function (r) { return r.name; }).filter(Boolean);
-		        if (thinNames.length && !window.__enrichCastRetrying) {
-		            window.__enrichCastRetrying = true;
-		            try {
+		    // TARGETED_ENRICH_RETRY: up to 2 passes for still-thin names (near-miss floors / thin seed arcs)
+		    if (!after.passed && !window.__enrichCastRetrying) {
+		        window.__enrichCastRetrying = true;
+		        try {
+		            for (let __retryN = 0; __retryN < 2 && !after.passed; __retryN++) {
+		                const thin = (after.perChar || []).filter(function (r) { return r && (!r.backstoryOk || !r.arcOk); });
+		                const thinNames = thin.map(function (r) { return r.name; }).filter(Boolean);
+		                if (!thinNames.length) break;
 		                const thinChars = (novelData.characters || []).filter(function (c) {
 		                    return thinNames.some(function (n) { return String((c && c.name) || '').trim().toLowerCase() === String(n).trim().toLowerCase(); });
 		                });
 		                const retryPrompt = [
-		                    'TARGETED DENSIFY RETRY — only these characters are still below floors:',
+		                    'TARGETED DENSIFY RETRY #' + (__retryN + 1) + ' - only these characters are still below floors:',
 		                    JSON.stringify(thinChars.map(function (c) {
-		                        return { name: c.name, backstoryWords: (String(c.backstory || '').trim().split(/\s+/).filter(Boolean).length), arcWords: (String(c.arc || '').trim().split(/\s+/).filter(Boolean).length), backstory: c.backstory || '', arc: c.arc || '' };
+		                        const bw = (String(c.backstory || '').trim().split(/\s+/).filter(Boolean).length);
+		                        const aw = (String(c.arc || '').trim().split(/\s+/).filter(Boolean).length);
+		                        return { name: c.name, backstoryWords: bw, arcWords: aw, needBackstory: bw < floors.backstory, needArc: aw < floors.arc, backstory: c.backstory || '', arc: c.arc || '' };
 		                    })),
-		                    'Floors: backstory >= ' + floors.backstory + ' words, arc >= ' + floors.arc + ' words.',
-		                    'Expand ONLY these names. Keep identity. Add motives/wounds/relationships/subplot pressure — no adjective pad.',
+		                    'HARD FLOORS (pipeline fails if missed): backstory >= ' + floors.backstory + ' words, arc >= ' + floors.arc + ' words.',
+		                    'For EVERY name with needArc=true: rewrite arc to at least ' + floors.arc + ' words covering start-state, subplot pressure on this person, a midpoint choice, and an end-state obligation tied to the world. Do NOT keep arrow-tagline arcs (e.g. "cynic → steward").',
+		                    'For EVERY name with needBackstory=true: expand backstory with motives, wounds, relationships, and why they act in chapter beats.',
+		                    'Keep identity/names. No adjective pad. Return FULL backstory AND arc strings for each listed name even if only one field was thin.',
 		                    'Return JSON only: {"characters":[{"name":"...","backstory":"...","arc":"...","obligations":["..."]}, ...]}'
 		                ].join('\n');
-		                if (typeof schemaPromptLines === 'function') {
-		                    retryPrompt; // schema already in first pass
-		                }
 		                const retryMessages = [
-		                    { role: 'system', content: getSkillSystemPrompt('tab2.enrichCharacters', 'You are a cast densifier finishing thin rows only.') },
+		                    { role: 'system', content: getSkillSystemPrompt('tab2.enrichCharacters', 'You are a cast densifier finishing thin rows only. Expand thin arcs to floor length with dramatizable beats; never leave arrow-tagline stubs.') },
 		                    { role: 'user', content: retryPrompt }
 		                ];
 		                requestLog.lastPrompt = retryMessages[1].content;
-		                requestLog.status = 'Pending (targeted densify retry)';
+		                requestLog.status = 'Pending (targeted densify retry #' + (__retryN + 1) + ')';
 		                requestLog.originTab = 'tab2';
 		                updateRequestLog();
 		                const retryResp = await callAI(retryMessages, document.getElementById('tab2'), {
-		                    max_tokens: Math.max(8000, parseInt(document.getElementById('maxTokens')?.value || '0', 10) || 0),
+		                    max_tokens: Math.max(10000, parseInt(document.getElementById('maxTokens')?.value || '0', 10) || 0),
 		                    operationName: 'enrichCharactersRetry'
 		                });
 		                const retryNorm = (typeof normalizeInbound === 'function')
 		                    ? normalizeInbound('tab2.enrichCharacters', retryResp, { novelData: novelData })
 		                    : retryResp;
 		                const retryChars = (retryNorm && retryNorm.characters) || (retryResp && retryResp.characters) || [];
-		                if (Array.isArray(retryChars) && retryChars.length) {
-		                    const byName2 = {};
-		                    retryChars.forEach(function (ch) {
-		                        if (ch && ch.name) byName2[String(ch.name).trim().toLowerCase()] = ch;
-		                    });
-		                    novelData.characters = (novelData.characters || []).map(function (existing) {
-		                        const key = String((existing && existing.name) || '').trim().toLowerCase();
-		                        const upd = byName2[key];
-		                        if (!upd) return existing;
-		                        return {
-		                            name: existing.name,
-		                            backstory: (upd.backstory && String(upd.backstory).trim()) || existing.backstory || '',
-		                            arc: (upd.arc && String(upd.arc).trim()) || existing.arc || '',
-		                            obligations: Array.isArray(upd.obligations) ? upd.obligations : (existing.obligations || [])
-		                        };
-		                    });
-		                    // sync DOM
-		                    const list = document.getElementById('characterList');
-		                    if (list) {
-		                        list.querySelectorAll('.character').forEach(function (div) {
-		                            const nameEl = div.querySelector('.charName');
-		                            const key = String((nameEl && nameEl.value) || '').trim().toLowerCase();
-		                            const char = (novelData.characters || []).find(function (c) {
-		                                return String((c && c.name) || '').trim().toLowerCase() === key;
-		                            });
-		                            if (!char) return;
-		                            const bsEl = div.querySelector('.charBackstory');
-		                            const arcEl = div.querySelector('.charArc');
-		                            if (bsEl && char.backstory) bsEl.value = char.backstory;
-		                            if (arcEl && char.arc) arcEl.value = char.arc;
+		                if (!Array.isArray(retryChars) || !retryChars.length) continue;
+		                const byName2 = {};
+		                retryChars.forEach(function (ch) {
+		                    if (ch && ch.name) byName2[String(ch.name).trim().toLowerCase()] = ch;
+		                });
+		                novelData.characters = (novelData.characters || []).map(function (existing) {
+		                    const key = String((existing && existing.name) || '').trim().toLowerCase();
+		                    const upd = byName2[key];
+		                    if (!upd) return existing;
+		                    const prefer = (typeof preferLongerField === 'function') ? preferLongerField : function (a, b) { return (a && String(a).trim()) || b || ''; };
+		                    return {
+		                        name: existing.name,
+		                        backstory: prefer(upd.backstory, existing.backstory),
+		                        arc: prefer(upd.arc, existing.arc),
+		                        obligations: Array.isArray(upd.obligations) && upd.obligations.length ? upd.obligations : (existing.obligations || [])
+		                    };
+		                });
+		                const list = document.getElementById('characterList');
+		                if (list) {
+		                    list.querySelectorAll('.character').forEach(function (div) {
+		                        const nameEl = div.querySelector('.charName');
+		                        const key = String((nameEl && nameEl.value) || '').trim().toLowerCase();
+		                        const char = (novelData.characters || []).find(function (c) {
+		                            return String((c && c.name) || '').trim().toLowerCase() === key;
 		                        });
-		                    }
-		                    after = scoreCastDensity(novelData.characters, { novelData: novelData });
+		                        if (!char) return;
+		                        const bsEl = div.querySelector('.charBackstory');
+		                        const arcEl = div.querySelector('.charArc');
+		                        if (bsEl && char.backstory) bsEl.value = char.backstory;
+		                        if (arcEl && char.arc) arcEl.value = char.arc;
+		                    });
 		                }
-		            } finally {
-		                window.__enrichCastRetrying = false;
+		                after = scoreCastDensity(novelData.characters, { novelData: novelData });
 		            }
+		        } finally {
+		            window.__enrichCastRetrying = false;
 		        }
 		    }
-		    novelData.lastCastEnrich = { before: before, after: after, ts: new Date().toISOString(), retried: !!(after && after.passed) };
+		    		    novelData.lastCastEnrich = { before: before, after: after, ts: new Date().toISOString(), retried: !!(after && after.passed) };
 		    window.__lastEnrichCast = novelData.lastCastEnrich;
 		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below density floor)';
 		    updateRequestLog();
