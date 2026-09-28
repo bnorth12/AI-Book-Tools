@@ -663,6 +663,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         { ok: spine.novelLen >= 400, msg: 'novelOutline empty/stub before prose len=' + spine.novelLen },
         { ok: spine.ch1Words >= 180, msg: 'Ch1 outline stub-thin before prose words=' + spine.ch1Words },
         { ok: spine.world, msg: 'worldBible missing before prose' },
+        { ok: (spine.blueprints || 0) >= 1, msg: 'chapterBlueprints missing before prose bp=' + spine.blueprints },
         { ok: spine.aiSlopRisk == null || spine.aiSlopRisk <= 65, msg: 'early-spine AI-slop risk too high before prose: ' + spine.aiSlopRisk + ' notes=' + (spine.slopNotes || []).join(';') }
       ]);
       appendProgress('### Phase - pre-prose spine gate\n- Status: ok\n- Eval: subplots=' + spine.subplots + ' plot=' + spine.plotLen + ' novel=' + spine.novelLen + ' ch1words=' + spine.ch1Words + ' bp=' + spine.blueprints + ' world=' + spine.world + ' slopRisk=' + spine.aiSlopRisk + ' consistency=' + spine.consistency + '. Early inputs dense enough to avoid multiplying slop into chapters.\n');
@@ -676,6 +677,76 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   }
 
   if (!report.config.outlineOnly) {
+  // Prove Tab5 Draft pack binds chapterBlueprints + digests (no API burn).
+  await doStep(5, 'Generate Chapters', 'draftPack-blueprint-bind', async () => {
+    return page.evaluate(() => {
+      if (typeof buildGenerateChapterUserContent !== 'function') {
+        throw new Error('buildGenerateChapterUserContent missing');
+      }
+      if (typeof scoreObligationCoverage !== 'function') {
+        throw new Error('scoreObligationCoverage missing');
+      }
+      if (typeof getPlotDigestText !== 'function' || typeof getSettingDigestText !== 'function') {
+        throw new Error('plot/setting digest helpers missing');
+      }
+      const pack = buildGenerateChapterUserContent(1, 1, {});
+      const need = [
+        'Chapter Blueprint (obligations JSON)',
+        'OBLIGATION CHECKLIST',
+        'arcStep',
+        'characterBeats',
+        'subplotPressure',
+        'worldHooks',
+        'allowedPayoffs',
+        'deferredThreads',
+        'ObligationRetrieve'
+      ];
+      const missing = need.filter((k) => pack.indexOf(k) < 0);
+      if (missing.length) throw new Error('Draft pack missing blueprint fields: ' + missing.join(','));
+      if (/~700-900 words/.test(pack) || /~400-word atmospheric/.test(pack)) {
+        throw new Error('Draft pack still has pad-style word quotas');
+      }
+      // Digests must not prefer empty generalPlot/setting when plotOutline/worldBible exist
+      const plotDig = getPlotDigestText(320);
+      const setDig = getSettingDigestText(280);
+      const plotSrc = String(novelData.plotOutline || novelData.generalPlot || '');
+      const hasWb = !!(novelData.worldBible || novelData.world);
+      if (plotSrc.length >= 80 && (!plotDig || plotDig === 'No plot provided' || plotDig.length < 40)) {
+        throw new Error('plot digest empty despite plotOutline/generalPlot');
+      }
+      if (!String(novelData.setting || '').trim() && hasWb && (!setDig || setDig === 'No setting provided')) {
+        throw new Error('setting digest empty despite worldBible');
+      }
+      // Coverage gate exists: score a deliberately empty text → must fail
+      const emptyCov = scoreObligationCoverage('', 1);
+      if (emptyCov.passed) throw new Error('coverage gate false-passed on empty prose');
+      // Score against blueprint with synthetic prose containing beat names
+      const bp = (typeof getChapterBlueprint === 'function') ? getChapterBlueprint(1) : null;
+      const names = ((bp && bp.characterBeats) || []).map((b) => (b && b.name) || '').filter(Boolean);
+      const hooks = (bp && bp.worldHooks) || [];
+      const synth = ['The arc unfolds.', ...names, ...hooks, String((bp && bp.arcStep) || ''), String(((bp && bp.subplotPressure) || [])[0] || '')].join(' ');
+      const synthCov = scoreObligationCoverage(synth + ' ' + synth, 1);
+      return {
+        packChars: pack.length,
+        plotDigChars: (plotDig || '').length,
+        setDigChars: (setDig || '').length,
+        emptyPassed: !!emptyCov.passed,
+        emptyFailures: (emptyCov.failures || []).slice(0, 6),
+        synthRatio: synthCov.ratio,
+        synthPassed: !!synthCov.passed,
+        synthHits: (synthCov.hits || []).slice(0, 8),
+        hasBlueprint: !!bp,
+        helpers: ['buildGenerateChapterUserContent', 'scoreObligationCoverage', 'getPlotDigestText', 'getSettingDigestText']
+      };
+    });
+  }, (r) => {
+    if (!r || !r.hasBlueprint) throw new Error('draftPack-blueprint-bind: no chapter blueprint for Ch1');
+    if (r.emptyPassed) throw new Error('draftPack-blueprint-bind: empty coverage must fail-closed');
+    return 'packChars=' + r.packChars + ' plotDig=' + r.plotDigChars + ' setDig=' + r.setDigChars +
+      ' emptyFail=' + (r.emptyFailures || []).join(',') + ' synthRatio=' + r.synthRatio +
+      ' synthHits=' + (r.synthHits || []).join('|');
+  }, { allowNoCall: true });
+
   await doStep(5, 'Generate Chapters', 'generateChapter1+quality', async () => {
     return page.evaluate(async () => {
       await generateChapter(1);
@@ -703,6 +774,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         Object.assign(NW_QUALITY_GATE, window.__NW_GATE_BACKUP);
         window.__NW_GATE_BACKUP = null;
       }
+      const cov = novelData.lastObligationCoverage || null;
       return {
         textLen: text.length,
         heur: heur,
@@ -721,7 +793,16 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         multiPassCount: multi.length,
         judgeAligned: alignNow ? alignNow.aligned : null,
         judgeDivergences: alignNow && alignNow.divergences ? alignNow.divergences.slice() : [],
-        gateDriver: gate && gate.driver
+        gateDriver: gate && gate.driver,
+        obligationCoverage: cov ? {
+          passed: !!cov.passed,
+          ratio: cov.ratio,
+          covered: cov.covered,
+          total: cov.total,
+          words: cov.words,
+          failures: (cov.failures || []).slice(0, 6),
+          misses: (cov.misses || []).slice(0, 8)
+        } : null
       };
     });
   }, (a, r) => {

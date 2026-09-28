@@ -16,6 +16,7 @@ This note lists **copy-ready seams** so a future BookEditor / BookDecomposer rew
 | **Judge advisory** | LLM scores + alignment/divergence log; must not override fail-closed unless product opts in | `judgeProseQualityLLM` / `alignJudgeWithGate` |
 | **Revise brief** | Text instructions derived from failures + attribute craft lines | `buildQualityReviseBrief` |
 | **Continuity brief** | Continuity risks + cast/world anchors + attribute snapshot | `buildContinuityReviseBrief` |
+| **ObligationCoverage** | Lightweight beat/name/location coverage vs chapter blueprint; fail-closed when spine obligations missing or short+low-coverage (not a token-success signal). Portable shape: `{ covered, total, ratio, hits[], misses[], words, passed, failures[] }` | `scoreObligationCoverage` / `assertObligationCoverageOrThrow` — **no** Editor impl |
 | **Multipass** | Cap (NW: `maxAutoPasses=2`); kinds `gate-fail` \| `continuity` \| `residual-staged`; log `qualityMultiPassLog[]` with `{chapter, pass, kind, passedBefore, passedAfter, ...}` | QE5 |
 
 ## Explicitly out of contract (NW-only / product UI)

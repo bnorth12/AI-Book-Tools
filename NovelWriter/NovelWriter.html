@@ -2609,6 +2609,349 @@ let activeAICallCount = 0;
 			return digestText(text || '', 400);
 		}
 
+		/** Prefer annotated plotOutline when generalPlot is empty (packing alignment). */
+		function getPlotDigestText(maxChars) {
+			maxChars = maxChars == null ? 320 : maxChars;
+			const src = String(novelData.plotOutline || novelData.generalPlot || '').trim();
+			return digestText(src || 'No plot provided', maxChars);
+		}
+
+		/** Prefer setting; else worldBible summary/factions/locations via digestWorldBible. */
+		function getSettingDigestText(maxChars) {
+			maxChars = maxChars == null ? 280 : maxChars;
+			const setting = String(novelData.setting || '').trim();
+			if (setting) return digestText(setting, maxChars);
+			const wb = digestWorldBible(novelData.worldBible || novelData.world);
+			return wb || 'No setting provided';
+		}
+
+		/** Normalize chapterBlueprints[i] (object or JSON string) for chapter Num. */
+		function getChapterBlueprint(chapterNum) {
+			const list = novelData.chapterBlueprints;
+			if (!Array.isArray(list) || !list.length) return null;
+			let raw = list[chapterNum - 1];
+			if (raw == null) {
+				raw = list.find(function (b) {
+					return b && (b.chapter === chapterNum || b.chapter === String(chapterNum));
+				});
+			}
+			if (raw == null) return null;
+			if (typeof raw === 'string') {
+				try { return JSON.parse(raw); } catch (_) {
+					return { chapter: chapterNum, arcStep: raw };
+				}
+			}
+			return (typeof raw === 'object') ? raw : null;
+		}
+
+		function digestChapterBlueprint(bp) {
+			if (!bp || typeof bp !== 'object') return null;
+			const beats = Array.isArray(bp.characterBeats) ? bp.characterBeats : [];
+			return {
+				chapter: bp.chapter,
+				role: bp.role || '',
+				arcStep: bp.arcStep || '',
+				subplotPressure: Array.isArray(bp.subplotPressure)
+					? bp.subplotPressure.slice(0, 6).map(String)
+					: (bp.subplotPressure ? [String(bp.subplotPressure)] : []),
+				characterBeats: beats.slice(0, 8).map(function (b) {
+					if (!b) return null;
+					if (typeof b === 'string') return { name: '', beat: digestText(b, 160) };
+					return { name: String(b.name || ''), beat: digestText(String(b.beat || ''), 160) };
+				}).filter(Boolean),
+				worldHooks: (Array.isArray(bp.worldHooks) ? bp.worldHooks : []).slice(0, 8).map(String),
+				allowedPayoffs: (Array.isArray(bp.allowedPayoffs) ? bp.allowedPayoffs : []).slice(0, 6).map(String),
+				deferredThreads: (Array.isArray(bp.deferredThreads) ? bp.deferredThreads : []).slice(0, 8).map(String)
+			};
+		}
+
+		/** Obligation checklist for Draft — executes beats; no pad-to-N word quotas. */
+		function buildObligationChecklist(bp) {
+			const d = digestChapterBlueprint(bp) || {};
+			const lines = [];
+			lines.push('OBLIGATION CHECKLIST (Draft executes these; success = dramatized obligations, NOT word quotas):');
+			if (d.role) lines.push('- Role: ' + d.role);
+			if (d.arcStep) lines.push('- Arc step: ' + d.arcStep);
+			(d.characterBeats || []).forEach(function (b) {
+				lines.push('- Character beat — ' + (b.name || '?') + ': ' + (b.beat || ''));
+			});
+			(d.subplotPressure || []).forEach(function (s) {
+				lines.push('- Subplot pressure: ' + s);
+			});
+			(d.worldHooks || []).forEach(function (h) {
+				lines.push('- World hook / location: ' + h);
+			});
+			(d.allowedPayoffs || []).forEach(function (p) {
+				lines.push('- Allowed payoff: ' + p);
+			});
+			(d.deferredThreads || []).forEach(function (t) {
+				lines.push('- Deferred (do not resolve early): ' + t);
+			});
+			lines.push('- Do NOT invent major throughlines, cast, or factions beyond the provided lists.');
+			lines.push('- If the draft is short, revise for the missing beat above — do not pad with filler words.');
+			return lines.join('\n');
+		}
+
+		/**
+		 * Local book-graph seed (EvidencePack-compatible). Retrieves ChN obligations,
+		 * active subplot threads, cast arc snippets, world hooks. No series KG.
+		 */
+		function retrieveChapterContextEvidence(chapterNum, tokenBudgetHint) {
+			const budget = Number(tokenBudgetHint) || 1200;
+			const bp = getChapterBlueprint(chapterNum);
+			const dig = digestChapterBlueprint(bp);
+			const excerpts = [];
+			function pushEx(refId, entityType, text, score) {
+				const t = _trimExcerpt(String(text || ''), 360);
+				if (!t) return;
+				excerpts.push({ refId: refId, entityType: entityType, text: t, score: score, citations: [] });
+			}
+			if (dig) {
+				if (dig.role) pushEx('bp-role-' + chapterNum, 'PlotBeat', 'Role: ' + dig.role, 0.9);
+				if (dig.arcStep) pushEx('bp-arc-' + chapterNum, 'PlotBeat', 'ArcStep: ' + dig.arcStep, 0.95);
+				(dig.characterBeats || []).forEach(function (b, i) {
+					pushEx('bp-char-' + chapterNum + '-' + i, 'Character', (b.name || '') + ': ' + (b.beat || ''), 0.93);
+				});
+				(dig.subplotPressure || []).forEach(function (s, i) {
+					pushEx('bp-sub-' + chapterNum + '-' + i, 'PlotBeat', String(s), 0.88);
+				});
+				(dig.worldHooks || []).forEach(function (h, i) {
+					pushEx('bp-world-' + chapterNum + '-' + i, 'WorldHook', String(h), 0.86);
+				});
+				(dig.allowedPayoffs || []).forEach(function (p, i) {
+					pushEx('bp-pay-' + chapterNum + '-' + i, 'PlotBeat', 'Payoff: ' + p, 0.8);
+				});
+				(dig.deferredThreads || []).forEach(function (t, i) {
+					pushEx('bp-def-' + chapterNum + '-' + i, 'PlotBeat', 'Deferred: ' + t, 0.72);
+				});
+			}
+			// Cast arc snippets for named beats (local only)
+			const named = (dig && dig.characterBeats) ? dig.characterBeats.map(function (b) { return (b.name || '').toLowerCase(); }).filter(Boolean) : [];
+			(novelData.characters || []).forEach(function (c, i) {
+				if (!c || !c.name) return;
+				const hit = !named.length || named.some(function (n) {
+					return String(c.name).toLowerCase().indexOf(n) >= 0 || n.indexOf(String(c.name).toLowerCase()) >= 0;
+				});
+				if (!hit && named.length) return;
+				pushEx('cast-arc-' + chapterNum + '-' + i, 'Character',
+					[c.name, c.arc, c.backstory].filter(Boolean).join(' | '), 0.78);
+			});
+			excerpts.sort(function (a, b) { return (b.score || 0) - (a.score || 0); });
+			const kept = [];
+			let used = 0;
+			for (let i = 0; i < excerpts.length; i++) {
+				const ex = excerpts[i];
+				const cost = (typeof _estimateTokens === 'function') ? _estimateTokens(ex.text) : Math.ceil((ex.text || '').length / 4);
+				if (kept.length && used + cost > budget) continue;
+				kept.push(ex);
+				used += cost;
+			}
+			return {
+				schemaVersion: '0.1',
+				projectId: novelData.title || 'untitled',
+				query: {
+					goal: 'chapter-obligations',
+					filters: {
+						genre: novelData.genre || '',
+						chapter: chapterNum,
+						characterIds: (novelData.characters || []).map(function (c) { return c && c.name; }).filter(Boolean),
+						themes: [],
+						domain: 'fiction',
+						projectGoal: '',
+						safetyTopics: [],
+						taxonIds: []
+					}
+				},
+				excerpts: kept,
+				graphPath: [],
+				expandOrNarrow: 'hold',
+				tokenBudgetHint: budget,
+				_meta: { estimatedTokens: used, source: 'chapterBlueprints-local', kbEnabled: (typeof isKbEnabled === 'function') ? isKbEnabled() : false }
+			};
+		}
+
+		/**
+		 * Lightweight obligation coverage vs chapterBlueprints.
+		 * Short + low-coverage => coverage fail (not token success).
+		 */
+		function scoreObligationCoverage(text, chapterNum) {
+			const bp = getChapterBlueprint(chapterNum);
+			const dig = digestChapterBlueprint(bp);
+			const raw = String(text || '');
+			const lower = raw.toLowerCase();
+			const words = raw.trim() ? raw.trim().split(/\s+/).length : 0;
+			const required = [];
+			const hits = [];
+			const misses = [];
+			function mark(label, ok) {
+				required.push(label);
+				(ok ? hits : misses).push(label);
+				return ok;
+			}
+			function namePresent(name) {
+				const n = String(name || '').trim();
+				if (!n) return false;
+				if (lower.indexOf(n.toLowerCase()) >= 0) return true;
+				const parts = n.replace(/^Dr\.\s+/i, '').split(/\s+/).filter(function (p) { return p.length >= 3; });
+				// Prefer surname (≥4) hit
+				for (let i = parts.length - 1; i >= 0; i--) {
+					if (parts[i].length >= 4 && lower.indexOf(parts[i].toLowerCase()) >= 0) return true;
+				}
+				return parts.some(function (p) { return p.length >= 4 && lower.indexOf(p.toLowerCase()) >= 0; });
+			}
+			if (!dig) {
+				return {
+					covered: 0, total: 0, ratio: 0, hits: [], misses: ['no-blueprint'],
+					words: words, spineMissing: true, passed: false,
+					failures: ['blueprint_missing']
+				};
+			}
+			if (dig.arcStep) {
+				const toks = String(dig.arcStep).toLowerCase().split(/[^a-z0-9]+/).filter(function (t) { return t.length >= 5; }).slice(0, 8);
+				const hitCount = toks.filter(function (t) { return lower.indexOf(t) >= 0; }).length;
+				mark('arcStep', toks.length ? hitCount >= Math.min(2, toks.length) : true);
+			}
+			(dig.characterBeats || []).forEach(function (b) {
+				if (b && b.name) mark('char:' + b.name, namePresent(b.name));
+			});
+			(dig.worldHooks || []).forEach(function (h) {
+				const toks = String(h).split(/[^a-zA-Z0-9]+/).filter(function (t) { return t.length >= 4; });
+				const ok = toks.length
+					? toks.some(function (t) { return lower.indexOf(t.toLowerCase()) >= 0; })
+					: lower.indexOf(String(h).toLowerCase()) >= 0;
+				mark('world:' + h, ok);
+			});
+			(dig.subplotPressure || []).forEach(function (s, i) {
+				const toks = String(s).toLowerCase().split(/[^a-z0-9]+/).filter(function (t) { return t.length >= 5; }).slice(0, 5);
+				mark('subplot:' + i, toks.length ? toks.some(function (t) { return lower.indexOf(t) >= 0; }) : true);
+			});
+			const total = required.length || 1;
+			const covered = hits.length;
+			const ratio = covered / total;
+			const failures = [];
+			const charMiss = misses.filter(function (m) { return m.indexOf('char:') === 0; });
+			if (charMiss.length) failures.push('missing_characterBeats:' + charMiss.join(','));
+			const subMiss = misses.filter(function (m) { return m.indexOf('subplot:') === 0; });
+			if (subMiss.length && (dig.subplotPressure || []).length) failures.push('subplot_not_advanced');
+			const worldReq = (dig.worldHooks || []).length;
+			const worldMiss = misses.filter(function (m) { return m.indexOf('world:') === 0; });
+			if (worldReq && worldMiss.length === worldReq) failures.push('location_break');
+			if (misses.indexOf('arcStep') >= 0) failures.push('arcStep_missing');
+			if (ratio < 0.5) failures.push('obligation_coverage<0.5');
+			if (words < 120 && ratio < 0.75) failures.push('short_low_coverage');
+			return {
+				covered: covered,
+				total: total,
+				ratio: Math.round(ratio * 1000) / 1000,
+				hits: hits,
+				misses: misses,
+				words: words,
+				passed: failures.length === 0,
+				failures: failures,
+				blueprint: dig
+			};
+		}
+
+		function assertObligationCoverageOrThrow(chapterNum, text) {
+			const cov = scoreObligationCoverage(text, chapterNum);
+			novelData.lastObligationCoverage = cov;
+			if (!Array.isArray(novelData.obligationCoverageLog)) novelData.obligationCoverageLog = [];
+			novelData.obligationCoverageLog.push(Object.assign({ chapter: chapterNum, ts: new Date().toISOString() }, {
+				covered: cov.covered, total: cov.total, ratio: cov.ratio, words: cov.words,
+				passed: cov.passed, failures: (cov.failures || []).slice(), misses: (cov.misses || []).slice()
+			}));
+			if (!cov.passed) {
+				const msg = 'OBLIGATION COVERAGE FAIL-CLOSED [chapter ' + chapterNum + ']: ' +
+					(cov.failures || []).join(' | ') +
+					' (covered=' + cov.covered + '/' + cov.total + ' words=' + cov.words +
+					'). Short+low-coverage is a coverage fail, not token success. Missing: ' +
+					(cov.misses || []).join(', ');
+				console.error(msg);
+				if (typeof alert === 'function') alert(msg);
+				throw new Error(msg);
+			}
+			return cov;
+		}
+
+		/**
+		 * Build Tab5 Draft user-content pack (part 1 or 2). Exposes blueprint obligations
+		 * for E2E assert without requiring a live completion.
+		 */
+		function buildGenerateChapterUserContent(chapterNum, part, opts) {
+			opts = opts || {};
+			const chapterLength = Math.max(500, parseInt(novelData.chapterLength, 10) || 4000);
+			const targetWordsPerPart = Math.max(1000, Math.round(chapterLength / 2));
+			const halfLo = Math.max(800, Math.round(targetWordsPerPart * 0.9));
+			const halfHi = Math.max(halfLo + 200, Math.round(targetWordsPerPart * 1.15));
+			const halfBand = halfLo + '-' + halfHi;
+			const continuityPacket = opts.continuityPacket || (typeof buildChapterContinuityPacket === 'function' ? buildChapterContinuityPacket(chapterNum) : null);
+			const strictMode = !!novelData.continuityStrictMode;
+			const bp = getChapterBlueprint(chapterNum);
+			const bpDigest = digestChapterBlueprint(bp);
+			const checklist = buildObligationChecklist(bp);
+			const obligationPack = retrieveChapterContextEvidence(chapterNum, 1200);
+			const epBlock = (typeof evidencePackPromptBlock === 'function')
+				? evidencePackPromptBlock({ goal: 'generateChapter', chapter: chapterNum, tokenBudgetHint: 2000 })
+				: '';
+			const cast = (novelData.characters || []).filter(function (c) { return c && c.name && c.backstory && c.arc; });
+			const lines = [];
+			if (part === 1) {
+				lines.push('Generate the first half of Chapter ' + chapterNum + ' (rough guide ~' + halfBand + ' words — guide only, NOT a pad quota) for a ' + (novelData.genre || '') + ' novel titled "' + (novelData.title || 'Untitled') + '" with the following details:');
+			} else {
+				lines.push('Continue Chapter ' + chapterNum + ' from this first half to complete the second half (rough guide ~' + halfBand + ' words — guide only, NOT a pad quota) for a ' + (novelData.genre || '') + ' novel titled "' + (novelData.title || 'Untitled') + '":');
+				lines.push('- **First Half:** ' + (opts.firstHalf || ''));
+			}
+			lines.push('- **Story Arc (digest):** ' + digestText(novelData.storyArc || 'No arc provided', 280));
+			lines.push('- **Plot (digest):** ' + getPlotDigestText(320));
+			lines.push('- **Setting (digest):** ' + getSettingDigestText(280));
+			lines.push('- **Style Guide (digest):** ' + digestStyleGuide(novelData.styleGuide));
+			lines.push('- **Characters:** ' + JSON.stringify(digestCharacters(cast)));
+			lines.push('- **Subplots:** ' + JSON.stringify(digestSubplots(novelData.subplots, 3, 180)));
+			lines.push('- **Chapter Outline (digest):** ' + digestText((novelData.chapterOutlines || [])[chapterNum - 1] || 'No outline provided', 500));
+			lines.push('- **Chapter Arc (digest):** ' + digestText((novelData.chapterArcs || [])[chapterNum - 1] || 'No arc provided', 280));
+			lines.push('- **Chapter Blueprint (obligations JSON):** ' + JSON.stringify(bpDigest || { missing: true, chapter: chapterNum }));
+			lines.push('- **Continuity Packet:** ' + JSON.stringify(continuityPacket));
+			if (epBlock) {
+				lines.push('- **EvidencePack:**');
+				lines.push(epBlock);
+			}
+			lines.push('- **ObligationRetrieve (local EvidencePack-shaped):** ' + JSON.stringify({
+				schemaVersion: obligationPack.schemaVersion,
+				query: obligationPack.query,
+				excerpts: obligationPack.excerpts,
+				_meta: obligationPack._meta
+			}));
+			lines.push('');
+			lines.push('Requirements:');
+			lines.push('- **Execute obligations:** Dramatize every checklist item below. Success = obligations covered in scene — NOT hitting a word count.');
+			lines.push('- **Structure:** Seamless narrative, no headers/markers. Vivid prose, dialogue, pacing, stakes; sensory detail tied to setting. Paragraphs separated by "\\n\\n".');
+			lines.push('- **Cast / world bound:** Use only listed characters; do not invent major throughlines, cast, or factions beyond blueprint + cast + world lists.');
+			lines.push(checklist);
+			if (strictMode) {
+				if (part === 1) {
+					lines.push('- **Strict Continuity:** Do not contradict previous chapter outcomes, preserve unresolved threads from the continuity packet, and ensure this chapter logically sets up the next chapter intent.');
+				} else {
+					lines.push('- **Strict Continuity:** Resolve or advance at least one unresolved thread from the continuity packet and avoid introducing contradictions in character or world state.');
+				}
+			}
+			if (part === 1) {
+				lines.push('- End at a natural pause, preserving "\\n\\n" breaks.');
+				lines.push('');
+				lines.push('Return as JSON:');
+				lines.push('{');
+				lines.push('    "chapter": "<first half text with \\n\\n between paragraphs>"');
+				lines.push('}');
+			} else {
+				lines.push('');
+				lines.push('Return as JSON:');
+				lines.push('{');
+				lines.push('    "chapter": "<second half text with \\n\\n between paragraphs>"');
+				lines.push('}');
+			}
+			return lines.join('\n');
+		}
+
+
 		function buildPromptContextPack(options = {}) {
 			const chapterNum = options.chapterNum || null;
 			const includePacket = options.includePacket !== false;
@@ -2619,8 +2962,8 @@ let activeAICallCount = 0;
 				authorStyle: novelData.authorStyle || '',
 				styleGuideDigest: digestStyleGuide(novelData.styleGuide),
 				storyArcDigest: digestText(novelData.storyArc || '', 280),
-				plotDigest: digestText(novelData.generalPlot || '', 320),
-				settingDigest: digestText(novelData.setting || '', 280),
+				plotDigest: (typeof getPlotDigestText === 'function') ? getPlotDigestText(320) : digestText(novelData.plotOutline || novelData.generalPlot || '', 320),
+				settingDigest: (typeof getSettingDigestText === 'function') ? getSettingDigestText(280) : digestText(novelData.setting || '', 280),
 				worldBibleDigest: digestWorldBible(novelData.worldBible || novelData.world),
 				characters: digestCharacters(charSource),
 				subplots: digestSubplots(novelData.subplots, 3, 180)
@@ -3156,6 +3499,15 @@ let activeAICallCount = 0;
 					citations: []
 				});
 			});
+			// Local book-graph seed: chapter blueprint obligations (no series KG)
+			if (query.chapter && typeof retrieveChapterContextEvidence === 'function') {
+				try {
+					const obl = retrieveChapterContextEvidence(query.chapter, Math.min(800, budget));
+					(obl.excerpts || []).forEach(function (ex) {
+						excerpts.push(ex);
+					});
+				} catch (e) { console.warn('retrieveChapterContextEvidence', e); }
+			}
 			// Rank + greedy budget
 			excerpts.sort((a, b) => (b.score || 0) - (a.score || 0));
 			const kept = [];
@@ -3245,6 +3597,16 @@ let activeAICallCount = 0;
 			if (thr.minConsistency != null && (scores.consistency ?? 100) < thr.minConsistency) failures.push('consistency<' + thr.minConsistency);
 			if (thr.minFlow != null && (scores.flow ?? 100) < thr.minFlow) failures.push('flow<' + thr.minFlow);
 			if (thr.minPacing != null && (scores.pacing ?? 100) < thr.minPacing) failures.push('pacing<' + thr.minPacing);
+			let obligationCoverage = null;
+			if (opts.chapterNum && typeof scoreObligationCoverage === 'function') {
+				obligationCoverage = scoreObligationCoverage(raw, opts.chapterNum);
+				if (obligationCoverage && !obligationCoverage.passed) {
+					(obligationCoverage.failures || ['obligation_coverage']).forEach(function (f) {
+						if (failures.indexOf(f) < 0) failures.push(f);
+					});
+				}
+				novelData.lastObligationCoverage = obligationCoverage;
+			}
 			const result = {
 				passed: failures.length === 0,
 				failures: failures,
@@ -3253,7 +3615,8 @@ let activeAICallCount = 0;
 				ts: new Date().toISOString(),
 				label: opts.label || 'qualityGate',
 				driver: NW_QUALITY_ROLES.failClosedDriver,
-				advisoryRole: NW_QUALITY_ROLES.advisory
+				advisoryRole: NW_QUALITY_ROLES.advisory,
+				obligationCoverage: obligationCoverage
 			};
 			novelData.lastQualityGate = result;
 			if (!Array.isArray(novelData.qualityFindings)) novelData.qualityFindings = [];
@@ -3723,7 +4086,7 @@ let activeAICallCount = 0;
 
 		async function ensureQualityAfterGenerate(chapterNum) {
 			const text0 = novelData.chapters[chapterNum - 1] || '';
-			let gate = runQualityGate(text0, { label: 'chapter' + chapterNum + '-generate' });
+			let gate = runQualityGate(text0, { label: 'chapter' + chapterNum + '-generate', chapterNum: chapterNum });
 			console.log('[C3 qualityGate]', gate.passed, gate.scores, 'driver=', gate.driver);
 			let revise = null;
 			let multi = null;
@@ -6042,6 +6405,11 @@ let activeAICallCount = 0;
 				if (richSubs.length < 1) fails.push('subplots empty/stub');
 				if (plot.length < 80) fails.push('plot/plotOutline empty/stub');
 				if (chWords < 80) fails.push('chapter outline stub-thin words=' + chWords);
+				const bpGate = (typeof getChapterBlueprint === 'function') ? getChapterBlueprint(ch) : null;
+				const bpDig = (typeof digestChapterBlueprint === 'function') ? digestChapterBlueprint(bpGate) : bpGate;
+				if (!bpDig || !(bpDig.arcStep || (bpDig.characterBeats && bpDig.characterBeats.length) || (bpDig.subplotPressure && bpDig.subplotPressure.length))) {
+					fails.push('chapterBlueprint missing/stub for chapter ' + ch);
+				}
 				const pack = [plot, novel, chOutline].filter(Boolean).join('\n');
 				if (typeof scoreProseQuality === 'function' && pack.length >= 40) {
 					const slop = scoreProseQuality(pack);
@@ -6050,7 +6418,7 @@ let activeAICallCount = 0;
 					}
 				}
 				if (fails.length) {
-					const msg = 'STAGE GATE FAIL-CLOSED [generateChapter ' + ch + ']: ' + fails.join(' | ') + '. Fix plot/subplots/chapter outline before prose.';
+					const msg = 'STAGE GATE FAIL-CLOSED [generateChapter ' + ch + ']: ' + fails.join(' | ') + '. Fix plot/subplots/chapter outline/blueprint before prose.';
 					console.error(msg);
 					alert(msg);
 					throw new Error(msg);
@@ -6078,40 +6446,12 @@ let activeAICallCount = 0;
 		    let totalTokens = 0;
 		    console.log('Initialized - chapterContent Length:', chapterContent.length, 'Content:', chapterContent, 'totalTokens:', totalTokens);
 
-		    // Part 1
+		    // Part 1 — blueprint-bound pack (obligations over pad quotas)
 		    const messagesPart1 = [
 			    { role: 'system', content: getAgentPrompt('tab5', 'generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
 		        {
 		            role: 'user',
-		            content: [
-		                `Generate the first half of Chapter ${chapterNum} (~${halfBand} words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}" with the following details:`,
-		                `- **Story Arc (digest):** ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
-		                `- **Plot (digest):** ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
-		                `- **Setting (digest):** ${digestText(novelData.setting || 'No setting provided', 280)}`,
-		                `- **Style Guide (digest):** ${digestStyleGuide(novelData.styleGuide)}`,
-		                `- **Characters:** ${JSON.stringify(digestCharacters(novelData.characters.filter(c => c.name && c.backstory && c.arc)))}`,
-		                `- **Subplots:** ${JSON.stringify(digestSubplots(novelData.subplots, 3, 180))}`,
-		                `- **Chapter Outline (digest):** ${digestText(novelData.chapterOutlines[chapterNum-1] || 'No outline provided', 500)}`,
-		                `- **Chapter Arc (digest):** ${digestText(novelData.chapterArcs[chapterNum-1] || 'No arc provided', 280)}`,
-			                `- **Continuity Packet:** ${JSON.stringify(continuityPacket)}`,
-		                ...(function(){ const _ep = evidencePackPromptBlock({ goal: 'generateChapter', chapter: chapterNum, tokenBudgetHint: 2000 }); return _ep ? ['- **EvidencePack:**', _ep] : []; })(),
-		                '',
-		                'Requirements:',
-		                '- **Structure:** Seamless narrative, no headers/markers. Use vivid prose, dialogue, pacing, and stakes, with 6-8 sensory details per phase (sights, sounds, smells, textures) tied to setting’s history, culture, or tech, amplifying tone and ambiguity.',
-		                '  Paragraphs: 5-10 sentences or ~150-200 words, separated by "\\n\\n".',
-		                `- **Character Development:** Deepen characters from the list—backstories, quirks, arcs via actions, dialogue, internal monologues (~700-900 words total), and emotional beats per the chapter arc.`,
-		                '- **World-Building:** Integrate 6-8 detailed setting elements—impact on characters/plot.',
-		                '- **Plot Expansion:** Begin advancing the chapter outline and arc (~400-500 words)—escalate tension tied to the story’s stakes.',
-		                `- **Tone & Hook:** Start with a ~400-word atmospheric hook—${novelData.authorStyle || 'generic'}-inspired tone with 1-2 twists tied to the chapter arc.`,
-			                ...(strictMode ? ['- **Strict Continuity:** Do not contradict previous chapter outcomes, preserve unresolved threads from the continuity packet, and ensure this chapter logically sets up the next chapter intent.'] : []),
-		                '- Use only characters from the provided list—no new characters.',
-		                '- End at a natural pause, preserving "\\n\\n" breaks.',
-		                '',
-		                'Return as JSON:',
-		                '{',
-		                '    "chapter": "<first half text with \\n\\n between paragraphs, ~${halfBand} words>"',
-		                '}'
-		            ].join('\n')
+		            content: buildGenerateChapterUserContent(chapterNum, 1, { continuityPacket: continuityPacket })
 		        }
 		    ];
 		    requestLog.lastPrompt = messagesPart1[1].content;
@@ -6153,35 +6493,7 @@ let activeAICallCount = 0;
 			    { role: 'system', content: getAgentPrompt('tab5', 'generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
 			    {
 			        role: 'user',
-			        content: [
-			            `Continue Chapter ${chapterNum} from this first half to complete the second half (~${halfBand} words) for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}":`,
-			            `- **First Half:** ${chapterContent}`,
-			            `- **Story Arc (digest):** ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
-			            `- **Plot (digest):** ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
-			            `- **Setting (digest):** ${digestText(novelData.setting || 'No setting provided', 280)}`,
-			            `- **Style Guide (digest):** ${digestStyleGuide(novelData.styleGuide)}`,
-			            `- **Characters:** ${JSON.stringify(digestCharacters(novelData.characters.filter(c => c.name && c.backstory && c.arc)))}`,
-			            `- **Subplots:** ${JSON.stringify(digestSubplots(novelData.subplots, 3, 180))}`,
-			            `- **Chapter Outline (digest):** ${digestText(novelData.chapterOutlines[chapterNum-1] || 'No outline provided', 500)}`,
-			            `- **Chapter Arc (digest):** ${digestText(novelData.chapterArcs[chapterNum-1] || 'No arc provided', 280)}`,
-			            `- **Continuity Packet:** ${JSON.stringify(continuityPacket)}`,
-		                ...(function(){ const _ep = evidencePackPromptBlock({ goal: 'generateChapter', chapter: chapterNum, tokenBudgetHint: 2000 }); return _ep ? ['- **EvidencePack:**', _ep] : []; })(),
-			            '',
-			            'Requirements:',
-			            '- **Structure:** Seamless narrative, no headers/markers. Use vivid prose, dialogue, pacing, and stakes, with 6-8 sensory details per phase tied to setting, amplifying tone and ambiguity.',
-			            '  Paragraphs: 5-10 sentences or ~150-200 words, separated by "\\n\\n".',
-			            `- **Character Development:** Continue deepening characters from the list—arcs via actions, dialogue, internal monologues (~700-900 words total), and emotional beats per the chapter arc.`,
-			            '- **World-Building:** Add 6-8 setting elements—impact on characters/plot.',
-			            '- **Plot Expansion:** Conclude the chapter outline and arc (~400-500 words)—escalate tension with a cliffhanger tied to the story arc.',
-			            `- **Tone:** ${novelData.authorStyle || 'generic'}-inspired with 1-2 twists (e.g., subplot escalation), ending with a cliffhanger.`,
-			            ...(strictMode ? ['- **Strict Continuity:** Resolve or advance at least one unresolved thread from the continuity packet and avoid introducing contradictions in character or world state.'] : []),
-			            '- Use only characters from the provided list—no new characters.',
-			            '',
-			            'Return as JSON:',
-			            '{',
-			            '    "chapter": "<second half text with \\n\\n between paragraphs, ~${halfBand} words>"',
-			            '}'
-			        ].join('\n')
+			        content: buildGenerateChapterUserContent(chapterNum, 2, { continuityPacket: continuityPacket, firstHalf: chapterContent })
 			    }
 			];
 		    requestLog.lastPrompt = messagesPart2[1].content;
@@ -6243,6 +6555,15 @@ let activeAICallCount = 0;
 		    try {
 		        await ensureQualityAfterGenerate(chapterNum);
 		    } catch (qgErr) { console.warn('qualityGate/revise after generateChapter', qgErr); }
+		    // Line-control: obligation coverage fail-closed (short+low-coverage ≠ token success)
+		    try {
+		        if (typeof assertObligationCoverageOrThrow === 'function') {
+		            assertObligationCoverageOrThrow(chapterNum, novelData.chapters[chapterNum - 1] || chapterContent);
+		        }
+		    } catch (covErr) {
+		        console.error('obligation coverage after generateChapter', covErr);
+		        throw covErr;
+		    }
 		    console.log(`Completed generateChapter for Chapter ${chapterNum}, Total Tokens: ${totalTokens}`);
 }
 

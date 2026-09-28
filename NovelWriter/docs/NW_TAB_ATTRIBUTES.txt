@@ -100,10 +100,17 @@ TAB 5 â€” Generate Chapters
 ==============================================================================
 Controls: per-chapter Generate; continuityStrictMode; autoContinuityAudit;
 continuityStatusPanel; packets / tracker / findings
-Uses: chapter outline/arc, characters, subplots, authorStyle, styleGuide,
-chapterLength, continuity
-novelData: chapters, continuityStrictMode, autoContinuityAudit,
-chapterContinuityPackets, continuityTracker, continuityFindings
+Uses: chapter outline/arc, **chapterBlueprints** (bound into Draft pack —
+arcStep, characterBeats, subplotPressure, worldHooks, allowedPayoffs,
+deferredThreads, role), characters, subplots, authorStyle, styleGuide,
+chapterLength, continuity; plot digest prefers plotOutline||generalPlot;
+setting digest prefers setting||worldBible (digestWorldBible).
+Draft executes blueprint obligations (checklist); may not invent major
+throughlines/cast/factions beyond lists; success = dramatized obligations,
+NOT word quotas. ObligationCoverage scored after gen (fail-closed).
+novelData: chapters, chapterBlueprints, continuityStrictMode, autoContinuityAudit,
+chapterContinuityPackets, continuityTracker, continuityFindings,
+lastObligationCoverage, obligationCoverageLog
 
 ==============================================================================
 TAB 6 â€” Edit Chapters
