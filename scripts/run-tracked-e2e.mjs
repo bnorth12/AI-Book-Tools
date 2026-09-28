@@ -739,13 +739,20 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         helpers: ['buildGenerateChapterUserContent', 'scoreObligationCoverage', 'getPlotDigestText', 'getSettingDigestText']
       };
     });
-  }, (r) => {
-    if (!r || !r.hasBlueprint) throw new Error('draftPack-blueprint-bind: no chapter blueprint for Ch1');
-    if (r.emptyPassed) throw new Error('draftPack-blueprint-bind: empty coverage must fail-closed');
+  }, (a, r) => {
+    // runStep calls evalFn(after, result) — result is 2nd arg
+    if (!r || !r.hasBlueprint) return 'FAIL: no chapter blueprint for Ch1';
+    if (r.emptyPassed) return 'FAIL: empty coverage must fail-closed';
     return 'packChars=' + r.packChars + ' plotDig=' + r.plotDigChars + ' setDig=' + r.setDigChars +
       ' emptyFail=' + (r.emptyFailures || []).join(',') + ' synthRatio=' + r.synthRatio +
       ' synthHits=' + (r.synthHits || []).join('|');
-  }, { allowNoCall: true });
+  }, {
+    allowNoCall: true,
+    stageGate: (result) => {
+      if (!result || !result.hasBlueprint) throw new Error('draftPack-blueprint-bind: no chapter blueprint for Ch1');
+      if (result.emptyPassed) throw new Error('draftPack-blueprint-bind: empty coverage must fail-closed');
+    }
+  });
 
   await doStep(5, 'Generate Chapters', 'generateChapter1+quality', async () => {
     return page.evaluate(async () => {
