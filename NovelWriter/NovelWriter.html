@@ -6367,22 +6367,28 @@ return c && c.name && c.backstory && c.arc; });
 				});
 				passResults.push({ pass: 1, kind: 'gate-fail', passedAfter: !!gate.passed });
 			}
-			// Pass 2 (QE5): continuity findings and/or still-failing gate — capped
-			const need = needsQualityMultiPass(chapterNum, gate, {
-				passesDone: passesDone,
-				didContinuityPass: false,
-				afterApplyStaged: false
-			});
-			if (need.needed && passesDone < maxPasses) {
+			// B3-fix: loop nested multipass under maxAutoPasses (continuity then anti-slop if budget remains)
+			let didContinuityPass = false;
+			let didAntiSlopPass = false;
+			while (passesDone < maxPasses) {
+				const need = needsQualityMultiPass(chapterNum, gate, {
+					passesDone: passesDone,
+					didContinuityPass: didContinuityPass,
+					didAntiSlopPass: didAntiSlopPass,
+					afterApplyStaged: false
+				});
+				if (!need.needed) break;
 				const kind = (need.reason === 'continuity-findings')
 					? 'continuity'
 					: (need.reason === 'residual-staged-notes'
 						? 'residual-staged'
 						: (need.reason === 'anti-slop-tells' ? 'anti-slop' : 'gate-fail'));
-				console.warn('[QE5] multi-pass', kind, 'as pass', passesDone + 1);
+				console.warn('[QE5/B3fix] multi-pass', kind, 'as pass', passesDone + 1);
 				multi = await runTargetedQualityPass(chapterNum, gate, { pass: passesDone + 1, kind: kind, tellReport: need.tellReport || null });
 				passesDone++;
 				gate = multi.gateAfter || gate;
+				if (kind === 'continuity') didContinuityPass = true;
+				if (kind === 'anti-slop') didAntiSlopPass = true;
 				passResults.push({ pass: passesDone, kind: kind, passedAfter: !!gate.passed });
 			}
 			// QE4: advisory LLM judge — never overrides fail-closed heuristics
@@ -6521,20 +6527,29 @@ return c && c.name && c.backstory && c.arc; });
 				failuresAfter: (gate.failures || []).slice(),
 				scoresAfter: gate.scores || null
 			});
-			const need = needsQualityMultiPass(chapterNum, gate, {
-				passesDone: 1,
-				didContinuityPass: false,
-				afterApplyStaged: true
-			});
-			if (need.needed) {
+			let passesDoneApply = 1;
+			let didContinuityPass = false;
+			let didAntiSlopPass = false;
+			const maxPassesApply = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : 2;
+			while (passesDoneApply < maxPassesApply) {
+				const need = needsQualityMultiPass(chapterNum, gate, {
+					passesDone: passesDoneApply,
+					didContinuityPass: didContinuityPass,
+					didAntiSlopPass: didAntiSlopPass,
+					afterApplyStaged: true
+				});
+				if (!need.needed) break;
 				const kind = (need.reason === 'continuity-findings')
 					? 'continuity'
 					: (need.reason === 'residual-staged-notes'
 						? 'residual-staged'
 						: (need.reason === 'anti-slop-tells' ? 'anti-slop' : 'gate-fail'));
-				console.warn('[QE5] after apply-staged → second pass', kind);
-				multi = await runTargetedQualityPass(chapterNum, gate, { pass: 2, kind: kind, tellReport: need.tellReport || null });
+				console.warn('[QE5/B3fix] after apply-staged → pass', passesDoneApply + 1, kind);
+				multi = await runTargetedQualityPass(chapterNum, gate, { pass: passesDoneApply + 1, kind: kind, tellReport: need.tellReport || null });
+				passesDoneApply++;
 				gate = multi.gateAfter || gate;
+				if (kind === 'continuity') didContinuityPass = true;
+				if (kind === 'anti-slop') didAntiSlopPass = true;
 			}
 			return { beforeScores: beforeScores, afterScores: afterScores, multi: multi, gate: gate };
 		}
@@ -6742,7 +6757,17 @@ return c && c.name && c.backstory && c.arc; });
 				if (!needSlop.needed || needSlop.reason !== 'anti-slop-tells') throw new Error('needsQualityMultiPass should request anti-slop');
 				const needCapped = needsQualityMultiPass(1, { passed: true, failures: [] }, { passesDone: 2, didAntiSlopPass: false });
 				if (needCapped.needed) throw new Error('anti-slop must nest under maxAutoPasses=2');
+				// B3-fix: after continuity consumed, remaining nest must select anti-slop when tells foul
+				const needAfterCont = needsQualityMultiPass(1, { passed: true, failures: [] }, {
+					passesDone: 1,
+					didContinuityPass: true,
+					didAntiSlopPass: false
+				});
+				if (!needAfterCont.needed || needAfterCont.reason !== 'anti-slop-tells') {
+					throw new Error('B3fix: after continuity, expected anti-slop-tells got ' + (needAfterCont.reason || 'none'));
+				}
 				say('B2 anti-slop tells OK');
+				say('B3fix continuity→anti-slop nest OK');
 				say('QE6 Attributes Smoke PASS');
 				return true;
 			} catch (e) {
