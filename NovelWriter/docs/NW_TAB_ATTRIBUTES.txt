@@ -201,3 +201,21 @@ Agents call packSkillInputs before prompts; enrich/suggest cast+subplot validate
 Density floors and Tab5 readiness remain code-enforced (not prompt-only).
 Series KG / suite merge still out of scope â€” skills are the on-ramp for book-graph context binders.
 
+
+==============================================================================
+STAGE JSON SCHEMAS (2026-09-27)
+==============================================================================
+Portable stage schemas live in NovelWriter.html (STAGE_SCHEMA_BEGIN/END).
+Escalation: invent (soft/optional) ? refine ? enrich (fail-closed floors) ?
+outline ? Tab5 readiness ? draft.
+
+Bidirectional normalize:
+  normalizeOutbound(stageId, novelData) — LLM/agent facing canonical snapshot
+  normalizeInbound(stageId, raw) — aliases (cast?characters, backStory?backstory,
+  chapter-wrapped JSON) ? canonical keys
+
+Wire points: callAI (NORMALIZE_INBOUND_CALLAI), validateSkillOutput,
+enrichCharacters / enrichSubplots apply, prepareAgentSkillRun schema prompts,
+window.NW_STAGE_SCHEMAS export.
+
+See UNIVERSAL_QUALITY_CONTRACT AgentSkill / StageSchema rows.
