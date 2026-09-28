@@ -372,6 +372,8 @@ Synced: 2026-04-19
 	        <button onclick="addCharacter()">Add Another Character</button>
 	        <button onclick="suggestCharacters()">Suggest Characters</button>
 			<button onclick="refineCharacters()">Refine Characters with Subplots</button>
+			<button onclick="enrichCharacters()">Enrich Cast (deepen backstory+arc)</button>
+			<div class="note ui-note">Enrich loop: after Tab3 invent, return here to deepen cast under subplot pressure, then Enrich Subplots. Density gates fail-closed on thin backstory/arc (no pad-to-N).</div>
 	        <button onclick="showTab(1)">Back</button>
 	        <button onclick="showTab(3)">Next: Subplots</button>
 	        <div class="loading-indicator">Processing...</div>
@@ -398,7 +400,9 @@ Synced: 2026-04-19
 	        </div>
 	        <button onclick="addSubplot()">Add Another Subplot</button>
 	        <button onclick="suggestSubplots()">AI Suggest Subplots</button>
-	        <button onclick="showTab(2)">Back</button>
+	        <button onclick="enrichSubplots()">Enrich Subplots (cast+world+plot)</button>
+	        <div class="note ui-note">Pass1: invent subplots → cycle Tab2 Enrich Cast → Enrich Subplots here. 40-char stubs fail density gates. Then Tab4 invent + outline refine before Tab5.</div>
+	        <button onclick="showTab(2)">Back: Enrich Cast</button>
 	        <button onclick="showTab(4)">Next: Outlines</button>
 	        <div class="loading-indicator">Processing...</div>
     </div>
@@ -991,10 +995,12 @@ let activeAICallCount = 0;
 			tab2: {
 				scrapeBookInfoForCharacters: { name: 'Character Name Scraper Agent', systemPrompt: 'You are an entity extraction specialist for fiction planning. Identify likely character names only, avoid locations/concepts, and minimize false positives.' },
 				suggestCharacters: { name: 'Character Generation Agent', systemPrompt: 'You are a character development specialist for long-form fiction. Create distinct, narratively useful characters with strong motivation logic, conflict hooks, and arc potential tied to the main plot.' },
-				refineCharacters: { name: 'Character Refinement Agent', systemPrompt: 'You are a character arc editor. Refine existing characters to deepen emotional coherence, subplot integration, and thematic relevance while preserving established identity.' }
+				refineCharacters: { name: 'Character Refinement Agent', systemPrompt: 'You are a character arc editor. Deepen backstory AND arc under subplot pressure when fields are thin; never freeze stub backstory. Preserve established identity only when density floors are already met; otherwise enrich motives, wounds, relationships, and subplot-tied growth.' },
+				enrichCharacters: { name: 'Character Enrichment Agent', systemPrompt: 'You are a cast densifier. Deepen existing characters from subplot + world + plot pressure. Expand thin backstory (motives, wounds, relationships) and arcs. Do not invent a replacement cast from scratch; do not pad with filler adjectives — add concrete obligations that chapters can dramatize.' }
 			},
 			tab3: {
-				suggestSubplots: { name: 'Subplot Design Agent', systemPrompt: 'You are a subplot strategist. Design subplots that reinforce central themes, cross-pressure character goals, and pay off through tangible chapter-level consequences.' }
+				suggestSubplots: { name: 'Subplot Design Agent', systemPrompt: 'You are a subplot strategist. Design subplots that reinforce central themes, cross-pressure character goals, and pay off through tangible chapter-level consequences.' },
+				enrichSubplots: { name: 'Subplot Enrichment Agent', systemPrompt: 'You are a throughline densifier. Deepen EXISTING subplots using cast + world/location + plot pressure. Expand nuance, named character involvement, chapter spans, sensory world hooks, and thematic stakes. Do NOT invent-from-scratch pad or replace rich throughlines with stubs; refuse 40-character summaries.' }
 			},
 			tab4: {
 				generateNovelOutlines: { name: 'Novel Outline Agent', systemPrompt: 'You are a structural narrative planner for full-length novels. Produce coherent macro-structure (novelOutline/plotOutline/storyArcOutline) with clear phase transitions, rising stakes, named subplot placement, and thematic throughline. Always emit chapterBlueprints with role, arcStep, subplotPressure, characterBeats (named), allowedPayoffs, deferredThreads, and worldHooks (factions/locations from the world bible). Meet stated word floors; never return empty shells.' },
@@ -1156,7 +1162,22 @@ let activeAICallCount = 0;
 	            updateChapterSubpages();
 	            showEditChapterSubpage(1);
 	        }
-	        if (tabNum === 5) renderContinuityStatusPanel();
+	        if (tabNum === 5) {
+	            renderContinuityStatusPanel();
+	            try {
+	                if (typeof scoreAdvanceToTab5Readiness === 'function') {
+	                    const ready = scoreAdvanceToTab5Readiness(novelData);
+	                    if (!ready.passed) {
+	                        console.warn('[Tab5] enrich/outline readiness not green', ready.failures);
+	                        const panel = document.getElementById('continuityStatusPanel');
+	                        if (panel) {
+	                            panel.dataset.enrichReadiness = 'fail';
+	                            panel.title = 'TAB5 readiness: ' + ready.failures.slice(0, 6).join(' | ');
+	                        }
+	                    }
+	                }
+	            } catch (e) { console.warn('readiness check', e); }
+	        }
 	        if (tabNum === 7) updateBookTab();
 	        if (tabNum === 8) populateConsolidatedBreakdowns();
 	        if (tabNum === 9) updateRequestLog();
@@ -2161,13 +2182,14 @@ let activeAICallCount = 0;
 		        `- Style Guide (digest): ${digestStyleGuide(novelData.styleGuide)}`,
 		        '',
 		        'For each character:',
-		        '- Retain the existing name and backstory unchanged.',
+		        '- Retain the existing name.',
+		        '- BACKSTORY: If thin/stub, DEEPEN it (target >=80 words) with motives, wounds, relationships, and why they act in beats under subplot pressure. Do NOT freeze thin backstory. If already dense, preserve identity while allowing enrichment tied to subplots.',
 		        '- Update the character arc (150-200 words) to integrate at least one specific subplot from the provided list, ensuring:',
 		        '  - A clear starting state (e.g., flaw, goal) reflecting their backstory.',
 		        '  - 2-3 specific events or conflicts from the subplot driving growth or change, with 2-3 sensory details (e.g., sounds, textures) tied to the setting.',
 		        '  - An end state tied to the story arc’s themes (e.g., redemption, survival) and subplot resolution, showing emotional or philosophical depth.',
 		        '- Ensure arcs enhance the novel’s themes, connect to the setting’s world (e.g., cultural norms), and maintain diversity in roles and perspectives.',
-		        '- Do not shorten below 150 words; prioritize vivid detail and subplot integration.',
+		        '- Density over padding: meet floors with concrete obligations chapters can dramatize; do not invent replacement cast from scratch.',
 		        '',
 		        'Return the response as a JSON object with this exact structure, without markdown code block markers:',
 		        '{',
@@ -2350,6 +2372,143 @@ let activeAICallCount = 0;
 	           updateRequestLog();
 	       }
 }
+
+		// Enrich existing cast: deepen backstory+arc under subplot/world/plot pressure (does NOT freeze thin backstory).
+		async function enrichCharacters() {
+		    collectData();
+		    if (!novelData.characters || !novelData.characters.length) {
+		        alert('No characters to enrich. Run Suggest Characters (Pass0 invent) first.');
+		        return;
+		    }
+		    const floors = densityFloorsForBook(novelData);
+		    const before = scoreCastDensity(novelData.characters, { novelData: novelData });
+		    const promptLines = [
+		        `Enrich (densify) exactly ${novelData.characters.length} EXISTING characters for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}".`,
+		        `- Story Arc (digest): ${digestText(novelData.storyArc || 'No arc provided', 280)}`,
+		        `- Plot (digest): ${digestText(novelData.generalPlot || 'No plot provided', 320)}`,
+		        `- Setting/world (digest): ${digestText(novelData.setting || 'No setting provided', 280)}`,
+		        `- World Bible: ${digestWorldBible(novelData.worldBible || novelData.world) || 'No world bible'}`,
+		        `- Existing Characters: ${JSON.stringify(digestCharacters(novelData.characters))}`,
+		        `- Subplots: ${JSON.stringify(digestSubplots(novelData.subplots, 4, 220))}`,
+		        `- Style: ${novelData.authorStyle || 'generic'}`,
+		        '',
+		        'Rules:',
+		        '- Do NOT invent a new cast from scratch; deepen the provided names.',
+		        `- Backstory floor >= ${floors.backstory} words: motives, wounds, relationships, why they act in chapter beats.`,
+		        `- Arc floor >= ${floors.arc} words (prefer 150-200): integrate specific subplot pressure + world/location hooks.`,
+		        '- No pad-to-N adjective filler; add dramatizable obligations.',
+		        '- Return JSON only: {"characters":[{"name":"...","backstory":"...","arc":"..."}, ...]}'
+		    ];
+		    const messages = [
+		        { role: 'system', content: getAgentPrompt('tab2', 'enrichCharacters', 'You are a cast densifier. Deepen existing characters under subplot and world pressure; never freeze thin backstory.') },
+		        { role: 'user', content: promptLines.join('\n') }
+		    ];
+		    requestLog.lastPrompt = messages[1].content;
+		    requestLog.status = 'Pending';
+		    requestLog.originTab = 'tab2';
+		    clearReturnedInfo();
+		    updateRequestLog();
+		    const response = await callAI(messages, document.getElementById('tab2'));
+		    const charList = document.getElementById('characterList');
+		    const refinedChars = response.characters || [];
+		    const charDivs = Array.from(charList.getElementsByClassName('character'));
+		    refinedChars.forEach((char, i) => {
+		        if (i < charDivs.length) {
+		            const div = charDivs[i];
+		            if (char.name) div.querySelector('.charName').value = char.name;
+		            if (char.backstory) div.querySelector('.charBackstory').value = char.backstory;
+		            if (char.arc) div.querySelector('.charArc').value = char.arc;
+		        }
+		    });
+		    novelData.characters = Array.from(charList.getElementsByClassName('character')).map((c, i) => {
+		        const existing = novelData.characters[i] || {};
+		        return {
+		            name: (c.querySelector('.charName') && c.querySelector('.charName').value) || existing.name || '',
+		            backstory: (c.querySelector('.charBackstory') && c.querySelector('.charBackstory').value) || existing.backstory || '',
+		            arc: (c.querySelector('.charArc') && c.querySelector('.charArc').value) || existing.arc || '',
+		            ...(existing.role !== undefined ? { role: existing.role } : {}),
+		            ...(existing.notes !== undefined ? { notes: existing.notes } : {})
+		        };
+		    });
+		    document.getElementById('numCharacters').value = novelData.characters.length || 1;
+		    updateCharacterCounter();
+		    const after = scoreCastDensity(novelData.characters, { novelData: novelData });
+		    novelData.lastCastEnrich = { before: before, after: after, ts: new Date().toISOString() };
+		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below density floor — re-run enrich)';
+		    updateRequestLog();
+		    if (!after.passed) {
+		        console.warn('[enrichCharacters] still below floor', after.failures);
+		        alert('Cast enriched but still below density floor:\n' + after.failures.slice(0, 8).join('\n'));
+		    }
+		    return after;
+		}
+
+		// Enrich existing subplots from cast+world+plot (not invent-from-scratch pad).
+		async function enrichSubplots() {
+		    collectData();
+		    const existing = (novelData.subplots || []).map(subplotPlainText).filter(function (s) { return s && s.trim(); });
+		    if (!existing.length) {
+		        alert('No subplots to enrich. Run AI Suggest Subplots (invent) first.');
+		        return;
+		    }
+		    const floors = densityFloorsForBook(novelData);
+		    const before = scoreSubplotDensity(novelData.subplots, { novelData: novelData });
+		    const messages = [
+		        { role: 'system', content: getAgentPrompt('tab3', 'enrichSubplots', 'You are a throughline densifier. Deepen existing subplots using cast + world + plot; do not invent-from-scratch pad.') },
+		        { role: 'user', content: [
+		            `Deepen exactly ${existing.length} EXISTING subplots for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}".`,
+		            `- Plot (digest): ${digestText(novelData.generalPlot || novelData.plotOutline || '', 360)}`,
+		            `- Setting/world: ${digestText(novelData.setting || '', 280)}`,
+		            `- World Bible: ${digestWorldBible(novelData.worldBible || novelData.world) || 'none'}`,
+		            `- Cast: ${JSON.stringify(digestCharacters(novelData.characters || []))}`,
+		            `- Existing subplots to deepen (preserve identity/throughline): ${JSON.stringify(existing.map(function (s) { return digestText(s, 400); }))}`,
+		            '',
+		            'For each subplot return one enriched string (>= ' + floors.subplot + ' words) that:',
+		            '- Keeps the same core throughline (do not replace with a unrelated invent-from-scratch plot);',
+		            '- Names cast members and adds chapter spans, sensory world/location hooks, conflict turns, and thematic resonance;',
+		            '- Adds nuance chapters can dramatize — not adjective padding or 40-char stubs.',
+		            'Return JSON: {"subplots":["<enriched1>", ...]} in the same order.'
+		        ].join('\n') }
+		    ];
+		    requestLog.lastPrompt = messages[1].content;
+		    requestLog.status = 'Pending';
+		    requestLog.originTab = 'tab3';
+		    clearReturnedInfo();
+		    updateRequestLog();
+		    const response = await callAI(messages, document.getElementById('tab3'));
+		    let enriched = (response && response.subplots) || [];
+		    if (!Array.isArray(enriched)) enriched = [];
+		    enriched = enriched.map(function (s) { return typeof s === 'string' ? s : subplotPlainText(s); });
+		    const subplotList = document.getElementById('subplotList');
+		    const sections = Array.from(subplotList.getElementsByClassName('subplot-section'));
+		    sections.forEach(function (sec, i) {
+		        if (i < enriched.length && enriched[i]) {
+		            sec.querySelector('.subplot').value = enriched[i];
+		        }
+		    });
+		    novelData.subplots = Array.from(subplotList.getElementsByClassName('subplot')).map(function (s) { return s.value; });
+		    updateSubplotCounter();
+		    const after = scoreSubplotDensity(novelData.subplots, { novelData: novelData });
+		    novelData.lastSubplotEnrich = { before: before, after: after, ts: new Date().toISOString() };
+		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below density floor — re-run enrich)';
+		    updateRequestLog();
+		    if (!after.passed) {
+		        console.warn('[enrichSubplots] still below floor', after.failures);
+		        alert('Subplots enriched but still below density floor:\n' + after.failures.slice(0, 8).join('\n'));
+		    }
+		    return after;
+		}
+
+		/** Programmatic Pass1 cycle for E2E / workflow: cast enrich then subplot enrich (order may be called twice by runner). */
+		async function runEnrichLoopPass() {
+		    collectData();
+		    const out = { cast: null, subplots: null };
+		    if ((novelData.characters || []).length) out.cast = await enrichCharacters();
+		    collectData();
+		    if ((novelData.subplots || []).some(function (s) { return subplotPlainText(s).trim(); })) out.subplots = await enrichSubplots();
+		    out.readiness = scoreAdvanceToTab5Readiness(novelData);
+		    return out;
+		}
 
 
 
@@ -2774,6 +2933,205 @@ let activeAICallCount = 0;
 		 * Lightweight obligation coverage vs chapterBlueprints.
 		 * Short + low-coverage => coverage fail (not token success).
 		 */
+﻿		// ---- Enrich-loop density / obligation floors (fail-closed; no pad-to-N) ----
+		// Cast/subplot fields historically landed at ~6-7% of intended floors; gates reject stubs.
+		const NW_DENSITY = {
+			castBackstoryMinWords: 80,
+			castArcMinWords: 60,
+			subplotMinWords: 120,
+			outlinePlotMinChars: 200,
+			outlineNovelMinChars: 200,
+			castFractionOfChapter: 0.07,
+			stubCharLimit: 40
+		};
+
+		function nwWordCount(text) {
+			const t = String(text || '').trim();
+			if (!t) return 0;
+			return t.split(/\s+/).filter(Boolean).length;
+		}
+
+		function subplotPlainText(s) {
+			if (!s) return '';
+			if (typeof s === 'string') return s;
+			const title = String(s.title || s.name || '').trim();
+			const body = String(s.summary || s.description || s.text || '').trim();
+			return (title && body) ? (title + ': ' + body) : (title || body || JSON.stringify(s));
+		}
+
+		function densityFloorsForBook(nd) {
+			// Fixed content floors (fail-closed). castFractionOfChapter (~0.07) is diagnostic only —
+			// historical thin casts landed at ~6-7% of these floors; do NOT scale floors up with chapterLength
+			// (that becomes a pad-to-N quota). Early inputs multiply; density != word quotas.
+			void nd;
+			return {
+				backstory: NW_DENSITY.castBackstoryMinWords,
+				arc: NW_DENSITY.castArcMinWords,
+				subplot: NW_DENSITY.subplotMinWords
+			};
+		}
+
+		function scoreCastDensity(characters, opts) {
+			const nd = (opts && opts.novelData) || (typeof novelData !== 'undefined' ? novelData : {});
+			const floors = densityFloorsForBook(nd);
+			const list = Array.isArray(characters) ? characters : [];
+			const perChar = [];
+			const failures = [];
+			list.forEach(function (c, i) {
+				const name = String((c && c.name) || '').trim() || ('#' + i);
+				const bw = nwWordCount(c && c.backstory);
+				const aw = nwWordCount(c && c.arc);
+				const bc = String((c && c.backstory) || '').trim().length;
+				const row = { name: name, backstoryWords: bw, arcWords: aw, backstoryOk: bw >= floors.backstory, arcOk: aw >= floors.arc, stub: bc > 0 && bc < NW_DENSITY.stubCharLimit };
+				perChar.push(row);
+				if (!row.backstoryOk) failures.push('cast_backstory_thin:' + name + ' words=' + bw + '<' + floors.backstory);
+				if (!row.arcOk) failures.push('cast_arc_thin:' + name + ' words=' + aw + '<' + floors.arc);
+				if (row.stub) failures.push('cast_backstory_stub_chars:' + name + ' chars=' + bc);
+			});
+			if (!list.length) failures.push('cast_empty');
+			return { passed: failures.length === 0, failures: failures, perChar: perChar, floors: floors, count: list.length };
+		}
+
+		function scoreSubplotDensity(subplots, opts) {
+			const nd = (opts && opts.novelData) || (typeof novelData !== 'undefined' ? novelData : {});
+			const floors = densityFloorsForBook(nd);
+			const list = Array.isArray(subplots) ? subplots : [];
+			const per = [];
+			const failures = [];
+			list.forEach(function (s, i) {
+				const text = subplotPlainText(s);
+				const words = nwWordCount(text);
+				const chars = text.trim().length;
+				const row = { index: i, words: words, chars: chars, ok: words >= floors.subplot, stub: chars > 0 && chars < NW_DENSITY.stubCharLimit };
+				per.push(row);
+				if (!row.ok) failures.push('subplot_thin:' + i + ' words=' + words + '<' + floors.subplot);
+				if (row.stub) failures.push('subplot_stub_chars:' + i + ' chars=' + chars);
+			});
+			const rich = per.filter(function (r) { return r.ok; }).length;
+			if (rich < 1) failures.push('subplots_no_rich_throughline');
+			if (list.length < 1) failures.push('subplots_empty');
+			return { passed: failures.length === 0, failures: failures, perSubplot: per, floors: floors, richCount: rich, count: list.length };
+		}
+
+		function scoreOutlineObligations(nd) {
+			nd = nd || (typeof novelData !== 'undefined' ? novelData : {});
+			const failures = [];
+			const hits = [];
+			const plot = String(nd.plotOutline || nd.generalPlot || '').trim();
+			const novel = String(nd.novelOutline || '').trim();
+			const arc = String(nd.storyArcOutline || nd.storyArc || '').trim();
+			const setting = String(nd.setting || '').trim();
+			const world = nd.worldBible || nd.world || null;
+			const worldText = typeof world === 'string' ? world : (world ? JSON.stringify(world) : '');
+			const pack = [plot, novel, arc, setting, worldText].join('\n').toLowerCase();
+			function mark(label, ok) { if (ok) hits.push(label); else failures.push('outline_obligation:' + label); }
+			mark('world', (setting.length >= 40) || (worldText.length >= 40));
+			mark('plot', plot.length >= NW_DENSITY.outlinePlotMinChars);
+			const namedChars = (nd.characters || []).filter(function (c) { return c && c.name && String(c.name).trim().length >= 2; });
+			const charNamedInOutline = namedChars.filter(function (c) {
+				const n = String(c.name).toLowerCase();
+				const parts = n.replace(/^dr\.\s+/, '').split(/\s+/).filter(function (p) { return p.length >= 4; });
+				return pack.indexOf(n) >= 0 || parts.some(function (p) { return pack.indexOf(p) >= 0; });
+			});
+			mark('character_named', charNamedInOutline.length >= Math.min(2, Math.max(1, namedChars.length)));
+			const conflictOk = /\b(conflict|stakes?|confront|clash|threat|crisis|payoff|resolution|resolve[sd]?)\b/i.test(pack);
+			mark('conflict_resolution', conflictOk && (arc.length >= 80 || plot.length >= 120));
+			const subs = nd.subplots || [];
+			const subTexts = subs.map(subplotPlainText).filter(Boolean);
+			const subplotNamed = subTexts.some(function (t) {
+				const head = t.split(/[:.\n]/)[0].trim().toLowerCase();
+				const toks = head.split(/\s+/).filter(function (w) { return w.length >= 5; }).slice(0, 3);
+				return toks.some(function (tok) { return pack.indexOf(tok) >= 0; });
+			}) || (Array.isArray(nd.chapterBlueprints) && nd.chapterBlueprints.some(function (bp) {
+				return bp && Array.isArray(bp.subplotPressure) && bp.subplotPressure.length > 0;
+			}));
+			mark('subplot_named', subplotNamed && subTexts.length >= 1);
+			mark('novel_outline', novel.length >= NW_DENSITY.outlineNovelMinChars);
+			const bps = Array.isArray(nd.chapterBlueprints) ? nd.chapterBlueprints : [];
+			mark('blueprints', bps.length >= 1);
+			return {
+				passed: failures.length === 0,
+				failures: failures,
+				hits: hits,
+				metrics: {
+					plotChars: plot.length,
+					novelChars: novel.length,
+					arcChars: arc.length,
+					charsNamed: charNamedInOutline.length,
+					blueprints: bps.length
+				}
+			};
+		}
+
+		function scoreAdvanceToTab5Readiness(nd) {
+			nd = nd || (typeof novelData !== 'undefined' ? novelData : {});
+			const cast = scoreCastDensity(nd.characters || [], { novelData: nd });
+			const subs = scoreSubplotDensity(nd.subplots || [], { novelData: nd });
+			const outline = scoreOutlineObligations(nd);
+			const failures = [].concat(cast.failures || [], subs.failures || [], outline.failures || []);
+			const report = {
+				passed: failures.length === 0,
+				failures: failures,
+				cast: cast,
+				subplots: subs,
+				outline: outline
+			};
+			if (typeof novelData !== 'undefined') {
+				novelData.lastEnrichReadiness = report;
+			}
+			return report;
+		}
+
+		function assertCastDensityOrThrow(characters, opts) {
+			const r = scoreCastDensity(characters, opts);
+			if (!r.passed) {
+				const msg = 'CAST DENSITY FAIL-CLOSED: ' + r.failures.join(' | ') +
+					'. Enrich/refine cast backstory+arc under subplot pressure (no pad-to-N).';
+				console.error(msg);
+				if (typeof alert === 'function') alert(msg);
+				throw new Error(msg);
+			}
+			return r;
+		}
+
+		function assertSubplotDensityOrThrow(subplots, opts) {
+			const r = scoreSubplotDensity(subplots, opts);
+			if (!r.passed) {
+				const msg = 'SUBPLOT DENSITY FAIL-CLOSED: ' + r.failures.join(' | ') +
+					'. Enrich throughlines from cast+world+plot; 40-char stubs are not rich.';
+				console.error(msg);
+				if (typeof alert === 'function') alert(msg);
+				throw new Error(msg);
+			}
+			return r;
+		}
+
+		function assertOutlineObligationsOrThrow(nd) {
+			const r = scoreOutlineObligations(nd);
+			if (!r.passed) {
+				const msg = 'OUTLINE OBLIGATIONS FAIL-CLOSED: ' + r.failures.join(' | ') +
+					'. Invent outline then refine/update until world/plot/character/conflict-resolution/subplot named.';
+				console.error(msg);
+				if (typeof alert === 'function') alert(msg);
+				throw new Error(msg);
+			}
+			return r;
+		}
+
+		function assertAdvanceToTab5ReadinessOrThrow(nd) {
+			const r = scoreAdvanceToTab5Readiness(nd);
+			if (!r.passed) {
+				const msg = 'TAB5 READINESS FAIL-CLOSED: ' + r.failures.slice(0, 12).join(' | ') +
+					(r.failures.length > 12 ? (' …+' + (r.failures.length - 12)) : '') +
+					'. Complete enrich loop (Pass1 cast↔subplot, Pass2–3 outline invent+refine) before Generate.';
+				console.error(msg);
+				if (typeof alert === 'function') alert(msg);
+				throw new Error(msg);
+			}
+			return r;
+		}
+
+
 		function scoreObligationCoverage(text, chapterNum) {
 			const bp = getChapterBlueprint(chapterNum);
 			const dig = digestChapterBlueprint(bp);
@@ -6390,19 +6748,26 @@ let activeAICallCount = 0;
 		    console.log('Pre-collectData - novelData.chapters:', novelData.chapters);
 		    collectData();
 		    console.log('Post-collectData - novelData.chapters:', novelData.chapters);
-			// Fail-closed workflow gate: empty/stub/sloppy early spine multiplies into chapter prose.
+			// Fail-closed workflow gate: enrich readiness + chapter spine (empty/stub multiplies into prose).
 			(function assertPreProseSpineGate(ch) {
 				const fails = [];
-				const richSubs = (novelData.subplots || []).filter(function (s) {
-					if (!s) return false;
-					if (typeof s === 'string') return s.trim().length >= 40;
-					return !!(s.title || s.name) && !!(s.summary || s.description);
-				});
+				if (typeof scoreAdvanceToTab5Readiness === 'function') {
+					const ready = scoreAdvanceToTab5Readiness(novelData);
+					if (!ready.passed) {
+						(ready.failures || []).slice(0, 10).forEach(function (f) { fails.push(f); });
+					}
+				} else {
+					const richSubs = (novelData.subplots || []).filter(function (s) {
+						if (!s) return false;
+						if (typeof s === 'string') return s.trim().length >= 120;
+						return nwWordCount(subplotPlainText(s)) >= 120;
+					});
+					if (richSubs.length < 1) fails.push('subplots empty/stub');
+				}
 				const plot = String(novelData.plotOutline || novelData.generalPlot || '').trim();
 				const novel = String(novelData.novelOutline || '').trim();
 				const chOutline = String((novelData.chapterOutlines || [])[ch - 1] || '').trim();
 				const chWords = chOutline ? chOutline.split(/\s+/).length : 0;
-				if (richSubs.length < 1) fails.push('subplots empty/stub');
 				if (plot.length < 80) fails.push('plot/plotOutline empty/stub');
 				if (chWords < 80) fails.push('chapter outline stub-thin words=' + chWords);
 				const bpGate = (typeof getChapterBlueprint === 'function') ? getChapterBlueprint(ch) : null;
@@ -6418,7 +6783,7 @@ let activeAICallCount = 0;
 					}
 				}
 				if (fails.length) {
-					const msg = 'STAGE GATE FAIL-CLOSED [generateChapter ' + ch + ']: ' + fails.join(' | ') + '. Fix plot/subplots/chapter outline/blueprint before prose.';
+					const msg = 'STAGE GATE FAIL-CLOSED [generateChapter ' + ch + ']: ' + fails.join(' | ') + '. Complete enrich loop + outline invent/refine before prose.';
 					console.error(msg);
 					alert(msg);
 					throw new Error(msg);

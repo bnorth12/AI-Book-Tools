@@ -17,6 +17,7 @@ This note lists **copy-ready seams** so a future BookEditor / BookDecomposer rew
 | **Revise brief** | Text instructions derived from failures + attribute craft lines | `buildQualityReviseBrief` |
 | **Continuity brief** | Continuity risks + cast/world anchors + attribute snapshot | `buildContinuityReviseBrief` |
 | **ObligationCoverage** | Lightweight beat/name/location coverage vs chapter blueprint; fail-closed when spine obligations missing or short+low-coverage (not a token-success signal). Portable shape: `{ covered, total, ratio, hits[], misses[], words, passed, failures[] }` | `scoreObligationCoverage` / `assertObligationCoverageOrThrow` — **no** Editor impl |
+| **EnrichReadiness / DensityFloors** | Fail-closed cast backstory+arc and subplot nuance floors; outline obligations (world/plot/character_named/conflict_resolution/subplot_named); Tab5 blocked until green. Not pad-to-N quotas. | `scoreCastDensity` / `scoreSubplotDensity` / `scoreOutlineObligations` / `scoreAdvanceToTab5Readiness` / `assertAdvanceToTab5ReadinessOrThrow` |
 | **Multipass** | Cap (NW: `maxAutoPasses=2`); kinds `gate-fail` \| `continuity` \| `residual-staged`; log `qualityMultiPassLog[]` with `{chapter, pass, kind, passedBefore, passedAfter, ...}` | QE5 |
 
 ## Explicitly out of contract (NW-only / product UI)

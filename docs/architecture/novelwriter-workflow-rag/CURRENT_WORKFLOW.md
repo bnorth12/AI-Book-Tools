@@ -311,3 +311,18 @@ Import Session (restores chapters, packets, tracker, findings)
 | `chapterBlueprints` | `generateNovelOutlines` | `generateChapterOutline` structural context | Session (display textarea) |
 
 **Surprise:** Packets trim prev chapter & arc anchors, but still inject **up to 8 full subplot texts** and **full characterArcProgress array** without digesting. Audit overwrites global `characterArcProgress` with **last audited chapter’s** view (not a merged multi-chapter ledger). Style guide is omitted from generateChapter user prompts despite being central elsewhere.
+
+## Enrich loop (enforced)
+
+
+ENRICH LOOP (2026-09-27) — enforced in code
+Pass0 invent (Tab1 story + Tab2/3 suggest) → Pass1 T2↔T3 enrich (enrichCharacters / enrichSubplots;
+refineCharacters now deepens thin backstory under subplot pressure — does NOT freeze stubs) →
+Pass2 T4 invent (generateNovelOutlines + blueprints) → Pass3 T4 outline refine
+(incorporateOutlineSuggestions / updateChapterOutline) → Pass4 Tab5 only if
+scoreAdvanceToTab5Readiness green (cast density + subplot density + outline obligations:
+world/plot/character_named/conflict_resolution/subplot_named) → Pass5 chapter QE.
+Density floors are fail-closed content floors (no pad-to-N). Helpers: scoreCastDensity,
+scoreSubplotDensity, scoreOutlineObligations, assertAdvanceToTab5ReadinessOrThrow.
+E2E: NW_E2E_ENRICH=1 or NW_E2E_REGEN_BIBLE=1 runs densify path and asserts non-stub fields.
+

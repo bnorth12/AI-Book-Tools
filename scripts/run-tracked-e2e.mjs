@@ -195,6 +195,8 @@ const report = {
   // Track B: optional rich fixture seed (skip bible regen unless NW_E2E_REGEN_BIBLE=1)
   const fixturePath = process.env.NW_E2E_FIXTURE || '';
   const regenBible = process.env.NW_E2E_REGEN_BIBLE === '1';
+  const enrichMode = process.env.NW_E2E_ENRICH === '1' || regenBible;
+  report.config.enrichMode = enrichMode;
   report.config.fixture = fixturePath || null;
   if (fixturePath) {
     const absFix = path.isAbsolute(fixturePath) ? fixturePath : path.join(path.dirname(fileURLToPath(import.meta.url)), '..', fixturePath);
@@ -446,6 +448,50 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     }
   });
 
+  // Pass1 densify: when NW_E2E_ENRICH=1 or REGEN_BIBLE=1, run cast+subplot enrich (even on fixture).
+  await doStep(2, 'Characters', 'enrichCharacters', async () => {
+    if (!enrichMode) return page.evaluate(() => ({ skipped: true, reason: 'NW_E2E_ENRICH not set' }));
+    return page.evaluate(async () => {
+      if (typeof enrichCharacters !== 'function') return { error: 'enrichCharacters missing' };
+      await enrichCharacters();
+      const dens = scoreCastDensity(novelData.characters || [], { novelData });
+      return { skipped: false, passed: dens.passed, failures: dens.failures, perChar: dens.perChar, floors: dens.floors };
+    });
+  }, (a, r) => (r && r.skipped)
+    ? 'Enrich cast skipped (set NW_E2E_ENRICH=1 to densify).'
+    : ('Cast enrich passed=' + !!(r && r.passed) + ' failures=' + ((r && r.failures) || []).slice(0, 4).join(';')), {
+    allowNoCall: true,
+    stageGate: (res) => {
+      if (!enrichMode) return;
+      assertStageGate('Tab2-enrich-cast', [
+        { ok: !!res && !res.error, msg: 'enrichCharacters missing/error' },
+        { ok: !!res && res.passed, msg: 'cast density fail-closed: ' + ((res && res.failures) || []).join(' | ') }
+      ]);
+    }
+  });
+
+  await doStep(3, 'Subplots', 'enrichSubplots', async () => {
+    if (!enrichMode) return page.evaluate(() => ({ skipped: true, reason: 'NW_E2E_ENRICH not set' }));
+    return page.evaluate(async () => {
+      if (typeof enrichSubplots !== 'function') return { error: 'enrichSubplots missing' };
+      await enrichSubplots();
+      const dens = scoreSubplotDensity(novelData.subplots || [], { novelData });
+      return { skipped: false, passed: dens.passed, failures: dens.failures, richCount: dens.richCount, floors: dens.floors, perSubplot: dens.perSubplot };
+    });
+  }, (a, r) => (r && r.skipped)
+    ? 'Enrich subplots skipped (set NW_E2E_ENRICH=1 to densify).'
+    : ('Subplot enrich passed=' + !!(r && r.passed) + ' rich=' + ((r && r.richCount) || 0) + ' failures=' + ((r && r.failures) || []).slice(0, 4).join(';')), {
+    allowNoCall: true,
+    stageGate: (res) => {
+      if (!enrichMode) return;
+      assertStageGate('Tab3-enrich-subplots', [
+        { ok: !!res && !res.error, msg: 'enrichSubplots missing/error' },
+        { ok: !!res && res.passed, msg: 'subplot density fail-closed (40-char stubs not rich): ' + ((res && res.failures) || []).join(' | ') },
+        { ok: !!res && (res.perSubplot || []).every((p) => (p.words || 0) === 0 || (p.chars || 0) >= 40), msg: 'subplot still has <40-char stubs' }
+      ]);
+    }
+  });
+
   await doStep(4, 'Outlines', 'generateNovelOutlines', async () => {
     // Always run macro outline agent (fixture previously skipped → empty novelOutline/plotOutline/blueprints).
     return page.evaluate(async () => {
@@ -524,12 +570,44 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     }
   });
 
+  // Pass3: outline refine / incorporate (obligations) when enrich mode on — once after macros / ch1
+  await doStep(4, 'Outlines', 'outlineRefine', async () => {
+    if (!enrichMode) return page.evaluate(() => ({ skipped: true }));
+    return page.evaluate(async () => {
+      const notes = [
+        'Name cast members and active subplots in novel/plot/arc outlines.',
+        'Ensure world/location hooks and conflict→resolution beats are explicit.',
+        'Preserve chapterBlueprints subplotPressure and characterBeats.'
+      ].join(' ');
+      const box = document.getElementById('outlineImprovements');
+      if (box) box.value = notes;
+      if (typeof incorporateOutlineSuggestions === 'function') {
+        await incorporateOutlineSuggestions();
+      } else if (typeof updateChapterOutline === 'function') {
+        await updateChapterOutline(1);
+      }
+      const obl = scoreOutlineObligations(novelData);
+      const ready = scoreAdvanceToTab5Readiness(novelData);
+      return { skipped: false, obligations: obl, readiness: { passed: ready.passed, failures: ready.failures.slice(0, 8) } };
+    });
+  }, (a, r) => (r && r.skipped)
+    ? 'Outline refine skipped (enrich mode off).'
+    : ('Outline refine obligations passed=' + !!(r && r.obligations && r.obligations.passed) + ' readiness=' + !!(r && r.readiness && r.readiness.passed)), {
+    allowNoCall: true,
+    stageGate: (res) => {
+      if (!enrichMode) return;
+      assertStageGate('Tab4-outline-refine', [
+        { ok: !!res && res.obligations && res.obligations.passed, msg: 'outline obligations missing: ' + (((res && res.obligations && res.obligations.failures) || []).join(' | ')) },
+      ]);
+    }
+  });
+
   // Outlines + generates for chapters 2..N (ch1 outline already done above when present)
   const chaptersToGenerate = report.config.chaptersToGenerate || report.config.numChapters || 2;
 
   // Ensure ch1 outline exists (lean path already ran generateChapterOutline1)
   for (let ch = 2; ch <= chaptersToGenerate; ch++) {
-    await doStep(4, 'Outlines', 'generateChapterOutline' + ch, async () => {
+  await doStep(4, 'Outlines', 'generateChapterOutline' + ch, async () => {
       return page.evaluate(async (chapterNum) => {
         await generateChapterOutline(chapterNum);
         const outline = novelData.chapterOutlines[chapterNum - 1] || '';
@@ -547,6 +625,24 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         ]);
       }
     });
+  }
+
+  // Fail-closed readiness before Tab5 burn: fixture stubs (~6-7% of floors) need NW_E2E_ENRICH=1 or REGEN_BIBLE=1.
+  {
+    const readySnap = await page.evaluate(() => {
+      if (typeof scoreAdvanceToTab5Readiness !== 'function') return { passed: false, failures: ['helpers-missing'] };
+      return scoreAdvanceToTab5Readiness(novelData);
+    });
+    report.config.tab5Readiness = readySnap;
+    appendProgress('### Tab5 readiness\n- passed: ' + !!readySnap.passed + '\n- failures: ' + ((readySnap.failures || []).slice(0, 8).join(' | ') || 'none') + '\n- enrichMode: ' + enrichMode + '\n');
+    if (!readySnap.passed && process.env.NW_E2E_OUTLINE_ONLY !== '1') {
+      const msg = 'TAB5 READINESS FAIL-CLOSED before chapter burn: ' + (readySnap.failures || []).slice(0, 8).join(' | ') +
+        '. Re-run with NW_E2E_ENRICH=1 (or NW_E2E_REGEN_BIBLE=1) so densify path runs; do not accept stub cast/subplots.';
+      if (enrichMode) {
+        throw new Error(msg + ' (enrichMode was on but readiness still red)');
+      }
+      throw new Error(msg);
+    }
   }
 
   if (process.env.NW_E2E_OUTLINE_ONLY === '1') {
