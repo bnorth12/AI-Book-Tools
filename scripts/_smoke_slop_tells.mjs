@@ -1,4 +1,4 @@
-﻿/**
+/**
  * B1 offline smoke: scoreSlopTells detectors (no NovelWriter.html, no LLM).
  */
 import fs from 'fs';
@@ -38,9 +38,32 @@ expectFail('echo', foulEcho, 'nameEcho');
 expectFail('emotion', foulEmotion, 'emotionLabel');
 expectFail('over', foulOver, 'overExplain');
 
+// B4-0b: delayed paraphrase (gap ~8 filler sentences) must foul overExplain via ±12 window
+const delayedRestate = `Rook priced the fork once. Selling the clean block would clear his mother's ledger but expose the chaplaincy network to Triad seizure; withholding it would mark him as complicit in opacity. The clean block was no longer currency. It was evidence.
+Radar bloomed once over Bridge Lock.
+Salt air hit the freighter lane.
+A courier sealed a ceramic shard.
+Orbital debris drifted past the Faraday mesh.
+The terminal hummed without a buyer.
+Herring brine clung to the pressure lock.
+Twelve milliseconds waited on the uplink.
+The fjord rain filled no silence.
+Rook studied the minting stylus again. Selling the clean block clears his mother's ledger but hands the chaplaincy network to seizure; withholding it marks him as complicit in opacity. The clean block had been currency. Kwan's refusal turned it into evidence.`;
+expectFail('delayed-restate', delayedRestate, 'overExplain');
+
+const ch2Path = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/novelwriter/_b3r_ch_texts/ch2.txt';
+let ch2OverExplain = null;
+if (fs.existsSync(ch2Path)) {
+  const ch2 = fs.readFileSync(ch2Path, 'utf8');
+  const ch2R = scoreSlopTells(ch2);
+  ch2OverExplain = { score: ch2R.tells.overExplain.score, ok: ch2R.tells.overExplain.ok, hits: ch2R.tells.overExplain.hits, failsTell: !ch2R.tells.overExplain.ok };
+  // Optional observation: Ch2 delayed loops often sit beyond ±12 (d~26); report, do not hard-fail smoke.
+  console.log('B3R Ch2 overExplain:', JSON.stringify(ch2OverExplain));
+}
+
 assert(SLOP_TELLS.length === 6, 'six tells');
 
-const report = { ok: fails.length === 0, fails, cleanPassed: cleanR.passed, tells: SLOP_TELLS };
+const report = { ok: fails.length === 0, fails, cleanPassed: cleanR.passed, tells: SLOP_TELLS, ch2OverExplain };
 fs.mkdirSync(PLAN, { recursive: true });
 fs.writeFileSync(path.join(PLAN, 'B1_SLOP_TELL_SMOKE_REPORT.json'), JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));

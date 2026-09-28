@@ -1,4 +1,4 @@
-﻿<!-- Novel Writer 0.3.4 -->
+<!-- Novel Writer 0.3.4 -->
 <!--
 EXECUTIVE OVERVIEW (NW1)
 NovelWriter SHALL be a single-file browser-based AI-assisted novel writing toolchain enabling authors to plan, draft, and refine a complete novel end-to-end.
@@ -6084,25 +6084,29 @@ return c && c.name && c.backstory && c.arc; });
 			const hits = [];
 			let worst = 0;
 			for (let i = 1; i < sents.length; i++) {
-				const a = {};
-				_slopWords(sents[i - 1].toLowerCase()).forEach(function (x) {
-					x = x.replace(/[^a-z]/g, '');
-					if (x.length > 3) a[x] = true;
-				});
 				const b = {};
 				_slopWords(sents[i].toLowerCase()).forEach(function (x) {
 					x = x.replace(/[^a-z]/g, '');
 					if (x.length > 3) b[x] = true;
 				});
-				const aKeys = Object.keys(a);
 				const bKeys = Object.keys(b);
-				if (!aKeys.length || !bKeys.length) continue;
-				let inter = 0;
-				aKeys.forEach(function (x) { if (b[x]) inter++; });
-				const union = aKeys.length + bKeys.length - inter;
-				const j = inter / union;
-				if (j > worst) worst = j;
-				if (j >= 0.55) hits.push('overlap=' + j.toFixed(2));
+				if (!bKeys.length) continue;
+				const maxD = Math.min(12, i);
+				for (let d = 1; d <= maxD; d++) {
+					const a = {};
+					_slopWords(sents[i - d].toLowerCase()).forEach(function (x) {
+						x = x.replace(/[^a-z]/g, '');
+						if (x.length > 3) a[x] = true;
+					});
+					const aKeys = Object.keys(a);
+					if (!aKeys.length) continue;
+					let inter = 0;
+					aKeys.forEach(function (x) { if (b[x]) inter++; });
+					const union = aKeys.length + bKeys.length - inter;
+					const j = inter / union;
+					if (j > worst) worst = j;
+					if (j >= 0.55 && hits.length < 6) hits.push('overlap@d' + d + '=' + j.toFixed(2));
+				}
 			}
 			return { score: _slopClamp(worst >= 0.55 ? 40 + worst * 50 : worst * 40), hits: hits };
 		}

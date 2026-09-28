@@ -1,4 +1,4 @@
-﻿/** Pure anti-slop tell detectors — B1 offline only; not wired into NovelWriter.html yet. */
+/** Pure anti-slop tell detectors — B1 offline only; not wired into NovelWriter.html yet. */
 export const SLOP_TELLS = ['cadence', 'stockMetaphor', 'hedgeStack', 'nameEcho', 'emotionLabel', 'overExplain'];
 
 export const SLOP_TELL_FLOORS = {
@@ -115,15 +115,19 @@ function scoreOverExplain(text) {
   const hits = [];
   let worst = 0;
   for (let i = 1; i < sents.length; i++) {
-    const a = new Set(words(sents[i - 1].toLowerCase()).map(x => x.replace(/[^a-z]/g, '')).filter(x => x.length > 3));
     const b = new Set(words(sents[i].toLowerCase()).map(x => x.replace(/[^a-z]/g, '')).filter(x => x.length > 3));
-    if (!a.size || !b.size) continue;
-    let inter = 0;
-    a.forEach(x => { if (b.has(x)) inter++; });
-    const union = a.size + b.size - inter;
-    const j = inter / union;
-    if (j > worst) worst = j;
-    if (j >= 0.55) hits.push('overlap=' + j.toFixed(2));
+    if (!b.size) continue;
+    const maxD = Math.min(12, i);
+    for (let d = 1; d <= maxD; d++) {
+      const a = new Set(words(sents[i - d].toLowerCase()).map(x => x.replace(/[^a-z]/g, '')).filter(x => x.length > 3));
+      if (!a.size) continue;
+      let inter = 0;
+      a.forEach(x => { if (b.has(x)) inter++; });
+      const union = a.size + b.size - inter;
+      const j = inter / union;
+      if (j > worst) worst = j;
+      if (j >= 0.55 && hits.length < 6) hits.push('overlap@d' + d + '=' + j.toFixed(2));
+    }
   }
   return { score: clamp(worst >= 0.55 ? 40 + worst * 50 : worst * 40), hits };
 }
