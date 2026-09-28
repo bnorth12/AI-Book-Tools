@@ -38,7 +38,7 @@ expectFail('echo', foulEcho, 'nameEcho');
 expectFail('emotion', foulEmotion, 'emotionLabel');
 expectFail('over', foulOver, 'overExplain');
 
-// B4-0b-widen: delayed paraphrase (gap ~8 filler) must foul overExplain via +/-32 window
+// B4-0b-widen: delayed paraphrase (gap ~8 filler) must foul overExplain via +/-40 window
 const delayedRestate = `Rook priced the fork once. Selling the clean block would clear his mother's ledger but expose the chaplaincy network to Triad seizure; withholding it would mark him as complicit in opacity. The clean block was no longer currency. It was evidence.
 Radar bloomed once over Bridge Lock.
 Salt air hit the freighter lane.
@@ -51,6 +51,45 @@ The fjord rain filled no silence.
 Rook studied the minting stylus again. Selling the clean block clears his mother's ledger but hands the chaplaincy network to seizure; withholding it marks him as complicit in opacity. The clean block had been currency. Kwan's refusal turned it into evidence.`;
 expectFail('delayed-restate', delayedRestate, 'overExplain');
 
+// B4-0d: delayed paraphrase beyond prior +/-32 window (A3 Ch2 class, d~39) must foul via +/-40
+const beyond32Restate = `She left one interval key intact, the same key that could still trace the spike back to its origin.
+Radar bloomed once over Bridge Lock.
+Salt air hit the freighter lane.
+A courier sealed a ceramic shard.
+Orbital debris drifted past the Faraday mesh.
+The terminal hummed without a buyer.
+Herring brine clung to the pressure lock.
+Twelve milliseconds waited on the uplink.
+The fjord rain filled no silence.
+Coolant pumps shifted pitch in the cage.
+A receipt queued for transmission three blocks away.
+Municipal SLA priced the thermos telemetry.
+Faraday nostalgia carried a price on every shelf.
+Buyers refreshed the Lofoten auction blocks.
+Clean intervals remembered something they were never sold.
+The spike rippled through three ledger rows.
+Cassian watched the desync without speaking.
+Rook sealed the sleeve and waited for the next ping.
+Aoi pocketed the drive with two reads remaining.
+Theo coffee ring dried on the console printout.
+Container traffic warmed the ceramic post crown.
+Guild voices billed manual interventions at microcredits.
+Evacuation drills stopped pretending along lane three.
+The Unlogged Child flickered between posts seventeen and eighteen.
+Harbor chaplaincy ledgers refused Triad seizure pricing.
+Sinta shard request sat beside the minting stylus.
+Park escrow release stamped the offline map.
+Okafor override key remained unused above the switch.
+Kwan refusal packet joined the clean block treaty table.
+Nakamura private cubesat failure ledger stayed locked.
+Bitung parasol docks smelled of wet graphene at dawn.
+The Conduit Consensus Triad broadcast uptime demands.
+Blind-spot clauses typed themselves under amber crowns.
+Typhoon warnings scrolled while dark posts reported nothing.
+Mireya rain-soaked ledger waited without a price.
+The interval key cooled against Rook palm one last time.
+Rook left the interval key intact, the same key that could still trace the spike back to its origin.`;
+expectFail('beyond32-restate', beyond32Restate, 'overExplain');
 // B4-0c: chapterEcho — Ch2 near-copy of Ch1 paragraph must FAIL; distinct Ch2 PASS
 const ch1Para = `Rook priced the fork once at Bridge Lock. Selling the clean block would clear his mother's ledger but expose the chaplaincy network to Triad seizure; withholding it would mark him as complicit in opacity. The clean block was no longer currency. It was evidence that could sink the convoy.`;
 const ch2NearCopy = `Morning traffic clogged the Faraday mesh.
@@ -102,7 +141,8 @@ const report = {
   tells: SLOP_TELLS,
   ch2OverExplain,
   ch4ChapterEcho,
-  chapterEchoFixture: { foulOk: !echoFoul.tells.chapterEcho.ok, passOk: echoPass.tells.chapterEcho.ok }
+  chapterEchoFixture: { foulOk: !echoFoul.tells.chapterEcho.ok, passOk: echoPass.tells.chapterEcho.ok },
+  beyond32: (() => { const r = scoreSlopTells(beyond32Restate); return { ok: !r.tells.overExplain.ok, score: r.tells.overExplain.score }; })()
 };
 fs.mkdirSync(PLAN, { recursive: true });
 fs.writeFileSync(path.join(PLAN, 'B1_SLOP_TELL_SMOKE_REPORT.json'), JSON.stringify(report, null, 2));

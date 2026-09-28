@@ -130,7 +130,7 @@ function scoreOverExplain(text) {
   for (let i = 1; i < sents.length; i++) {
     const b = contentWordSet(sents[i]);
     if (!b.size) continue;
-    const maxD = Math.min(32, i);
+    const maxD = Math.min(40, i);
     for (let d = 1; d <= maxD; d++) {
       const a = contentWordSet(sents[i - d]);
       if (!a.size) continue;
