@@ -430,6 +430,7 @@ Synced: 2026-04-19
 	            <label for="outlineImprovements">Improvements to Implement:</label>
 	            <textarea id="outlineImprovements" placeholder="Enter improvements to incorporate into the outlines"></textarea>
 	            <button onclick="generateNovelOutlines()">AI Suggest Novel Outline</button>
+	            <button onclick="enrichChapterBlueprints()">Enrich Chapter Blueprints (six beats)</button>
 	            <button onclick="incorporateOutlineSuggestions()">Incorporate Suggestions</button>
 	        </div>
 	        <div id="chapterOutlinesNav" class="chapter-nav" data-testid="nw-outline-nav"></div>
@@ -1023,6 +1024,7 @@ let activeAICallCount = 0;
 				enrichSubplots: { name: 'Subplot Enrichment Agent', systemPrompt: 'You are a throughline densifier. Deepen EXISTING subplots using cast + world/location + plot pressure. Expand nuance, named character involvement, chapter spans, sensory world hooks, and thematic stakes. Do NOT invent-from-scratch pad or replace rich throughlines with stubs; refuse 40-character summaries.' }
 			},
 			tab4: {
+				enrichChapterBlueprints: { name: 'Chapter Blueprint Enrichment Agent', systemPrompt: 'You densify existing chapter blueprints into six dramatizable beats per chapter. No pad-to-N. Name cast. Hard floors before prose.' },
 				generateNovelOutlines: { name: 'Novel Outline Agent', systemPrompt: 'You are a structural narrative planner for full-length novels. Produce coherent macro-structure (novelOutline/plotOutline/storyArcOutline) with clear phase transitions, rising stakes, named subplot placement, and thematic throughline. Always emit chapterBlueprints with role, arcStep, subplotPressure, characterBeats (named), allowedPayoffs, deferredThreads, and worldHooks (factions/locations from the world bible). Meet stated word floors; never return empty shells.' },
 				generateChapterOutline: { name: 'Chapter Outline Agent', systemPrompt: 'You are a chapter planning specialist. Convert macro outline goals into a 300-400 word outline and 200-300 word arc with structured beats tied to named characters, the chapter blueprint arcStep, active subplot pressure, and concrete worldHooks (factions/locations from the world bible). Advance plot and unresolved threads; never return soft one-liner beats or ignore the world bible when provided.' },
 				updateChapterOutline: { name: 'Outline Update Agent', systemPrompt: 'You are an outline revision editor. Integrate requested changes while preserving continuity, causality, and role of the chapter in the broader narrative sequence.' },
@@ -1232,6 +1234,20 @@ let activeAICallCount = 0;
 				],
 				output: { shape: 'chapterOutline', validators: ['nonEmptyText', 'minWords:40'] },
 				stop: null
+			},
+
+			'tab4.enrichChapterBlueprints': {
+				id: 'tab4.enrichChapterBlueprints', tab: 'tab4', agentKey: 'enrichChapterBlueprints', name: 'Chapter Blueprint Beat Enrichment',
+				ability: 'Densify EXISTING chapterBlueprints to six fail-closed beats (sceneGoal, castArcBeat, subplotPressure, dialogueTurn, sensoryWorldHook, turnOrPayoff). Soft invent OK; hard floors before generate. No pad-to-N.',
+				inputs: [
+					{ name: 'chapterBlueprints', binder: 'chapterBlueprints', required: true },
+					{ name: 'characters', binder: 'charactersDigest', required: true, maxChars: 1600 },
+					{ name: 'subplots', binder: 'subplotsDigest', required: true, maxChars: 900 },
+					{ name: 'novelOutline', binder: 'novelOutline', required: false, maxChars: 600 },
+					{ name: 'setting', binder: 'settingDigest', required: false, maxChars: 280 }
+				],
+				output: { shape: 'chapterBlueprints[]', validators: ['beatCoverage'] },
+				stop: 'beatCoverageGreen'
 			},
 			'tab4.updateChapterOutline': {
 				id: 'tab4.updateChapterOutline', tab: 'tab4', agentKey: 'updateChapterOutline', name: 'Update Chapter Outline',
@@ -2459,6 +2475,7 @@ let activeAICallCount = 0;
 						(__op && String(__op)) || (typeof window !== 'undefined' && window.__activeSkillId) || ''
 					) : null;
 					const __stageId = __stageGuess || (
+						/enrichChapterBlueprints/i.test(__op) ? 'tab4.generateNovelOutlines' :
 						/enrichCharacters|suggestCharacters|refineCharacters/i.test(__op) ? 'tab2.enrichCharacters' :
 						/enrichSubplots|suggestSubplots/i.test(__op) ? 'tab3.enrichSubplots' :
 						/generateChapter|reviseChapter/i.test(__op) ? 'tab5.generateChapter' :
@@ -4529,18 +4546,173 @@ const messages = [
 			};
 		}
 
+		﻿// === BEAT_COVERAGE_BEGIN ===
+		// A1/A2: fail-closed chapter blueprint beat obligations (no pad-to-N).
+		// Required six: sceneGoal, castArcBeat, subplotPressure, dialogueTurn, sensoryWorldHook, turnOrPayoff
+		var NW_BEAT_REQUIRED = ['sceneGoal', 'castArcBeat', 'subplotPressure', 'dialogueTurn', 'sensoryWorldHook', 'turnOrPayoff'];
+		var NW_BEAT_STUB_CHARS = (typeof NW_DENSITY !== 'undefined' && NW_DENSITY.stubCharLimit) ? NW_DENSITY.stubCharLimit : 40;
+
+		function nwBeatFieldText(v) {
+			if (v == null) return '';
+			if (typeof v === 'string') return v.trim();
+			if (Array.isArray(v)) return v.map(function (x) { return nwBeatFieldText(x); }).filter(Boolean).join('; ');
+			if (typeof v === 'object') {
+		if (v.name && (v.beat || v.text || v.summary)) {
+			return String(v.name).trim() + ': ' + String(v.beat || v.text || v.summary || '').trim();
+		}
+		if (v.beat || v.text || v.summary || v.goal) return String(v.beat || v.text || v.summary || v.goal || '').trim();
+		try { return JSON.stringify(v); } catch (_) { return String(v); }
+			}
+			return String(v).trim();
+		}
+
+		function normalizeChapterBeatPack(raw, chapterNum) {
+			if (raw == null) return null;
+			var bp = raw;
+			if (typeof raw === 'string') {
+		try { bp = JSON.parse(raw); } catch (_) { bp = { arcStep: raw }; }
+			}
+			if (typeof bp !== 'object') return null;
+			var sceneGoal = nwBeatFieldText(bp.sceneGoal || bp.goal || bp.role || '');
+			var castArcBeat = nwBeatFieldText(bp.castArcBeat || '');
+			if (!castArcBeat && Array.isArray(bp.characterBeats) && bp.characterBeats.length) {
+		castArcBeat = bp.characterBeats.map(nwBeatFieldText).filter(Boolean).join('; ');
+			}
+			if (!castArcBeat) castArcBeat = nwBeatFieldText(bp.arcStep || '');
+			var subplotPressure = nwBeatFieldText(bp.subplotPressure || bp.subplot || '');
+			var dialogueTurn = nwBeatFieldText(bp.dialogueTurn || bp.dialogue || bp.dialogueObligation || '');
+			var sensoryWorldHook = nwBeatFieldText(bp.sensoryWorldHook || '');
+			if (!sensoryWorldHook && Array.isArray(bp.worldHooks) && bp.worldHooks.length) {
+		sensoryWorldHook = bp.worldHooks.map(String).filter(Boolean).join('; ');
+			}
+			var turnOrPayoff = nwBeatFieldText(bp.turnOrPayoff || bp.payoff || '');
+			if (!turnOrPayoff && Array.isArray(bp.allowedPayoffs) && bp.allowedPayoffs.length) {
+		turnOrPayoff = bp.allowedPayoffs.map(String).filter(Boolean).join('; ');
+			}
+			if (!turnOrPayoff) turnOrPayoff = nwBeatFieldText(bp.arcStep || '');
+			return {
+		chapter: bp.chapter != null ? bp.chapter : chapterNum,
+		sceneGoal: sceneGoal,
+		castArcBeat: castArcBeat,
+		subplotPressure: subplotPressure,
+		dialogueTurn: dialogueTurn,
+		sensoryWorldHook: sensoryWorldHook,
+		turnOrPayoff: turnOrPayoff,
+		// preserve extras for packing
+		characterBeats: bp.characterBeats,
+		worldHooks: bp.worldHooks,
+		allowedPayoffs: bp.allowedPayoffs,
+		deferredThreads: bp.deferredThreads,
+		role: bp.role || '',
+		arcStep: bp.arcStep || ''
+			};
+		}
+
+		function scoreBeatCoverage(nd, opts) {
+			nd = nd || {};
+			opts = opts || {};
+			var cap = Number(opts.chapterCap) || Number(nd.numChapters) || Number(opts.e2eCap) || 0;
+			var list = Array.isArray(nd.chapterBlueprints) ? nd.chapterBlueprints : [];
+			if (!cap || cap < 1) cap = Math.max(list.length, 1);
+			var stubLimit = NW_BEAT_STUB_CHARS;
+			var perChapter = [];
+			var failures = [];
+			var namedChars = (nd.characters || []).map(function (c) {
+		return String((c && c.name) || '').trim().toLowerCase();
+			}).filter(function (n) { return n.length >= 2; });
+			var hasSubplots = (nd.subplots || []).length >= 1;
+
+			for (var i = 0; i < cap; i++) {
+		var ch = i + 1;
+		var raw = list[i];
+		if (raw == null) {
+			raw = list.find(function (b) {
+				return b && (b.chapter === ch || b.chapter === String(ch));
+			});
+		}
+		var pack = normalizeChapterBeatPack(raw, ch);
+		var row = { chapter: ch, ok: true, missing: [], stub: [], castNamed: false };
+		if (!pack) {
+			row.ok = false;
+			row.missing = NW_BEAT_REQUIRED.slice();
+			failures.push('beat_missing_blueprint:ch' + ch);
+			perChapter.push(row);
+			continue;
+		}
+		NW_BEAT_REQUIRED.forEach(function (k) {
+			var t = nwBeatFieldText(pack[k]);
+			if (!t) {
+				row.missing.push(k);
+				failures.push('beat_missing:' + k + ':ch' + ch);
+			} else if (t.length < stubLimit) {
+				row.stub.push(k);
+				failures.push('beat_stub:' + k + ':ch' + ch + ':chars=' + t.length + '<' + stubLimit);
+			}
+		});
+		var castText = String(pack.castArcBeat || '').toLowerCase();
+		row.castNamed = !namedChars.length || namedChars.some(function (n) {
+			var parts = n.replace(/^dr\.\s+/, '').split(/\s+/).filter(function (p) { return p.length >= 4; });
+			return castText.indexOf(n) >= 0 || parts.some(function (p) { return castText.indexOf(p) >= 0; });
+		});
+		if (namedChars.length && !row.castNamed) {
+			failures.push('beat_cast_unnamed:ch' + ch);
+			row.ok = false;
+		}
+		if (hasSubplots && !nwBeatFieldText(pack.subplotPressure)) {
+			// already covered by missing; keep explicit
+		}
+		if (row.missing.length || row.stub.length) row.ok = false;
+		row.pack = {
+			sceneGoal: pack.sceneGoal,
+			castArcBeat: pack.castArcBeat,
+			subplotPressure: pack.subplotPressure,
+			dialogueTurn: pack.dialogueTurn,
+			sensoryWorldHook: pack.sensoryWorldHook,
+			turnOrPayoff: pack.turnOrPayoff
+		};
+		perChapter.push(row);
+			}
+			return {
+		passed: failures.length === 0,
+		failures: failures,
+		perChapter: perChapter,
+		required: NW_BEAT_REQUIRED.slice(),
+		chapterCap: cap,
+		stubCharLimit: stubLimit
+			};
+		}
+
+		function assertBeatCoverageOrThrow(nd, opts) {
+			var r = scoreBeatCoverage(nd, opts);
+			if (!r.passed) {
+		var msg = 'BEAT COVERAGE FAIL-CLOSED: ' + (r.failures || []).slice(0, 10).join(' | ') +
+			'. Run enrichChapterBlueprints until all six beats are non-stub for every chapter in cap.';
+		if (typeof console !== 'undefined') console.error(msg);
+		if (typeof alert === 'function') alert(msg);
+		throw new Error(msg);
+			}
+			return r;
+		}
+		// === BEAT_COVERAGE_END ===
+
+
 		function scoreAdvanceToTab5Readiness(nd) {
 			nd = nd || (typeof novelData !== 'undefined' ? novelData : {});
 			const cast = scoreCastDensity(nd.characters || [], { novelData: nd });
 			const subs = scoreSubplotDensity(nd.subplots || [], { novelData: nd });
 			const outline = scoreOutlineObligations(nd);
-			const failures = [].concat(cast.failures || [], subs.failures || [], outline.failures || []);
+			const beatCap = Number(nd.numChapters) || Math.max((nd.chapterBlueprints || []).length, 1);
+			const beats = (typeof scoreBeatCoverage === 'function')
+				? scoreBeatCoverage(nd, { chapterCap: beatCap })
+				: { passed: true, failures: [], perChapter: [] };
+			const failures = [].concat(cast.failures || [], subs.failures || [], outline.failures || [], beats.failures || []);
 			const report = {
 				passed: failures.length === 0,
 				failures: failures,
 				cast: cast,
 				subplots: subs,
-				outline: outline
+				outline: outline,
+				beats: beats
 			};
 			if (typeof novelData !== 'undefined') {
 				novelData.lastEnrichReadiness = report;
@@ -8075,6 +8247,150 @@ return c && c.name && c.backstory && c.arc; });
 
 
 		//Generate a chapter outline and arc
+
+		async function enrichChapterBlueprints() {
+		    if (typeof window !== 'undefined') window.__activeSkillId = 'tab4.enrichChapterBlueprints';
+		    collectData();
+		    const cap = Number(novelData.numChapters) || Math.max((novelData.chapterBlueprints || []).length, 1);
+		    let list = Array.isArray(novelData.chapterBlueprints) ? novelData.chapterBlueprints.slice() : [];
+		    while (list.length < cap) list.push({ chapter: list.length + 1 });
+		    list = list.slice(0, cap).map(function (bp, i) {
+		        const n = normalizeChapterBeatPack(bp, i + 1) || { chapter: i + 1 };
+		        n.chapter = n.chapter != null ? n.chapter : (i + 1);
+		        return n;
+		    });
+		    novelData.chapterBlueprints = list;
+		    const before = scoreBeatCoverage(novelData, { chapterCap: cap });
+		    const promptLines = [
+		        'Enrich (densify) chapterBlueprints for "' + (novelData.title || 'Untitled') + '" (' + (novelData.genre || '') + ').',
+		        'Cap: exactly ' + cap + ' chapter blueprint objects (chapters 1..' + cap + ').',
+		        'Cast: ' + JSON.stringify((novelData.characters || []).map(function (c) { return c && c.name; }).filter(Boolean)),
+		        'Subplots: ' + JSON.stringify(typeof digestSubplots === 'function' ? digestSubplots(novelData.subplots, 4, 220) : (novelData.subplots || []).slice(0, 4)),
+		        'Novel outline digest: ' + (typeof digestText === 'function' ? digestText(novelData.novelOutline || '', 500) : String(novelData.novelOutline || '').slice(0, 500)),
+		        'Setting: ' + (typeof digestText === 'function' ? digestText(novelData.setting || '', 280) : String(novelData.setting || '').slice(0, 280)),
+		        'Existing blueprints: ' + JSON.stringify(list),
+		        '',
+		        'HARD RULES (pipeline fails if missed):',
+		        '- Each chapter MUST include ALL SIX beats as strings >= 40 chars: sceneGoal, castArcBeat, subplotPressure, dialogueTurn, sensoryWorldHook, turnOrPayoff.',
+		        '- castArcBeat MUST name at least one existing cast member.',
+		        '- dialogueTurn must specify spoken exchange obligation (who/about), not "add dialogue".',
+		        '- No pad-to-N adjective filler; dramatizable obligations only.',
+		        '- Soft invent of missing blueprint rows is OK; do not wipe dense fields — expand thin ones.',
+		        'Return JSON only: {"chapterBlueprints":[{"chapter":1,"sceneGoal":"...","castArcBeat":"...","subplotPressure":"...","dialogueTurn":"...","sensoryWorldHook":"...","turnOrPayoff":"..."}, ...]}'
+		    ];
+		    const messages = [
+		        { role: 'system', content: (typeof getSkillSystemPrompt === 'function') ? getSkillSystemPrompt('tab4.enrichChapterBlueprints', 'You densify chapter blueprints into six dramatizable beats.') : 'You densify chapter blueprints into six dramatizable beats.' },
+		        { role: 'user', content: promptLines.join('\n') }
+		    ];
+		    requestLog.lastPrompt = messages[1].content;
+		    requestLog.status = 'Pending';
+		    requestLog.originTab = 'tab4';
+		    if (typeof updateRequestLog === 'function') updateRequestLog();
+		    const response = await callAI(messages, document.getElementById('tab4'), {
+		        max_tokens: Math.max(12000, parseInt(document.getElementById('maxTokens')?.value || '0', 10) || 0),
+		        operationName: 'enrichChapterBlueprints'
+		    });
+		    const norm = (typeof normalizeInbound === 'function')
+		        ? normalizeInbound('tab4.generateNovelOutlines', response, { novelData: novelData })
+		        : response;
+		    let refined = (norm && norm.chapterBlueprints) || (response && response.chapterBlueprints) || [];
+		    if (!Array.isArray(refined) || !refined.length) {
+		        throw new Error('enrichChapterBlueprints: empty chapterBlueprints[] in model response');
+		    }
+		    function prefer(a, b) {
+		        if (typeof preferLongerField === 'function') return preferLongerField(a, b);
+		        const sa = String(a || '').trim();
+		        const sb = String(b || '').trim();
+		        return sa.length >= sb.length ? sa : sb;
+		    }
+		    const byCh = {};
+		    refined.forEach(function (bp, i) {
+		        const pack = normalizeChapterBeatPack(bp, (bp && bp.chapter) || (i + 1));
+		        if (!pack) return;
+		        const ch = Number(pack.chapter) || (i + 1);
+		        byCh[ch] = pack;
+		    });
+		    novelData.chapterBlueprints = list.map(function (existing, i) {
+		        const ch = i + 1;
+		        const upd = byCh[ch] || normalizeChapterBeatPack(refined[i], ch);
+		        if (!upd) return existing;
+		        return {
+		            chapter: ch,
+		            sceneGoal: prefer(upd.sceneGoal, existing.sceneGoal),
+		            castArcBeat: prefer(upd.castArcBeat, existing.castArcBeat),
+		            subplotPressure: prefer(upd.subplotPressure, existing.subplotPressure),
+		            dialogueTurn: prefer(upd.dialogueTurn, existing.dialogueTurn),
+		            sensoryWorldHook: prefer(upd.sensoryWorldHook, existing.sensoryWorldHook),
+		            turnOrPayoff: prefer(upd.turnOrPayoff, existing.turnOrPayoff),
+		            role: existing.role || upd.role || '',
+		            arcStep: prefer(upd.arcStep, existing.arcStep),
+		            characterBeats: upd.characterBeats || existing.characterBeats,
+		            worldHooks: upd.worldHooks || existing.worldHooks,
+		            allowedPayoffs: upd.allowedPayoffs || existing.allowedPayoffs,
+		            deferredThreads: existing.deferredThreads || upd.deferredThreads
+		        };
+		    });
+		    let after = scoreBeatCoverage(novelData, { chapterCap: cap });
+		    if (!after.passed && !window.__enrichBpRetrying) {
+		        window.__enrichBpRetrying = true;
+		        try {
+		            const thinCh = (after.perChapter || []).filter(function (r) { return r && !r.ok; }).map(function (r) { return r.chapter; });
+		            if (thinCh.length) {
+		                const thinBps = novelData.chapterBlueprints.filter(function (bp, i) {
+		                    return thinCh.indexOf(Number(bp.chapter) || (i + 1)) >= 0;
+		                });
+		                const retryPrompt = [
+		                    'TARGETED BLUEPRINT BEAT RETRY - only these chapters still fail six-beat floors:',
+		                    JSON.stringify(thinBps),
+		                    'Failures: ' + (after.failures || []).slice(0, 12).join(' | '),
+		                    'Return JSON only with full six beats >= 40 chars each, naming cast in castArcBeat: {"chapterBlueprints":[...]}'
+		                ].join('\n');
+		                const retryResp = await callAI([
+		                    { role: 'system', content: 'Finish thin chapter blueprint beats only.' },
+		                    { role: 'user', content: retryPrompt }
+		                ], document.getElementById('tab4'), {
+		                    max_tokens: Math.max(10000, parseInt(document.getElementById('maxTokens')?.value || '0', 10) || 0),
+		                    operationName: 'enrichChapterBlueprintsRetry'
+		                });
+		                const retryNorm = (typeof normalizeInbound === 'function')
+		                    ? normalizeInbound('tab4.generateNovelOutlines', retryResp, { novelData: novelData })
+		                    : retryResp;
+		                const retryList = (retryNorm && retryNorm.chapterBlueprints) || (retryResp && retryResp.chapterBlueprints) || [];
+		                retryList.forEach(function (bp, i) {
+		                    const pack = normalizeChapterBeatPack(bp, (bp && bp.chapter) || thinCh[i]);
+		                    if (!pack) return;
+		                    const ch = Number(pack.chapter) || thinCh[i];
+		                    const idx = Math.max(0, ch - 1);
+		                    if (idx >= novelData.chapterBlueprints.length) return;
+		                    const existing = novelData.chapterBlueprints[idx];
+		                    novelData.chapterBlueprints[idx] = Object.assign({}, existing, {
+		                        chapter: ch,
+		                        sceneGoal: prefer(pack.sceneGoal, existing.sceneGoal),
+		                        castArcBeat: prefer(pack.castArcBeat, existing.castArcBeat),
+		                        subplotPressure: prefer(pack.subplotPressure, existing.subplotPressure),
+		                        dialogueTurn: prefer(pack.dialogueTurn, existing.dialogueTurn),
+		                        sensoryWorldHook: prefer(pack.sensoryWorldHook, existing.sensoryWorldHook),
+		                        turnOrPayoff: prefer(pack.turnOrPayoff, existing.turnOrPayoff)
+		                    });
+		                });
+		                after = scoreBeatCoverage(novelData, { chapterCap: cap });
+		            }
+		        } finally {
+		            window.__enrichBpRetrying = false;
+		        }
+		    }
+		    const ta = document.getElementById('chapterBlueprints');
+		    if (ta) ta.value = JSON.stringify(novelData.chapterBlueprints, null, 2);
+		    novelData.lastBeatEnrich = { before: before, after: after, ts: new Date().toISOString() };
+		    window.__lastBeatEnrich = novelData.lastBeatEnrich;
+		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below beat floors)';
+		    if (typeof updateRequestLog === 'function') updateRequestLog();
+		    if (!after.passed) {
+		        throw new Error('enrichChapterBlueprints densify still below beat floors: ' + (after.failures || []).slice(0, 8).join(' | '));
+		    }
+		    return after;
+		}
+
 		async function generateChapterOutline(chapterNum) {
 		    collectData();
 		    // Agent Skill I/O pack (tab4.generateChapterOutline)
@@ -8344,10 +8660,18 @@ return c && c.name && c.backstory && c.arc; });
 				const chWords = chOutline ? chOutline.split(/\s+/).length : 0;
 				if (plot.length < 80) fails.push('plot/plotOutline empty/stub');
 				if (chWords < 80) fails.push('chapter outline stub-thin words=' + chWords);
-				const bpGate = (typeof getChapterBlueprint === 'function') ? getChapterBlueprint(ch) : null;
-				const bpDig = (typeof digestChapterBlueprint === 'function') ? digestChapterBlueprint(bpGate) : bpGate;
-				if (!bpDig || !(bpDig.arcStep || (bpDig.characterBeats && bpDig.characterBeats.length) || (bpDig.subplotPressure && bpDig.subplotPressure.length))) {
-					fails.push('chapterBlueprint missing/stub for chapter ' + ch);
+				if (typeof scoreBeatCoverage === 'function') {
+					const beatCap = Number(novelData.numChapters) || Math.max((novelData.chapterBlueprints || []).length, ch);
+					const beatR = scoreBeatCoverage(novelData, { chapterCap: beatCap });
+					if (!beatR.passed) {
+						(beatR.failures || []).slice(0, 8).forEach(function (f) { fails.push(f); });
+					}
+				} else {
+					const bpGate = (typeof getChapterBlueprint === 'function') ? getChapterBlueprint(ch) : null;
+					const bpDig = (typeof digestChapterBlueprint === 'function') ? digestChapterBlueprint(bpGate) : bpGate;
+					if (!bpDig || !(bpDig.arcStep || (bpDig.characterBeats && bpDig.characterBeats.length) || (bpDig.subplotPressure && bpDig.subplotPressure.length))) {
+						fails.push('chapterBlueprint missing/stub for chapter ' + ch);
+					}
 				}
 				const pack = [plot, novel, chOutline].filter(Boolean).join('\n');
 				if (typeof scoreProseQuality === 'function' && pack.length >= 40) {

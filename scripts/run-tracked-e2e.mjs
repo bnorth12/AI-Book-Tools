@@ -1,5 +1,5 @@
-/**
- * Lean Tracked E2E driver — step-by-step with live progress
+﻿/**
+ * Lean Tracked E2E driver â€” step-by-step with live progress
  */
 import fs from 'fs';
 import path from 'path';
@@ -73,7 +73,7 @@ function assertApiStep(label, beforeCalls, after, opts) {
   const minChars = opts.minChars || 0;
   const contentLen = opts.contentLen != null ? opts.contentLen : null;
   if (!grew && !opts.allowNoCall) {
-    throw new Error(label + ': expected API call to increase book tokenUsage.calls (before=' + beforeCalls + ' after=' + after.totals.calls + ') — likely auth failure or silent no-op');
+    throw new Error(label + ': expected API call to increase book tokenUsage.calls (before=' + beforeCalls + ' after=' + after.totals.calls + ') â€” likely auth failure or silent no-op');
   }
   if (contentLen != null && contentLen < minChars) {
     throw new Error(label + ': expected content >= ' + minChars + ' chars, got ' + contentLen + ' (false pass / empty generation)');
@@ -123,7 +123,7 @@ function tokLine(snap, beforeCalls) {
 
 async function runStep(page, tab, name, stepLabel, fn, evalFn) {
   writeStatus(tab, stepLabel, 'running');
-  appendProgress('### Tab ' + tab + ' — ' + name + ' — ' + stepLabel + '\n- Status: running\n- Tokens: pending\n- Eval: starting…\n');
+  appendProgress('### Tab ' + tab + ' â€” ' + name + ' â€” ' + stepLabel + '\n- Status: running\n- Tokens: pending\n- Eval: startingâ€¦\n');
   const before = await bookSnap(page);
   const beforeCalls = before.totals.calls;
   let ok = true;
@@ -140,8 +140,8 @@ async function runStep(page, tab, name, stepLabel, fn, evalFn) {
   const status = ok ? 'pass' : 'fail';
   writeStatus(tab, stepLabel, status);
   appendProgress(
-    '### Tab ' + tab + ' — ' + name + ' — ' + stepLabel + '\n' +
-    '- Status: ' + status + (err ? (' — ' + String(err).replace(/\n/g, ' ').slice(0, 200)) : '') + '\n' +
+    '### Tab ' + tab + ' â€” ' + name + ' â€” ' + stepLabel + '\n' +
+    '- Status: ' + status + (err ? (' â€” ' + String(err).replace(/\n/g, ' ').slice(0, 200)) : '') + '\n' +
     '- Tokens this call / book cumulative: ' + tokLine(after, beforeCalls) + '\n' +
     '- Eval: ' + evalText + '\n'
   );
@@ -156,7 +156,7 @@ const report = {
 };
 
 (async () => {
-  appendProgress('### Phase — lean E2E — launching\n- Status: running\n- Tokens: n/a\n- Eval: Opening live NovelWriter via Playwright; injecting API key (not logged); lean config 2ch/500w/3chars/2subplots.\n');
+  appendProgress('### Phase â€” lean E2E â€” launching\n- Status: running\n- Tokens: n/a\n- Eval: Opening live NovelWriter via Playwright; injecting API key (not logged); lean config 2ch/500w/3chars/2subplots.\n');
   writeStatus(0, 'e2e-launch', 'running');
 
   const browser = await chromium.launch({ headless: true });
@@ -334,7 +334,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     const beforeCalls = beforeSnap.totals.calls;
     const r = await runStep(page, tab, name, stepLabel, fn, evalFn);
     // HARD_STOP_ENRICH_STEP: enrich evaluate/throw must abort before outlines
-    if (enrichMode && !r.ok && /enrichCharacters|enrichSubplots/.test(stepLabel)) {
+    if (enrichMode && !r.ok && /enrichCharacters|enrichSubplots|enrichChapterBlueprints/.test(stepLabel)) {
       report.steps.push({ name: stepLabel, ok: false, error: r.err });
       fs.writeFileSync(REPORT_JSON, JSON.stringify(Object.assign({}, report, { partial: true }), null, 2));
       throw new Error('ENRICH HARD-STOP [' + stepLabel + ']: ' + (r.err || 'failed'));
@@ -356,10 +356,10 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       } catch (assertErr) {
         r.ok = false;
         r.err = assertErr.message;
-        appendProgress('### Tab ' + tab + ' — ' + name + ' — ' + stepLabel + ' (assert)\n- Status: fail — ' + assertErr.message + '\n- Tokens this call / book cumulative: ' + tokLine(r.after, beforeCalls) + '\n- Eval: FAIL-CLOSED stage gate (empty/stub-thin/sloppy early input must not multiply into later stages).\n');
+        appendProgress('### Tab ' + tab + ' â€” ' + name + ' â€” ' + stepLabel + ' (assert)\n- Status: fail â€” ' + assertErr.message + '\n- Tokens this call / book cumulative: ' + tokLine(r.after, beforeCalls) + '\n- Eval: FAIL-CLOSED stage gate (empty/stub-thin/sloppy early input must not multiply into later stages).\n');
         writeStatus(tab, stepLabel, 'fail');
         // HARD_STOP_ENRICH_GATE: densify failures must not leak into outlines/chapters
-        if (enrichMode && /enrichCharacters|enrichSubplots/.test(stepLabel)) {
+        if (enrichMode && /enrichCharacters|enrichSubplots|enrichChapterBlueprints/.test(stepLabel)) {
           throw assertErr;
         }
       }
@@ -379,7 +379,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     return page.evaluate(async () => (typeof runC1Smoke === 'function' ? await runC1Smoke() : false));
   }, (a, r, ok) => ok && r
     ? 'Local digest asserts passed (no full-manuscript dump). Packing path looks healthy for lean run.'
-    : 'C1 smoke failed or returned false — digests/packing may be weak; continuing carefully.');
+    : 'C1 smoke failed or returned false â€” digests/packing may be weak; continuing carefully.');
 
   await doStep(1, 'API & Story Info', 'fetchAuthors', async () => {
     return page.evaluate(async () => {
@@ -401,7 +401,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       await fetchStyleGuide();
       return { author: author, len: ((document.getElementById('styleGuide') || {}).value || '').length };
     });
-  }, (a, r) => (r && r.skipped) ? 'Skipped — no author set.' : ('Style guide length ' + ((r && r.len) || 0) + '. Prefer concrete craft notes over vague cheerleading.'));
+  }, (a, r) => (r && r.skipped) ? 'Skipped â€” no author set.' : ('Style guide length ' + ((r && r.len) || 0) + '. Prefer concrete craft notes over vague cheerleading.'));
 
   await doStep(1, 'API & Story Info', 'suggestStoryInfo', async () => {
     if (useFixture) return page.evaluate(() => ({ title: novelData.title || '', skipped: true, reason: 'fixture' }));
@@ -409,7 +409,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       await suggestStoryInfo();
       return { title: document.getElementById('title').value };
     });
-  }, (a, r) => (r && r.skipped) ? ('Fixture title/arc reused: "' + (a.storyArcSnippet || a.title || '…') + '".') : ('Title/arc filled. Snippet: "' + (a.storyArcSnippet || '…') + '". Looking for concrete stakes vs stock openers.'), { minChars: 0, allowNoCall: true });
+  }, (a, r) => (r && r.skipped) ? ('Fixture title/arc reused: "' + (a.storyArcSnippet || a.title || 'â€¦') + '".') : ('Title/arc filled. Snippet: "' + (a.storyArcSnippet || 'â€¦') + '". Looking for concrete stakes vs stock openers.'), { minChars: 0, allowNoCall: true });
 
   await doStep(2, 'Characters', 'suggestCharacters', async () => {
     if (useFixture) return page.evaluate(() => ({ count: (novelData.characters || []).length, skipped: true }));
@@ -504,7 +504,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   });
 
   await doStep(4, 'Outlines', 'generateNovelOutlines', async () => {
-    // Always run macro outline agent (fixture previously skipped → empty novelOutline/plotOutline/blueprints).
+    // Always run macro outline agent (fixture previously skipped â†’ empty novelOutline/plotOutline/blueprints).
     return page.evaluate(async () => {
       await generateNovelOutlines();
       const richSubs = (novelData.subplots || []).filter((s) => {
@@ -581,13 +581,13 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     }
   });
 
-  // Pass3: outline refine / incorporate (obligations) when enrich mode on — once after macros / ch1
+  // Pass3: outline refine / incorporate (obligations) when enrich mode on â€” once after macros / ch1
   await doStep(4, 'Outlines', 'outlineRefine', async () => {
     if (!enrichMode) return page.evaluate(() => ({ skipped: true }));
     return page.evaluate(async () => {
       const notes = [
         'Name cast members and active subplots in novel/plot/arc outlines.',
-        'Ensure world/location hooks and conflict→resolution beats are explicit.',
+        'Ensure world/location hooks and conflictâ†’resolution beats are explicit.',
         'Preserve chapterBlueprints subplotPressure and characterBeats.'
       ].join(' ');
       const box = document.getElementById('outlineImprovements');
@@ -707,7 +707,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       outlineOnlyOk = false;
       outlineOnlyErr = e.message;
     }
-    appendProgress('### Phase - outline-only proof\n- Status: ' + (outlineOnlyOk ? 'ok' : 'fail') + (outlineOnlyErr ? (' — ' + outlineOnlyErr) : '') + '\n- Eval: novel=' + outlineProof.novelOutlineLen + ' plot=' + outlineProof.plotOutlineLen + ' arc=' + outlineProof.storyArcOutlineLen + ' bp=' + outlineProof.blueprints + ' subplots=' + outlineProof.subplots + ' ch1words=' + outlineProof.ch1Words + ' world=' + outlineProof.worldBible + ' promptWorld=' + outlineProof.lastPromptHasWorld + ' slopRisk=' + outlineProof.aiSlopRisk + ' consistency=' + outlineProof.consistency + ' sample=\"' + String(outlineProof.subplot0 || '').replace(/\n/g, ' ') + '\"\n');
+    appendProgress('### Phase - outline-only proof\n- Status: ' + (outlineOnlyOk ? 'ok' : 'fail') + (outlineOnlyErr ? (' â€” ' + outlineOnlyErr) : '') + '\n- Eval: novel=' + outlineProof.novelOutlineLen + ' plot=' + outlineProof.plotOutlineLen + ' arc=' + outlineProof.storyArcOutlineLen + ' bp=' + outlineProof.blueprints + ' subplots=' + outlineProof.subplots + ' ch1words=' + outlineProof.ch1Words + ' world=' + outlineProof.worldBible + ' promptWorld=' + outlineProof.lastPromptHasWorld + ' slopRisk=' + outlineProof.aiSlopRisk + ' consistency=' + outlineProof.consistency + ' sample=\"' + String(outlineProof.subplot0 || '').replace(/\n/g, ' ') + '\"\n');
     report.steps.push({ tab: 5, name: 'Chapters', step: 'outline-only-skip', ok: outlineOnlyOk, error: outlineOnlyErr, eval: outlineOnlyOk ? 'Skipped prose generation (outline-only); early-stage gates passed.' : ('outline-only gates failed: ' + outlineOnlyErr) });
     if (!outlineOnlyOk) throw new Error(outlineOnlyErr || 'outline-only stage gates failed');
   }
@@ -727,7 +727,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       };
       if (typeof NW_QUALITY_GATE === 'object' && NW_QUALITY_GATE) {
         window.__NW_GATE_BACKUP = Object.assign({}, NW_QUALITY_GATE);
-        // High bar so first draft fails closed → pass1 revise; continuity still open → pass2
+        // High bar so first draft fails closed â†’ pass1 revise; continuity still open â†’ pass2
         NW_QUALITY_GATE.minInterest = Math.max(NW_QUALITY_GATE.minInterest || 0, 92);
         NW_QUALITY_GATE.minHumanLikeness = Math.max(NW_QUALITY_GATE.minHumanLikeness || 0, 90);
       }
@@ -824,7 +824,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       if (!String(novelData.setting || '').trim() && hasWb && (!setDig || setDig === 'No setting provided')) {
         throw new Error('setting digest empty despite worldBible');
       }
-      // Coverage gate exists: score a deliberately empty text → must fail
+      // Coverage gate exists: score a deliberately empty text â†’ must fail
       const emptyCov = scoreObligationCoverage('', 1);
       if (emptyCov.passed) throw new Error('coverage gate false-passed on empty prose');
       // Score against blueprint with synthetic prose containing beat names
@@ -847,7 +847,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       };
     });
   }, (a, r) => {
-    // runStep calls evalFn(after, result) — result is 2nd arg
+    // runStep calls evalFn(after, result) â€” result is 2nd arg
     if (!r || !r.hasBlueprint) return 'FAIL: no chapter blueprint for Ch1';
     if (r.emptyPassed) return 'FAIL: empty coverage must fail-closed';
     return 'packChars=' + r.packChars + ' plotDig=' + r.plotDigChars + ' setDig=' + r.setDigChars +
@@ -954,7 +954,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   await doStep(6, 'Edit Chapters', 'applyStagedChapterImprovements1', async () => {
     return page.evaluate(async () => {
       if (typeof showTab === 'function') showTab(6);
-      if (typeof applyStagedChapterImprovements !== 'function') throw new Error('applyStagedChapterImprovements missing — refresh live HTML');
+      if (typeof applyStagedChapterImprovements !== 'function') throw new Error('applyStagedChapterImprovements missing â€” refresh live HTML');
       const editEl = document.getElementById('chapterEditContent1');
       if (!editEl) throw new Error('chapterEditContent1 missing');
       if (!editEl.value && novelData.chapters[0]) editEl.value = novelData.chapters[0];
@@ -985,7 +985,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
 
   await doStep(6, 'Edit Chapters', 'reviseChapterForQuality1', async () => {
     return page.evaluate(async () => {
-      if (typeof reviseChapterForQuality !== 'function') throw new Error('reviseChapterForQuality missing — refresh live HTML');
+      if (typeof reviseChapterForQuality !== 'function') throw new Error('reviseChapterForQuality missing â€” refresh live HTML');
       const prior = (novelData.qualityReviseLog || []).slice();
       const autoRevise = prior.length > 0;
       let result;
@@ -1010,7 +1010,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       };
     });
   }, (a, r) => {
-    return 'QE2 revise: skipped=' + (r && r.skipped) + ' reason=' + ((r && r.reason) || '') + ' attempts=' + ((r && r.attempts) || 0) + ' gate ' + (r && r.passedBefore) + '→' + (r && r.passedAfter) + ' log=' + (r && r.reviseLogLen) + '.';
+    return 'QE2 revise: skipped=' + (r && r.skipped) + ' reason=' + ((r && r.reason) || '') + ' attempts=' + ((r && r.attempts) || 0) + ' gate ' + (r && r.passedBefore) + 'â†’' + (r && r.passedAfter) + ' log=' + (r && r.reviseLogLen) + '.';
   }, { minChars: 200, contentFromResult: true, allowNoCall: true });
 
   await doStep(7, 'Book', 'suggestBookImprovements', async () => {
@@ -1026,7 +1026,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
 
   await doStep(7, 'Book', 'applyTopBookCritique', async () => {
     return page.evaluate(async () => {
-      if (typeof applyTopBookCritiques !== 'function') throw new Error('applyTopBookCritiques missing — refresh live HTML');
+      if (typeof applyTopBookCritiques !== 'function') throw new Error('applyTopBookCritiques missing â€” refresh live HTML');
       const pending = (novelData.bookImprovementsWithStatus || []).filter(x => x && x.status === 'To Incorporate' && String(x.text || '').trim());
       if (!pending.length) throw new Error('No To Incorporate critique items to apply');
       const before = scoreProseQuality(novelData.chapters[0] || '');
@@ -1142,7 +1142,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     '- Book tokens prompt/comp/total: ' + report.summary.totals.prompt_tokens + '/' + report.summary.totals.completion_tokens + '/' + report.summary.totals.total_tokens,
     '- Failed steps: ' + (report.summary.failedSteps.join(', ') || 'none'),
     '',
-    '## Cost / efficiency (tokens) — not quality',
+    '## Cost / efficiency (tokens) â€” not quality',
     '',
     'Token usage is a cost/efficiency product metric. Quality scores are separate (below).',
     '',
@@ -1152,7 +1152,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     '| --- | --- | --- | ---: | ---: | ---: | ---: |'
   ];
   for (const c of report.tokensByPrompt) {
-    mdLines.push('| ' + c.i + ' | ' + c.originTab + ' | ' + c.operationName + ' | ' + c.prompt_tokens + ' | ' + c.completion_tokens + ' | ' + c.total_tokens + ' | ' + (c.contextPackChars == null ? '—' : c.contextPackChars) + ' |');
+    mdLines.push('| ' + c.i + ' | ' + c.originTab + ' | ' + c.operationName + ' | ' + c.prompt_tokens + ' | ' + c.completion_tokens + ' | ' + c.total_tokens + ' | ' + (c.contextPackChars == null ? 'â€”' : c.contextPackChars) + ' |');
   }
   mdLines.push('');
   mdLines.push('### Per stage rollup');
@@ -1168,7 +1168,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   mdLines.push('- prompt/comp/total: **' + report.summary.totals.prompt_tokens + ' / ' + report.summary.totals.completion_tokens + ' / ' + report.summary.totals.total_tokens + '**');
   mdLines.push('- calls: **' + report.summary.callCount + '**');
   mdLines.push('');
-  mdLines.push('## Quality samples (prose — separate from tokens)');
+  mdLines.push('## Quality samples (prose â€” separate from tokens)');
   for (const s of report.qualitySamples) {
     mdLines.push('- ' + s.label + ': interest=' + s.interest + ' readability=' + s.readability + ' aiSlopRisk=' + s.aiSlopRisk + ' humanLikeness=' + s.humanLikeness + ' (' + s.source + ')');
   }
@@ -1177,13 +1177,13 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   mdLines.push('');
   mdLines.push('- Canonical human deliverable after builder: `TRACKED_E2E_REPORT_YYYY-MM-DD_HHMMSS.md` (+ `TRACKED_E2E_REPORT_LATEST.md` copy)');
   mdLines.push('- Optional sidecar: `TRACKED_E2E_ANNEX_NOVELDATA.json`');
-  mdLines.push('- `TRACKED_E2E_TOKENS_BY_STAGE.md` — tokens-only view');
-  mdLines.push('- `TRACKED_E2E_REPORT.json` — machine-readable (includes tokensByPrompt / tokensByStage)');
+  mdLines.push('- `TRACKED_E2E_TOKENS_BY_STAGE.md` â€” tokens-only view');
+  mdLines.push('- `TRACKED_E2E_REPORT.json` â€” machine-readable (includes tokensByPrompt / tokensByStage)');
   fs.writeFileSync(REPORT_MD_LATEST, mdLines.join('\n') + '\n');
 
   // Tokens-only companion
   const tokMd = [
-    '# Tracked E2E — tokens by stage / prompt',
+    '# Tracked E2E â€” tokens by stage / prompt',
     '',
     'Cost/efficiency only. Not quality.',
     '',
@@ -1203,16 +1203,16 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   }
   fs.writeFileSync(TOKENS_MD, tokMd.join('\n') + '\n');
 
-  // Do not write TRACKED_E2E_ANNEXES.md — book annexes live only in TRACKED_E2E_REPORT.md.
+  // Do not write TRACKED_E2E_ANNEXES.md â€” book annexes live only in TRACKED_E2E_REPORT.md.
   if (fs.existsSync(ANNEX_MD)) {
     fs.unlinkSync(ANNEX_MD);
   }
 
 
   appendProgress(
-    '### Phase — lean E2E — final\n' +
+    '### Phase â€” lean E2E â€” final\n' +
     '- Status: ' + (report.ok ? 'pass' : 'partial/fail') + '\n' +
-    '- Tokens this call / book cumulative: — / book ' + report.summary.totals.prompt_tokens + '/' + report.summary.totals.completion_tokens + '/' + report.summary.totals.total_tokens + ' (' + report.summary.callCount + ' calls)\n' +
+    '- Tokens this call / book cumulative: â€” / book ' + report.summary.totals.prompt_tokens + '/' + report.summary.totals.completion_tokens + '/' + report.summary.totals.total_tokens + ' (' + report.summary.callCount + ' calls)\n' +
     '- Eval: Lean run finished. Failed=[' + (report.summary.failedSteps.join(', ') || 'none') + ']. Dated report via builder (TRACKED_E2E_REPORT_<stamp>.md).\n'
   );
 
@@ -1227,7 +1227,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       if (r.status !== 0) {
         console.error('unified report builder failed', r.stderr || r.stdout);
       } else {
-        appendProgress('### Phase — unified report\n- Status: pass\n- Eval: Dated TRACKED_E2E_REPORT_<stamp>.md (+ LATEST copy) regenerated as single-file deliverable.\n');
+        appendProgress('### Phase â€” unified report\n- Status: pass\n- Eval: Dated TRACKED_E2E_REPORT_<stamp>.md (+ LATEST copy) regenerated as single-file deliverable.\n');
       }
     }
   } catch (e) {
@@ -1245,8 +1245,10 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   }, null, 2));
   process.exit(report.ok ? 0 : 2);
 })().catch(err => {
-  appendProgress('### Phase — lean E2E — fatal\n- Status: fail\n- Eval: ' + String(err && err.message || err).slice(0, 300) + '\n');
+  appendProgress('### Phase â€” lean E2E â€” fatal\n- Status: fail\n- Eval: ' + String(err && err.message || err).slice(0, 300) + '\n');
   writeStatus(0, 'fatal', 'fail');
   console.error(err);
   process.exit(1);
 });
+
+
