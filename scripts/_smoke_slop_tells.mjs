@@ -38,7 +38,7 @@ expectFail('echo', foulEcho, 'nameEcho');
 expectFail('emotion', foulEmotion, 'emotionLabel');
 expectFail('over', foulOver, 'overExplain');
 
-// B4-0b: delayed paraphrase (gap ~8 filler sentences) must foul overExplain via ±12 window
+// B4-0b: delayed paraphrase (gap ~8 filler sentences) must foul overExplain via +/-32 window
 const delayedRestate = `Rook priced the fork once. Selling the clean block would clear his mother's ledger but expose the chaplaincy network to Triad seizure; withholding it would mark him as complicit in opacity. The clean block was no longer currency. It was evidence.
 Radar bloomed once over Bridge Lock.
 Salt air hit the freighter lane.
@@ -57,7 +57,7 @@ if (fs.existsSync(ch2Path)) {
   const ch2 = fs.readFileSync(ch2Path, 'utf8');
   const ch2R = scoreSlopTells(ch2);
   ch2OverExplain = { score: ch2R.tells.overExplain.score, ok: ch2R.tells.overExplain.ok, hits: ch2R.tells.overExplain.hits, failsTell: !ch2R.tells.overExplain.ok };
-  // Optional observation: Ch2 delayed loops often sit beyond ±12 (d~26); report, do not hard-fail smoke.
+  // Optional observation: Ch2 delayed loops often sit beyond prior +/-12; now +/-32 (d~26); report, do not hard-fail smoke.
   console.log('B3R Ch2 overExplain:', JSON.stringify(ch2OverExplain));
 }
 

@@ -117,7 +117,7 @@ function scoreOverExplain(text) {
   for (let i = 1; i < sents.length; i++) {
     const b = new Set(words(sents[i].toLowerCase()).map(x => x.replace(/[^a-z]/g, '')).filter(x => x.length > 3));
     if (!b.size) continue;
-    const maxD = Math.min(12, i);
+    const maxD = Math.min(32, i);
     for (let d = 1; d <= maxD; d++) {
       const a = new Set(words(sents[i - d].toLowerCase()).map(x => x.replace(/[^a-z]/g, '')).filter(x => x.length > 3));
       if (!a.size) continue;
