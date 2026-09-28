@@ -351,6 +351,10 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         r.err = assertErr.message;
         appendProgress('### Tab ' + tab + ' — ' + name + ' — ' + stepLabel + ' (assert)\n- Status: fail — ' + assertErr.message + '\n- Tokens this call / book cumulative: ' + tokLine(r.after, beforeCalls) + '\n- Eval: FAIL-CLOSED stage gate (empty/stub-thin/sloppy early input must not multiply into later stages).\n');
         writeStatus(tab, stepLabel, 'fail');
+        // HARD_STOP_ENRICH_GATE: densify failures must not leak into outlines/chapters
+        if (enrichMode && /enrichCharacters|enrichSubplots/.test(stepLabel)) {
+          throw assertErr;
+        }
       }
     }
     report.steps.push({ name: stepLabel, ok: r.ok, error: r.err });

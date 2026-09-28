@@ -3109,6 +3109,7 @@ const messages = [
 		        `- Backstory floor >= ${floors.backstory} words: motives, wounds, relationships, why they act in chapter beats.`,
 		        `- Arc floor >= ${floors.arc} words (prefer 150-200): integrate specific subplot pressure + world/location hooks.`,
 		        '- No pad-to-N adjective filler; add dramatizable obligations.',
+		        '- CRITICAL: every backstory MUST be at least ' + floors.backstory + ' words and every arc at least ' + floors.arc + ' words or the pipeline fails.',
 		        '- Return JSON only: {"characters":[{"name":"...","backstory":"...","arc":"..."}, ...]}'
 		    ];
 		    // Agent Skill I/O pack (tab2.enrichCharacters)
@@ -3131,7 +3132,7 @@ const messages = [
 		    requestLog.originTab = 'tab2';
 		    clearReturnedInfo();
 		    updateRequestLog();
-		    const response = await callAI(messages, document.getElementById('tab2'));
+		    const response = await callAI(messages, document.getElementById('tab2'), { max_tokens: Math.max(12000, parseInt(document.getElementById('maxTokens')?.value || '0', 10) || 0), operationName: 'enrichCharacters' });
 		    // Skill validate (tab2.enrichCharacters)
 		    try {
 		        const __skillVal = validateSkillOutput('tab2.enrichCharacters', response, { novelData: novelData });
@@ -3141,36 +3142,50 @@ const messages = [
 		        }
 		    } catch (e) { console.warn('Skill validate error', e); }
 
+		    const refinedChars = (response && response.characters) || [];
+		    // APPLY_ENRICH_CAST_TO_NOVELDATA
+		    if (!Array.isArray(refinedChars) || !refinedChars.length) {
+		        throw new Error('enrichCharacters: empty/missing characters[] in model response — densify failed');
+		    }
+		    const byName = {};
+		    refinedChars.forEach((ch) => {
+		        if (ch && ch.name) byName[String(ch.name).trim().toLowerCase()] = ch;
+		    });
+		    novelData.characters = (novelData.characters || []).map((existing, i) => {
+		        const key = String((existing && existing.name) || '').trim().toLowerCase();
+		        const hit = byName[key] || refinedChars[i] || null;
+		        if (!hit) return existing;
+		        return Object.assign({}, existing, {
+		            name: hit.name || existing.name || '',
+		            backstory: hit.backstory || existing.backstory || '',
+		            arc: hit.arc || existing.arc || ''
+		        });
+		    });
 		    const charList = document.getElementById('characterList');
-		    const refinedChars = response.characters || [];
-		    const charDivs = Array.from(charList.getElementsByClassName('character'));
-		    refinedChars.forEach((char, i) => {
-		        if (i < charDivs.length) {
+		    if (charList) {
+		        const charDivs = Array.from(charList.getElementsByClassName('character'));
+		        novelData.characters.forEach((char, i) => {
+		            if (i >= charDivs.length) return;
 		            const div = charDivs[i];
-		            if (char.name) div.querySelector('.charName').value = char.name;
-		            if (char.backstory) div.querySelector('.charBackstory').value = char.backstory;
-		            if (char.arc) div.querySelector('.charArc').value = char.arc;
-		        }
-		    });
-		    novelData.characters = Array.from(charList.getElementsByClassName('character')).map((c, i) => {
-		        const existing = novelData.characters[i] || {};
-		        return {
-		            name: (c.querySelector('.charName') && c.querySelector('.charName').value) || existing.name || '',
-		            backstory: (c.querySelector('.charBackstory') && c.querySelector('.charBackstory').value) || existing.backstory || '',
-		            arc: (c.querySelector('.charArc') && c.querySelector('.charArc').value) || existing.arc || '',
-		            ...(existing.role !== undefined ? { role: existing.role } : {}),
-		            ...(existing.notes !== undefined ? { notes: existing.notes } : {})
-		        };
-		    });
-		    document.getElementById('numCharacters').value = novelData.characters.length || 1;
-		    updateCharacterCounter();
+		            const nameEl = div.querySelector('.charName');
+		            const bsEl = div.querySelector('.charBackstory');
+		            const arcEl = div.querySelector('.charArc');
+		            if (nameEl && char.name) nameEl.value = char.name;
+		            if (bsEl && char.backstory) bsEl.value = char.backstory;
+		            if (arcEl && char.arc) arcEl.value = char.arc;
+		        });
+		    }
+		    const numEl = document.getElementById('numCharacters');
+		    if (numEl) numEl.value = novelData.characters.length || 1;
+		    if (typeof updateCharacterCounter === 'function') updateCharacterCounter();
 		    const after = scoreCastDensity(novelData.characters, { novelData: novelData });
 		    novelData.lastCastEnrich = { before: before, after: after, ts: new Date().toISOString() };
-		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below density floor — re-run enrich)';
+		    window.__lastEnrichCast = novelData.lastCastEnrich;
+		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below density floor)';
 		    updateRequestLog();
 		    if (!after.passed) {
 		        console.warn('[enrichCharacters] still below floor', after.failures);
-		        alert('Cast enriched but still below density floor:\n' + after.failures.slice(0, 8).join('\n'));
+		        throw new Error('enrichCharacters densify still below density floors: ' + (after.failures || []).slice(0, 8).join(' | '));
 		    }
 		    return after;
 		}
@@ -3211,7 +3226,7 @@ const messages = [
 		    requestLog.originTab = 'tab3';
 		    clearReturnedInfo();
 		    updateRequestLog();
-		    const response = await callAI(messages, document.getElementById('tab3'));
+		    const response = await callAI(messages, document.getElementById('tab3'), { max_tokens: Math.max(8000, parseInt(document.getElementById('maxTokens')?.value || '0', 10) || 0), operationName: 'enrichSubplots' });
 		    // Skill validate (tab3.enrichSubplots)
 		    try {
 		        const __skillVal = validateSkillOutput('tab3.enrichSubplots', response, { novelData: novelData });
@@ -3222,24 +3237,35 @@ const messages = [
 		    } catch (e) { console.warn('Skill validate error', e); }
 
 		    let enriched = (response && response.subplots) || [];
+		    // APPLY_ENRICH_SUBPLOTS_TO_NOVELDATA
 		    if (!Array.isArray(enriched)) enriched = [];
-		    enriched = enriched.map(function (s) { return typeof s === 'string' ? s : subplotPlainText(s); });
-		    const subplotList = document.getElementById('subplotList');
-		    const sections = Array.from(subplotList.getElementsByClassName('subplot-section'));
-		    sections.forEach(function (sec, i) {
-		        if (i < enriched.length && enriched[i]) {
-		            sec.querySelector('.subplot').value = enriched[i];
-		        }
+		    enriched = enriched.map(function (s) { return typeof s === 'string' ? s : subplotPlainText(s); }).filter(function (s) { return s && String(s).trim(); });
+		    if (!enriched.length) {
+		        throw new Error('enrichSubplots: empty/missing subplots[] in model response — densify failed');
+		    }
+		    const prevSubs = (novelData.subplots || []).map(subplotPlainText);
+		    novelData.subplots = prevSubs.map(function (prev, i) {
+		        return (enriched[i] && String(enriched[i]).trim()) ? enriched[i] : prev;
 		    });
-		    novelData.subplots = Array.from(subplotList.getElementsByClassName('subplot')).map(function (s) { return s.value; });
-		    updateSubplotCounter();
+		    if (enriched.length > novelData.subplots.length) {
+		        novelData.subplots = enriched.slice();
+		    }
+		    const subplotList = document.getElementById('subplotList');
+		    if (subplotList) {
+		        const plains = Array.from(subplotList.getElementsByClassName('subplot'));
+		        novelData.subplots.forEach(function (text, i) {
+		            if (i < plains.length) plains[i].value = text;
+		        });
+		    }
+		    if (typeof updateSubplotCounter === 'function') updateSubplotCounter();
 		    const after = scoreSubplotDensity(novelData.subplots, { novelData: novelData });
 		    novelData.lastSubplotEnrich = { before: before, after: after, ts: new Date().toISOString() };
-		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below density floor — re-run enrich)';
+		    window.__lastEnrichSubplots = novelData.lastSubplotEnrich;
+		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below density floor)';
 		    updateRequestLog();
 		    if (!after.passed) {
 		        console.warn('[enrichSubplots] still below floor', after.failures);
-		        alert('Subplots enriched but still below density floor:\n' + after.failures.slice(0, 8).join('\n'));
+		        throw new Error('enrichSubplots densify still below density floors: ' + (after.failures || []).slice(0, 8).join(' | '));
 		    }
 		    return after;
 		}
