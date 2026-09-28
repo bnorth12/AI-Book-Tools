@@ -182,3 +182,22 @@ world/plot/character_named/conflict_resolution/subplot_named) → Pass5 chapter 
 Density floors are fail-closed content floors (no pad-to-N). Helpers: scoreCastDensity,
 scoreSubplotDensity, scoreOutlineObligations, assertAdvanceToTab5ReadinessOrThrow.
 E2E: NW_E2E_ENRICH=1 or NW_E2E_REGEN_BIBLE=1 runs densify path and asserts non-stub fields.
+
+
+AGENT SKILLS (2026-09-27) — full catalog wired
+----------------------------------------------
+Every Tab1–Tab8 LLM agent has an Agent Skill id `tabN.agentKey` in `defaultSkillCatalog`.
+Each skill declares:
+  - inputs[]: named binders (digests, blueprints, density floors, EvidencePack, readiness…)
+  - output: shape + validators (castDensity, subplotDensity, outlineObligations, obligationCoverage, …)
+  - ability: technique text layered onto Tab11 system prompt via getSkillSystemPrompt()
+  - stop: optional readiness predicate (cast/subplot/outline/tab5 green)
+
+Runtime helpers: packSkillInputs, validateSkillOutput, prepareAgentSkillRun, finalizeAgentSkillRun,
+getSkillSystemPrompt, listAgentSkills, skillCatalog export/import.
+
+Tab11 shows Agent Skills table (inputs / output / ability) beneath prompt manager.
+Agents call packSkillInputs before prompts; enrich/suggest cast+subplot validate outputs.
+Density floors and Tab5 readiness remain code-enforced (not prompt-only).
+Series KG / suite merge still out of scope — skills are the on-ramp for book-graph context binders.
+

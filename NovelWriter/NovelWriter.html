@@ -601,6 +601,26 @@ Synced: 2026-04-19
 		<button onclick="exportPromptCatalog()">Export Prompt Profile</button>
 		<label for="promptImportFile">Import Prompt Profile:</label>
 		<input type="file" id="promptImportFile" accept=".json" onchange="importPromptCatalog(event)">
+		<hr>
+		<h3>Agent Skills (inputs / outputs / ability)</h3>
+		<div class="note">Skills declare binders into prompts and validators on outputs. Ability text deepens technique on top of the system prompt. Density/readiness floors stay code-enforced.</div>
+		<table id="skillManagerTable">
+			<thead>
+				<tr>
+					<th>Tab / Agent</th>
+					<th>Skill</th>
+					<th>Inputs</th>
+					<th>Output / stop</th>
+					<th>Ability</th>
+				</tr>
+			</thead>
+			<tbody id="skillManagerBody"></tbody>
+		</table>
+		<button onclick="saveSkillCatalogFromUI()">Save Skill Abilities</button>
+		<button onclick="resetSkillCatalogToDefaults()">Reset Skills</button>
+		<button onclick="exportSkillCatalog()">Export Skills</button>
+		<label for="skillImportFile">Import Skills:</label>
+		<input type="file" id="skillImportFile" accept=".json" onchange="importSkillCatalog(event)">
 		<button onclick="showTab(10)">Back</button>
 		<div class="loading-indicator">Processing...</div>
 	</div>
@@ -1031,6 +1051,631 @@ let activeAICallCount = 0;
 			return promptCatalog?.[tabKey]?.[agentKey]?.systemPrompt || fallbackPrompt;
 		}
 
+/* === Agent Skills (NW 2026-09-27): I/O pack + validate around prompts === */
+		const AGENT_SKILL_SCHEMA_VERSION = '1.0';
+
+		/** Portable contract note: AgentSkill / SkillIO — vendored copy shape for Editor later. */
+		const defaultSkillCatalog = {
+			'tab1.fetchAuthors': {
+				id: 'tab1.fetchAuthors', tab: 'tab1', agentKey: 'fetchAuthors', name: 'Author Discovery',
+				ability: 'Rank authors as practical style models for the SELECTED genre/book type only. Stay genre-generic; never hard-wire a private taste (e.g. dystopian HFY). Prefer distinctive craft over fame.',
+				inputs: [
+					{ name: 'genre', binder: 'genre', required: true },
+					{ name: 'title', binder: 'title', required: false },
+					{ name: 'bookTypeHint', binder: 'bookTypeHint', required: false, maxChars: 200 }
+				],
+				output: { shape: 'authors[]', validators: ['nonEmptyArray'] },
+				stop: null
+			},
+			'tab1.fetchStyleGuide': {
+				id: 'tab1.fetchStyleGuide', tab: 'tab1', agentKey: 'fetchStyleGuide', name: 'Style Guide',
+				ability: 'Produce concrete reusable style guidance: voice, rhythm, pacing, imagery, dialogue, narrative distance. Tie guidance to selected authors when present.',
+				inputs: [
+					{ name: 'genre', binder: 'genre', required: true },
+					{ name: 'authors', binder: 'authorsDigest', required: false, maxChars: 600 },
+					{ name: 'authorStyle', binder: 'authorStyle', required: false, maxChars: 240 }
+				],
+				output: { shape: 'styleGuide', validators: ['nonEmptyText'] },
+				stop: null
+			},
+			'tab1.suggestStoryArc': {
+				id: 'tab1.suggestStoryArc', tab: 'tab1', agentKey: 'suggestStoryArc', name: 'Story Arc',
+				ability: 'Design an emotionally coherent long-form arc with escalating stakes and act-level turns that chapters can execute. Prefer dramatizable obligations over abstract theme slogans.',
+				inputs: [
+					{ name: 'genre', binder: 'genre', required: true },
+					{ name: 'title', binder: 'title', required: false },
+					{ name: 'setting', binder: 'settingDigest', required: false, maxChars: 320 },
+					{ name: 'styleGuide', binder: 'styleGuideDigest', required: false, maxChars: 280 }
+				],
+				output: { shape: 'storyArc', validators: ['nonEmptyText', 'minWords:80'] },
+				stop: null
+			},
+			'tab1.suggestGeneralPlot': {
+				id: 'tab1.suggestGeneralPlot', tab: 'tab1', agentKey: 'suggestGeneralPlot', name: 'General Plot',
+				ability: 'Build causally linked events and reversals across the full chapter count. Name consequences that later blueprints can obligate.',
+				inputs: [
+					{ name: 'genre', binder: 'genre', required: true },
+					{ name: 'storyArc', binder: 'storyArcDigest', required: true, maxChars: 360 },
+					{ name: 'setting', binder: 'settingDigest', required: false, maxChars: 280 },
+					{ name: 'numChapters', binder: 'numChapters', required: false }
+				],
+				output: { shape: 'generalPlot', validators: ['nonEmptyText', 'minWords:100'] },
+				stop: null
+			},
+			'tab1.suggestSetting': {
+				id: 'tab1.suggestSetting', tab: 'tab1', agentKey: 'suggestSetting', name: 'World / Setting',
+				ability: 'Build a setting that is vivid, mechanically consistent, and tied to conflict and character decision pressure. Prefer locations chapters can hook.',
+				inputs: [
+					{ name: 'genre', binder: 'genre', required: true },
+					{ name: 'storyArc', binder: 'storyArcDigest', required: false, maxChars: 280 },
+					{ name: 'generalPlot', binder: 'plotDigest', required: false, maxChars: 320 }
+				],
+				output: { shape: 'setting', validators: ['nonEmptyText', 'minWords:80'] },
+				stop: null
+			},
+			'tab1.suggestStoryInfo': {
+				id: 'tab1.suggestStoryInfo', tab: 'tab1', agentKey: 'suggestStoryInfo', name: 'Story Bootstrap',
+				ability: 'Synthesize title, arc, plot, and setting into one coherent package ready for cast/subplot invent. Fields must be concrete and internally consistent.',
+				inputs: [
+					{ name: 'genre', binder: 'genre', required: true },
+					{ name: 'styleGuide', binder: 'styleGuideDigest', required: false, maxChars: 240 },
+					{ name: 'authors', binder: 'authorsDigest', required: false, maxChars: 400 }
+				],
+				output: { shape: 'storyInfo', validators: ['storyInfoFields'] },
+				stop: null
+			},
+			'tab2.scrapeBookInfoForCharacters': {
+				id: 'tab2.scrapeBookInfoForCharacters', tab: 'tab2', agentKey: 'scrapeBookInfoForCharacters', name: 'Character Name Scraper',
+				ability: 'Extract likely character names only from bible digests. Avoid locations, factions-as-places, and concepts.',
+				inputs: [
+					{ name: 'storyArc', binder: 'storyArcDigest', required: false, maxChars: 280 },
+					{ name: 'generalPlot', binder: 'plotDigest', required: false, maxChars: 320 },
+					{ name: 'setting', binder: 'settingDigest', required: false, maxChars: 280 }
+				],
+				output: { shape: 'names[]', validators: ['nonEmptyArray'] },
+				stop: null
+			},
+			'tab2.suggestCharacters': {
+				id: 'tab2.suggestCharacters', tab: 'tab2', agentKey: 'suggestCharacters', name: 'Character Generation',
+				ability: 'Invent a cast with distinct motives, wounds, relationships, and arc potential tied to plot. Prefer dense backstory/arc over name stubs — densify later if thin, but aim above density floors.',
+				inputs: [
+					{ name: 'genre', binder: 'genre', required: true },
+					{ name: 'title', binder: 'title', required: false },
+					{ name: 'storyArc', binder: 'storyArcDigest', required: true, maxChars: 320 },
+					{ name: 'generalPlot', binder: 'plotDigest', required: true, maxChars: 360 },
+					{ name: 'setting', binder: 'settingDigest', required: false, maxChars: 280 },
+					{ name: 'worldBible', binder: 'worldBibleDigest', required: false, maxChars: 400 },
+					{ name: 'style', binder: 'authorStyle', required: false, maxChars: 160 }
+				],
+				output: { shape: 'characters[]', validators: ['castDensity'] },
+				stop: 'castDensityGreen'
+			},
+			'tab2.refineCharacters': {
+				id: 'tab2.refineCharacters', tab: 'tab2', agentKey: 'refineCharacters', name: 'Character Refinement',
+				ability: 'Deepen backstory AND arc under subplot pressure when thin; never freeze stub backstory. Preserve identity only when density floors already met.',
+				inputs: [
+					{ name: 'characters', binder: 'charactersDigest', required: true, maxChars: 2400 },
+					{ name: 'subplots', binder: 'subplotsDigest', required: true, maxChars: 900 },
+					{ name: 'generalPlot', binder: 'plotDigest', required: false, maxChars: 320 },
+					{ name: 'worldBible', binder: 'worldBibleDigest', required: false, maxChars: 360 },
+					{ name: 'densityFloors', binder: 'densityFloors', required: true }
+				],
+				output: { shape: 'characters[]', validators: ['castDensity'] },
+				stop: 'castDensityGreen'
+			},
+			'tab2.enrichCharacters': {
+				id: 'tab2.enrichCharacters', tab: 'tab2', agentKey: 'enrichCharacters', name: 'Character Enrichment',
+				ability: 'Densify EXISTING cast under subplot + world + plot pressure. Add dramatizable obligations; no invent-pad cast swap; no adjective filler.',
+				inputs: [
+					{ name: 'characters', binder: 'charactersDigest', required: true, maxChars: 2400 },
+					{ name: 'subplots', binder: 'subplotsDigest', required: true, maxChars: 900 },
+					{ name: 'storyArc', binder: 'storyArcDigest', required: false, maxChars: 280 },
+					{ name: 'generalPlot', binder: 'plotDigest', required: false, maxChars: 320 },
+					{ name: 'setting', binder: 'settingDigest', required: false, maxChars: 280 },
+					{ name: 'worldBible', binder: 'worldBibleDigest', required: false, maxChars: 400 },
+					{ name: 'densityFloors', binder: 'densityFloors', required: true }
+				],
+				output: { shape: 'characters[]', validators: ['castDensity'] },
+				stop: 'castDensityGreen'
+			},
+			'tab3.suggestSubplots': {
+				id: 'tab3.suggestSubplots', tab: 'tab3', agentKey: 'suggestSubplots', name: 'Subplot Design',
+				ability: 'Design subplots that cross-pressure cast goals and pay off in chapter consequences. Name cast and locations; avoid one-line stubs.',
+				inputs: [
+					{ name: 'genre', binder: 'genre', required: true },
+					{ name: 'storyArc', binder: 'storyArcDigest', required: false, maxChars: 280 },
+					{ name: 'generalPlot', binder: 'plotDigest', required: true, maxChars: 360 },
+					{ name: 'characters', binder: 'charactersDigest', required: true, maxChars: 1600 },
+					{ name: 'setting', binder: 'settingDigest', required: false, maxChars: 280 }
+				],
+				output: { shape: 'subplots[]', validators: ['subplotDensity'] },
+				stop: 'subplotDensityGreen'
+			},
+			'tab3.enrichSubplots': {
+				id: 'tab3.enrichSubplots', tab: 'tab3', agentKey: 'enrichSubplots', name: 'Subplot Enrichment',
+				ability: 'Deepen EXISTING subplot threads with named cast, sensory locations, stakes, and resolution pressure. Do not replace the thread set with unrelated new plots.',
+				inputs: [
+					{ name: 'subplots', binder: 'subplotsDigest', required: true, maxChars: 1200 },
+					{ name: 'characters', binder: 'charactersDigest', required: true, maxChars: 1600 },
+					{ name: 'generalPlot', binder: 'plotDigest', required: false, maxChars: 320 },
+					{ name: 'worldBible', binder: 'worldBibleDigest', required: false, maxChars: 360 },
+					{ name: 'densityFloors', binder: 'densityFloors', required: true }
+				],
+				output: { shape: 'subplots[]', validators: ['subplotDensity'] },
+				stop: 'subplotDensityGreen'
+			},
+			'tab4.generateNovelOutlines': {
+				id: 'tab4.generateNovelOutlines', tab: 'tab4', agentKey: 'generateNovelOutlines', name: 'Novel Outlines / Macros',
+				ability: 'Produce macros + chapter blueprints that STEER plot line, cast arcs, and subplot threads. Name cast, world hooks, conflict, and resolution obligations. Line control over word padding.',
+				inputs: [
+					{ name: 'genre', binder: 'genre', required: true },
+					{ name: 'storyArc', binder: 'storyArcDigest', required: true, maxChars: 360 },
+					{ name: 'generalPlot', binder: 'plotDigest', required: true, maxChars: 400 },
+					{ name: 'setting', binder: 'settingDigest', required: false, maxChars: 320 },
+					{ name: 'worldBible', binder: 'worldBibleDigest', required: true, maxChars: 500 },
+					{ name: 'characters', binder: 'charactersDigest', required: true, maxChars: 2000 },
+					{ name: 'subplots', binder: 'subplotsDigest', required: true, maxChars: 1000 },
+					{ name: 'numChapters', binder: 'numChapters', required: true }
+				],
+				output: { shape: 'outlines', validators: ['outlineObligations'] },
+				stop: 'outlineObligationsGreen'
+			},
+			'tab4.generateChapterOutline': {
+				id: 'tab4.generateChapterOutline', tab: 'tab4', agentKey: 'generateChapterOutline', name: 'Chapter Outline',
+				ability: 'Expand one chapter from its blueprint into beats that execute spine obligations — not invent a new throughline.',
+				inputs: [
+					{ name: 'chapterNum', binder: 'chapterNum', required: true },
+					{ name: 'blueprint', binder: 'chapterBlueprint', required: true, maxChars: 800 },
+					{ name: 'macros', binder: 'outlineMacrosDigest', required: false, maxChars: 500 },
+					{ name: 'characters', binder: 'charactersDigest', required: true, maxChars: 1200 },
+					{ name: 'subplots', binder: 'subplotsDigest', required: false, maxChars: 600 }
+				],
+				output: { shape: 'chapterOutline', validators: ['nonEmptyText', 'minWords:40'] },
+				stop: null
+			},
+			'tab4.updateChapterOutline': {
+				id: 'tab4.updateChapterOutline', tab: 'tab4', agentKey: 'updateChapterOutline', name: 'Update Chapter Outline',
+				ability: 'Revise a chapter outline to restore missing world/plot/cast/conflict/subplot obligations without bloating.',
+				inputs: [
+					{ name: 'chapterNum', binder: 'chapterNum', required: true },
+					{ name: 'chapterOutline', binder: 'chapterOutlineText', required: true, maxChars: 1200 },
+					{ name: 'blueprint', binder: 'chapterBlueprint', required: true, maxChars: 800 },
+					{ name: 'characters', binder: 'charactersDigest', required: false, maxChars: 1000 },
+					{ name: 'subplots', binder: 'subplotsDigest', required: false, maxChars: 500 }
+				],
+				output: { shape: 'chapterOutline', validators: ['nonEmptyText', 'minWords:40'] },
+				stop: null
+			},
+			'tab4.incorporateOutlineSuggestions': {
+				id: 'tab4.incorporateOutlineSuggestions', tab: 'tab4', agentKey: 'incorporateOutlineSuggestions', name: 'Incorporate Outline Suggestions',
+				ability: 'Merge improvement suggestions into outlines while preserving spine line control and named obligations.',
+				inputs: [
+					{ name: 'outlines', binder: 'outlineMacrosDigest', required: true, maxChars: 800 },
+					{ name: 'suggestions', binder: 'outlineSuggestions', required: true, maxChars: 800 },
+					{ name: 'characters', binder: 'charactersDigest', required: false, maxChars: 800 },
+					{ name: 'subplots', binder: 'subplotsDigest', required: false, maxChars: 500 }
+				],
+				output: { shape: 'outlines', validators: ['outlineObligations'] },
+				stop: null
+			},
+			'tab5.generateChapter': {
+				id: 'tab5.generateChapter', tab: 'tab5', agentKey: 'generateChapter', name: 'Chapter Draft',
+				ability: 'Execute blueprint + outline obligations in prose. Do not invent a new throughline. Development must be earned from spine inputs; never pad-to-N.',
+				inputs: [
+					{ name: 'chapterNum', binder: 'chapterNum', required: true },
+					{ name: 'blueprint', binder: 'chapterBlueprint', required: true, maxChars: 900 },
+					{ name: 'chapterOutline', binder: 'chapterOutlineText', required: true, maxChars: 1000 },
+					{ name: 'obligations', binder: 'obligationChecklist', required: true, maxChars: 700 },
+					{ name: 'evidence', binder: 'chapterEvidence', required: false, maxChars: 900 },
+					{ name: 'characters', binder: 'charactersDigest', required: true, maxChars: 1400 },
+					{ name: 'subplots', binder: 'subplotsDigest', required: false, maxChars: 600 },
+					{ name: 'continuity', binder: 'continuityPacket', required: false, maxChars: 500 },
+					{ name: 'readiness', binder: 'tab5Readiness', required: true }
+				],
+				output: { shape: 'chapterProse', validators: ['nonEmptyText', 'obligationCoverage'] },
+				stop: 'tab5ReadinessGreen'
+			},
+			'tab5.continuityAudit': {
+				id: 'tab5.continuityAudit', tab: 'tab5', agentKey: 'continuityAudit', name: 'Continuity Audit',
+				ability: 'Find cast/subplot/world continuity risks with concrete anchors. Prefer actionable misses over vague style notes.',
+				inputs: [
+					{ name: 'chapterNum', binder: 'chapterNum', required: true },
+					{ name: 'chapterText', binder: 'chapterText', required: true, maxChars: 4000 },
+					{ name: 'blueprint', binder: 'chapterBlueprint', required: false, maxChars: 700 },
+					{ name: 'characters', binder: 'charactersDigest', required: true, maxChars: 1200 },
+					{ name: 'subplots', binder: 'subplotsDigest', required: false, maxChars: 500 }
+				],
+				output: { shape: 'continuityFindings', validators: ['objectOrArray'] },
+				stop: null
+			},
+			'tab5.reviseChapterForQuality': {
+				id: 'tab5.reviseChapterForQuality', tab: 'tab5', agentKey: 'generateChapter', name: 'Quality Revise',
+				ability: 'Revise prose against fail-closed quality + continuity briefs. Preserve spine obligations; improve readability/human-likeness without inventing new plot.',
+				inputs: [
+					{ name: 'chapterNum', binder: 'chapterNum', required: true },
+					{ name: 'chapterText', binder: 'chapterText', required: true, maxChars: 5000 },
+					{ name: 'reviseBrief', binder: 'qualityReviseBrief', required: true, maxChars: 1200 },
+					{ name: 'blueprint', binder: 'chapterBlueprint', required: false, maxChars: 600 }
+				],
+				output: { shape: 'chapterProse', validators: ['nonEmptyText'] },
+				stop: null
+			},
+			'tab6.checkSpellingAndGrammar': {
+				id: 'tab6.checkSpellingAndGrammar', tab: 'tab6', agentKey: 'checkSpellingAndGrammar', name: 'Spelling / Grammar',
+				ability: 'Correct spelling and grammar only; preserve voice, meaning, and story facts.',
+				inputs: [
+					{ name: 'chapterNum', binder: 'chapterNum', required: true },
+					{ name: 'chapterText', binder: 'chapterText', required: true, maxChars: 6000 }
+				],
+				output: { shape: 'chapterProse', validators: ['nonEmptyText'] },
+				stop: null
+			},
+			'tab6.updateChapter': {
+				id: 'tab6.updateChapter', tab: 'tab6', agentKey: 'updateChapter', name: 'Chapter Update',
+				ability: 'Apply targeted edits while preserving continuity and spine obligations.',
+				inputs: [
+					{ name: 'chapterNum', binder: 'chapterNum', required: true },
+					{ name: 'chapterText', binder: 'chapterText', required: true, maxChars: 5000 },
+					{ name: 'updateBrief', binder: 'updateBrief', required: true, maxChars: 800 },
+					{ name: 'blueprint', binder: 'chapterBlueprint', required: false, maxChars: 600 }
+				],
+				output: { shape: 'chapterProse', validators: ['nonEmptyText'] },
+				stop: null
+			},
+			'tab7.suggestBookImprovements': {
+				id: 'tab7.suggestBookImprovements', tab: 'tab7', agentKey: 'suggestBookImprovements', name: 'Book Improvements',
+				ability: 'Propose structural improvements that restore line control (plot, arcs, subplots) and readability — not generic polish lists.',
+				inputs: [
+					{ name: 'macros', binder: 'outlineMacrosDigest', required: false, maxChars: 600 },
+					{ name: 'characters', binder: 'charactersDigest', required: false, maxChars: 1000 },
+					{ name: 'subplots', binder: 'subplotsDigest', required: false, maxChars: 600 },
+					{ name: 'chaptersDigest', binder: 'chaptersDigest', required: false, maxChars: 1600 }
+				],
+				output: { shape: 'improvements[]', validators: ['nonEmptyArray'] },
+				stop: null
+			},
+			'tab7.breakdownImprovement': {
+				id: 'tab7.breakdownImprovement', tab: 'tab7', agentKey: 'breakdownImprovement', name: 'Breakdown Improvement',
+				ability: 'Break one improvement into chapter-scoped actionable instructions with preserved continuity constraints.',
+				inputs: [
+					{ name: 'improvement', binder: 'improvementItem', required: true, maxChars: 800 },
+					{ name: 'chaptersDigest', binder: 'chaptersDigest', required: false, maxChars: 1200 },
+					{ name: 'characters', binder: 'charactersDigest', required: false, maxChars: 800 }
+				],
+				output: { shape: 'breakdown', validators: ['objectOrArray'] },
+				stop: null
+			},
+			'tab8.integrateBreakdown': {
+				id: 'tab8.integrateBreakdown', tab: 'tab8', agentKey: 'integrateBreakdown', name: 'Integrate Breakdown',
+				ability: 'Apply breakdown instructions into chapter prose while preserving voice, continuity, and spine obligations.',
+				inputs: [
+					{ name: 'chapterNum', binder: 'chapterNum', required: true },
+					{ name: 'chapterText', binder: 'chapterText', required: true, maxChars: 5000 },
+					{ name: 'breakdown', binder: 'breakdownForChapter', required: true, maxChars: 1000 }
+				],
+				output: { shape: 'chapterProse', validators: ['nonEmptyText'] },
+				stop: null
+			}
+		};
+
+		let skillCatalog = JSON.parse(JSON.stringify(defaultSkillCatalog));
+
+		function listAgentSkills() {
+			return Object.keys(skillCatalog);
+		}
+
+		function getAgentSkill(skillId) {
+			return skillCatalog[skillId] || defaultSkillCatalog[skillId] || null;
+		}
+
+		function getSkillSystemPrompt(skillId, fallbackPrompt) {
+			const skill = getAgentSkill(skillId);
+			if (!skill) return fallbackPrompt || '';
+			const base = getAgentPrompt(skill.tab, skill.agentKey, fallbackPrompt || '');
+			const ability = (skill.ability || '').trim();
+			if (!ability) return base;
+			return base + '\n\nSkill ability:\n' + ability;
+		}
+
+		function skillBindValue(binder, ctx) {
+			const nd = ctx.novelData || (typeof novelData !== 'undefined' ? novelData : {}) || {};
+			const ch = ctx.chapterNum != null ? Number(ctx.chapterNum) : null;
+			const max = ctx._maxChars || 400;
+			const clip = (s, n) => {
+				const t = (s == null ? '' : String(s));
+				return t.length <= n ? t : t.slice(0, n) + '…';
+			};
+			const dig = (s, n) => (typeof digestText === 'function' ? digestText(s || '', n) : clip(s, n));
+			switch (binder) {
+				case 'genre': return nd.genre || '';
+				case 'title': return nd.title || '';
+				case 'authorStyle': return nd.authorStyle || '';
+				case 'numChapters': return nd.numChapters || (nd.chapterOutlines || []).length || '';
+				case 'chapterNum': return ch;
+				case 'bookTypeHint': return ctx.bookTypeHint || nd.bookType || '';
+				case 'storyArcDigest': return dig(nd.storyArc || '', max);
+				case 'plotDigest': return dig(nd.generalPlot || nd.plotOutline || '', max);
+				case 'settingDigest': return dig(nd.setting || '', max);
+				case 'styleGuideDigest': return dig(nd.styleGuide || '', max);
+				case 'authorsDigest': return dig(JSON.stringify(nd.authors || nd.selectedAuthors || []), max);
+				case 'worldBibleDigest':
+					return (typeof digestWorldBible === 'function'
+						? (digestWorldBible(nd.worldBible || nd.world) || '')
+						: dig(JSON.stringify(nd.worldBible || nd.world || {}), max));
+				case 'charactersDigest':
+					return (typeof digestCharacters === 'function'
+						? JSON.stringify(digestCharacters(nd.characters || []))
+						: dig(JSON.stringify(nd.characters || []), max));
+				case 'subplotsDigest':
+					return (typeof digestSubplots === 'function'
+						? JSON.stringify(digestSubplots(nd.subplots || [], 6, Math.min(220, max)))
+						: dig(JSON.stringify(nd.subplots || []), max));
+				case 'densityFloors':
+					return (typeof densityFloorsForBook === 'function'
+						? JSON.stringify(densityFloorsForBook(nd))
+						: JSON.stringify({ backstory: 80, arc: 60, subplot: 120 }));
+				case 'outlineMacrosDigest':
+					return dig([nd.novelOutline, nd.plotOutline, nd.storyArcOutline].filter(Boolean).join('\n'), max);
+				case 'chapterBlueprint': {
+					const bp = (typeof getChapterBlueprint === 'function')
+						? getChapterBlueprint(nd, ch)
+						: ((nd.chapterBlueprints || [])[ch - 1] || null);
+					return dig(typeof digestChapterBlueprint === 'function' ? digestChapterBlueprint(bp) : JSON.stringify(bp || {}), max);
+				}
+				case 'chapterOutlineText': {
+					const outlines = nd.chapterOutlines || [];
+					const raw = ch != null ? outlines[ch - 1] : '';
+					return dig(typeof raw === 'string' ? raw : JSON.stringify(raw || ''), max);
+				}
+				case 'obligationChecklist': {
+					if (typeof buildObligationChecklist === 'function') {
+						return dig(JSON.stringify(buildObligationChecklist(nd, ch) || {}), max);
+					}
+					return '';
+				}
+				case 'chapterEvidence': {
+					if (typeof retrieveChapterContextEvidence === 'function') {
+						const pack = retrieveChapterContextEvidence(nd, ch) || {};
+						return dig(typeof formatEvidencePackForPrompt === 'function' ? formatEvidencePackForPrompt(pack) : JSON.stringify(pack), max);
+					}
+					return '';
+				}
+				case 'continuityPacket': {
+					const packets = nd.continuityPackets || nd.chapterContinuity || {};
+					return dig(JSON.stringify(packets[ch] || packets[String(ch)] || {}), max);
+				}
+				case 'tab5Readiness': {
+					if (typeof scoreAdvanceToTab5Readiness === 'function') {
+						return JSON.stringify(scoreAdvanceToTab5Readiness(nd));
+					}
+					return '';
+				}
+				case 'chapterText': {
+					const chapters = nd.chapters || [];
+					const c = chapters[ch - 1] || ctx.chapterText || '';
+					const text = typeof c === 'string' ? c : (c.content || c.text || '');
+					return clip(text, max);
+				}
+				case 'qualityReviseBrief': return clip(ctx.reviseBrief || ctx.qualityReviseBrief || '', max);
+				case 'updateBrief': return clip(ctx.updateBrief || '', max);
+				case 'outlineSuggestions': return dig(JSON.stringify(ctx.suggestions || nd.outlineSuggestions || []), max);
+				case 'chaptersDigest': {
+					const chapters = nd.chapters || [];
+					const brief = chapters.slice(0, 8).map((c, i) => {
+						const text = typeof c === 'string' ? c : (c.content || c.text || '');
+						return `Ch${i + 1}: ` + dig(text, 180);
+					});
+					return brief.join('\n');
+				}
+				case 'improvementItem': return dig(JSON.stringify(ctx.improvement || {}), max);
+				case 'breakdownForChapter': return dig(JSON.stringify(ctx.breakdown || {}), max);
+				default: return ctx[binder] != null ? clip(String(ctx[binder]), max) : '';
+			}
+		}
+
+		function packSkillInputs(skillId, ctx = {}) {
+			const skill = getAgentSkill(skillId);
+			if (!skill) {
+				return { skillId, ok: false, missingRequired: [skillId], lines: [], userContent: '', packed: {} };
+			}
+			const packed = {};
+			const missingRequired = [];
+			const lines = [`Skill: ${skill.name} (${skill.id})`, ''];
+			(skill.inputs || []).forEach((inp) => {
+				const localCtx = Object.assign({}, ctx, { _maxChars: inp.maxChars || 400 });
+				const val = skillBindValue(inp.binder, localCtx);
+				packed[inp.name] = val;
+				const empty = val == null || val === '' || val === 'null' || val === 'undefined';
+				if (inp.required && empty) missingRequired.push(inp.name);
+				lines.push(`- ${inp.name}: ${empty ? '(missing)' : val}`);
+			});
+			if (skill.ability) {
+				lines.push('');
+				lines.push('Ability constraints:');
+				lines.push(skill.ability);
+			}
+			return {
+				skillId,
+				ok: missingRequired.length === 0,
+				missingRequired,
+				lines,
+				userContent: lines.join('\n'),
+				packed,
+				skill
+			};
+		}
+
+		function wordCountSkill(text) {
+			return String(text || '').trim().split(/\s+/).filter(Boolean).length;
+		}
+
+		function validateSkillOutput(skillId, response, ctx = {}) {
+			const skill = getAgentSkill(skillId);
+			const failures = [];
+			const scores = {};
+			if (!skill) {
+				return { ok: false, failures: [`unknown skill ${skillId}`], scores };
+			}
+			const nd = ctx.novelData || (typeof novelData !== 'undefined' ? novelData : {}) || {};
+			const validators = (skill.output && skill.output.validators) || [];
+			validators.forEach((v) => {
+				if (v === 'nonEmptyArray') {
+					const arr = Array.isArray(response) ? response
+						: (response && (response.authors || response.characters || response.subplots || response.improvements || response.names)) || [];
+					if (!Array.isArray(arr) || arr.length === 0) failures.push('nonEmptyArray');
+				} else if (v === 'nonEmptyText') {
+					const text = typeof response === 'string' ? response
+						: (response && (response.text || response.content || response.styleGuide || response.storyArc || response.generalPlot || response.setting || response.chapterOutline || response.prose)) || '';
+					if (!String(text).trim()) failures.push('nonEmptyText');
+				} else if (v.startsWith('minWords:')) {
+					const n = Number(v.split(':')[1]);
+					const text = typeof response === 'string' ? response
+						: (response && (response.text || response.content || response.storyArc || response.generalPlot || response.setting || response.chapterOutline)) || '';
+					const wc = wordCountSkill(text);
+					scores.words = wc;
+					if (wc < n) failures.push(`minWords:${n} (got ${wc})`);
+				} else if (v === 'storyInfoFields') {
+					const obj = response || {};
+					['title', 'storyArc', 'generalPlot', 'setting'].forEach((k) => {
+						if (!String(obj[k] || '').trim()) failures.push(`storyInfo missing ${k}`);
+					});
+				} else if (v === 'castDensity') {
+					const chars = (response && response.characters) || response || [];
+					if (typeof scoreCastDensity === 'function') {
+						scores.cast = scoreCastDensity(chars, { novelData: nd });
+						if (!scores.cast.passed) failures.push('castDensity:' + (scores.cast.failures || []).join(';'));
+					}
+				} else if (v === 'subplotDensity') {
+					const subs = (response && response.subplots) || response || [];
+					if (typeof scoreSubplotDensity === 'function') {
+						scores.subplots = scoreSubplotDensity(subs, { novelData: nd });
+						if (!scores.subplots.passed) failures.push('subplotDensity:' + (scores.subplots.failures || []).join(';'));
+					}
+				} else if (v === 'outlineObligations') {
+					const merged = Object.assign({}, nd, response || {});
+					if (typeof scoreOutlineObligations === 'function') {
+						scores.outline = scoreOutlineObligations(merged);
+						if (!scores.outline.passed) failures.push('outlineObligations:' + (scores.outline.failures || []).join(';'));
+					}
+				} else if (v === 'obligationCoverage') {
+					const ch = ctx.chapterNum;
+					const text = typeof response === 'string' ? response : (response && (response.content || response.text || response.prose)) || '';
+					if (typeof scoreObligationCoverage === 'function' && ch != null) {
+						scores.coverage = scoreObligationCoverage(nd, ch, text);
+						if (scores.coverage && scores.coverage.passed === false) failures.push('obligationCoverage');
+					}
+				} else if (v === 'objectOrArray') {
+					if (response == null || (typeof response !== 'object')) failures.push('objectOrArray');
+				}
+			});
+			if (skill.stop === 'tab5ReadinessGreen' && typeof scoreAdvanceToTab5Readiness === 'function') {
+				scores.readiness = scoreAdvanceToTab5Readiness(nd);
+				if (!scores.readiness.passed) failures.push('tab5Readiness');
+			}
+			return { ok: failures.length === 0, failures, scores, skillId };
+		}
+
+		function assertSkillOutputOrThrow(skillId, response, ctx = {}) {
+			const result = validateSkillOutput(skillId, response, ctx);
+			if (!result.ok) {
+				throw new Error(`Skill ${skillId} output failed: ${result.failures.join(' | ')}`);
+			}
+			return result;
+		}
+
+		function prepareAgentSkillRun(skillId, ctx = {}, fallbackSystemPrompt = '') {
+			const packed = packSkillInputs(skillId, ctx);
+			const skill = packed.skill || getAgentSkill(skillId);
+			const system = getSkillSystemPrompt(skillId, fallbackSystemPrompt);
+			const userExtra = ctx.userExtraLines ? ('\n' + ctx.userExtraLines.join('\n')) : '';
+			const userContent = (ctx.userContentOverride != null)
+				? ctx.userContentOverride
+				: (packed.userContent + userExtra);
+			return {
+				skillId,
+				skill,
+				packed,
+				messages: [
+					{ role: 'system', content: system },
+					{ role: 'user', content: userContent }
+				],
+				ctx
+			};
+		}
+
+		function finalizeAgentSkillRun(run, response, opts = {}) {
+			const failClosed = opts.failClosed !== false;
+			const result = validateSkillOutput(run.skillId, response, run.ctx || {});
+			if (!result.ok && failClosed) {
+				throw new Error(`Skill ${run.skillId} output failed: ${result.failures.join(' | ')}`);
+			}
+			return result;
+		}
+
+		function renderSkillManagerTable() {
+			const body = document.getElementById('skillManagerBody');
+			if (!body) return;
+			body.innerHTML = '';
+			Object.values(skillCatalog).forEach((skill) => {
+				const row = document.createElement('tr');
+				const inputs = (skill.inputs || []).map((i) => `${i.name}${i.required ? '*' : ''}←${i.binder}`).join('<br>');
+				const outs = skill.output
+					? `${skill.output.shape || ''} [${(skill.output.validators || []).join(', ')}]`
+					: '';
+				row.innerHTML = `
+					<td>${skill.tab}<br><small>${skill.agentKey}</small></td>
+					<td>${skill.name}<br><small>${skill.id}</small></td>
+					<td><div style="max-height:120px;overflow:auto;font-size:12px">${inputs}</div></td>
+					<td><div style="max-height:80px;overflow:auto;font-size:12px">${outs}<br>stop: ${skill.stop || '—'}</div></td>
+					<td><textarea data-skill="${skill.id}" style="min-width:280px;min-height:90px">${skill.ability || ''}</textarea></td>
+				`;
+				body.appendChild(row);
+			});
+		}
+
+		function saveSkillCatalogFromUI() {
+			const textareas = document.querySelectorAll('#skillManagerBody textarea[data-skill]');
+			textareas.forEach((ta) => {
+				const id = ta.getAttribute('data-skill');
+				if (skillCatalog[id]) skillCatalog[id].ability = ta.value;
+			});
+			alert('Skill abilities saved for this session.');
+			if (typeof renderSkillManagerTable === 'function') renderSkillManagerTable();
+		}
+
+		function resetSkillCatalogToDefaults() {
+			skillCatalog = JSON.parse(JSON.stringify(defaultSkillCatalog));
+			renderSkillManagerTable();
+		}
+
+		function exportSkillCatalog() {
+			const blob = new Blob([JSON.stringify({ schemaVersion: AGENT_SKILL_SCHEMA_VERSION, skills: skillCatalog }, null, 2)], { type: 'application/json' });
+			const a = document.createElement('a');
+			a.href = URL.createObjectURL(blob);
+			a.download = 'novelwriter-skill-catalog.json';
+			a.click();
+		}
+
+		function importSkillCatalog(event) {
+			const file = event.target.files && event.target.files[0];
+			if (!file) return;
+			const reader = new FileReader();
+			reader.onload = () => {
+				try {
+					const parsed = JSON.parse(reader.result);
+					const incoming = parsed.skills || parsed;
+					skillCatalog = Object.assign({}, defaultSkillCatalog, incoming);
+					renderSkillManagerTable();
+					alert('Skill catalog imported for this session.');
+				} catch (e) {
+					alert('Invalid skill catalog JSON: ' + e.message);
+				}
+			};
+			reader.readAsText(file);
+		}
+/* === end Agent Skills === */
+
+
 		function renderPromptManagerTable() {
 			const body = document.getElementById('promptManagerBody');
 			if (!body) return;
@@ -1363,14 +2008,16 @@ let activeAICallCount = 0;
 	    // NW.T1.F4: suggestStoryInfo() SHALL populate all story info fields in one LLM call, preserving any fields already filled by the user.
 	    // Fetch authors for the selected genre via AI (corrected)
 		async function fetchAuthors() {
-		    const genre = document.getElementById('genre').value;
+		    		    // Agent Skill I/O pack (tab1.fetchAuthors)
+		    window.__lastSkillPack = packSkillInputs('tab1.fetchAuthors', { novelData: novelData });
+const genre = document.getElementById('genre').value;
 		    const apiKey = document.getElementById('apiKey').value;
 		    const authorSelect = document.getElementById('authorStyle');
 		    const loadingDiv = document.getElementById('tab1').querySelector('.loading-indicator');
 		    if (loadingDiv) loadingDiv.style.display = 'block';
 
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab1', 'fetchAuthors', 'You are an expert on literature.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab1.fetchAuthors', 'You are an expert on literature.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -1525,7 +2172,10 @@ let activeAICallCount = 0;
 
 		//Get an editable style guide for the specific author selected
         async function fetchStyleGuide() {
-		    const author = document.getElementById('authorStyle').value;
+		   
+		    // Agent Skill I/O pack (tab1.fetchStyleGuide)
+		    window.__lastSkillPack = packSkillInputs('tab1.fetchStyleGuide', { novelData: novelData });
+ const author = document.getElementById('authorStyle').value;
 		    if (!author) {
 		        alert('Please select an author first.');
 		        return;
@@ -1535,7 +2185,7 @@ let activeAICallCount = 0;
 		        return;
 		    }
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab1', 'fetchStyleGuide', 'You are an expert on literary styles.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab1.fetchStyleGuide', 'You are an expert on literary styles.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -1619,8 +2269,11 @@ let activeAICallCount = 0;
 		//AI Suggesting Story Arc
 		async function suggestStoryArc() {
 		    collectData();
+		    // Agent Skill I/O pack (tab1.suggestStoryArc)
+		    window.__lastSkillPack = packSkillInputs('tab1.suggestStoryArc', { novelData: novelData });
+
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab1', 'suggestStoryArc', 'You are a creative writing assistant specializing in detailed narrative planning.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab1.suggestStoryArc', 'You are a creative writing assistant specializing in detailed narrative planning.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -1703,6 +2356,9 @@ let activeAICallCount = 0;
 		// Generate Plot Arc
 		async function suggestGeneralPlot() {
 		    collectData();
+		    // Agent Skill I/O pack (tab1.suggestGeneralPlot)
+		    window.__lastSkillPack = packSkillInputs('tab1.suggestGeneralPlot', { novelData: novelData });
+
 		    // Explicitly define variables to avoid scoping issues
 		    const genre = novelData.genre || 'scifi';
 		    const title = novelData.title || 'Untitled';
@@ -1714,7 +2370,7 @@ let activeAICallCount = 0;
 		    console.log('suggestGeneralPlot - novelData state:', { genre, title, storyArc, numChapters, authorStyle, styleGuide });
 
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab1', 'suggestGeneralPlot', 'You are a creative writing assistant specializing in detailed narrative planning.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab1.suggestGeneralPlot', 'You are a creative writing assistant specializing in detailed narrative planning.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -1801,8 +2457,11 @@ let activeAICallCount = 0;
 		//Geneates the Setting on Tab 1
 		async function suggestSetting() {
 		    collectData();
+		    // Agent Skill I/O pack (tab1.suggestSetting)
+		    window.__lastSkillPack = packSkillInputs('tab1.suggestSetting', { novelData: novelData });
+
 		    const messages = [
-		        { role: "system", content: getAgentPrompt('tab1', 'suggestSetting', 'You are a creative writing assistant specializing in immersive world-building.') },
+		        { role: "system", content: getSkillSystemPrompt('tab1.suggestSetting', 'You are a creative writing assistant specializing in immersive world-building.') },
 		        {
 		            role: "user",
 		            content: [
@@ -1895,6 +2554,9 @@ let activeAICallCount = 0;
 	    //scrapes story info fields for character names and adds them to the character list
 	    async function scrapeBookInfoForCharacters() {
 	        collectData();
+		    // Agent Skill I/O pack (tab2.scrapeBookInfoForCharacters)
+		    window.__lastSkillPack = packSkillInputs('tab2.scrapeBookInfoForCharacters', { novelData: novelData });
+
 	        const bookInfoParts = [
 	            novelData.title && `Title: ${novelData.title}`,
 	            novelData.storyArc && `Story Arc: ${novelData.storyArc}`,
@@ -1909,7 +2571,7 @@ let activeAICallCount = 0;
 
 	        const bookInfo = bookInfoParts.join('\n');
 	        const messages = [
-	            { role: 'system', content: getAgentPrompt('tab2', 'scrapeBookInfoForCharacters', 'You are a helpful assistant that identifies character names in story descriptions.') },
+	            { role: 'system', content: getSkillSystemPrompt('tab2.scrapeBookInfoForCharacters', 'You are a helpful assistant that identifies character names in story descriptions.') },
 	            { role: 'user', content: `Extract all character names mentioned in the following book information. Only include names of people or beings who are characters in the story — not locations, organisations, or concepts. If no character names are found, return an empty array.\n\nReturn as JSON: {"characters": [{"name": "Character Name"}, ...]}\n\n${bookInfo}` }
 	        ];
 	        requestLog.lastPrompt = messages[1].content;
@@ -2030,9 +2692,17 @@ let activeAICallCount = 0;
 		        '    ]',
 		        '}'
 		    ];
+		    // Agent Skill I/O pack (tab2.suggestCharacters)
+		    (function() {
+		        const __pack = packSkillInputs('tab2.suggestCharacters', { novelData: novelData });
+		        window.__lastSkillPack = __pack;
+		        promptLines.push('', '--- Skill-packed inputs ---');
+		        __pack.lines.forEach((ln) => promptLines.push(ln));
+		    })();
+
 
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab2', 'suggestCharacters', 'You are a creative writing assistant specializing in immersive, character-driven narratives.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab2.suggestCharacters', 'You are a creative writing assistant specializing in immersive, character-driven narratives.') },
 		        { role: 'user', content: promptLines.join('\n') }
 		    ];
 		    requestLog.lastPrompt = messages[1].content;
@@ -2043,6 +2713,15 @@ let activeAICallCount = 0;
 
 		    try {
 		        const response = await callAI(messages, document.getElementById('tab2'));
+		    // Skill validate (tab2.suggestCharacters)
+		    try {
+		        const __skillVal = validateSkillOutput('tab2.suggestCharacters', response, { novelData: novelData });
+		        window.__lastSkillValidation = __skillVal;
+		        if (!__skillVal.ok) {
+		            console.warn('Skill tab2.suggestCharacters validation', __skillVal.failures, __skillVal.scores);
+		        }
+		    } catch (e) { console.warn('Skill validate error', e); }
+
 		        console.log('Characters response:', response);
 
 		        let newChars;
@@ -2199,9 +2878,20 @@ let activeAICallCount = 0;
 		        '    ]',
 		        '}'
 		    ];
+		    // Agent Skill I/O pack (tab2.refineCharacters)
+		    (function() {
+		        const __pack = packSkillInputs('tab2.refineCharacters', { novelData: novelData });
+		        if (!__pack.ok) {
+		            console.warn('Skill tab2.refineCharacters missing inputs', __pack.missingRequired);
+		        }
+		        promptLines.push('', '--- Skill-packed inputs ---');
+		        __pack.lines.forEach((ln) => promptLines.push(ln));
+		        window.__lastSkillPack = __pack;
+		    })();
+
 
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab2', 'refineCharacters', 'You are a creative writing assistant specializing in character-driven narrative refinement.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab2.refineCharacters', 'You are a creative writing assistant specializing in character-driven narrative refinement.') },
 		        { role: 'user', content: promptLines.join('\n') }
 		    ];
 		    requestLog.lastPrompt = messages[1].content;
@@ -2254,8 +2944,12 @@ let activeAICallCount = 0;
 	       const numToGenerate = Math.max(minSubplots - existingSubplots.length, 0);
 	       console.log('Existing subplots:', existingSubplots.length, 'Min subplots:', minSubplots, 'Num to generate:', numToGenerate);
 
-	       const messages = [
-	           { role: 'system', content: getAgentPrompt('tab3', 'suggestSubplots', 'You are a creative writing assistant specializing in intricate, character-driven narrative development.') },
+	       
+	       // Agent Skill I/O pack (tab3.suggestSubplots)
+	       const __suggestSubPack = packSkillInputs('tab3.suggestSubplots', { novelData: novelData });
+	       window.__lastSkillPack = __suggestSubPack;
+const messages = [
+	           { role: 'system', content: getSkillSystemPrompt('tab3.suggestSubplots', 'You are a creative writing assistant specializing in intricate, character-driven narrative development.') },
 	           {
 	               role: 'user',
 	               content: [
@@ -2285,6 +2979,24 @@ let activeAICallCount = 0;
 
 	       try {
 	           const response = await callAI(messages, document.getElementById('tab3'));
+		    // Skill validate (tab3.suggestSubplots)
+		    try {
+		        const __skillVal = validateSkillOutput('tab3.suggestSubplots', response, { novelData: novelData });
+		        window.__lastSkillValidation = __skillVal;
+		        if (!__skillVal.ok) {
+		            console.warn('Skill tab3.suggestSubplots validation', __skillVal.failures, __skillVal.scores);
+		        }
+		    } catch (e) { console.warn('Skill validate error', e); }
+
+		    // Skill validate (tab2.refineCharacters)
+		    try {
+		        const __skillVal = validateSkillOutput('tab2.refineCharacters', response, { novelData: novelData });
+		        window.__lastSkillValidation = __skillVal;
+		        if (!__skillVal.ok) {
+		            console.warn('Skill tab2.refineCharacters validation', __skillVal.failures, __skillVal.scores);
+		        }
+		    } catch (e) { console.warn('Skill validate error', e); }
+
 	           console.log('Subplots response:', response);
 
 	           let newSubplots;
@@ -2399,8 +3111,19 @@ let activeAICallCount = 0;
 		        '- No pad-to-N adjective filler; add dramatizable obligations.',
 		        '- Return JSON only: {"characters":[{"name":"...","backstory":"...","arc":"..."}, ...]}'
 		    ];
+		    // Agent Skill I/O pack (tab2.enrichCharacters)
+		    (function() {
+		        const __pack = packSkillInputs('tab2.enrichCharacters', { novelData: novelData });
+		        if (!__pack.ok) {
+		            console.warn('Skill tab2.enrichCharacters missing inputs', __pack.missingRequired);
+		        }
+		        promptLines.push('', '--- Skill-packed inputs ---');
+		        __pack.lines.forEach((ln) => promptLines.push(ln));
+		        window.__lastSkillPack = __pack;
+		    })();
+
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab2', 'enrichCharacters', 'You are a cast densifier. Deepen existing characters under subplot and world pressure; never freeze thin backstory.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab2.enrichCharacters', 'You are a cast densifier. Deepen existing characters under subplot and world pressure; never freeze thin backstory.') },
 		        { role: 'user', content: promptLines.join('\n') }
 		    ];
 		    requestLog.lastPrompt = messages[1].content;
@@ -2409,6 +3132,15 @@ let activeAICallCount = 0;
 		    clearReturnedInfo();
 		    updateRequestLog();
 		    const response = await callAI(messages, document.getElementById('tab2'));
+		    // Skill validate (tab2.enrichCharacters)
+		    try {
+		        const __skillVal = validateSkillOutput('tab2.enrichCharacters', response, { novelData: novelData });
+		        window.__lastSkillValidation = __skillVal;
+		        if (!__skillVal.ok) {
+		            console.warn('Skill tab2.enrichCharacters validation', __skillVal.failures, __skillVal.scores);
+		        }
+		    } catch (e) { console.warn('Skill validate error', e); }
+
 		    const charList = document.getElementById('characterList');
 		    const refinedChars = response.characters || [];
 		    const charDivs = Array.from(charList.getElementsByClassName('character'));
@@ -2453,8 +3185,12 @@ let activeAICallCount = 0;
 		    }
 		    const floors = densityFloorsForBook(novelData);
 		    const before = scoreSubplotDensity(novelData.subplots, { novelData: novelData });
+		    // Agent Skill I/O pack (tab3.enrichSubplots)
+		    const __subPack = packSkillInputs('tab3.enrichSubplots', { novelData: novelData });
+		    window.__lastSkillPack = __subPack;
+
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab3', 'enrichSubplots', 'You are a throughline densifier. Deepen existing subplots using cast + world + plot; do not invent-from-scratch pad.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab3.enrichSubplots', 'You are a throughline densifier. Deepen existing subplots using cast + world + plot; do not invent-from-scratch pad.') },
 		        { role: 'user', content: [
 		            `Deepen exactly ${existing.length} EXISTING subplots for a ${novelData.genre} novel titled "${novelData.title || 'Untitled'}".`,
 		            `- Plot (digest): ${digestText(novelData.generalPlot || novelData.plotOutline || '', 360)}`,
@@ -2476,6 +3212,15 @@ let activeAICallCount = 0;
 		    clearReturnedInfo();
 		    updateRequestLog();
 		    const response = await callAI(messages, document.getElementById('tab3'));
+		    // Skill validate (tab3.enrichSubplots)
+		    try {
+		        const __skillVal = validateSkillOutput('tab3.enrichSubplots', response, { novelData: novelData });
+		        window.__lastSkillValidation = __skillVal;
+		        if (!__skillVal.ok) {
+		            console.warn('Skill tab3.enrichSubplots validation', __skillVal.failures, __skillVal.scores);
+		        }
+		    } catch (e) { console.warn('Skill validate error', e); }
+
 		    let enriched = (response && response.subplots) || [];
 		    if (!Array.isArray(enriched)) enriched = [];
 		    enriched = enriched.map(function (s) { return typeof s === 'string' ? s : subplotPlainText(s); });
@@ -3236,6 +3981,8 @@ let activeAICallCount = 0;
 		 * for E2E assert without requiring a live completion.
 		 */
 		function buildGenerateChapterUserContent(chapterNum, part, opts) {
+			// Skill-packed inputs (tab5.generateChapter) available via window.__lastSkillPack / __chSkillPack
+
 			opts = opts || {};
 			const chapterLength = Math.max(500, parseInt(novelData.chapterLength, 10) || 4000);
 			const targetWordsPerPart = Math.max(1000, Math.round(chapterLength / 2));
@@ -3251,7 +3998,12 @@ let activeAICallCount = 0;
 			const epBlock = (typeof evidencePackPromptBlock === 'function')
 				? evidencePackPromptBlock({ goal: 'generateChapter', chapter: chapterNum, tokenBudgetHint: 2000 })
 				: '';
-			const cast = (novelData.characters || []).filter(function (c) { return c && c.name && c.backstory && c.arc; });
+			const cast = (novelData.characters || []).filter(function (c) { 
+			// Skill-packed append (tab5.generateChapter)
+			if (typeof window !== 'undefined' && window.__lastSkillPack && window.__lastSkillPack.skillId === 'tab5.generateChapter') {
+				novelData.__skillPackLines = window.__lastSkillPack.lines;
+			}
+return c && c.name && c.backstory && c.arc; });
 			const lines = [];
 			if (part === 1) {
 				lines.push('Generate the first half of Chapter ' + chapterNum + ' (rough guide ~' + halfBand + ' words — guide only, NOT a pad quota) for a ' + (novelData.genre || '') + ' novel titled "' + (novelData.title || 'Untitled') + '" with the following details:');
@@ -4410,6 +5162,9 @@ let activeAICallCount = 0;
 
 
 		async function reviseChapterForQuality(chapterNum, gateResult, opts) {
+		    // Agent Skill I/O pack (tab5.reviseChapterForQuality)
+		    window.__lastSkillPack = packSkillInputs('tab5.reviseChapterForQuality', { novelData: novelData, chapterNum: chapterNum, updateBrief: (opts && opts.brief) || '', reviseBrief: (typeof buildQualityReviseBrief === 'function' ? buildQualityReviseBrief(gateResult) : '') });
+
 			opts = opts || {};
 			const maxAttempts = (opts.maxAttempts != null) ? opts.maxAttempts : NW_QUALITY_REVISE.maxAttempts;
 			const before = gateResult || runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-preRevise' });
@@ -5194,6 +5949,9 @@ let activeAICallCount = 0;
 		async function runChapterContinuityAudit(chapterNum, options = {}) {
 			const __c2ContEp = evidencePackPromptBlock({ goal: 'continuityAudit', chapter: chapterNum, tokenBudgetHint: 1200 });
 			collectData();
+		    // Agent Skill I/O pack (tab5.continuityAudit)
+		    window.__lastSkillPack = packSkillInputs('tab5.continuityAudit', { novelData: novelData, chapterNum: chapterNum });
+
 			const chapterText = novelData.chapters[chapterNum - 1] || document.getElementById(`chapterGenContent${chapterNum}`)?.value || '';
 			if (!chapterText.trim()) {
 				if (!options.silent) alert(`Chapter ${chapterNum} has no content to audit.`);
@@ -5201,7 +5959,7 @@ let activeAICallCount = 0;
 			}
 			const packet = buildChapterContinuityPacket(chapterNum);
 			const messages = [
-				{ role: 'system', content: getAgentPrompt('tab5', 'continuityAudit', 'You are a meticulous fiction continuity editor. Detect timeline drift, character-arc inconsistency, subplot drop-off, and story-arc misalignment. Return strict JSON only.') },
+				{ role: 'system', content: getSkillSystemPrompt('tab5.continuityAudit', 'You are a meticulous fiction continuity editor. Detect timeline drift, character-arc inconsistency, subplot drop-off, and story-arc misalignment. Return strict JSON only.') },
 				{
 					role: 'user',
 					content: [
@@ -5267,6 +6025,9 @@ let activeAICallCount = 0;
 
 	    async function checkSpellingAndGrammar(chapterNum, source) {
 		    collectData();
+		    // Agent Skill I/O pack (tab6.checkSpellingAndGrammar)
+		    window.__lastSkillPack = packSkillInputs('tab6.checkSpellingAndGrammar', { novelData: novelData, chapterNum: chapterNum });
+
 		    const contentElement = document.getElementById(`chapterEditContent${chapterNum}`);
 		    const content = contentElement.value;
 		    if (!content) {
@@ -5274,7 +6035,7 @@ let activeAICallCount = 0;
 		        return;
 		    }
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab6', 'checkSpellingAndGrammar', 'You are a grammar and spelling checker.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab6.checkSpellingAndGrammar', 'You are a grammar and spelling checker.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -5366,6 +6127,9 @@ let activeAICallCount = 0;
 	        // Suggest improvements for the entire book and update the table
 		    async function suggestBookImprovements() {
 			    collectData();
+		    // Agent Skill I/O pack (tab7.suggestBookImprovements)
+		    window.__lastSkillPack = packSkillInputs('tab7.suggestBookImprovements', { novelData: novelData });
+
 			    var __c2BookEp = evidencePackPromptBlock({ goal: 'suggestBookImprovements', tokenBudgetHint: 1500 });
 			    const fullBook = novelData.chapters
 			        .filter(chapter => chapter.trim() !== '')
@@ -5376,7 +6140,7 @@ let activeAICallCount = 0;
 			        return;
 			    }
 			    const messages = [
-			        { role: 'system', content: getAgentPrompt('tab7', 'suggestBookImprovements', 'You are a literary editor specializing in detailed narrative critique.') },
+			        { role: 'system', content: getSkillSystemPrompt('tab7.suggestBookImprovements', 'You are a literary editor specializing in detailed narrative critique.') },
 			        {
 			            role: 'user',
 			            content: [
@@ -5551,6 +6315,9 @@ let activeAICallCount = 0;
 			//Break improvements into executable parts
 			async function breakdownImprovement(index) {
 			    collectData();
+		    // Agent Skill I/O pack (tab7.breakdownImprovement)
+		    window.__lastSkillPack = packSkillInputs('tab7.breakdownImprovement', { novelData: novelData, improvement: (novelData.improvements || [])[index] });
+
 			    const improvement = novelData.bookImprovementsWithStatus[index];
 			    if (!improvement || improvement.status !== 'To Incorporate') {
 			        alert('Select an improvement marked "To Incorporate" to break down.');
@@ -5574,7 +6341,7 @@ let activeAICallCount = 0;
 			    })));
 
 			    const messages = [
-			        { role: 'system', content: getAgentPrompt('tab7', 'breakdownImprovement', 'You are a literary editor specializing in actionable narrative breakdowns.') },
+			        { role: 'system', content: getSkillSystemPrompt('tab7.breakdownImprovement', 'You are a literary editor specializing in actionable narrative breakdowns.') },
 			        {
 			            role: 'user',
 			            content: [
@@ -5805,6 +6572,9 @@ let activeAICallCount = 0;
 		    // NW.T8.F5: integrateBreakdownSuggestions() SHALL update novelData.chapters, sync Tab 5 and Tab 6 textareas, update the Book tab, and refresh Tab 7 status dropdowns after all integrations complete.
 		    async function integrateBreakdownSuggestions() {
 		        collectData();
+		    // Agent Skill I/O pack (tab8.integrateBreakdown)
+		    window.__lastSkillPack = packSkillInputs('tab8.integrateBreakdown', { novelData: novelData });
+
 
 		        const toIntegrate = novelData.bookImprovementsWithStatus
 		            .map((item, idx) => ({ ...item, _idx: idx }))
@@ -5837,7 +6607,7 @@ let activeAICallCount = 0;
 		                if (!currentText.trim()) continue;
 
 		                const messages = [
-		                    { role: 'system', content: getAgentPrompt('tab8', 'integrateBreakdown', 'You are a skilled fiction editor. Revise the provided chapter text to incorporate the listed improvements. Return ONLY the revised chapter text with no commentary, headers, or markdown code fences.') },
+		                    { role: 'system', content: getSkillSystemPrompt('tab8.integrateBreakdown', 'You are a skilled fiction editor. Revise the provided chapter text to incorporate the listed improvements. Return ONLY the revised chapter text with no commentary, headers, or markdown code fences.') },
 		                    { role: 'user', content: 'Revise ' + chKey + ' of the ' + (novelData.genre || '') + ' novel "' + (novelData.title || 'Untitled') + '" to incorporate these improvements:\n\n' + chapterInstructions + '\n\nCurrent ' + chKey + ' text:\n' + currentText }
 		                ];
 
@@ -6052,6 +6822,9 @@ let activeAICallCount = 0;
 		    // Incorporate user-suggested improvements into the main outlines
 		    async function incorporateOutlineSuggestions() {
 			    collectData();
+		    // Agent Skill I/O pack (tab4.incorporateOutlineSuggestions)
+		    window.__lastSkillPack = packSkillInputs('tab4.incorporateOutlineSuggestions', { novelData: novelData });
+
 			    const improvements = document.getElementById('outlineImprovements').value;
 			    if (!improvements) {
 			        alert('No improvements entered to incorporate.');
@@ -6059,7 +6832,7 @@ let activeAICallCount = 0;
 			    }
 			    novelData.outlineImprovements = improvements;
 			    const messages = [
-			        { role: 'system', content: getAgentPrompt('tab4', 'incorporateOutlineSuggestions', 'You are a creative writing assistant.') },
+			        { role: 'system', content: getSkillSystemPrompt('tab4.incorporateOutlineSuggestions', 'You are a creative writing assistant.') },
 			        {
 			            role: 'user',
 			            content: [
@@ -6356,6 +7129,13 @@ let activeAICallCount = 0;
 	    // Generate novel outlines via AI
 	    async function generateNovelOutlines() {
 		    collectData();
+		    const __outlineSkillPack = packSkillInputs('tab4.generateNovelOutlines', { novelData: novelData });
+		    if (!__outlineSkillPack.ok) {
+		        console.warn('Skill tab4.generateNovelOutlines missing inputs', __outlineSkillPack.missingRequired);
+		    }
+		    window.__lastSkillPack = __outlineSkillPack;
+		    // Agent Skill I/O pack (tab4.generateNovelOutlines)
+
 		    console.log('generateNovelOutlines - novelData state:', {
 		        genre: novelData.genre,
 		        title: novelData.title,
@@ -6369,7 +7149,7 @@ let activeAICallCount = 0;
 		    });
 
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab4', 'generateNovelOutlines', 'You are a creative writing assistant specializing in detailed narrative planning.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab4.generateNovelOutlines', 'You are a creative writing assistant specializing in detailed narrative planning.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -6516,6 +7296,9 @@ let activeAICallCount = 0;
 		//Generate a chapter outline and arc
 		async function generateChapterOutline(chapterNum) {
 		    collectData();
+		    // Agent Skill I/O pack (tab4.generateChapterOutline)
+		    window.__lastSkillPack = packSkillInputs('tab4.generateChapterOutline', { novelData: novelData, chapterNum: chapterNum });
+
 		    showChapterSubpage(chapterNum);
 			const totalChapters = Math.max(1, parseInt(novelData.numChapters || 1));
 			const chapterRatio = chapterNum / totalChapters;
@@ -6550,7 +7333,7 @@ let activeAICallCount = 0;
 		        ].join('\n');
 
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab4', 'generateChapterOutline', 'You are a creative writing assistant specializing in detailed narrative planning.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab4.generateChapterOutline', 'You are a creative writing assistant specializing in detailed narrative planning.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -6666,6 +7449,9 @@ let activeAICallCount = 0;
 		//Update Chapter Outline with AI support
 		async function updateChapterOutline(chapterNum) {
 		    collectData();
+		    // Agent Skill I/O pack (tab4.updateChapterOutline)
+		    window.__lastSkillPack = packSkillInputs('tab4.updateChapterOutline', { novelData: novelData, chapterNum: chapterNum });
+
 		    const contentElement = document.getElementById(`chapterContent${chapterNum}`);
 		    const currentContent = contentElement.value;
 		    const improvements = document.getElementById(`chapterImprovement${chapterNum}`).value;
@@ -6690,7 +7476,7 @@ let activeAICallCount = 0;
 		    const styleGuide = novelData.styleGuide || defaultAuthors["nealstephenson"].styleGuide;
 
 		    const messages = [
-		        { role: "system", content: getAgentPrompt('tab4', 'updateChapterOutline', 'You are a creative writing assistant.') },
+		        { role: "system", content: getSkillSystemPrompt('tab4.updateChapterOutline', 'You are a creative writing assistant.') },
 		        {
 		            role: "user",
 		            content: [
@@ -6747,6 +7533,13 @@ let activeAICallCount = 0;
 		    console.log(`Starting generateChapter for Chapter ${chapterNum}`);
 		    console.log('Pre-collectData - novelData.chapters:', novelData.chapters);
 		    collectData();
+		    // Agent Skill I/O pack (tab5.generateChapter)
+		    const __chSkillPack = packSkillInputs('tab5.generateChapter', { novelData: novelData, chapterNum: chapterNum });
+		    if (!__chSkillPack.ok) {
+		        console.warn('Skill tab5.generateChapter missing inputs', __chSkillPack.missingRequired);
+		    }
+		    window.__lastSkillPack = __chSkillPack;
+
 		    console.log('Post-collectData - novelData.chapters:', novelData.chapters);
 			// Fail-closed workflow gate: enrich readiness + chapter spine (empty/stub multiplies into prose).
 			(function assertPreProseSpineGate(ch) {
@@ -6813,7 +7606,7 @@ let activeAICallCount = 0;
 
 		    // Part 1 — blueprint-bound pack (obligations over pad quotas)
 		    const messagesPart1 = [
-			    { role: 'system', content: getAgentPrompt('tab5', 'generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
+			    { role: 'system', content: getSkillSystemPrompt('tab5.generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
 		        {
 		            role: 'user',
 		            content: buildGenerateChapterUserContent(chapterNum, 1, { continuityPacket: continuityPacket })
@@ -6855,7 +7648,7 @@ let activeAICallCount = 0;
 
 		    // Part 2
 			const messagesPart2 = [
-			    { role: 'system', content: getAgentPrompt('tab5', 'generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
+			    { role: 'system', content: getSkillSystemPrompt('tab5.generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
 			    {
 			        role: 'user',
 			        content: buildGenerateChapterUserContent(chapterNum, 2, { continuityPacket: continuityPacket, firstHalf: chapterContent })
@@ -6946,6 +7739,9 @@ let activeAICallCount = 0;
 	    async function updateChapter(chapterNum, opts) {
 		    opts = opts || {};
 		    collectData();
+		    // Agent Skill I/O pack (tab6.updateChapter)
+		    window.__lastSkillPack = packSkillInputs('tab6.updateChapter', { novelData: novelData, chapterNum: chapterNum, updateBrief: (opts && opts.brief) || '' });
+
 		    ensureChapterImprovementsArray();
 		    const prevContent = chapterNum > 1 ? novelData.chapters.slice(0, chapterNum-1).join('\n') : '';
 		    const contextLimit = 1000;
@@ -6971,7 +7767,7 @@ let activeAICallCount = 0;
 		    }
 
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab6', 'updateChapter', 'You are a creative writing assistant.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab6.updateChapter', 'You are a creative writing assistant.') },
 		        {
 		            role: 'user',
 		            content: [
@@ -7027,13 +7823,16 @@ let activeAICallCount = 0;
 	    // Suggest initial story info via AI
 	    async function suggestStoryInfo() {
 		    collectData();
+		    // Agent Skill I/O pack (tab1.suggestStoryInfo)
+		    window.__lastSkillPack = packSkillInputs('tab1.suggestStoryInfo', { novelData: novelData });
+
 			const existingTitle = document.getElementById('title').value;
 			const existingStoryArc = document.getElementById('storyArc').value;
 			const existingGeneralPlot = document.getElementById('generalPlot').value;
 			const existingSetting = document.getElementById('setting').value;
 			const existingStyleGuide = document.getElementById('styleGuide').value;
 		    const messages = [
-		        { role: 'system', content: getAgentPrompt('tab1', 'suggestStoryInfo', 'You are a creative writing assistant specializing in immersive, thematic narratives.') },
+		        { role: 'system', content: getSkillSystemPrompt('tab1.suggestStoryInfo', 'You are a creative writing assistant specializing in immersive, thematic narratives.') },
 		        {
 		            role: 'user',
 		            content: [
