@@ -1,4 +1,4 @@
-﻿# AI Book Tools
+# AI Book Tools
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub issues](https://img.shields.io/github/issues/bnorth12/AI-Book-Tools)](https://github.com/bnorth12/AI-Book-Tools/issues)
@@ -63,6 +63,12 @@ Documentation index: [docs/README.md](docs/README.md)
 - Text editor (VS Code recommended)
 
 ### Local Development
+
+### Local xAI key (optional)
+
+For local scripts / E2E that need an env key (BNLaptop, NovelWriterSite-style hosts), copy `secrets/xai.local.env.example` to `secrets/xai.local.env` and set `XAI_API_KEY=`. That path is gitignored — never commit a real key.
+
+Browser tools still take the key in Setup UI. **GitHub Actions** uses the repo secret `XAI_API_KEY`, not the local file.
 
 ```bash
 
