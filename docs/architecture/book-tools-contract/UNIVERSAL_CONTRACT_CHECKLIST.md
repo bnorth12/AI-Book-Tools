@@ -60,7 +60,7 @@ Update status only: `not started` · `in progress` · `done` · `n/a` (with note
 - [ ] C1 — Slim `callGrokAPI` payloads (digests of chunks/context, not whole book every step where avoidable)
 - [ ] C2 — Optional graph / ReferenceDoc emit compatible with Phase 0 schema (ingest)
 - [ ] C3 — Only where LLM rewrites prose; skip for pure structure extract if no generation
-- [ ] C4 — Model/provider alignment (#118 done for dropdown); paste-bridge later
+- [ ] C4 — Model/provider alignment: #118 merged to main as a merge commit at `3b25145` on 2026-10-02 (model list refreshed, multi-agent Responses routing added); saved-model blank-dropdown fallback still pending; paste-bridge later
 - [ ] C5 — Helpers in `BookDecomposer.js` only
 
 ### HerbalBookForge (Nonfiction)
@@ -68,7 +68,7 @@ Update status only: `not started` · `in progress` · `done` · `n/a` (with note
 - [ ] C1 — Herbal **evidence/safety digests** (claims, citations, contraindications) — not fiction arc digests
 - [ ] C2 — Same KB retrieve contracts; domain filter `nonfiction` / safety kinds
 - [ ] C3 — Readability + no AI-slot **and** safety/factual gates (herbal-specific bar)
-- [ ] C4 — Provider / paste-bridge; multi-agent Responses routing already aligned (#118)
+- [ ] C4 — Multi-agent Responses routing merged via #118 (merge commit `3b25145` on main, 2026-10-02; HBF fix `39f7562` adds truncation detection, saved-model fallback, configured endpoint); provider / paste-bridge still pending
 - [ ] C5 — Vendored copies inside HBF; coordinate with Fiction on contract text only
 
 
