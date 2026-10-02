@@ -8,6 +8,7 @@ This directory contains process, planning, architecture, and release documentati
 - `runbooks/`: Manual testing and operational runbooks.
 - `releases/`: Release closeout reports and publication evidence.
 - `roadmap/`: Planned capability work and backlog planning notes.
+- `architecture/book-tools-contract/`: universal digests/RAG/quality/provider checklist per tool (vendored copies; separate codebases).
 - `architecture/ui-unification/`: UI unification analysis, test plans, traceability, and accessibility evidence.
 - `system-security-analysis/`: Threat models, cyber threat analysis, trust boundaries, and mitigation tracking artifacts.
 - `integration/`: Cross-tool integration issue briefs and data-model references.
