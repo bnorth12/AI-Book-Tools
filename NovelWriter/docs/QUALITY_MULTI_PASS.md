@@ -11,6 +11,7 @@ After the first auto-revise (QE2 gate-fail) or after Tab6 apply-staged (QE3), No
 | Heuristics gate still failing | `gate-fail` |
 | Chapter continuity findings / tracker risks | `continuity` |
 | Residual staged improvement notes (after apply-staged) | `residual-staged` |
+| Slop tells over floor (`scoreSlopTells`; checked after the rows above, revise-only, never fail-closes the gate) | `anti-slop` |
 
 ## Caps & fail-closed
 

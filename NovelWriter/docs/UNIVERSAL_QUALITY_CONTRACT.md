@@ -21,7 +21,7 @@ This note lists **copy-ready seams** so a future BookEditor / BookDecomposer rew
 | **AgentSkill / SkillIO** | Declared per-agent inputs (binders), output validators, and ability text layered on system prompts. Portable catalog shape (`schemaVersion`, skill id, inputs[], output, stop). Runtime stays per-app. | `defaultSkillCatalog` / `packSkillInputs` / `validateSkillOutput` / `getSkillSystemPrompt` — **no** Editor impl yet |
 | **StageSchema** | Per-tab/stage required vs optional fields (soft early, fail-closed later); bidirectional normalizeInbound/Outbound; alias map | `normalizeInbound` / `normalizeOutbound` / `validateAgainstStageSchema` / `schemaPromptLines` — NW-first; portable catalog shape |
 | **SlopTellReport** | Tell-level anti-slop scores (cadence/stockMetaphor/hedgeStack/nameEcho/emotionLabel/overExplain/chapterEcho); revise-only multipass kind `anti-slop`; does **not** fail-close Quality gate until product opts in | `scoreSlopTells` / `buildAntiSlopReviseBrief` — NW-first; portable shape for Editor |
-| **Multipass** | Cap (NW: `maxAutoPasses=2`); kinds `gate-fail` \| `continuity` \| `residual-staged`; log `qualityMultiPassLog[]` with `{chapter, pass, kind, passedBefore, passedAfter, ...}` | QE5 |
+| **Multipass** | Cap (NW: `maxAutoPasses=2`); kinds `gate-fail` \| `continuity` \| `residual-staged` \| `anti-slop`; log `qualityMultiPassLog[]` with `{chapter, pass, kind, passedBefore, passedAfter, ...}` | QE5 |
 
 ## Explicitly out of contract (NW-only / product UI)
 
