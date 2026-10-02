@@ -97,7 +97,28 @@ function stripDialogue(text) {
     .replace(/\u201C([^\u201D]*)\u201D/g, ' ')
     .replace(/'([^'\\]|\\.)*'/g, ' ');
 }
-function scoreNameEcho(text) {
+/**
+ * B5-0: capitalized function/common words are never names. Sentence-initial
+ * `The`/`She`/`Then`... matched /^[A-Z][a-z]{2,}$/ and fouled nameEcho
+ * (B4 Phase 2 Ch4 `The`x3, Ch5 `The`x4). Exclusion applies to the bare token
+ * only; real names (Kwan, Rook, Algorithm...) are unaffected.
+ */
+export const NAME_ECHO_STOPWORDS = new Set([
+  'the', 'this', 'that', 'these', 'those', 'then', 'than', 'there', 'their', 'they', 'them',
+  'she', 'her', 'hers', 'his', 'him', 'its', 'our', 'ours', 'you', 'your', 'yours', 'who', 'whom', 'whose',
+  'and', 'but', 'for', 'nor', 'yet', 'not', 'nothing', 'something', 'everything', 'someone', 'everyone', 'nobody',
+  'when', 'while', 'where', 'what', 'which', 'why', 'how', 'whether', 'because', 'though', 'although', 'unless', 'until', 'since',
+  'after', 'before', 'now', 'here', 'only', 'just', 'even', 'still', 'once', 'also', 'too', 'again', 'instead',
+  'each', 'every', 'all', 'any', 'some', 'both', 'few', 'many', 'most', 'such', 'another', 'other', 'either', 'neither',
+  'into', 'onto', 'from', 'with', 'without', 'over', 'under', 'above', 'below', 'through', 'behind', 'beside', 'between',
+  'inside', 'outside', 'across', 'against', 'along', 'around', 'beyond', 'near', 'past', 'toward', 'towards', 'upon', 'within',
+  'was', 'were', 'had', 'has', 'have', 'did', 'does', 'can', 'could', 'would', 'should', 'will', 'may', 'might', 'must',
+  'yes', 'out', 'off', 'down', 'back', 'later', 'somewhere', 'nowhere', 'everywhere'
+]);
+function isNameToken(tok) {
+  return /^[A-Z][a-z]{2,}$/.test(tok) && !NAME_ECHO_STOPWORDS.has(tok.toLowerCase());
+}
+export function scoreNameEcho(text) {
   const w = words(stripDialogue(text));
   const hits = [];
   let worst = 0;
@@ -106,7 +127,7 @@ function scoreNameEcho(text) {
     const window = w.slice(i, i + 25);
     const counts = {};
     window.forEach(tok => {
-      if (/^[A-Z][a-z]{2,}$/.test(tok)) counts[tok] = (counts[tok] || 0) + 1;
+      if (isNameToken(tok)) counts[tok] = (counts[tok] || 0) + 1;
     });
     Object.entries(counts).forEach(([name, c]) => {
       if (c > worst) { worst = c; worstName = name; }
