@@ -24,7 +24,7 @@ On PowerShell, set the variable for the process first (`$env:NW_B4_PRECHECK_ONLY
 |---|---|---|
 | `_smoke_slop_tells.mjs` | B1/B4 anti-slop tell detectors (`_nw_slop_tells_snippet.mjs`) against vendored annex chapters and the slop corpus | No |
 | `_smoke_b5_0_name_echo.mjs` | B5-0 nameEcho stopword fix, before/after scoring of annex prose and B4 inject spans | No |
-| `_smoke_nw_quality_html.mjs` | Loads this checkout's `NovelWriter/NovelWriter.html` and runs the C3 / QE1-6 in-page smokes plus anti-slop helpers; asserts the smokes leave `novelData` unchanged | Yes |
+| `_smoke_nw_quality_html.mjs` | Loads this checkout's `NovelWriter/NovelWriter.html` and runs the C3 / QE1-6 in-page smokes plus anti-slop helpers; runs the in-page `_scoreNameEchoTell` (B5-0 function-word cases + HTML/snippet parity over `scripts/fixtures`); asserts the smokes leave `novelData` unchanged | Yes |
 | `_b4_1a_inject_prove.mjs` with `NW_B4_PRECHECK_ONLY=1` | Loads the HTML, the vendored B3R seed and an inject span, and stops after the in-page detector precheck | Yes |
 
 `_nw_slop_tells_snippet.mjs` is the shared ESM detector module imported by the two pure smokes; it is not run directly.

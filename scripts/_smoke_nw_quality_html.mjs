@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { chromium } from 'playwright';
+import { scoreNameEcho } from './_nw_slop_tells_snippet.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -47,7 +48,7 @@ const result = await page.evaluate(async () => {
   const helpers = ['scoreProseQuality', 'runQualityGate', 'scoreSlopTells', 'buildAntiSlopReviseBrief', 'needsQualityMultiPass',
     'runTargetedQualityPass', 'reviseChapterForQuality', 'guardChapterReviseGrowth', 'applyE2eSlopInject', 'ensureQualityAfterGenerate',
     'applyBookCritiqueItem', 'applyTopBookCritiques', 'applyStagedChapterImprovements'].filter(n => typeof window[n] !== 'function' && typeof eval(n) !== 'function');
-  // B5-0 offline scorer is the snippet; the HTML nameEcho mirror is PR5, so only check detector shape here.
+  // Detector shape; the B5-0 nameEcho port is exercised directly against the in-page _scoreNameEchoTell below.
   const tell = scoreSlopTells('Kwan told Kwan that Kwan would not sign what Kwan had refused.');
   // growth guard reverts runaway growth
   const base = Array(10).fill('A paragraph of ordinary prose that is long enough to count here.').join('\n\n');
@@ -56,6 +57,54 @@ const result = await page.evaluate(async () => {
   const reverted = g.reverted === true && novelData.chapters[0] === base;
   return { out, unchanged: before === after, missingHelpers: helpers, nameEchoFoul: !tell.tells.nameEcho.ok, tells: Object.keys(tell.tells), guardReverted: reverted };
 });
+
+// ---- B5-0 nameEcho port: run the HTML's own _scoreNameEchoTell (in-page) ----
+const FIX = path.join(SCRIPT_DIR, 'fixtures');
+const neCases = {
+  theFP: 'The door opened onto the quay. The room was cold. The lamp above it flickered twice. The rain kept falling on ceramic posts.',
+  algorithm: 'Algorithm Two voted. Algorithm One demanded. Algorithm Three abstained.',
+  truePositive: 'Kwan told Kwan that Kwan would not sign what Kwan had refused yesterday when Kwan arrived.'
+};
+// parity corpus: every nw_slop annex chapter, inject span (alone + appended to its base chapter), slop_corpus txt
+const parity = {};
+const annex = {};
+for (const f of fs.readdirSync(path.join(FIX, 'nw_slop', 'annex_chapters')).filter(f => f.endsWith('.json'))) {
+  const id = f.replace(/\.json$/, '');
+  annex[id] = (JSON.parse(fs.readFileSync(path.join(FIX, 'nw_slop', 'annex_chapters', f), 'utf8')).chapters || []).map(t => String(t || '').trim());
+  annex[id].forEach((t, i) => { parity[id + ' Ch' + (i + 1)] = t; });
+}
+for (const m of JSON.parse(fs.readFileSync(path.join(FIX, 'nw_slop', 'inject_spans', '_spans_meta.json'), 'utf8'))) {
+  const span = fs.readFileSync(path.join(FIX, 'nw_slop', 'inject_spans', m.file), 'utf8');
+  parity['span ' + m.file] = span;
+  const base = (annex[m.annex] || [])[m.ch - 1] || '';
+  parity['span+base ' + m.file] = base.replace(/\s+$/, '') + '\n\n' + span;
+}
+for (const f of fs.readdirSync(path.join(FIX, 'slop_corpus')).filter(f => f.endsWith('.txt'))) parity['slop_corpus ' + f] = fs.readFileSync(path.join(FIX, 'slop_corpus', f), 'utf8');
+const all = { ...Object.fromEntries(Object.entries(neCases).map(([k, v]) => ['case ' + k, v])), ...parity };
+const htmlNe = await page.evaluate(texts => {
+  const o = {};
+  for (const [k, t] of Object.entries(texts)) o[k] = _scoreNameEchoTell(t);
+  return o;
+}, all);
+const neFails = [];
+if (htmlNe['case theFP'].score !== 0) neFails.push('theFP (The x4 sentence-initial) must score 0: ' + JSON.stringify(htmlNe['case theFP']));
+const algSnip = scoreNameEcho(neCases.algorithm);
+if (!(htmlNe['case algorithm'].score >= 55) || htmlNe['case algorithm'].score !== algSnip.score) neFails.push('Algorithm x3 must foul like snippet: ' + JSON.stringify({ html: htmlNe['case algorithm'], snippet: algSnip }));
+if (!(htmlNe['case truePositive'].score >= 55) || !/Kwan/.test(htmlNe['case truePositive'].hits.join())) neFails.push('true-positive Kwan echo must foul: ' + JSON.stringify(htmlNe['case truePositive']));
+const parityMismatch = [];
+for (const k of Object.keys(all)) {
+  const sn = scoreNameEcho(all[k]);
+  if (sn.score !== htmlNe[k].score || JSON.stringify(sn.hits) !== JSON.stringify(htmlNe[k].hits)) parityMismatch.push({ unit: k, html: htmlNe[k], snippet: sn });
+}
+if (parityMismatch.length) neFails.push('HTML vs snippet nameEcho parity mismatch on ' + parityMismatch.length + ' unit(s)');
+const watch = ['A3R Ch5', 'B4 Ch4', 'B4 Ch5', 'span+base span_a3r_ch5_chapterecho.txt'];
+watch.forEach(u => { if (!htmlNe[u] || htmlNe[u].score >= 55) neFails.push(u + ' nameEcho must not false-fail in HTML: ' + JSON.stringify(htmlNe[u])); });
+result.nameEchoPort = {
+  cases: Object.fromEntries(Object.keys(neCases).map(k => [k, htmlNe['case ' + k]])),
+  parity: { units: Object.keys(all).length, mismatches: parityMismatch },
+  fixtures: Object.fromEntries(watch.map(u => [u, htmlNe[u]])),
+  fails: neFails
+};
 await browser.close();
 
 const fails = [];
@@ -65,6 +114,7 @@ if (result.missingHelpers.length) fails.push('missing helpers: ' + result.missin
 if (!result.nameEchoFoul) fails.push('nameEcho narration should foul');
 if (result.tells.length !== 7) fails.push('expected 7 tells, got ' + result.tells.join(','));
 if (!result.guardReverted) fails.push('guardChapterReviseGrowth did not revert runaway growth');
+fails.push(...result.nameEchoPort.fails);
 if (pageErrors.length) fails.push('page errors: ' + pageErrors.join(' | '));
 const report = { ok: fails.length === 0, fails, html: path.relative(REPO_ROOT, HTML_PATH).split(path.sep).join('/'), ...result };
 fs.mkdirSync(OUT_DIR, { recursive: true });
