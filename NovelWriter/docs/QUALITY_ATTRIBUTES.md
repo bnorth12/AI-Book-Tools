@@ -9,7 +9,7 @@ Status: **implemented 2026-09-27** in `NovelWriter/NovelWriter.html`.
 | `scoreProseQuality` heuristics | **Fail-closed driver** | Scores feed `runQualityGate` |
 | `runQualityGate` | **Fail-closed** | Failures trigger revise / multipass |
 | LLM `judgeProseQualityLLM` | **Advisory only** | Divergence logged; does not alone revise (`reviseOnJudgeAdvisory=false`) |
-| Multipass | Cap `maxAutoPasses=2` | kinds: `gate-fail`, `continuity`, `residual-staged` |
+| Multipass | Cap `maxAutoPasses=2` | kinds: `gate-fail`, `continuity`, `residual-staged`, `anti-slop` (revise-only; never fail-closes the gate) |
 
 ## Attribute fields (0–100)
 

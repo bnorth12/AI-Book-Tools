@@ -11,7 +11,7 @@ Lean Tracked E2E now reports quality gate scores, heuristic samples, Ch1 `update
 2. **Fail-closed revise** ✅ — when `runQualityGate` fails, auto-revise once (or N) against failure reasons, then re-gate; keep fail-closed if still below thresholds.
 3. **Chapter improvement application** ✅ — wire non-empty `chapterImprovements` into Tab6 edit flow; stop silent empty slots.
 4. **Judge ↔ gate alignment** ✅ — heuristics = fail-closed driver; LLM judge = advisory + divergence log (`QUALITY_JUDGE_GATE.md`). `reviseOnJudgeAdvisory` default false.
-5. **Multi-pass quality editing** ✅ — second targeted pass (continuity / still-fail / residual staged); cap `maxAutoPasses=2`; `qualityMultiPassLog` pass1→pass2 (`QUALITY_MULTI_PASS.md`).
+5. **Multi-pass quality editing** ✅ — second targeted pass (continuity / still-fail / residual staged / revise-only `anti-slop` when slop tells exceed their floors); cap `maxAutoPasses=2`; `qualityMultiPassLog` pass1→pass2 (`QUALITY_MULTI_PASS.md`).
 6. **Per-prompt cost in-product** ✅ — Tab1 diagnostics table from `novelData.tokenUsage` + rate card (same as report).
 
 7. **QE6 quality attributes** ✅ — readability/slop/consistency/flow/pacing in heuristics + revise/continuity briefs; fail-closed remains heuristics.

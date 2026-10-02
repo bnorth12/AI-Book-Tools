@@ -3189,8 +3189,11 @@ Synced: 2026-04-19
 			if (cont.hasAny && !ctx.didContinuityPass) return { needed: true, reason: 'continuity-findings' };
 			if (ctx.afterApplyStaged) {
 				const notes = String((novelData.chapterImprovements || [])[chapterNum - 1] || '').trim();
+				// #129 review: notes this run's revise pass already consumed are not residual (no second paid call on the same notes).
+				const consumed = ctx.consumedStagedNotes != null ? String(ctx.consumedStagedNotes).trim() : null;
 				if (
 					notes &&
+					notes !== consumed &&
 					!/^QUALITY GATE FAIL-CLOSED REVISE/i.test(notes) &&
 					!/^CONTINUITY-FOCUSED QUALITY PASS/i.test(notes) &&
 					!/^ANTI-SLOP QUALITY PASS/i.test(notes)
@@ -3693,13 +3696,15 @@ Synced: 2026-04-19
 			let passesDoneApply = 1;
 			let didContinuityPass = false;
 			let didAntiSlopPass = false;
+			let consumedStagedNotes = text;
 			const maxPassesApply = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : 2;
 			while (passesDoneApply < maxPassesApply) {
 				const need = needsQualityMultiPass(chapterNum, gate, {
 					passesDone: passesDoneApply,
 					didContinuityPass: didContinuityPass,
 					didAntiSlopPass: didAntiSlopPass,
-					afterApplyStaged: true
+					afterApplyStaged: true,
+					consumedStagedNotes: consumedStagedNotes
 				});
 				if (!need.needed) {
 					// B4-1A: if inject still pending (continuity idle path missed), splice then re-evaluate
@@ -3714,11 +3719,13 @@ Synced: 2026-04-19
 						? 'residual-staged'
 						: (need.reason === 'anti-slop-tells' ? 'anti-slop' : 'gate-fail'));
 				console.warn('[QE5/B3fix] after apply-staged → pass', passesDoneApply + 1, kind);
+				const notesForPass = String((novelData.chapterImprovements || [])[chapterNum - 1] || '').trim();
 				multi = await runTargetedQualityPass(chapterNum, gate, { pass: passesDoneApply + 1, kind: kind, tellReport: need.tellReport || null });
 				passesDoneApply++;
 				gate = multi.gateAfter || gate;
 				if (kind === 'continuity') didContinuityPass = true;
 				if (kind === 'anti-slop') didAntiSlopPass = true;
+				if (kind === 'residual-staged') consumedStagedNotes = notesForPass;
 			}
 			return { beforeScores: beforeScores, afterScores: afterScores, multi: multi, gate: gate };
 		}

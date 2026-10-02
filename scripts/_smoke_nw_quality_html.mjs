@@ -2,6 +2,9 @@
  * PR2 offline in-page smoke (no LLM, no API key): loads THIS checkout's NovelWriter.html in headless
  * Chromium and runs the C3 / QE1-6 smokes plus the anti-slop helpers. Asserts every smoke PASSes and
  * that the smokes leave novelData (chapters, characters, continuity, quality logs) unchanged.
+ * Also (#129 review): one Update Chapter with staged notes makes exactly 1 LLM call (callAI stubbed and
+ * counted, never live), notes staged during the run still trigger the residual pass, and
+ * syncChapterTextToDom writes only the gen/edit prose textareas.
  * Usage: node scripts/_smoke_nw_quality_html.mjs   (see scripts/README.md)
  * Env: NW_HTML_PATH (default NovelWriter/NovelWriter.html), NW_OUT_DIR (default out/nw-smoke)
  */
@@ -119,6 +122,95 @@ result.nameEchoPort = {
   fixtures: Object.fromEntries(watch.map(u => [u, htmlNe[u]])),
   fails: neFails
 };
+// ---- #129 review MUST-FIX 1: Update Chapter with notes = exactly 1 LLM call (callAI stubbed + counted) ----
+// Clean prose (gate pass, all 7 tells pass, same length before/after so the growth guard is idle).
+const cleanProse = JSON.parse(fs.readFileSync(path.join(FIX, 'nw_slop', 'annex_chapters', 'B3.json'), 'utf8').replace(/^\uFEFF/, '')).chapters[0];
+result.updateChapterCalls = await page.evaluate(async prose => {
+  const domIds = ['numChapters', 'chapterEditImprovement1', 'chapterEditContent1', 'chapterGenContent1', 'chapterContent1'];
+  const domVal = () => Object.fromEntries(domIds.map(id => { const el = document.getElementById(id); return [id, el ? el.value : null]; }));
+  const ndBefore = JSON.stringify(novelData);
+  const nd0 = JSON.parse(ndBefore);
+  const dom0 = domVal();
+  const rl0 = JSON.stringify(requestLog);
+  const realCallAI = window.callAI;
+  const realAlert = window.alert;
+  const r = { errors: [] };
+  let calls = 0;
+  let onCall = null;
+  const NOTES = 'Tighten the dock scene: cut one stock gesture and add one concrete sound.';
+  const setup = async () => {
+    const numEl = document.getElementById('numChapters');
+    if (numEl && !(parseInt(numEl.value, 10) >= 1)) numEl.value = '2';
+    novelData.numChapters = 2;
+    novelData.continuityFindings = [];
+    novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
+    novelData.chapters = [prose, ''];
+    novelData.chapterImprovements = [NOTES, ''];
+    if (!document.getElementById('chapterEditImprovement1') && typeof updateChapterSubpages === 'function') await updateChapterSubpages();
+    document.getElementById('chapterEditContent1').value = prose;
+    document.getElementById('chapterGenContent1').value = prose; // collectData reads chapter prose from the DOM
+    document.getElementById('chapterEditImprovement1').value = NOTES;
+    calls = 0;
+    onCall = null;
+  };
+  const kindsSince = n => (novelData.qualityMultiPassLog || []).slice(n).map(e => e.kind);
+  window.alert = () => {};
+  window.callAI = async () => { calls++; if (onCall) onCall(calls); return { chapter: prose }; };
+  try {
+    // A) one Update Chapter click with notes: pass 1 consumes the notes, no residual second call
+    await setup();
+    r.continuityClear = !getChapterContinuityFindings(1).hasAny;
+    let mp0 = (novelData.qualityMultiPassLog || []).length;
+    await applyStagedChapterImprovements(1);
+    r.consumedNotes = { calls, kinds: kindsSince(mp0) };
+    // B) genuinely new notes staged while pass 1 runs must still trigger the residual pass
+    await setup();
+    onCall = n => { if (n === 1) novelData.chapterImprovements[0] = 'NEW note staged during pass 1: give the harbourmaster one line of dialogue.'; };
+    mp0 = (novelData.qualityMultiPassLog || []).length;
+    await applyStagedChapterImprovements(1);
+    r.newNotes = { calls, kinds: kindsSince(mp0) };
+    // C) needsQualityMultiPass directly: consumed notes skip, unapplied notes trigger, legacy ctx unchanged
+    await setup();
+    const pass = { passed: true, failures: [] };
+    const base = { passesDone: 1, didContinuityPass: false, didAntiSlopPass: false, afterApplyStaged: true };
+    r.needConsumed = needsQualityMultiPass(1, pass, Object.assign({}, base, { consumedStagedNotes: NOTES })).reason;
+    r.needUnapplied = needsQualityMultiPass(1, pass, Object.assign({}, base, { consumedStagedNotes: 'some older notes' })).reason;
+    r.needLegacy = needsQualityMultiPass(1, pass, base).reason;
+    // D) textarea sync (652a459): prose goes to chapterGenContent1/chapterEditContent1, never the Tab 4 outline box
+    const outlineBefore = document.getElementById('chapterContent1').value;
+    syncChapterTextToDom(1, 'SYNC-PROBE prose');
+    r.textareaSync = document.getElementById('chapterGenContent1').value === 'SYNC-PROBE prose'
+      && document.getElementById('chapterEditContent1').value === 'SYNC-PROBE prose'
+      && document.getElementById('chapterContent1').value === outlineBefore;
+  } catch (e) {
+    r.errors.push(String(e && e.message ? e.message : e));
+  } finally {
+    window.callAI = realCallAI;
+    window.alert = realAlert;
+    Object.keys(novelData).forEach(k => { if (!(k in nd0)) delete novelData[k]; });
+    Object.assign(novelData, nd0);
+    Object.entries(dom0).forEach(([id, v]) => { const el = document.getElementById(id); if (el && v != null) el.value = v; });
+    Object.assign(requestLog, JSON.parse(rl0));
+    if (typeof updateRequestLog === 'function') updateRequestLog();
+  }
+  r.restored = JSON.stringify(novelData) === ndBefore && JSON.stringify(domVal()) === JSON.stringify(dom0)
+    && JSON.stringify(requestLog) === rl0 && window.callAI === realCallAI && window.alert === realAlert;
+  return r;
+}, cleanProse);
+{
+  const u = result.updateChapterCalls;
+  const f = [];
+  if (u.errors.length) f.push('updateChapter call-count smoke threw: ' + u.errors.join(' | '));
+  if (!u.continuityClear) f.push('call-count smoke setup: continuity findings not clear');
+  if (!u.consumedNotes || u.consumedNotes.calls !== 1) f.push('one Update Chapter with notes must make exactly 1 LLM call, made ' + (u.consumedNotes && u.consumedNotes.calls) + ' (kinds ' + JSON.stringify(u.consumedNotes && u.consumedNotes.kinds) + ')');
+  if (!u.newNotes || u.newNotes.calls !== 2 || u.newNotes.kinds.indexOf('residual-staged') < 0) f.push('notes staged during pass 1 must trigger residual-staged pass 2: ' + JSON.stringify(u.newNotes));
+  if (u.needConsumed === 'residual-staged-notes') f.push('needsQualityMultiPass: consumed notes must not be residual');
+  if (u.needUnapplied !== 'residual-staged-notes') f.push('needsQualityMultiPass: unapplied notes must be residual, got ' + u.needUnapplied);
+  if (u.needLegacy !== 'residual-staged-notes') f.push('needsQualityMultiPass: ctx without consumedStagedNotes must stay residual, got ' + u.needLegacy);
+  if (!u.textareaSync) f.push('syncChapterTextToDom must write chapterGenContent1 + chapterEditContent1 and leave chapterContent1');
+  if (!u.restored) f.push('call-count smoke did not restore novelData / DOM / requestLog / callAI');
+  u.fails = f;
+}
 await browser.close();
 
 const fails = [];
@@ -129,6 +221,7 @@ if (!result.nameEchoFoul) fails.push('nameEcho narration should foul');
 if (result.tells.length !== 7) fails.push('expected 7 tells, got ' + result.tells.join(','));
 if (!result.guardReverted) fails.push('guardChapterReviseGrowth did not revert runaway growth');
 fails.push(...result.nameEchoPort.fails);
+fails.push(...result.updateChapterCalls.fails);
 if (pageErrors.length) fails.push('page errors: ' + pageErrors.join(' | '));
 const report = { ok: fails.length === 0, fails, html: path.relative(REPO_ROOT, HTML_PATH).split(path.sep).join('/'), ...result };
 fs.mkdirSync(OUT_DIR, { recursive: true });

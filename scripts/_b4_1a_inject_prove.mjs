@@ -108,11 +108,12 @@ await page.evaluate(({ key, seedObj, spanText, spanName, targetChapter, afterCon
   novelData.lastSlopInject = null;
   novelData.qualityJudgeEveryChapter = false;
   // Clear continuity findings so inject can land pre-nest and anti-slop gets budget under maxAutoPasses=2
+  // Keep both as arrays (Copilot #129): updateChapterSubpages() calls .slice() on continuityTracker.chapters.
   if (novelData.continuityFindings && typeof novelData.continuityFindings === 'object') {
-    novelData.continuityFindings = {};
+    novelData.continuityFindings = [];
   }
   if (novelData.continuityTracker && novelData.continuityTracker.chapters) {
-    novelData.continuityTracker.chapters = {};
+    novelData.continuityTracker.chapters = [];
   }
   novelData.autoContinuityAudit = false;
 
