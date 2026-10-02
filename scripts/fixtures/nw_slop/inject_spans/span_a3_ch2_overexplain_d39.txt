@@ -1,0 +1,9 @@
+--- pair d=39 j=0.92 ---
+She left one interval key intact, the same key that could still trace the spike back to its origin.
+
+Rook left the interval key intact, the same key that could still trace the spike back to its origin.
+
+--- pair d=41 j=0.81 ---
+Inside, the stale coffee in Theo Bramble’s thermos continued to register as narrative telemetry under the municipal SLA, a reminder that even Faraday nostalgia carried a price.
+
+Inside, the stale coffee in Theo Bramble’s thermos still registered as narrative telemetry under the municipal SLA, a reminder that even Faraday nostalgia carried a price.

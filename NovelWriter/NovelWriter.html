@@ -254,6 +254,18 @@ Synced: 2026-04-19
 			        </select>
 			        <label for="maxTokens">Max Tokens per Update:</label>
 			        <input type="number" id="maxTokens" min="500" value="6000">
+                        <button type="button" id="c3SmokeBtn" onclick="runC3Smoke()" title="#120 C3 quality gate smoke">C3 Smoke</button>
+			<button type="button" onclick="runQe123Smoke()">QE 1/2/3 Smoke</button>
+			<button type="button" onclick="runQe4Smoke()">QE4 Judge↔Gate Smoke</button>
+			<button type="button" onclick="runQe5Smoke()">QE5 Multi-Pass Smoke</button>
+			<button type="button" onclick="runQe6Smoke()">QE6 Attributes Smoke</button>
+			<pre id="qe6SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
+			<pre id="qe5SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
+			<pre id="qe4SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
+			<pre id="qe123SmokeResult" style="white-space:pre-wrap;font-size:12px;"></pre>
+                        <pre id="c3SmokeResult" style="margin:4px 0 4px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#fff7f0;border:1px solid #edc;white-space:pre-wrap;"></pre>
+                        <pre id="qualityGateResult" style="margin:4px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f5f5ff;border:1px solid #ccd;white-space:pre-wrap;">Quality gate: (none yet)</pre>
+			<pre id="qualityJudgeAlignResult" style="white-space:pre-wrap;font-size:12px;"></pre>
 			        <label for="genre">Genre:</label>
 			        <select id="genre" onchange="enableAuthorFetch()">
 			            <option value="scifi">Science Fiction</option>
@@ -449,6 +461,7 @@ Synced: 2026-04-19
 		    <textarea id="bookContent" readonly placeholder="All chapters will appear here concatenated"></textarea>
 		    <button onclick="exportBook()">Export Book</button>
 		    <button onclick="suggestBookImprovements()">Suggest Improvements</button>
+	        <button onclick="applyTopBookCritiques(1).then(r=>alert('Applied '+(r.applied||[]).length+' critique(s)')).catch(e=>alert(e.message||e))">Apply Top Critique</button>
 		    <table id="improvementsTable">
 		        <thead>
 		            <tr>
@@ -2204,7 +2217,7 @@ Synced: 2026-04-19
 		            <textarea id="chapterEditContent${i}" placeholder="Edit chapter content" oninput="syncChapterContent(${i}, 'edit')">${novelData.chapters[i-1]}</textarea>
 		            <label>Improvements to Implement:</label>
 		            <textarea id="chapterEditImprovement${i}" placeholder="Enter improvements to incorporate into this chapter">${novelData.chapterImprovements[i-1]}</textarea>
-		            <button onclick="updateChapter(${i})">Update Chapter</button>
+		            <button onclick="applyStagedChapterImprovements(${i}).catch(e=>console.error(e))">Update Chapter</button>
 		            <button onclick="checkSpellingAndGrammar(${i}, 'edit')">Check Spelling & Grammar</button>
 		        `;
 		        editContainer.appendChild(subpage);
@@ -2279,6 +2292,1661 @@ Synced: 2026-04-19
 	        if (source === 'gen' && editElement) editElement.value = newContent;
 	        console.log(`Synced chapter${source === 'edit' ? 'Gen' : 'Edit'}Content${chapterNum} to:`, newContent);
 	    }
+
+		// ==== #117 split 2/5 (PR2): prose quality gate, anti-slop detectors, revise-only multipass (QE1-6, B1-B4, B5-0) ====
+		// PR2 STANDALONE SHIM: PR1 (#117 split 1/5) owns the book quality ledger (ensureBookQualitySamples).
+		// Until PR1 lands, pushQualitySample falls back to this equivalent lazy-init helper. Safe to delete once PR1 is merged.
+		function _nwPr2QualitySamples() {
+			if (typeof ensureBookQualitySamples === 'function') return ensureBookQualitySamples();
+			if (!Array.isArray(novelData.qualitySamples)) novelData.qualitySamples = [];
+			return novelData.qualitySamples;
+		}
+		// Offline smoke isolation (Copilot highs on #117 QE1-3/QE5/QE6): snapshot novelData keys + DOM values, restore in finally.
+		function _nwSmokeSnapshot(keys, domIds) {
+			const snap = {};
+			(keys || []).forEach(function (k) { snap[k] = { had: Object.prototype.hasOwnProperty.call(novelData, k), v: novelData[k] === undefined ? undefined : JSON.parse(JSON.stringify(novelData[k])) }; });
+			const dom = {};
+			(domIds || []).forEach(function (id) { const el = document.getElementById(id); if (el) dom[id] = el.value; });
+			return function restore() {
+				Object.keys(snap).forEach(function (k) { if (snap[k].had) novelData[k] = snap[k].v; else delete novelData[k]; });
+				Object.keys(dom).forEach(function (id) { const el = document.getElementById(id); if (el) el.value = dom[id]; });
+			};
+		}
+
+		// ---- #120 C3: Prose quality heuristics + optional LLM judge (scores attach to current book) ----
+		/**
+		 * Local heuristics for prose quality (0-100 ints).
+		 * Signals (documented):
+		 * - interest: sentence-length variance, proper-noun/concrete density, dialogue presence, low filler ratio
+		 * - readability: avg sentence length in a comfortable band (~12-22 words), paragraph breaks, low exclamation spam
+		 * - aiSlopRisk: hedge/stock-phrase hits ("in today's world", "a testament to", "delve", "tapestry", "nestled",
+		 *   "moreover", "furthermore", "it is important to note"), repeated transition stacks, vague fillers
+		 * - humanLikeness: inverse of slop + specificity + natural variance (not metronomic sentence lengths)
+		 */
+		function scoreProseQuality(text, opts) {
+			opts = opts || {};
+			const notes = [];
+			const raw = (text || '').toString();
+			const cleaned = raw.replace(/\s+/g, ' ').trim();
+			const emptyScores = {
+				interest: 0, readability: 0, aiSlopRisk: 100, humanLikeness: 0,
+				consistency: 0, flow: 0, pacing: 0,
+				notes: ['empty or too short'],
+				meta: { wordCount: 0, sentCount: 0 }
+			};
+			if (!cleaned || cleaned.length < 40) return emptyScores;
+			const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(s => s.replace(/[^a-zA-Z0-9]/g, '').length > 0);
+			const words = cleaned.split(/\s+/).filter(Boolean);
+			const wordCount = words.length || 1;
+			const sentCount = Math.max(1, sentences.length);
+			const lengths = sentences.map(s => s.split(/\s+/).filter(Boolean).length);
+			const avgLen = lengths.reduce((a, b) => a + b, 0) / sentCount;
+			const variance = lengths.reduce((a, b) => a + Math.pow(b - avgLen, 2), 0) / sentCount;
+			const stdev = Math.sqrt(variance);
+
+			const stockPhrases = [
+				"in today's world", "a testament to", "delve", "tapestry", "nestled",
+				"moreover", "furthermore", "it is important to note", "in conclusion",
+				"a myriad of", "stands as a", "beacon of", "underscore the", "navigate the complexities",
+				"at the end of the day", "only time will tell", "in the realm of", "shed light on",
+				"vibrant tapestry", "rich tapestry", "delve deeper", "delve into", "pivotal role",
+				"as soft as", "in the heart of", "little did they know", "against all odds",
+				"a double-edged sword", "time stood still", "bated breath", "crystal clear",
+				"dive into", "embark on a journey", "game changer", "only to realize",
+				"whispered secrets", "unbreakable bond", "ever-evolving", "paradigm shift"
+			];
+			const lower = cleaned.toLowerCase();
+			let stockHits = 0;
+			stockPhrases.forEach(p => {
+				const re = new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+				const m = lower.match(re);
+				if (m) stockHits += m.length;
+			});
+			const transitionWords = ['however', 'therefore', 'moreover', 'furthermore', 'additionally', 'consequently', 'thus', 'hence', 'meanwhile', 'nevertheless', 'nonetheless'];
+			let transitionHits = 0;
+			transitionWords.forEach(t => {
+				const m = lower.match(new RegExp('\\b' + t + '\\b', 'gi'));
+				if (m) transitionHits += m.length;
+			});
+			const exclamations = (cleaned.match(/!/g) || []).length;
+			const properNouns = (cleaned.match(/\b[A-Z][a-z]{2,}\b/g) || []).length;
+			const dialogueMarks = (raw.match(/["\u201C\u201D']/g) || []).length;
+			const vagueFillers = (lower.match(/\b(things?|stuff|various|numerous|significant|unique|innovative|cutting-edge|seamless|robust|leverage|utilize|facilitate)\b/gi) || []).length;
+			const adverbly = (lower.match(/\b\w+ly\b/gi) || []).length;
+			const passiveHints = (lower.match(/\b(was|were|been|being)\s+\w+ed\b/gi) || []).length;
+
+			let interest = 45;
+			interest += Math.min(25, stdev * 2.5);
+			interest += Math.min(15, (properNouns / wordCount) * 400);
+			interest += Math.min(10, dialogueMarks > 2 ? 10 : dialogueMarks * 3);
+			interest -= Math.min(20, stockHits * 6);
+			interest -= Math.min(10, (vagueFillers / wordCount) * 200);
+			interest = Math.max(0, Math.min(100, Math.round(interest)));
+			if (stdev < 3) notes.push('low sentence-length variance');
+			if (stockHits) notes.push('stockPhraseHits=' + stockHits);
+			if (dialogueMarks > 2) notes.push('has dialogue cues');
+
+			// Readability: sentence length band + syllable-ish long-word density + paragraphing
+			let readability = 70;
+			if (avgLen >= 12 && avgLen <= 22) readability += 15;
+			else if (avgLen >= 8 && avgLen <= 28) readability += 5;
+			else readability -= Math.min(30, Math.abs(avgLen - 17) * 2);
+			readability -= Math.min(20, Math.max(0, exclamations - 2) * 5);
+			const longWords = words.filter(w => w.replace(/[^a-zA-Z]/g, '').length >= 12).length;
+			readability -= Math.min(15, Math.round((longWords / wordCount) * 180));
+			readability -= Math.min(10, Math.round((adverbly / wordCount) * 120));
+			const paraBreaks = (raw.match(/\n\s*\n/g) || []).length;
+			if (paraBreaks >= 1) readability += 5;
+			if (paraBreaks === 0 && wordCount > 180) { readability -= 8; notes.push('no paragraph breaks'); }
+			readability = Math.max(0, Math.min(100, Math.round(readability)));
+			notes.push('avgSentenceLen=' + avgLen.toFixed(1) + ' stdev=' + stdev.toFixed(1));
+
+			let aiSlopRisk = 15;
+			aiSlopRisk += Math.min(40, stockHits * 10);
+			aiSlopRisk += Math.min(20, transitionHits * 4);
+			aiSlopRisk += Math.min(15, (vagueFillers / Math.max(1, wordCount / 100)) * 3);
+			aiSlopRisk += Math.min(10, Math.round((passiveHints / Math.max(1, sentCount)) * 8));
+			if (stdev < 2.5 && sentCount > 4) aiSlopRisk += 10;
+			aiSlopRisk = Math.max(0, Math.min(100, Math.round(aiSlopRisk)));
+			if (transitionHits >= 3) notes.push('transitionStacks=' + transitionHits);
+
+			// Consistency: cast/world name presence vs novelData (create-path); unnamed pronoun soup
+			let consistency = 70;
+			const cast = Array.isArray(novelData.characters) ? novelData.characters : [];
+			const castNames = cast.map(c => (c && c.name) ? String(c.name).trim() : '').filter(Boolean);
+			let castHits = 0;
+			castNames.forEach(n => {
+				const parts = n.split(/\s+/).filter(p => p.length >= 3);
+				const hit = parts.some(p => new RegExp('\\b' + p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(cleaned));
+				if (hit) castHits++;
+			});
+			if (castNames.length >= 2) {
+				const ratio = castHits / castNames.length;
+				if (ratio < 0.15 && wordCount > 200) { consistency -= 25; notes.push('castUnderMentioned'); }
+				else if (ratio >= 0.25) consistency += 10;
+			}
+			const heShe = (lower.match(/\b(he|she|they)\b/gi) || []).length;
+			if (properNouns < 2 && heShe > 12 && wordCount > 150) { consistency -= 15; notes.push('pronounHeavyNoNames'); }
+			const timeResets = (lower.match(/\b(earlier that (day|morning|night)|the next (day|morning)|suddenly|all at once)\b/gi) || []).length;
+			if (timeResets >= 4) { consistency -= 10; notes.push('timelineResets=' + timeResets); }
+			consistency = Math.max(0, Math.min(100, Math.round(consistency)));
+
+			// Flow: rhythm + transition overuse + short-sentence stacks + paragraph glue
+			let flow = 65;
+			flow += Math.min(20, stdev * 2);
+			if (stdev < 2.5 && sentCount > 5) flow -= 15;
+			flow -= Math.min(25, Math.max(0, transitionHits - 2) * 5);
+			let shortStacks = 0;
+			for (let i = 1; i < lengths.length; i++) {
+				if (lengths[i] <= 5 && lengths[i - 1] <= 5) shortStacks++;
+			}
+			flow -= Math.min(15, shortStacks * 3);
+			if (paraBreaks >= 2 && wordCount > 250) flow += 5;
+			flow = Math.max(0, Math.min(100, Math.round(flow)));
+			if (shortStacks >= 3) notes.push('shortSentenceStacks=' + shortStacks);
+
+			// Pacing: dialogue/narration balance + beat density vs monologue stretches
+			let pacing = 65;
+			const dialogueRatio = Math.min(1, dialogueMarks / Math.max(8, wordCount / 12));
+			if (dialogueRatio >= 0.08 && dialogueRatio <= 0.55) pacing += 15;
+			else if (dialogueRatio < 0.02 && wordCount > 300) { pacing -= 15; notes.push('lowDialogueDensity'); }
+			else if (dialogueRatio > 0.7) { pacing -= 10; notes.push('dialogueHeavy'); }
+			const beatMarkers = (lower.match(/\b(then|next|after|before|until|when|as soon as|later|finally)\b/gi) || []).length;
+			const beatPer100 = (beatMarkers / wordCount) * 100;
+			if (beatPer100 < 0.8 && wordCount > 250) { pacing -= 12; notes.push('lowBeatDensity'); }
+			else if (beatPer100 > 6) { pacing -= 10; notes.push('rushedBeats'); }
+			else pacing += 8;
+			const longest = Math.max.apply(null, lengths);
+			if (longest >= 45) { pacing -= 10; notes.push('longSentenceStretch=' + longest); }
+			pacing = Math.max(0, Math.min(100, Math.round(pacing)));
+
+			let humanLikeness = Math.round(
+				(interest * 0.22) + (readability * 0.18) + ((100 - aiSlopRisk) * 0.28) +
+				(consistency * 0.12) + (flow * 0.10) + (pacing * 0.10)
+			);
+			humanLikeness = Math.max(0, Math.min(100, humanLikeness));
+
+			return {
+				interest, readability, aiSlopRisk, humanLikeness,
+				consistency, flow, pacing,
+				notes,
+				meta: {
+					wordCount, sentCount, avgLen: +avgLen.toFixed(2), stdev: +stdev.toFixed(2),
+					stockHits, transitionHits, exclamations, castHits, castNamed: castNames.length,
+					shortStacks, beatMarkers, dialogueMarks, adverbly, passiveHints
+				}
+			};
+		}
+
+
+		/**
+		 * Optional one-shot LLM judge. Fail-soft to heuristics-only on missing key/error.
+		 * Uses small max_tokens (~400). Uses Tab1 model today (FUTURE: per-agent model tiers).
+		 */
+		async function judgeProseQualityLLM(text, tabEl) {
+			const sample = (text || '').toString().slice(0, 3500);
+			const heuristics = scoreProseQuality(sample);
+			const key = (document.getElementById('apiKey') || {}).value || '';
+			if (!key.trim()) {
+				return Object.assign({}, heuristics, { source: 'heuristics', rationale: 'no api key; heuristics only' });
+			}
+			const tab = tabEl || document.getElementById('tab1') || document.body;
+			const messages = [
+				{ role: 'system', content: 'You are a terse literary quality rater. Return ONLY compact JSON. Scores are integers 0-100.' },
+				{
+					role: 'user',
+					content: [
+						'Score this prose sample for: interest, readability, aiSlopRisk (higher=more AI cliche/slop), humanLikeness.',
+						'Return JSON exactly: {"interest":0,"readability":0,"aiSlopRisk":0,"humanLikeness":0,"rationale":"short"}',
+						'Sample:',
+						sample
+					].join('\n')
+				}
+			];
+			try {
+				requestLog.originTab = (tab && tab.id) || 'tab1';
+				requestLog.contextPackChars = (messages[1].content || '').length;
+				const resp = await callAI(messages, tab, { max_tokens: 400, operationName: 'judgeProseQualityLLM' });
+				let parsed = resp;
+				if (resp && typeof resp.chapter === 'string') {
+					try {
+						parsed = JSON.parse(resp.chapter.replace(/^```json\s*/i, '').replace(/\s*```$/i, ''));
+					} catch (e) {
+						parsed = null;
+					}
+				}
+				if (parsed && typeof parsed === 'object' && parsed.interest != null) {
+					const clamp = (n) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+					return {
+						interest: clamp(parsed.interest),
+						readability: clamp(parsed.readability),
+						aiSlopRisk: clamp(parsed.aiSlopRisk),
+						humanLikeness: clamp(parsed.humanLikeness),
+						notes: heuristics.notes,
+						rationale: parsed.rationale || '',
+						source: 'llm+heuristics',
+						heuristics: heuristics
+					};
+				}
+				return Object.assign({}, heuristics, { source: 'heuristics', rationale: 'LLM response unparseable; heuristics only' });
+			} catch (err) {
+				return Object.assign({}, heuristics, { source: 'heuristics', rationale: 'LLM judge failed: ' + (err && err.message ? err.message : err) });
+			}
+		}
+
+		function pushQualitySample(label, scores, textLen) {
+			const samples = _nwPr2QualitySamples();
+			const sample = {
+				label: label,
+				ts: new Date().toISOString(),
+				textLen: textLen || 0,
+				interest: scores.interest,
+				readability: scores.readability,
+				aiSlopRisk: scores.aiSlopRisk,
+				humanLikeness: scores.humanLikeness,
+				source: scores.source || 'heuristics',
+				rationale: scores.rationale || '',
+				notes: scores.notes || []
+			};
+			samples.push(sample);
+			return sample;
+		}
+
+		window.scoreProseQuality = scoreProseQuality;
+		window.judgeProseQualityLLM = judgeProseQualityLLM;
+
+		// ---- #120 C3: quality / no-AI-slop gate ----
+		const NW_QUALITY_GATE = {
+			minInterest: 40,
+			minHumanLikeness: 50,
+			maxAiSlopRisk: 55,
+			minReadability: 40,
+			minConsistency: 35,
+			minFlow: 35,
+			minPacing: 35,
+			minChars: 40
+		};
+		// QE6 attribute roles: interest/readability/aiSlop/human/consistency/flow/pacing
+		// Fail-closed via heuristics gate; LLM judge remains advisory (see NW_QUALITY_ROLES).
+		// QE4: fail-closed driver is always heuristics. LLM judge is advisory-only unless explicitly opted in.
+		const NW_QUALITY_ROLES = {
+			failClosedDriver: 'heuristics',
+			advisory: 'llmJudge',
+			reviseOnJudgeAdvisory: false // do not auto-revise solely on LLM disagree (cost + noise)
+		};
+		const NW_QUALITY_JUDGE_ADVISORY = {
+			minInterest: 45,
+			minHumanLikeness: 45,
+			maxAiSlopRisk: 65,
+			minReadability: 45
+		};
+
+		function runQualityGate(text, opts) {
+			opts = opts || {};
+			const scores = scoreProseQuality(text);
+			const thr = Object.assign({}, NW_QUALITY_GATE, opts.thresholds || {});
+			const raw = String(text || '');
+			const failures = [];
+			if (raw.trim().length < thr.minChars) failures.push('too_short');
+			if (scores.aiSlopRisk >= thr.maxAiSlopRisk) failures.push('aiSlopRisk>=' + thr.maxAiSlopRisk);
+			if (scores.humanLikeness < thr.minHumanLikeness) failures.push('humanLikeness<' + thr.minHumanLikeness);
+			if (scores.interest < thr.minInterest) failures.push('interest<' + thr.minInterest);
+			if (thr.minReadability != null && scores.readability < thr.minReadability) failures.push('readability<' + thr.minReadability);
+			if (thr.minConsistency != null && (scores.consistency ?? 100) < thr.minConsistency) failures.push('consistency<' + thr.minConsistency);
+			if (thr.minFlow != null && (scores.flow ?? 100) < thr.minFlow) failures.push('flow<' + thr.minFlow);
+			if (thr.minPacing != null && (scores.pacing ?? 100) < thr.minPacing) failures.push('pacing<' + thr.minPacing);
+			let obligationCoverage = null;
+			if (opts.chapterNum && typeof scoreObligationCoverage === 'function') {
+				obligationCoverage = scoreObligationCoverage(raw, opts.chapterNum);
+				if (obligationCoverage && !obligationCoverage.passed) {
+					(obligationCoverage.failures || ['obligation_coverage']).forEach(function (f) {
+						if (failures.indexOf(f) < 0) failures.push(f);
+					});
+				}
+				novelData.lastObligationCoverage = obligationCoverage;
+			}
+			const result = {
+				passed: failures.length === 0,
+				failures: failures,
+				scores: scores,
+				thresholds: thr,
+				ts: new Date().toISOString(),
+				label: opts.label || 'qualityGate',
+				driver: NW_QUALITY_ROLES.failClosedDriver,
+				advisoryRole: NW_QUALITY_ROLES.advisory,
+				obligationCoverage: obligationCoverage
+			};
+			novelData.lastQualityGate = result;
+			if (!Array.isArray(novelData.qualityFindings)) novelData.qualityFindings = [];
+			novelData.qualityFindings.push({
+				label: result.label,
+				passed: result.passed,
+				failures: failures.slice(),
+				interest: scores.interest,
+				readability: scores.readability,
+				aiSlopRisk: scores.aiSlopRisk,
+				humanLikeness: scores.humanLikeness,
+				ts: result.ts
+			});
+			pushQualitySample(result.label, Object.assign({}, scores, { source: 'heuristics-gate', rationale: result.passed ? 'gate pass' : 'gate fail: ' + failures.join(',') }), raw.length);
+			const el = document.getElementById('qualityGateResult');
+			if (el) {
+				el.textContent = (result.passed ? 'PASS' : 'FAIL') +
+					' interest/read/slop/human=' + scores.interest + '/' + scores.readability + '/' + scores.aiSlopRisk + '/' + scores.humanLikeness +
+					' cons/flow/pace=' + (scores.consistency ?? '?') + '/' + (scores.flow ?? '?') + '/' + (scores.pacing ?? '?') +
+					(failures.length ? (' | ' + failures.join(', ')) : '');
+			}
+			return result;
+		}
+
+
+		function judgeWouldFailGate(judgeScores, thresholds) {
+			const thr = Object.assign({}, NW_QUALITY_JUDGE_ADVISORY, thresholds || {});
+			const s = judgeScores || {};
+			const failures = [];
+			if (s.interest != null && s.interest < thr.minInterest) failures.push('judge:interest<' + thr.minInterest);
+			if (s.humanLikeness != null && s.humanLikeness < thr.minHumanLikeness) failures.push('judge:humanLikeness<' + thr.minHumanLikeness);
+			if (s.aiSlopRisk != null && s.aiSlopRisk >= thr.maxAiSlopRisk) failures.push('judge:aiSlopRisk>=' + thr.maxAiSlopRisk);
+			if (thr.minReadability != null && s.readability != null && s.readability < thr.minReadability) failures.push('judge:readability<' + thr.minReadability);
+			return { wouldFail: failures.length > 0, failures: failures, thresholds: thr };
+		}
+
+		/**
+		 * QE4: compare heuristic fail-closed gate to LLM judge (advisory).
+		 * Does NOT change gate.passed. Records divergence for report / UI.
+		 */
+		function alignJudgeWithGate(gateResult, judgeScores, opts) {
+			opts = opts || {};
+			const gate = gateResult || novelData.lastQualityGate || null;
+			const judge = judgeScores || null;
+			const jFail = judge ? judgeWouldFailGate(judge, opts.judgeThresholds) : { wouldFail: null, failures: [], thresholds: NW_QUALITY_JUDGE_ADVISORY };
+			const divergences = [];
+			if (gate && judge) {
+				if (gate.passed && jFail.wouldFail) divergences.push('heuristics_pass_judge_fail');
+				if (!gate.passed && jFail.wouldFail === false) divergences.push('heuristics_fail_judge_pass');
+				const delta = {
+					interest: (judge.interest != null && gate.scores) ? judge.interest - gate.scores.interest : null,
+					readability: (judge.readability != null && gate.scores) ? judge.readability - gate.scores.readability : null,
+					aiSlopRisk: (judge.aiSlopRisk != null && gate.scores) ? judge.aiSlopRisk - gate.scores.aiSlopRisk : null,
+					humanLikeness: (judge.humanLikeness != null && gate.scores) ? judge.humanLikeness - gate.scores.humanLikeness : null
+				};
+				const alignment = {
+					ts: new Date().toISOString(),
+					label: opts.label || (gate && gate.label) || 'judgeGateAlign',
+					driver: NW_QUALITY_ROLES.failClosedDriver,
+					advisory: NW_QUALITY_ROLES.advisory,
+					gatePassed: !!gate.passed,
+					gateFailures: (gate.failures || []).slice(),
+					gateScores: gate.scores || null,
+					judgeScores: {
+						interest: judge.interest,
+						readability: judge.readability,
+						aiSlopRisk: judge.aiSlopRisk,
+						humanLikeness: judge.humanLikeness,
+						source: judge.source || 'llm',
+						rationale: (judge.rationale || '').slice(0, 240)
+					},
+					judgeWouldFail: jFail.wouldFail,
+					judgeFailures: jFail.failures.slice(),
+					divergences: divergences,
+					delta: delta,
+					aligned: divergences.length === 0,
+					reviseOnJudgeAdvisory: !!NW_QUALITY_ROLES.reviseOnJudgeAdvisory
+				};
+				novelData.lastJudgeGateAlignment = alignment;
+				if (!Array.isArray(novelData.judgeGateAlignments)) novelData.judgeGateAlignments = [];
+				novelData.judgeGateAlignments.push(alignment);
+				if (!Array.isArray(novelData.qualityFindings)) novelData.qualityFindings = [];
+				novelData.qualityFindings.push({
+					label: alignment.label + '-judgeAdvisory',
+					passed: gate.passed, // fail-closed unchanged
+					advisory: true,
+					judgeWouldFail: jFail.wouldFail,
+					divergences: divergences.slice(),
+					interest: judge.interest,
+					readability: judge.readability,
+					aiSlopRisk: judge.aiSlopRisk,
+					humanLikeness: judge.humanLikeness,
+					ts: alignment.ts
+				});
+				const el = document.getElementById('qualityJudgeAlignResult');
+				if (el) {
+					el.textContent = (alignment.aligned ? 'ALIGNED' : 'DIVERGE') +
+						' gate=' + (gate.passed ? 'PASS' : 'FAIL') +
+						' judgeWouldFail=' + jFail.wouldFail +
+						(divergences.length ? (' | ' + divergences.join(',')) : '') +
+						' | judge i/r/s/h=' + judge.interest + '/' + judge.readability + '/' + judge.aiSlopRisk + '/' + judge.humanLikeness;
+				}
+				return alignment;
+			}
+			return {
+				ts: new Date().toISOString(),
+				aligned: null,
+				driver: NW_QUALITY_ROLES.failClosedDriver,
+				advisory: NW_QUALITY_ROLES.advisory,
+				note: 'missing gate or judge'
+			};
+		}
+
+		/**
+		 * Optional post-generate advisory judge. Never flips fail-closed gate.
+		 * If reviseOnJudgeAdvisory is true AND gate passed AND judge would fail, caller may revise — default off.
+		 */
+		async function runJudgeAdvisoryAfterGate(text, gateResult, tabEl, opts) {
+			opts = opts || {};
+			const gate = gateResult || novelData.lastQualityGate;
+			let judge = null;
+			try {
+				judge = await judgeProseQualityLLM(text, tabEl);
+				pushQualitySample((opts.label || (gate && gate.label) || 'chapter') + '-llmJudge', Object.assign({}, judge, {
+					source: judge.source || 'llm+heuristics',
+					rationale: (judge.rationale || '').slice(0, 200)
+				}), (text || '').length);
+			} catch (e) {
+				console.warn('runJudgeAdvisoryAfterGate judge failed', e);
+				return { alignment: null, judge: null, error: String(e && e.message ? e.message : e) };
+			}
+			const alignment = alignJudgeWithGate(gate, judge, { label: opts.label || (gate && gate.label) || 'judgeGateAlign' });
+			return { alignment: alignment, judge: judge };
+		}
+
+		window.alignJudgeWithGate = alignJudgeWithGate;
+		window.judgeWouldFailGate = judgeWouldFailGate;
+		window.runJudgeAdvisoryAfterGate = runJudgeAdvisoryAfterGate;
+		window.NW_QUALITY_ROLES = NW_QUALITY_ROLES;
+
+		async function runC3Smoke() {
+			const el = document.getElementById('c3SmokeResult') || document.getElementById('c1SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastQualityJudgeAlign","boundedReviseLog"], []);
+			try {
+				const slop = "In todays world, it is important to note that a vibrant tapestry of innovation will delve deeper into the complexities. Moreover, furthermore, a testament to progress stands as a beacon of seamless robust leverage.";
+				const fail = runQualityGate(slop, { label: 'c3-smoke-slop' });
+				if (fail.passed) throw new Error('expected slop sample to FAIL gate');
+				say('slop stub FAIL gate OK: ' + fail.failures.join(','));
+				const okProse = 'Mara checked the load cell at Pier 46 twice. "One kilo short," she said. Rain ticked on the copper seals. She wrote 999.000 in the log and did not smile.';
+				const ok = runQualityGate(okProse + ' ' + okProse + ' ' + okProse, { label: 'c3-smoke-ok' });
+				if (!ok.passed) throw new Error('expected concrete sample to PASS; failures=' + ok.failures.join(','));
+				say('concrete stub PASS gate OK scores=' + ok.scores.interest + '/' + ok.scores.readability + '/' + ok.scores.aiSlopRisk + '/' + ok.scores.humanLikeness);
+				say('C3 Smoke PASS');
+				return true;
+			} catch (e) {
+				say('C3 Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			} finally {
+				__restore();
+			}
+		}
+
+		window.runQualityGate = runQualityGate;
+		window.runC3Smoke = runC3Smoke;
+
+		// ---- #120 QE 1/2/3: apply-critique, fail-closed revise, chapter improvement apply ----
+		const NW_QUALITY_REVISE = { maxAttempts: 1, maxAutoPasses: 2, maxGrowthRatio: 1.35, maxGrowthChars: 3500, requireParagraphPreserve: true }; // QE5 + bounded revise
+
+		function ensureChapterImprovementsArray() {
+			const n = Math.max(1, Number(novelData.numChapters) || (novelData.chapters || []).length || 1);
+			if (!Array.isArray(novelData.chapterImprovements)) novelData.chapterImprovements = [];
+			while (novelData.chapterImprovements.length < n) novelData.chapterImprovements.push('');
+			if (novelData.chapterImprovements.length > n) novelData.chapterImprovements.length = n;
+			return novelData.chapterImprovements;
+		}
+
+		function inferChapterFromCritiqueText(text) {
+			const s = String(text || '');
+			let m = s.match(/Chapter\(s\)\s*([0-9]+)/i) || s.match(/Chapters?\s+([0-9]+)/i) || s.match(/\bCh\.?\s*([0-9]+)\b/i);
+			if (m) {
+				const n = parseInt(m[1], 10);
+				if (n >= 1) return n; // clamp at apply time, not here
+			}
+			return 1;
+		}
+
+		function stageChapterImprovement(chapterNum, text, opts) {
+			opts = opts || {};
+			ensureChapterImprovementsArray();
+			const idx = chapterNum - 1;
+			const incoming = String(text || '').trim();
+			if (!incoming) throw new Error('stageChapterImprovement: empty improvement text');
+			const mode = opts.mode || 'replace';
+			const prev = String(novelData.chapterImprovements[idx] || '').trim();
+			let next = incoming;
+			if (mode === 'append' && prev) next = prev + '\n\n' + incoming;
+			novelData.chapterImprovements[idx] = next;
+			const el = document.getElementById('chapterEditImprovement' + chapterNum);
+			if (el) el.value = next;
+			const contentEl = document.getElementById('chapterEditContent' + chapterNum);
+			if (contentEl && !(contentEl.value || '').trim() && novelData.chapters[idx]) {
+				contentEl.value = novelData.chapters[idx];
+			}
+			if (!Array.isArray(novelData.chapterImprovementLog)) novelData.chapterImprovementLog = [];
+			novelData.chapterImprovementLog.push({
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				source: opts.source || 'manual',
+				mode: mode,
+				chars: next.length
+			});
+			return next;
+		}
+
+		function buildQualityReviseBrief(gateResult) {
+			const failures = (gateResult && gateResult.failures) || [];
+			const scores = (gateResult && gateResult.scores) || {};
+			const craft = [];
+			const failStr = failures.join(' ').toLowerCase();
+			if (failStr.includes('aislop') || (scores.aiSlopRisk != null && scores.aiSlopRisk >= (NW_QUALITY_GATE.maxAiSlopRisk || 55))) {
+				craft.push('AI-SLOP: delete stock/filler phrases (delve, tapestry, pivotal role, paradigm shift); prefer concrete verbs and specific nouns.');
+			}
+			if (failStr.includes('readability') || (scores.readability != null && scores.readability < (NW_QUALITY_GATE.minReadability || 40))) {
+				craft.push('READABILITY: split overlong sentences; cut stacked adverbs; add paragraph breaks every ~2–4 beats.');
+			}
+			if (failStr.includes('interest') || (scores.interest != null && scores.interest < (NW_QUALITY_GATE.minInterest || 40))) {
+				craft.push('INTEREST: add one concrete sensory detail and one unexpected specific (name, tool, measurement); vary sentence length.');
+			}
+			if (failStr.includes('consistency') || (scores.consistency != null && scores.consistency < (NW_QUALITY_GATE.minConsistency || 35))) {
+				const names = (novelData.characters || []).map(c => c && c.name).filter(Boolean).slice(0, 6);
+				craft.push('CONSISTENCY: keep cast/timeline coherent' + (names.length ? (' — use established names (' + names.join(', ') + ')') : '') + '; do not reset clocks/locations without cause; advance prior continuity risks.');
+			}
+			if (failStr.includes('flow') || (scores.flow != null && scores.flow < (NW_QUALITY_GATE.minFlow || 35))) {
+				craft.push('FLOW: reduce transition stacks (however/moreover/furthermore); avoid three short choppy sentences in a row; glue paragraphs with causal links, not throat-clearing.');
+			}
+			if (failStr.includes('pacing') || (scores.pacing != null && scores.pacing < (NW_QUALITY_GATE.minPacing || 35))) {
+				craft.push('PACING: balance scene beats — if rushed, expand one action with consequence; if stretched, cut summary and land a beat sooner; keep dialogue/narration from monopolizing.');
+			}
+			if (failStr.includes('humanlikeness') || (scores.humanLikeness != null && scores.humanLikeness < (NW_QUALITY_GATE.minHumanLikeness || 50))) {
+				craft.push('HUMAN-LIKENESS: prefer imperfect specific observation over polished abstraction; one grounded body/place detail beats three thematic statements.');
+			}
+			if (!craft.length) {
+				craft.push('General polish: cut AI-slop; add concrete sensory detail; preserve continuity; keep near target length.');
+			}
+			return [
+				'QUALITY GATE FAIL-CLOSED REVISE — fix these failures without changing plot facts:',
+				failures.map(f => '- ' + f).join('\n') || '- (unspecified gate failure)',
+				'Current scores: interest=' + (scores.interest ?? '?') +
+					' readability=' + (scores.readability ?? '?') +
+					' aiSlopRisk=' + (scores.aiSlopRisk ?? '?') +
+					' humanLikeness=' + (scores.humanLikeness ?? '?') +
+					' consistency=' + (scores.consistency ?? '?') +
+					' flow=' + (scores.flow ?? '?') +
+					' pacing=' + (scores.pacing ?? '?'),
+				'Craft instructions:',
+				craft.map(c => '- ' + c).join('\n'),
+				'Requirements: preserve continuity and plot facts; keep near target length.'
+			].join('\n');
+		}
+
+
+
+		// ---- #120 QE5: multi-pass quality editing (cap + continuity second pass) ----
+		function getChapterContinuityFindings(chapterNum) {
+			const n = Number(chapterNum) || 1;
+			const prefix = 'Chapter ' + n + ':';
+			const fromList = (novelData.continuityFindings || []).filter(function (f) {
+				const s = String(f || '');
+				return s.indexOf(prefix) === 0 || s.indexOf('Chapter ' + n) >= 0;
+			});
+			const trackerCh = (novelData.continuityTracker && Array.isArray(novelData.continuityTracker.chapters))
+				? novelData.continuityTracker.chapters[n - 1]
+				: null;
+			const risks = (trackerCh && Array.isArray(trackerCh.continuityRisks)) ? trackerCh.continuityRisks.slice() : [];
+			return { chapter: n, findings: fromList, risks: risks, hasAny: fromList.length > 0 || risks.length > 0 };
+		}
+
+		function buildContinuityReviseBrief(chapterNum) {
+			const c = getChapterContinuityFindings(chapterNum);
+			const items = (c.risks.length ? c.risks : c.findings.map(function (f) {
+				return String(f).replace(/^Chapter\s+\d+:\s*/i, '');
+			})).filter(Boolean).slice(0, 8);
+			const names = (novelData.characters || []).map(function (ch) { return ch && ch.name; }).filter(Boolean).slice(0, 8);
+			const settingBits = [novelData.setting, novelData.worldBible || novelData.world].filter(Boolean).map(function (s) {
+				return String(s).replace(/\s+/g, ' ').trim().slice(0, 160);
+			});
+			const scores = scoreProseQuality((novelData.chapters || [])[chapterNum - 1] || '');
+			return [
+				'CONTINUITY-FOCUSED QUALITY PASS — fix these continuity issues without changing core plot facts:',
+				(items.length ? items.map(function (x) { return '- ' + x; }).join('\n') : '- (unspecified continuity risk)'),
+				names.length ? ('Cast anchors: ' + names.join(', ')) : 'Cast anchors: (none named yet)',
+				settingBits.length ? ('World/setting anchors: ' + settingBits[0]) : '',
+				'Attribute snapshot: consistency=' + scores.consistency + ' flow=' + scores.flow + ' pacing=' + scores.pacing + ' readability=' + scores.readability + ' aiSlopRisk=' + scores.aiSlopRisk,
+				'Requirements: resolve or explicitly advance each listed risk; keep names/timeline/world consistent; fix flow/pacing only where it supports continuity; preserve concrete sensory detail; keep near target length; do not invent contradictory lore.'
+			].filter(Boolean).join('\n');
+		}
+
+
+		/** B2 anti-slop tells — revise-only multipass; does NOT fail-close runQualityGate. */
+		const NW_SLOP_TELLS = ['cadence', 'stockMetaphor', 'hedgeStack', 'nameEcho', 'emotionLabel', 'overExplain', 'chapterEcho'];
+		const NW_SLOP_TELL_FLOORS = {
+			cadence: 60,
+			stockMetaphor: 55,
+			hedgeStack: 50,
+			nameEcho: 55,
+			emotionLabel: 50,
+			overExplain: 55,
+			chapterEcho: 55
+		};
+		const NW_SLOP_METAPHOR_BANK = [
+			'heart of gold', 'cold as ice', 'time stood still', 'double-edged sword',
+			'light at the end of the tunnel', 'tip of the iceberg', 'calm before the storm',
+			'needle in a haystack', 'blessing in disguise', "pandora's box",
+			'crystal clear', 'unbreakable bond', 'whispered secrets', 'against all odds'
+		];
+		const NW_SLOP_HEDGES = ['maybe', 'perhaps', 'seemed', 'seems', 'as if', 'almost', 'somewhat', 'kind of', 'sort of', 'might', 'could have', 'appeared to'];
+		const NW_SLOP_EMOTION_RE = /\b(felt|was|were|seemed|appeared)\s+(very\s+)?(sad|angry|happy|afraid|scared|nervous|excited|lonely|guilty|ashamed|proud|anxious|relieved)\b/gi;
+		const NW_SLOP_TRANSITIONS = ['however', 'therefore', 'moreover', 'furthermore', 'additionally', 'consequently', 'thus', 'hence', 'meanwhile', 'nevertheless'];
+
+		function _slopSentences(t) {
+			return String(t || '').split(/(?<=[.!?])\s+/).map(function (s) { return s.trim(); }).filter(Boolean);
+		}
+		function _slopWords(t) {
+			return String(t || '').split(/\s+/).filter(Boolean);
+		}
+		function _slopClamp(n) { return Math.max(0, Math.min(100, Math.round(n))); }
+		/** Strip quoted dialogue so spoken address names do not trip nameEcho. */
+		function _slopStripDialogue(t) {
+			return String(t || '')
+				.replace(/"([^"\\]|\\.)*"/g, ' ')
+				.replace(/\u201C([^\u201D]*)\u201D/g, ' ')
+				.replace(/'([^'\\]|\\.)*'/g, ' ');
+		}
+
+		function _scoreCadenceTell(text) {
+			const sents = _slopSentences(text);
+			const hits = [];
+			if (sents.length < 3) return { score: 0, hits: hits };
+			const lens = sents.map(function (s) { return _slopWords(s).length; });
+			const avg = lens.reduce(function (a, b) { return a + b; }, 0) / lens.length;
+			const variance = lens.reduce(function (a, b) { return a + Math.pow(b - avg, 2); }, 0) / lens.length;
+			const stdev = Math.sqrt(variance);
+			const lower = text.toLowerCase();
+			let tHits = 0;
+			NW_SLOP_TRANSITIONS.forEach(function (tr) {
+				const m = lower.match(new RegExp('\\b' + tr + '\\b', 'gi'));
+				if (m) tHits += m.length;
+			});
+			let score = 0;
+			if (stdev < 2.5) { score += 40; hits.push('low_variance:' + stdev.toFixed(2)); }
+			score += Math.min(40, tHits * 12);
+			if (tHits >= 2) hits.push('transitionHits=' + tHits);
+			return { score: _slopClamp(score), hits: hits };
+		}
+		function _scoreStockMetaphorTell(text) {
+			const lower = text.toLowerCase();
+			const hits = [];
+			let n = 0;
+			NW_SLOP_METAPHOR_BANK.forEach(function (p) {
+				if (lower.indexOf(p) >= 0) { n++; hits.push(p); }
+			});
+			return { score: _slopClamp(n * 28), hits: hits };
+		}
+		function _scoreHedgeStackTell(text) {
+			const w = _slopWords(text.toLowerCase());
+			const hits = [];
+			let worst = 0;
+			for (let i = 0; i < w.length; i++) {
+				let c = 0;
+				const window = w.slice(i, i + 40).join(' ');
+				NW_SLOP_HEDGES.forEach(function (h) {
+					const re = new RegExp('\\b' + h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
+					const m = window.match(re);
+					if (m) c += m.length;
+				});
+				if (c > worst) worst = c;
+			}
+			if (worst >= 3) hits.push('hedgeWindow=' + worst);
+			return { score: _slopClamp(worst >= 3 ? 40 + worst * 15 : worst * 10), hits: hits };
+		}
+		function _scoreNameEchoTell(text) {
+			const narr = _slopStripDialogue(text);
+			const w = _slopWords(narr);
+			const hits = [];
+			let worst = 0;
+			let worstName = '';
+			for (let i = 0; i < w.length; i++) {
+				const window = w.slice(i, i + 25);
+				const counts = {};
+				window.forEach(function (tok) {
+					if (/^[A-Z][a-z]{2,}$/.test(tok)) counts[tok] = (counts[tok] || 0) + 1;
+				});
+				Object.keys(counts).forEach(function (name) {
+					const c = counts[name];
+					if (c > worst) { worst = c; worstName = name; }
+				});
+			}
+			if (worst >= 3) hits.push('nameEcho:' + worstName + 'x' + worst);
+			return { score: _slopClamp(worst >= 3 ? 35 + worst * 18 : 0), hits: hits };
+		}
+		function _scoreEmotionLabelTell(text) {
+			const hits = [];
+			const m = String(text).match(NW_SLOP_EMOTION_RE) || [];
+			m.forEach(function (x) { hits.push(x); });
+			return { score: _slopClamp(m.length * 35), hits: hits };
+		}
+		function _scoreOverExplainTell(text) {
+			const sents = _slopSentences(text);
+			const hits = [];
+			let worst = 0;
+			for (let i = 1; i < sents.length; i++) {
+				const b = {};
+				_slopWords(sents[i].toLowerCase()).forEach(function (x) {
+					x = x.replace(/[^a-z]/g, '');
+					if (x.length > 3) b[x] = true;
+				});
+				const bKeys = Object.keys(b);
+				if (!bKeys.length) continue;
+				const maxD = Math.min(40, i);
+				for (let d = 1; d <= maxD; d++) {
+					const a = {};
+					_slopWords(sents[i - d].toLowerCase()).forEach(function (x) {
+						x = x.replace(/[^a-z]/g, '');
+						if (x.length > 3) a[x] = true;
+					});
+					const aKeys = Object.keys(a);
+					if (!aKeys.length) continue;
+					let inter = 0;
+					aKeys.forEach(function (x) { if (b[x]) inter++; });
+					const union = aKeys.length + bKeys.length - inter;
+					const j = inter / union;
+					if (j > worst) worst = j;
+					if (j >= 0.55 && hits.length < 6) hits.push('overlap@d' + d + '=' + j.toFixed(2));
+				}
+			}
+			return { score: _slopClamp(worst >= 0.55 ? 40 + worst * 50 : worst * 40), hits: hits };
+		}
+
+		function _scoreChapterEchoTell(chapterText, priorChapterTexts) {
+			const priors = Array.isArray(priorChapterTexts) ? priorChapterTexts.filter(function (t) { return String(t || '').trim(); }) : [];
+			const hits = [];
+			if (!priors.length) return { score: 0, hits: hits };
+			function contentSet(sent) {
+				const o = {};
+				_slopWords(String(sent).toLowerCase()).forEach(function (x) {
+					x = x.replace(/[^a-z]/g, '');
+					if (x.length > 3) o[x] = true;
+				});
+				return o;
+			}
+			function jaccard(a, b) {
+				const aKeys = Object.keys(a);
+				const bKeys = Object.keys(b);
+				if (!aKeys.length || !bKeys.length) return 0;
+				let inter = 0;
+				aKeys.forEach(function (x) { if (b[x]) inter++; });
+				const union = aKeys.length + bKeys.length - inter;
+				return union ? inter / union : 0;
+			}
+			const curSents = _slopSentences(chapterText);
+			const priorSets = [];
+			priors.forEach(function (pt, pi) {
+				_slopSentences(pt).forEach(function (s, si) {
+					const set = contentSet(s);
+					if (Object.keys(set).length) priorSets.push({ pi: pi, si: si, set: set });
+				});
+			});
+			if (!priorSets.length) return { score: 0, hits: hits };
+			let worst = 0;
+			let matchingSentences = 0;
+			for (let ci = 0; ci < curSents.length; ci++) {
+				const b = contentSet(curSents[ci]);
+				if (!Object.keys(b).length) continue;
+				let sentWorst = 0;
+				let bestLabel = '';
+				for (let p = 0; p < priorSets.length; p++) {
+					const j = jaccard(priorSets[p].set, b);
+					if (j > sentWorst) {
+						sentWorst = j;
+						bestLabel = 'ch' + (priorSets[p].pi + 1) + 's' + priorSets[p].si + '@cur' + ci + '=' + j.toFixed(2);
+					}
+				}
+				if (sentWorst > worst) worst = sentWorst;
+				if (sentWorst >= 0.55) {
+					matchingSentences++;
+					if (hits.length < 6) hits.push('echo:' + bestLabel);
+				}
+			}
+			let score = 0;
+			if (worst >= 0.55) {
+				score = 40 + worst * 50 + Math.min(30, matchingSentences * 5);
+			} else {
+				score = worst * 40;
+			}
+			return { score: _slopClamp(score), hits: hits };
+		}
+
+		const _SLOP_SCORERS = {
+			cadence: _scoreCadenceTell,
+			stockMetaphor: _scoreStockMetaphorTell,
+			hedgeStack: _scoreHedgeStackTell,
+			nameEcho: _scoreNameEchoTell,
+			emotionLabel: _scoreEmotionLabelTell,
+			overExplain: _scoreOverExplainTell
+		};
+		function scoreSlopTells(text, floorsOrOpts) {
+			const opts = floorsOrOpts || {};
+			const priorChapters = Array.isArray(opts.priorChapters) ? opts.priorChapters : null;
+			const floorsIn = Object.assign({}, opts);
+			delete floorsIn.priorChapters;
+			const floors = Object.assign({}, NW_SLOP_TELL_FLOORS, floorsIn);
+			const tells = {};
+			const failures = [];
+			NW_SLOP_TELLS.forEach(function (k) {
+				let r;
+				if (k === 'chapterEcho') {
+					r = priorChapters ? _scoreChapterEchoTell(text, priorChapters) : { score: 0, hits: [] };
+				} else {
+					r = _SLOP_SCORERS[k](text);
+				}
+				const ok = r.score < floors[k];
+				tells[k] = { score: r.score, hits: r.hits, ok: ok };
+				if (!ok) failures.push('tell_high:' + k + ':' + r.score + '>=' + floors[k]);
+			});
+			return { tells: tells, passed: failures.length === 0, failures: failures, floors: floors };
+		}
+		function buildAntiSlopReviseBrief(tellReport) {
+			const lines = ['ANTI-SLOP QUALITY PASS (revise-only; keep length bounded; do not pad):'];
+			const t = (tellReport && tellReport.tells) || {};
+			if (t.cadence && !t.cadence.ok) lines.push('CADENCE: break template rhythm; cut transition stacks (however/moreover/furthermore); vary sentence length.');
+			if (t.stockMetaphor && !t.stockMetaphor.ok) lines.push('STOCK METAPHOR: delete cliché figurative phrases; replace with concrete sensory detail from the scene.');
+			if (t.hedgeStack && !t.hedgeStack.ok) lines.push('HEDGE STACK: commit — cut stacked maybe/perhaps/seemed/as if; one hedge max per beat.');
+			if (t.nameEcho && !t.nameEcho.ok) lines.push('NAME-ECHO: in narration, use pronoun/role after first mention in a beat; keep spoken address in dialogue.');
+			if (t.emotionLabel && !t.emotionLabel.ok) lines.push('EMOTION-LABEL: show via action/gesture/dialogue; delete "felt/was [emotion]" labels.');
+			if (t.overExplain && !t.overExplain.ok) lines.push('OVER-EXPLAIN: delete adjacent restatement; let the paid beat stand once.');
+			if (t.chapterEcho && !t.chapterEcho.ok) lines.push('CHAPTER-ECHO: this chapter re-narrates a prior chapter beat; cut cross-chapter paraphrase/scene replay; keep only new paid progress.');
+			if (tellReport && tellReport.failures && tellReport.failures.length) {
+				lines.push('Tells: ' + tellReport.failures.join('; '));
+			}
+			return lines.join('\n');
+		}
+		window.scoreSlopTells = scoreSlopTells;
+		window.buildAntiSlopReviseBrief = buildAntiSlopReviseBrief;
+		window.NW_SLOP_TELL_FLOORS = NW_SLOP_TELL_FLOORS;
+
+
+		function needsQualityMultiPass(chapterNum, gate, ctx) {
+			ctx = ctx || {};
+			const maxP = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : 2;
+			const done = ctx.passesDone || 0;
+			if (done >= maxP) return { needed: false, reason: null };
+			if (gate && gate.passed === false) return { needed: true, reason: 'gate-still-fail' };
+			const cont = getChapterContinuityFindings(chapterNum);
+			if (cont.hasAny && !ctx.didContinuityPass) return { needed: true, reason: 'continuity-findings' };
+			if (ctx.afterApplyStaged) {
+				const notes = String((novelData.chapterImprovements || [])[chapterNum - 1] || '').trim();
+				if (
+					notes &&
+					!/^QUALITY GATE FAIL-CLOSED REVISE/i.test(notes) &&
+					!/^CONTINUITY-FOCUSED QUALITY PASS/i.test(notes) &&
+					!/^ANTI-SLOP QUALITY PASS/i.test(notes)
+				) {
+					return { needed: true, reason: 'residual-staged-notes' };
+				}
+			}
+			// B2: revise-only anti-slop — nest under maxAutoPasses; do not fail-close gate
+			if (!ctx.didAntiSlopPass && typeof scoreSlopTells === 'function') {
+				const chIdx = chapterNum - 1;
+				const chText = (novelData.chapters && novelData.chapters[chIdx]) || '';
+				const prior = (chapterNum >= 2 && Array.isArray(novelData.chapters))
+					? novelData.chapters.slice(0, chIdx).filter(function (t) { return String(t || '').trim(); })
+					: [];
+				const tellOpts = prior.length ? { priorChapters: prior } : undefined;
+				const tell = scoreSlopTells(chText, tellOpts);
+				if (!tell.passed) return { needed: true, reason: 'anti-slop-tells', tellReport: tell };
+			}
+			return { needed: false, reason: null };
+		}
+
+		function pushQualityMultiPassLog(entry) {
+			if (!Array.isArray(novelData.qualityMultiPassLog)) novelData.qualityMultiPassLog = [];
+			novelData.qualityMultiPassLog.push(entry);
+			novelData.lastQualityMultiPass = entry;
+			return entry;
+		}
+
+		/**
+		 * QE5 targeted pass: continuity brief, residual staged apply, or gate-fail revise.
+		 * Fail-closed still driven by heuristics gate afterward.
+		 */
+		async function runTargetedQualityPass(chapterNum, gateResult, opts) {
+			opts = opts || {};
+			const pass = opts.pass != null ? opts.pass : 2;
+			const kind = opts.kind || 'gate-fail';
+			const before = gateResult || runQualityGate(novelData.chapters[chapterNum - 1] || '', {
+				label: 'chapter' + chapterNum + '-preMultiPass' + pass
+			});
+			let gateAfter = before;
+			if (kind === 'continuity' || kind === 'residual-staged' || kind === 'anti-slop') {
+				let brief;
+				if (kind === 'continuity') {
+					brief = buildContinuityReviseBrief(chapterNum);
+				} else if (kind === 'anti-slop') {
+					let tellR = opts.tellReport;
+					if (!tellR) {
+						const _chIdx = chapterNum - 1;
+						const _prior = (chapterNum >= 2 && Array.isArray(novelData.chapters))
+							? novelData.chapters.slice(0, _chIdx).filter(function (t) { return String(t || '').trim(); })
+							: [];
+						tellR = scoreSlopTells(novelData.chapters[_chIdx] || '', _prior.length ? { priorChapters: _prior } : undefined);
+					}
+					brief = buildAntiSlopReviseBrief(tellR);
+				} else {
+					brief = String((novelData.chapterImprovements || [])[chapterNum - 1] || '').trim() || buildQualityReviseBrief(before);
+				}
+				stageChapterImprovement(chapterNum, brief, {
+					mode: 'replace',
+					source: kind === 'continuity' ? 'quality-multipass-continuity'
+						: (kind === 'anti-slop' ? 'quality-multipass-anti-slop' : 'quality-multipass-residual')
+				});
+				const __beforeMp = novelData.chapters[chapterNum - 1] || '';
+				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityMultiPass' });
+				guardChapterReviseGrowth(chapterNum, __beforeMp, novelData.chapters[chapterNum - 1] || '', { source: 'qualityMultiPass:' + kind });
+				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', {
+					label: 'chapter' + chapterNum + '-afterMultiPass' + pass
+				});
+				pushQualitySample('chapter' + chapterNum + '-afterMultiPass' + pass, Object.assign({}, gateAfter.scores || {}, {
+					source: 'heuristics-multipass',
+					rationale: (gateAfter.passed ? 'multipass pass' : 'multipass still fail') + ' kind=' + kind
+				}), (novelData.chapters[chapterNum - 1] || '').length);
+			} else {
+				const forced = before.passed
+					? { passed: false, failures: (before.failures || []).slice().concat(['qe5-gate-retry']), scores: before.scores || {} }
+					: before;
+				const r = await reviseChapterForQuality(chapterNum, forced, { maxAttempts: 1 });
+				gateAfter = r.gateAfter || before;
+			}
+			if (!Array.isArray(novelData.qualityReviseLog)) novelData.qualityReviseLog = [];
+			novelData.qualityReviseLog.push({
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				pass: pass,
+				kind: kind,
+				attempts: 1,
+				passedBefore: !!before.passed,
+				passedAfter: !!gateAfter.passed,
+				failuresBefore: (before.failures || []).slice(),
+				failuresAfter: (gateAfter.failures || []).slice(),
+				multiPass: true
+			});
+			pushQualityMultiPassLog({
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				pass: pass,
+				kind: kind,
+				passedBefore: !!before.passed,
+				passedAfter: !!gateAfter.passed,
+				failuresAfter: (gateAfter.failures || []).slice(),
+				scoresAfter: gateAfter.scores || null
+			});
+			return { revised: true, attempts: 1, gateBefore: before, gateAfter: gateAfter, pass: pass, kind: kind };
+		}
+
+		window.getChapterContinuityFindings = getChapterContinuityFindings;
+		window.buildContinuityReviseBrief = buildContinuityReviseBrief;
+		window.needsQualityMultiPass = needsQualityMultiPass;
+		window.runTargetedQualityPass = runTargetedQualityPass;
+		window.NW_QUALITY_REVISE = NW_QUALITY_REVISE;
+
+
+
+		function syncChapterTextToDom(chapterNum, text) {
+			const el = document.getElementById('chapterContent' + chapterNum) || document.getElementById('chapterEditContent' + chapterNum);
+			if (el) el.value = text;
+		}
+
+		/** BOUNDED_REVISE: reject runaway growth / lost paragraph structure; restore prior text. */
+		function guardChapterReviseGrowth(chapterNum, beforeText, afterText, meta) {
+			meta = meta || {};
+			const before = String(beforeText || '');
+			const after = String(afterText || '');
+			const cfg = NW_QUALITY_REVISE || {};
+			const maxRatio = cfg.maxGrowthRatio != null ? cfg.maxGrowthRatio : 1.35;
+			const maxExtra = cfg.maxGrowthChars != null ? cfg.maxGrowthChars : 3500;
+			const reasons = [];
+			if (before.length > 400 && after.length > before.length * maxRatio) {
+				reasons.push('growth_ratio>' + maxRatio + ' (' + before.length + '→' + after.length + ')');
+			}
+			if (before.length > 400 && (after.length - before.length) > maxExtra) {
+				reasons.push('growth_chars>' + maxExtra + ' (Δ' + (after.length - before.length) + ')');
+			}
+			const beforeParas = before.split(/\n\s*\n/).filter(function (p) { return p.trim().length > 40; }).length;
+			const afterParas = after.split(/\n\s*\n/).filter(function (p) { return p.trim().length > 40; }).length;
+			if (cfg.requireParagraphPreserve !== false && beforeParas >= 3 && afterParas < 2 && after.length > before.length * 0.8) {
+				reasons.push('lost_paragraph_breaks (' + beforeParas + '→' + afterParas + ')');
+			}
+			if (!reasons.length) {
+				return { ok: true, text: after, reasons: [] };
+			}
+			novelData.chapters[chapterNum - 1] = before;
+			syncChapterTextToDom(chapterNum, before);
+			if (!Array.isArray(novelData.boundedReviseLog)) novelData.boundedReviseLog = [];
+			novelData.boundedReviseLog.push({
+				chapter: chapterNum, ts: new Date().toISOString(), reasons: reasons,
+				beforeLen: before.length, afterLen: after.length, source: meta.source || 'revise'
+			});
+			console.warn('[BOUNDED_REVISE] restored chapter', chapterNum, reasons);
+			return { ok: false, text: before, reasons: reasons, reverted: true };
+		}
+
+
+		async function reviseChapterForQuality(chapterNum, gateResult, opts) {
+		    // Agent Skill I/O pack (tab5.reviseChapterForQuality)
+		    // PR2 standalone: Agent Skill packs arrive with PR1; skip when packSkillInputs is absent.
+		    if (typeof packSkillInputs === 'function') window.__lastSkillPack = packSkillInputs('tab5.reviseChapterForQuality', { novelData: novelData, chapterNum: chapterNum, updateBrief: (opts && opts.brief) || '', reviseBrief: (typeof buildQualityReviseBrief === 'function' ? buildQualityReviseBrief(gateResult) : '') });
+
+			opts = opts || {};
+			const maxAttempts = (opts.maxAttempts != null) ? opts.maxAttempts : NW_QUALITY_REVISE.maxAttempts;
+			const before = gateResult || runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-preRevise' });
+			if (before.passed) return { revised: false, attempts: 0, gateBefore: before, gateAfter: before };
+			let gateAfter = before;
+			let attempts = 0;
+			for (let a = 0; a < maxAttempts; a++) {
+				attempts++;
+				const brief = buildQualityReviseBrief(gateAfter);
+				stageChapterImprovement(chapterNum, brief, { mode: 'replace', source: 'quality-revise' });
+				const __beforeRev = novelData.chapters[chapterNum - 1] || '';
+				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityRevise' });
+				guardChapterReviseGrowth(chapterNum, __beforeRev, novelData.chapters[chapterNum - 1] || '', { source: 'qualityRevise' });
+				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-afterRevise' + attempts });
+				pushQualitySample('chapter' + chapterNum + '-afterRevise', Object.assign({}, gateAfter.scores || {}, {
+					source: 'heuristics-revise',
+					rationale: gateAfter.passed ? 'revise pass' : 'revise still fail: ' + (gateAfter.failures || []).join(',')
+				}), (novelData.chapters[chapterNum - 1] || '').length);
+				if (gateAfter.passed) break;
+			}
+			// Fail-closed: last gate result stays on novelData.lastQualityGate (set by runQualityGate)
+			if (!Array.isArray(novelData.qualityReviseLog)) novelData.qualityReviseLog = [];
+			novelData.qualityReviseLog.push({
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				attempts: attempts,
+				passedBefore: before.passed,
+				passedAfter: gateAfter.passed,
+				failuresBefore: (before.failures || []).slice(),
+				failuresAfter: (gateAfter.failures || []).slice()
+			});
+			return { revised: true, attempts: attempts, gateBefore: before, gateAfter: gateAfter };
+		}
+
+
+		/**
+		 * B4-1A E2E foul inject: splice known-foul span into chapter draft so anti-slop nest must see it.
+		 * Controlled by window.__NW_E2E_SLOP_INJECT = { enabled, spanText, targetChapter, afterContinuity, spanName }.
+		 * Default afterContinuity=true: wait until continuity pass done (or continuity idle) so anti-slop gets budget.
+		 */
+		function applyE2eSlopInject(chapterNum, phase) {
+			phase = phase || 'pre-nest';
+			const cfg = window.__NW_E2E_SLOP_INJECT;
+			if (!cfg || !cfg.enabled || cfg.applied) return false;
+			const target = cfg.targetChapter != null ? Number(cfg.targetChapter) : Number(chapterNum);
+			if (Number(chapterNum) !== target) return false;
+			const afterCont = cfg.afterContinuity !== false;
+			if (afterCont && phase === 'pre-nest') {
+				const cont = (typeof getChapterContinuityFindings === 'function')
+					? getChapterContinuityFindings(chapterNum)
+					: { hasAny: false };
+				if (cont && cont.hasAny) return false;
+			}
+			if (afterCont && phase === 'pre-antislope') {
+				/* fall through — inject just before anti-slop re-check */
+			} else if (afterCont && phase === 'post-continuity') {
+				/* fall through */
+			} else if (!afterCont && phase !== 'pre-nest') {
+				return false;
+			} else if (afterCont && phase !== 'pre-nest' && phase !== 'post-continuity' && phase !== 'pre-antislope') {
+				return false;
+			}
+			const foul = String(cfg.spanText || '').trim();
+			if (!foul) return false;
+			const idx = chapterNum - 1;
+			if (!Array.isArray(novelData.chapters)) novelData.chapters = [];
+			const before = String(novelData.chapters[idx] || '');
+			const marker = foul.slice(0, Math.min(96, foul.length));
+			if (marker && before.indexOf(marker) >= 0) {
+				cfg.applied = true;
+				cfg.appliedPhase = phase + ':already-present';
+				return false;
+			}
+			const injected = before ? (before.replace(/\s+$/, '') + '\n\n' + foul) : foul;
+			novelData.chapters[idx] = injected;
+			if (typeof syncChapterTextToDom === 'function') {
+				syncChapterTextToDom(chapterNum, injected);
+			} else {
+				const el = document.getElementById('chapterEditContent' + chapterNum)
+					|| document.getElementById('chapterGenContent' + chapterNum)
+					|| document.getElementById('chapterContent' + chapterNum);
+				if (el) el.value = injected;
+			}
+			const prior = (chapterNum >= 2 && Array.isArray(novelData.chapters))
+				? novelData.chapters.slice(0, idx).filter(function (t) { return String(t || '').trim(); })
+				: [];
+			const tellOpts = prior.length ? { priorChapters: prior } : undefined;
+			const preTell = (typeof scoreSlopTells === 'function') ? scoreSlopTells(injected, tellOpts) : null;
+			cfg.applied = true;
+			cfg.appliedPhase = phase;
+			cfg.preInjectLen = before.length;
+			cfg.postInjectLen = injected.length;
+			cfg.preTell = preTell ? {
+				passed: !!preTell.passed,
+				failures: (preTell.failures || []).slice(),
+				tells: preTell.tells
+			} : null;
+			novelData.lastSlopInject = {
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				phase: phase,
+				spanName: cfg.spanName || null,
+				preInjectLen: before.length,
+				postInjectLen: injected.length,
+				preTellPassed: preTell ? !!preTell.passed : null,
+				preTellFailures: preTell ? (preTell.failures || []).slice() : [],
+				preTellScores: preTell && preTell.tells ? Object.keys(preTell.tells).reduce(function (acc, k) {
+					acc[k] = { ok: preTell.tells[k].ok, score: preTell.tells[k].score };
+					return acc;
+				}, {}) : null
+			};
+			console.warn('[B4-1A] slop inject applied', novelData.lastSlopInject);
+			return true;
+		}
+		window.applyE2eSlopInject = applyE2eSlopInject;
+
+		async function ensureQualityAfterGenerate(chapterNum) {
+			// B4-1A: foul-inject before nest when continuity idle (else wait post-continuity)
+			if (typeof applyE2eSlopInject === 'function') applyE2eSlopInject(chapterNum, 'pre-nest');
+			const text0 = novelData.chapters[chapterNum - 1] || '';
+			let gate = runQualityGate(text0, { label: 'chapter' + chapterNum + '-generate', chapterNum: chapterNum });
+			console.log('[C3 qualityGate]', gate.passed, gate.scores, 'driver=', gate.driver);
+			let revise = null;
+			let multi = null;
+			const passResults = [];
+			const maxPasses = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : 2;
+			let passesDone = 0;
+			// Pass 1 (QE2): heuristics gate fail → auto-revise once
+			if (!gate.passed && passesDone < maxPasses) {
+				console.warn('[QE2] gate FAIL — auto-revise pass1', gate.failures);
+				revise = await reviseChapterForQuality(chapterNum, gate, { maxAttempts: NW_QUALITY_REVISE.maxAttempts });
+				passesDone++;
+				gate = revise.gateAfter;
+				if (Array.isArray(novelData.qualityReviseLog) && novelData.qualityReviseLog.length) {
+					const last = novelData.qualityReviseLog[novelData.qualityReviseLog.length - 1];
+					last.pass = 1;
+					last.kind = 'gate-fail';
+				}
+				pushQualityMultiPassLog({
+					ts: new Date().toISOString(),
+					chapter: chapterNum,
+					pass: 1,
+					kind: 'gate-fail',
+					passedBefore: false,
+					passedAfter: !!gate.passed,
+					failuresAfter: (gate.failures || []).slice(),
+					scoresAfter: gate.scores || null
+				});
+				passResults.push({ pass: 1, kind: 'gate-fail', passedAfter: !!gate.passed });
+			}
+			// B3-fix: loop nested multipass under maxAutoPasses (continuity then anti-slop if budget remains)
+			let didContinuityPass = false;
+			let didAntiSlopPass = false;
+			while (passesDone < maxPasses) {
+				const need = needsQualityMultiPass(chapterNum, gate, {
+					passesDone: passesDone,
+					didContinuityPass: didContinuityPass,
+					didAntiSlopPass: didAntiSlopPass,
+					afterApplyStaged: false
+				});
+				if (!need.needed) {
+					// B4-1A: if inject still pending (continuity idle path missed), splice then re-evaluate
+					if (typeof applyE2eSlopInject === 'function' && applyE2eSlopInject(chapterNum, 'pre-antislope')) {
+						continue;
+					}
+					break;
+				}
+				const kind = (need.reason === 'continuity-findings')
+					? 'continuity'
+					: (need.reason === 'residual-staged-notes'
+						? 'residual-staged'
+						: (need.reason === 'anti-slop-tells' ? 'anti-slop' : 'gate-fail'));
+				console.warn('[QE5/B3fix] multi-pass', kind, 'as pass', passesDone + 1);
+				multi = await runTargetedQualityPass(chapterNum, gate, { pass: passesDone + 1, kind: kind, tellReport: need.tellReport || null });
+				passesDone++;
+				gate = multi.gateAfter || gate;
+				if (kind === 'continuity') didContinuityPass = true;
+				if (kind === 'anti-slop') didAntiSlopPass = true;
+				// B4-1A: after continuity revise, splice foul so remaining nest budget can anti-slop
+				if (kind === 'continuity' && typeof applyE2eSlopInject === 'function') {
+					applyE2eSlopInject(chapterNum, 'post-continuity');
+				}
+				passResults.push({ pass: passesDone, kind: kind, passedAfter: !!gate.passed });
+			}
+			// B4-1A: capture post-nest tell scores when inject was applied this chapter
+			if (novelData.lastSlopInject && novelData.lastSlopInject.chapter === chapterNum && typeof scoreSlopTells === 'function') {
+				const _idx = chapterNum - 1;
+				const _prior = (chapterNum >= 2 && Array.isArray(novelData.chapters))
+					? novelData.chapters.slice(0, _idx).filter(function (t) { return String(t || '').trim(); })
+					: [];
+				const _post = scoreSlopTells(novelData.chapters[_idx] || '', _prior.length ? { priorChapters: _prior } : undefined);
+				novelData.lastSlopInject.postTellPassed = !!_post.passed;
+				novelData.lastSlopInject.postTellFailures = (_post.failures || []).slice();
+				novelData.lastSlopInject.postTellScores = _post.tells ? Object.keys(_post.tells).reduce(function (acc, k) {
+					acc[k] = { ok: _post.tells[k].ok, score: _post.tells[k].score };
+					return acc;
+				}, {}) : null;
+				novelData.lastSlopInject.multiPassKinds = (novelData.qualityMultiPassLog || [])
+					.filter(function (e) { return e && e.chapter === chapterNum; })
+					.map(function (e) { return e.kind; });
+				novelData.lastSlopInject.antiSlopCount = novelData.lastSlopInject.multiPassKinds.filter(function (k) { return k === 'anti-slop'; }).length;
+			}
+			// QE4: advisory LLM judge — never overrides fail-closed heuristics
+			let advisory = null;
+			try {
+				const tabEl = document.getElementById('tab5') || document.getElementById('tab1');
+				const text = novelData.chapters[chapterNum - 1] || '';
+				// Only auto-judge chapter 1 by default to limit cost; opts via novelData.qualityJudgeEveryChapter
+				const every = !!novelData.qualityJudgeEveryChapter;
+				if (chapterNum === 1 || every) {
+					advisory = await runJudgeAdvisoryAfterGate(text, gate, tabEl, { label: 'chapter' + chapterNum + '-generate' });
+					if (
+						NW_QUALITY_ROLES.reviseOnJudgeAdvisory &&
+						gate.passed &&
+						advisory && advisory.alignment &&
+						advisory.alignment.judgeWouldFail &&
+						passesDone < maxPasses
+					) {
+						console.warn('[QE4] advisory judge would fail — optional revise enabled');
+						const fake = {
+							passed: false,
+							failures: (advisory.alignment.judgeFailures || []).slice(),
+							scores: gate.scores
+						};
+						const advRev = await reviseChapterForQuality(chapterNum, fake, { maxAttempts: 1 });
+						passesDone++;
+						if (!revise) revise = advRev;
+						else multi = advRev;
+						gate = advRev.gateAfter || gate;
+					}
+				}
+			} catch (advErr) {
+				console.warn('[QE4] advisory judge skipped', advErr);
+			}
+			return { gate: gate, revise: revise, multi: multi, advisory: advisory, multiPass: passResults, passesDone: passesDone };
+		}
+
+		async function applyBookCritiqueItem(index, opts) {
+			opts = opts || {};
+			collectData();
+			ensureChapterImprovementsArray();
+			if (!Array.isArray(novelData.bookImprovementsWithStatus) || !novelData.bookImprovementsWithStatus[index]) {
+				throw new Error('applyBookCritiqueItem: missing item at index ' + index);
+			}
+			const item = novelData.bookImprovementsWithStatus[index];
+			if (item.status === 'Ignored') throw new Error('Item is Ignored');
+			const text = String(item.text || '').trim();
+			if (!text) throw new Error('Critique item text empty');
+			let chNum = opts.chapterNum || inferChapterFromCritiqueText(text);
+			const maxCh = Math.max(1, Number(novelData.numChapters) || (novelData.chapters || []).length || 1);
+			if (chNum > maxCh) chNum = maxCh;
+			if (chNum < 1) chNum = 1;
+			const beforeScores = scoreProseQuality(novelData.chapters[chNum - 1] || '');
+			stageChapterImprovement(chNum, text, { mode: opts.mode || 'replace', source: 'book-critique:' + index });
+			await updateChapter(chNum, { requireImprovements: true, operationTag: 'applyCritique' });
+			const afterScores = scoreProseQuality(novelData.chapters[chNum - 1] || '');
+			pushQualitySample('chapter' + chNum + '-afterCritiqueApply', Object.assign({}, afterScores, {
+				source: 'heuristics-critique-apply',
+				rationale: 'applied book critique #' + index
+			}), (novelData.chapters[chNum - 1] || '').length);
+			item.status = 'Incorporated';
+			item.appliedAt = new Date().toISOString();
+			item.appliedChapter = chNum;
+			item.applyDelta = {
+				interest: afterScores.interest - beforeScores.interest,
+				readability: afterScores.readability - beforeScores.readability,
+				aiSlopRisk: afterScores.aiSlopRisk - beforeScores.aiSlopRisk,
+				humanLikeness: afterScores.humanLikeness - beforeScores.humanLikeness
+			};
+			if (!Array.isArray(novelData.critiqueApplyLog)) novelData.critiqueApplyLog = [];
+			novelData.critiqueApplyLog.push({
+				ts: item.appliedAt,
+				index: index,
+				chapter: chNum,
+				delta: item.applyDelta
+			});
+			// Refresh table if present
+			if (typeof updateBookImprovementsTable === 'function' && Array.isArray(novelData.bookImprovements)) {
+				updateBookImprovementsTable(novelData.bookImprovements.join('\n'));
+			}
+			return { chapter: chNum, beforeScores: beforeScores, afterScores: afterScores, item: item };
+		}
+
+		async function applyTopBookCritiques(maxItems, opts) {
+			opts = opts || {};
+			const max = maxItems != null ? maxItems : 1;
+			collectData();
+			const list = novelData.bookImprovementsWithStatus || [];
+			const pending = list
+				.map((item, idx) => ({ item, idx }))
+				.filter(x => x.item && x.item.status === 'To Incorporate' && String(x.item.text || '').trim());
+			if (!pending.length) {
+				alert('No "To Incorporate" critique items to apply. Run Suggest Book Improvements first.');
+				return { applied: [] };
+			}
+			const applied = [];
+			for (let i = 0; i < Math.min(max, pending.length); i++) {
+				applied.push(await applyBookCritiqueItem(pending[i].idx, opts));
+			}
+			return { applied: applied };
+		}
+
+		async function applyStagedChapterImprovements(chapterNum) {
+			collectData();
+			ensureChapterImprovementsArray();
+			const el = document.getElementById('chapterEditImprovement' + chapterNum);
+			const fromEl = el ? String(el.value || '').trim() : '';
+			const fromData = String(novelData.chapterImprovements[chapterNum - 1] || '').trim();
+			const text = fromEl || fromData;
+			if (!text) {
+				const msg = 'Chapter ' + chapterNum + ' has no improvement notes. Stage a critique or enter notes before applying.';
+				alert(msg);
+				throw new Error(msg);
+			}
+			if (el) el.value = text;
+			novelData.chapterImprovements[chapterNum - 1] = text;
+			const beforeScores = scoreProseQuality(novelData.chapters[chapterNum - 1] || '');
+			const __beforeStaged = novelData.chapters[chapterNum - 1] || '';
+			await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'applyChapterImprovements' });
+			guardChapterReviseGrowth(chapterNum, __beforeStaged, novelData.chapters[chapterNum - 1] || '', { source: 'applyStaged' });
+			const afterScores = scoreProseQuality(novelData.chapters[chapterNum - 1] || '');
+			pushQualitySample('chapter' + chapterNum + '-afterChapterImprovements', Object.assign({}, afterScores, {
+				source: 'heuristics-chapter-improve',
+				rationale: 'applied staged chapterImprovements'
+			}), (novelData.chapters[chapterNum - 1] || '').length);
+			// QE5: after first apply-staged, optional second targeted pass (cap 2)
+			let multi = null;
+			let gate = runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-afterApplyStaged' });
+			pushQualityMultiPassLog({
+				ts: new Date().toISOString(),
+				chapter: chapterNum,
+				pass: 1,
+				kind: 'apply-staged',
+				passedBefore: null,
+				passedAfter: !!gate.passed,
+				failuresAfter: (gate.failures || []).slice(),
+				scoresAfter: gate.scores || null
+			});
+			let passesDoneApply = 1;
+			let didContinuityPass = false;
+			let didAntiSlopPass = false;
+			const maxPassesApply = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : 2;
+			while (passesDoneApply < maxPassesApply) {
+				const need = needsQualityMultiPass(chapterNum, gate, {
+					passesDone: passesDoneApply,
+					didContinuityPass: didContinuityPass,
+					didAntiSlopPass: didAntiSlopPass,
+					afterApplyStaged: true
+				});
+				if (!need.needed) {
+					// B4-1A: if inject still pending (continuity idle path missed), splice then re-evaluate
+					if (typeof applyE2eSlopInject === 'function' && applyE2eSlopInject(chapterNum, 'pre-antislope')) {
+						continue;
+					}
+					break;
+				}
+				const kind = (need.reason === 'continuity-findings')
+					? 'continuity'
+					: (need.reason === 'residual-staged-notes'
+						? 'residual-staged'
+						: (need.reason === 'anti-slop-tells' ? 'anti-slop' : 'gate-fail'));
+				console.warn('[QE5/B3fix] after apply-staged → pass', passesDoneApply + 1, kind);
+				multi = await runTargetedQualityPass(chapterNum, gate, { pass: passesDoneApply + 1, kind: kind, tellReport: need.tellReport || null });
+				passesDoneApply++;
+				gate = multi.gateAfter || gate;
+				if (kind === 'continuity') didContinuityPass = true;
+				if (kind === 'anti-slop') didAntiSlopPass = true;
+			}
+			return { beforeScores: beforeScores, afterScores: afterScores, multi: multi, gate: gate };
+		}
+
+		async function runQe123Smoke() {
+			const el = document.getElementById('qe123SmokeResult') || document.getElementById('c3SmokeResult') || document.getElementById('c1SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastQualityJudgeAlign","boundedReviseLog"], ["chapterEditImprovement1","chapterEditContent1"]);
+			try {
+				ensureChapterImprovementsArray();
+				const n = novelData.numChapters || 2;
+				novelData.chapters = novelData.chapters || [];
+				while (novelData.chapters.length < n) novelData.chapters.push('');
+				novelData.chapters[0] = novelData.chapters[0] || 'Smoke chapter one with a bolt and a wet dock plank.';
+				stageChapterImprovement(1, 'Add one concrete sensory detail about rust.', { mode: 'replace', source: 'qe-smoke' });
+				if (!String(novelData.chapterImprovements[0] || '').includes('rust')) throw new Error('stage failed');
+				say('stageChapterImprovement OK');
+				let threw = false;
+				const saved = novelData.chapterImprovements[0];
+				novelData.chapterImprovements[0] = '';
+				const elImp = document.getElementById('chapterEditImprovement1');
+				const savedEl = elImp ? elImp.value : null;
+				if (elImp) elImp.value = '';
+				try {
+					await applyStagedChapterImprovements(1);
+				} catch (e) {
+					threw = true;
+					say('empty apply correctly rejected');
+				}
+				novelData.chapterImprovements[0] = saved;
+				if (elImp && savedEl != null) elImp.value = saved;
+				if (!threw) throw new Error('expected empty apply to throw');
+				const brief = buildQualityReviseBrief({
+					passed: false,
+					failures: ['aiSlopRisk>=55'],
+					scores: { interest: 40, readability: 50, aiSlopRisk: 70, humanLikeness: 40 }
+				});
+				if (!/FAIL-CLOSED REVISE/.test(brief)) throw new Error('revise brief missing');
+				say('buildQualityReviseBrief OK');
+				const ch = inferChapterFromCritiqueText('Pacing in Chapter 2 lags due to exposition.');
+				if (ch !== 2) throw new Error('inferChapter expected 2 got ' + ch);
+				say('inferChapterFromCritiqueText OK');
+				// QE4 structure
+					if (!NW_QUALITY_ROLES || NW_QUALITY_ROLES.failClosedDriver !== 'heuristics') throw new Error('QE4 roles driver');
+					if (NW_QUALITY_ROLES.advisory !== 'llmJudge') throw new Error('QE4 roles advisory');
+					const fakeGate = { passed: true, failures: [], scores: { interest: 90, readability: 80, aiSlopRisk: 20, humanLikeness: 80 }, label: 'qe4-smoke' };
+					const harshJudge = { interest: 40, readability: 40, aiSlopRisk: 80, humanLikeness: 30, source: 'llm+heuristics', rationale: 'smoke diverge' };
+					const align = alignJudgeWithGate(fakeGate, harshJudge, { label: 'qe4-smoke' });
+					if (!align || align.aligned !== false) throw new Error('expected diverge');
+					if (!(align.divergences || []).includes('heuristics_pass_judge_fail')) throw new Error('expected heuristics_pass_judge_fail');
+					if (align.gatePassed !== true) throw new Error('gate must stay pass under advisory');
+					say('QE4 alignJudgeWithGate diverge OK (gate stays pass)');
+					say('QE 1/2/3 Smoke PASS (structure; live apply/revise needs API)');
+					return true;
+			} catch (e) {
+				say('QE 1/2/3 Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			} finally {
+				__restore();
+			}
+		}
+
+		window.stageChapterImprovement = stageChapterImprovement;
+		window.applyBookCritiqueItem = applyBookCritiqueItem;
+		window.applyTopBookCritiques = applyTopBookCritiques;
+		window.applyStagedChapterImprovements = applyStagedChapterImprovements;
+		window.reviseChapterForQuality = reviseChapterForQuality;
+		window.ensureQualityAfterGenerate = ensureQualityAfterGenerate;
+
+		async function runQe4Smoke() {
+			const el = document.getElementById('qe4SmokeResult') || document.getElementById('qe123SmokeResult') || document.getElementById('c3SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastQualityJudgeAlign","boundedReviseLog"], []);
+			try {
+				if (NW_QUALITY_ROLES.failClosedDriver !== 'heuristics') throw new Error('driver must be heuristics');
+				if (NW_QUALITY_ROLES.advisory !== 'llmJudge') throw new Error('advisory must be llmJudge');
+				if (NW_QUALITY_ROLES.reviseOnJudgeAdvisory !== false) throw new Error('default reviseOnJudgeAdvisory must be false');
+				say('roles OK: fail-closed=heuristics, advisory=llmJudge, reviseOnJudgeAdvisory=false');
+				const passGate = runQualityGate('Concrete sensory prose with a bolt on a wet dock plank and a named character Mira.', { label: 'qe4-gate-pass' });
+				if (!passGate.passed) throw new Error('expected heur pass on concrete sample');
+				if (passGate.driver !== 'heuristics') throw new Error('driver field missing');
+				say('heuristics gate PASS + driver field OK');
+				const align = alignJudgeWithGate(passGate, {
+					interest: 35, readability: 40, aiSlopRisk: 75, humanLikeness: 30,
+					source: 'llm+heuristics', rationale: 'synthetic harsh judge'
+				}, { label: 'qe4-align' });
+				if (align.aligned !== false) throw new Error('expected divergence');
+				if (novelData.lastQualityGate && novelData.lastQualityGate.passed !== true) throw new Error('advisory must not flip gate');
+				say('divergence logged; fail-closed gate unchanged');
+				say('QE4 Smoke PASS');
+				return true;
+			} catch (e) {
+				say('QE4 Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			} finally {
+				__restore();
+			}
+		}
+		window.runQe4Smoke = runQe4Smoke;
+
+		async function runQe5Smoke() {
+			const el = document.getElementById('qe5SmokeResult') || document.getElementById('qe4SmokeResult') || document.getElementById('qe123SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastQualityJudgeAlign","boundedReviseLog"], []);
+			try {
+				if (!NW_QUALITY_REVISE || NW_QUALITY_REVISE.maxAutoPasses !== 2) throw new Error('maxAutoPasses must be 2');
+				if (NW_QUALITY_ROLES.reviseOnJudgeAdvisory !== false) throw new Error('reviseOnJudgeAdvisory must stay false');
+				say('cap OK: maxAutoPasses=2, reviseOnJudgeAdvisory=false');
+				novelData.continuityFindings = ['Chapter 1: timeline drift on dock clocks'];
+				if (!novelData.continuityTracker) novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
+				novelData.continuityTracker.chapters = novelData.continuityTracker.chapters || [];
+				novelData.continuityTracker.chapters[0] = { chapter: 1, continuityRisks: ['Unnamed child status restated without update'] };
+				const cont = getChapterContinuityFindings(1);
+				if (!cont.hasAny) throw new Error('expected continuity findings');
+				const brief = buildContinuityReviseBrief(1);
+				if (!/CONTINUITY-FOCUSED QUALITY PASS/.test(brief)) throw new Error('continuity brief missing');
+				say('continuity brief OK');
+				const passGate = { passed: true, failures: [], scores: { interest: 90, readability: 80, aiSlopRisk: 20, humanLikeness: 80 } };
+				const needCont = needsQualityMultiPass(1, passGate, { passesDone: 1, didContinuityPass: false });
+				if (!needCont.needed || needCont.reason !== 'continuity-findings') throw new Error('expected continuity-findings need');
+				const needCap = needsQualityMultiPass(1, { passed: false, failures: ['x'] }, { passesDone: 2 });
+				if (needCap.needed) throw new Error('cap must block pass>2');
+				say('needsQualityMultiPass OK (continuity + cap)');
+				pushQualityMultiPassLog({
+					ts: new Date().toISOString(),
+					chapter: 1,
+					pass: 1,
+					kind: 'gate-fail',
+					passedBefore: false,
+					passedAfter: true,
+					failuresAfter: [],
+					scoresAfter: passGate.scores
+				});
+				pushQualityMultiPassLog({
+					ts: new Date().toISOString(),
+					chapter: 1,
+					pass: 2,
+					kind: 'continuity',
+					passedBefore: true,
+					passedAfter: true,
+					failuresAfter: [],
+					scoresAfter: passGate.scores
+				});
+				if (!Array.isArray(novelData.qualityMultiPassLog) || novelData.qualityMultiPassLog.length < 2) throw new Error('multiPass log');
+				say('qualityMultiPassLog pass1→pass2 OK');
+				say('QE5 Smoke PASS (structure; live multipass needs API)');
+				return true;
+			} catch (e) {
+				say('QE5 Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			} finally {
+				__restore();
+			}
+		}
+		window.runQe5Smoke = runQe5Smoke;
+
+		function runQe6Smoke() {
+			const el = document.getElementById('qe6SmokeResult') || document.getElementById('qe5SmokeResult');
+			const log = [];
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastQualityJudgeAlign","boundedReviseLog"], []);
+			try {
+				if (!NW_QUALITY_GATE || NW_QUALITY_GATE.minConsistency == null) throw new Error('minConsistency missing');
+				if (NW_QUALITY_GATE.minFlow == null || NW_QUALITY_GATE.minPacing == null) throw new Error('flow/pacing thresholds missing');
+				if (NW_QUALITY_ROLES.failClosedDriver !== 'heuristics') throw new Error('fail-closed must stay heuristics');
+				if (NW_QUALITY_REVISE.maxAutoPasses !== 2) throw new Error('maxAutoPasses must stay 2');
+				say('thresholds OK');
+				// isolated fixture state (restored in finally): user continuity findings must not steer the anti-slop nest checks
+				novelData.continuityFindings = [];
+				novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
+				novelData.characters = [
+					{ name: 'Dr. Lumen Kwan', role: 'lead', backstory: 'x', arc: 'y' },
+					{ name: 'Rook Velasquez', role: 'foil', backstory: 'x', arc: 'y' }
+				];
+				const slop = scoreProseQuality('In today\'s world, we must delve into the rich tapestry of life. Moreover, furthermore, it is important to note a pivotal role.');
+				if (slop.aiSlopRisk < 40) throw new Error('expected elevated aiSlopRisk got ' + slop.aiSlopRisk);
+				if (slop.flow == null || slop.pacing == null || slop.consistency == null) throw new Error('QE6 attrs missing');
+				say('slop/attrs OK slop=' + slop.aiSlopRisk + ' flow=' + slop.flow + ' pace=' + slop.pacing + ' cons=' + slop.consistency);
+				const good = scoreProseQuality([
+					'Kwan checked the Bitung dock chronometer twice.',
+					'Rook sold a clean block that never existed.',
+					'"Twelve milliseconds," Kwan said.',
+					'The freighter light stuttered, then held.',
+					'They walked the parasol planks without speaking.'
+				].join('\n\n'));
+				const gateFail = runQualityGate(slop.meta && false ? '' : 'In today\'s world, we must delve into the rich tapestry. Moreover, furthermore, additionally, consequently, thus we navigate the complexities of a vibrant tapestry and pivotal role in the realm of progress.', { label: 'qe6-slop' });
+				const brief = buildQualityReviseBrief(gateFail);
+				if (!/AI-SLOP|READABILITY|FLOW|PACING|CONSISTENCY|INTEREST|HUMAN/i.test(brief)) throw new Error('revise brief lacks craft dims');
+				if (!/consistency=|flow=|pacing=/.test(brief)) throw new Error('revise brief lacks attr scores');
+				say('revise brief OK');
+				const cbrief = buildContinuityReviseBrief(1);
+				if (!/Cast anchors:/.test(cbrief) || !/Kwan/.test(cbrief)) throw new Error('continuity brief missing cast');
+				say('continuity brief OK');
+				// B2 anti-slop tells (revise-only; nest under maxAutoPasses=2)
+				if (typeof scoreSlopTells !== 'function') throw new Error('scoreSlopTells missing');
+				if (typeof buildAntiSlopReviseBrief !== 'function') throw new Error('buildAntiSlopReviseBrief missing');
+				const cleanTell = scoreSlopTells([
+					'Kwan checked the twelve-millisecond spike against the freighter log.',
+					'Rook priced the fork once, then waited.',
+					'"If this deletes Sinta\'s uplink," she said, "the ledger becomes evidence."',
+					'Salt air hit Bridge Lock. Radar bloomed once and went dark.'
+				].join('\n'));
+				if (!cleanTell.passed) throw new Error('clean prose should pass tells: ' + cleanTell.failures.join('|'));
+				const foulHedge = scoreSlopTells('Maybe she perhaps seemed as if she almost kind of might sort of appeared to hesitate at the door.');
+				if (foulHedge.tells.hedgeStack.ok) throw new Error('expected hedgeStack foul');
+				const dialogueOnly = scoreSlopTells('"Kwan, Kwan, Kwan — listen," Rook said. The dock stayed quiet.');
+				if (!dialogueOnly.tells.nameEcho.ok) throw new Error('dialogue address should allowlist nameEcho');
+				const narrEcho = scoreSlopTells('Kwan told Kwan that Kwan would not sign what Kwan had refused.');
+				if (narrEcho.tells.nameEcho.ok) throw new Error('narration nameEcho should foul');
+				const briefSlop = buildAntiSlopReviseBrief(foulHedge);
+				if (!/^ANTI-SLOP QUALITY PASS/i.test(briefSlop) || !/HEDGE/i.test(briefSlop)) throw new Error('anti-slop brief weak');
+				novelData.chapters = [foulHedge.failures ? 'Maybe she perhaps seemed as if she almost kind of might sort of appeared to hesitate at the door.' : ''];
+				novelData.chapters[0] = 'Maybe she perhaps seemed as if she almost kind of might sort of appeared to hesitate at the door.';
+				const needSlop = needsQualityMultiPass(1, { passed: true, failures: [] }, { passesDone: 1, didAntiSlopPass: false });
+				if (!needSlop.needed || needSlop.reason !== 'anti-slop-tells') throw new Error('needsQualityMultiPass should request anti-slop');
+				const needCapped = needsQualityMultiPass(1, { passed: true, failures: [] }, { passesDone: 2, didAntiSlopPass: false });
+				if (needCapped.needed) throw new Error('anti-slop must nest under maxAutoPasses=2');
+				// B3-fix: after continuity consumed, remaining nest must select anti-slop when tells foul
+				const needAfterCont = needsQualityMultiPass(1, { passed: true, failures: [] }, {
+					passesDone: 1,
+					didContinuityPass: true,
+					didAntiSlopPass: false
+				});
+				if (!needAfterCont.needed || needAfterCont.reason !== 'anti-slop-tells') {
+					throw new Error('B3fix: after continuity, expected anti-slop-tells got ' + (needAfterCont.reason || 'none'));
+				}
+				say('B2 anti-slop tells OK');
+				say('B3fix continuity→anti-slop nest OK');
+				say('QE6 Attributes Smoke PASS');
+				return true;
+			} catch (e) {
+				say('QE6 Attributes Smoke FAIL: ' + (e && e.message ? e.message : e));
+				return false;
+			} finally {
+				__restore();
+			}
+		}
+		window.runQe6Smoke = runQe6Smoke;
+
+
+
+
+
+		window.runQe123Smoke = runQe123Smoke;
 
 		function getTrimmedContext(text, maxChars = 1200) {
 			if (!text || typeof text !== 'string') return '';
@@ -2674,7 +4342,7 @@ Synced: 2026-04-19
 			                </select>
 			            </td>
 			            <td>${improvement}</td>
-			            <td><button onclick="breakdownImprovement(${index})">Break Down</button></td>
+			            <td><button onclick="breakdownImprovement(${index})">Break Down</button> <button onclick="applyBookCritiqueItem(${index}).then(r=>alert('Applied to Ch.'+r.chapter)).catch(e=>alert(e.message||e))">Apply</button></td>
 			        `;
 			        const breakdownRow = document.createElement('tr');
 			        breakdownRow.innerHTML = `
@@ -4098,6 +5766,9 @@ Synced: 2026-04-19
 				await runChapterContinuityAudit(chapterNum, { silent: true });
 			}
 		    console.log('Post-final updateRequestLog - chapterContent Length:', chapterContent.length);
+		    try {
+		        await ensureQualityAfterGenerate(chapterNum);
+		    } catch (qgErr) { console.warn('qualityGate/revise after generateChapter', qgErr); }
 		    console.log(`Completed generateChapter for Chapter ${chapterNum}, Total Tokens: ${totalTokens}`);
 }
 
@@ -4112,14 +5783,31 @@ Synced: 2026-04-19
 	    // NW.T6.F1: updateChapter() SHALL send the current chapter text plus improvement notes to the LLM and replace the chapter textarea content with the revised text.
 	    // NW.T6.F2: checkSpellingAndGrammar() SHALL send the current chapter text to the LLM for proofreading and apply the corrected version back to the chapter textarea.
 	    // Update an existing chapter with improvements
-	    async function updateChapter(chapterNum) {
+	    async function updateChapter(chapterNum, opts) {
+		    opts = opts || {};
 		    collectData();
+		    ensureChapterImprovementsArray();
 		    const prevContent = chapterNum > 1 ? novelData.chapters.slice(0, chapterNum-1).join('\n') : '';
 		    const contextLimit = 1000;
 		    const trimmedContext = prevContent.slice(-contextLimit * 4);
 		    const currentContent = document.getElementById(`chapterEditContent${chapterNum}`).value;
-		    const improvements = document.getElementById(`chapterEditImprovement${chapterNum}`).value;
+		    let improvements = document.getElementById(`chapterEditImprovement${chapterNum}`).value;
+		    if (!(String(improvements || '').trim())) {
+		        improvements = String((novelData.chapterImprovements || [])[chapterNum-1] || '');
+		    }
 		    novelData.chapterImprovements[chapterNum-1] = improvements;
+		    if (opts.requireImprovements !== false) {
+		        // QE3: do not silently edit with empty improvement notes (allow explicit opt-out)
+		        const require = (opts.requireImprovements === true) || (opts.operationTag === 'applyCritique') || (opts.operationTag === 'qualityRevise') || (opts.operationTag === 'applyChapterImprovements');
+		        if (!(String(improvements || '').trim())) {
+		            if (require) {
+		                const msg = 'Chapter ' + chapterNum + ': improvement notes are empty. Stage a critique or enter notes before updating.';
+		                alert(msg);
+		                throw new Error(msg);
+		            }
+		            console.warn('[QE3] updateChapter with empty improvements (soft allow)');
+		        }
+		    }
 
 		    const messages = [
 		        { role: 'system', content: getAgentPrompt('tab6', 'updateChapter', 'You are a creative writing assistant.') },
@@ -4164,6 +5852,11 @@ Synced: 2026-04-19
 		        }
 		        novelData.chapters[chapterNum-1] = response.chapter || '';
 		        syncChapterContent(chapterNum, 'edit');
+		        try {
+		            const _heur = scoreProseQuality(novelData.chapters[chapterNum-1] || '');
+		            pushQualitySample('chapter' + chapterNum + '-afterUpdate', Object.assign({}, _heur, { source: 'heuristics', rationale: (opts.operationTag || 'updateChapter') }), (novelData.chapters[chapterNum-1] || '').length);
+		            if (Array.isArray(novelData.editedChapters)) novelData.editedChapters[chapterNum-1] = novelData.chapters[chapterNum-1];
+		        } catch (e) { console.warn('post-updateChapter quality sample', e); }
 		    });
 }
 
