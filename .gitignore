@@ -33,3 +33,9 @@ test-results/
 
 # Session exports may contain API keys - never commit
 *_session.json
+
+# Local secrets (never commit real keys)
+secrets/*
+!secrets/*.example
+!secrets/README.md
+.local/

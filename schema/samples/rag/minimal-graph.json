@@ -1,0 +1,226 @@
+{
+  "schemaVersion": "0.1",
+  "projectId": "demo-mixed-001",
+  "meta": {
+    "createdAt": "2026-09-16T13:00:00-05:00",
+    "updatedAt": "2026-09-16T14:25:00-05:00",
+    "sourceTool": "phase0-sample"
+  },
+  "entities": [
+    {
+      "entityType": "Character",
+      "id": "char-aria",
+      "domain": "fiction",
+      "name": "Aria",
+      "role": "protagonist",
+      "voiceCard": {
+        "lexicon": [
+          "bridge",
+          "map",
+          "unsay",
+          "planks"
+        ],
+        "cadence": "short clauses",
+        "tabooPhrases": [
+          "destined for greatness"
+        ],
+        "emotionalBaseline": "wary hope"
+      },
+      "arcSummary": "Learns to bargain memory without self-erasure.",
+      "chapters": [
+        2
+      ]
+    },
+    {
+      "entityType": "PlotBeat",
+      "id": "beat-threshold",
+      "domain": "fiction",
+      "label": "Threshold crossing",
+      "arcStep": "turn",
+      "stakes": "Losing the only map home",
+      "payoffStatus": "open",
+      "chapter": 2
+    },
+    {
+      "entityType": "Motif",
+      "id": "motif-river-glass",
+      "domain": "fiction",
+      "label": "River-glass",
+      "imageryTokens": [
+        "reflected sky",
+        "broken light",
+        "silence under surface"
+      ],
+      "overuseThreshold": 3,
+      "chapters": [
+        2
+      ]
+    },
+    {
+      "entityType": "StyleExemplar",
+      "id": "style-01",
+      "domain": "fiction",
+      "title": "Bridge by sound",
+      "excerpt": "She counted the planks by sound, not sight\u2014each hollow note a step she could still unsay.",
+      "voiceTags": [
+        "sensory",
+        "restraint"
+      ],
+      "sourceRef": "ref-style-source",
+      "informs": {
+        "chapter": 2,
+        "projectIntent": "Prove that memory can be bargained without erasing who bargains."
+      }
+    },
+    {
+      "entityType": "ReferenceDoc",
+      "id": "ref-voice-note",
+      "domain": "fiction",
+      "kind": "note",
+      "title": "Aria dialogue cap",
+      "text": "Author note: Aria never monologues longer than four sentences in early chapters.",
+      "provenance": {
+        "source": "author-session",
+        "author": "Fiction"
+      },
+      "tags": [
+        "voice",
+        "aria"
+      ]
+    },
+    {
+      "entityType": "ReferenceDoc",
+      "id": "ref-style-source",
+      "domain": "fiction",
+      "kind": "citation",
+      "title": "Style scrap",
+      "text": "Internal exemplar provenance for style-01.",
+      "provenance": {
+        "source": "project-bible"
+      },
+      "tags": [
+        "style"
+      ]
+    },
+    {
+      "entityType": "Taxon",
+      "id": "taxon-chamomile",
+      "domain": "nonfiction",
+      "scientificName": "Matricaria chamomilla",
+      "commonNames": [
+        "chamomile",
+        "German chamomile",
+        "wild chamomile"
+      ],
+      "family": "Asteraceae"
+    },
+    {
+      "entityType": "Preparation",
+      "id": "prep-tea",
+      "domain": "nonfiction",
+      "method": "infusion",
+      "partUsed": "dried flower heads",
+      "notes": "1 tsp per cup; steep 5\u201310 minutes."
+    },
+    {
+      "entityType": "Contraindication",
+      "id": "contra-preg",
+      "domain": "nonfiction",
+      "severity": "moderate",
+      "population": "pregnancy (therapeutic doses)",
+      "evidenceRefs": [
+        "ref-safety-preg"
+      ]
+    },
+    {
+      "entityType": "SafetyTopic",
+      "id": "safety-pregnancy",
+      "domain": "nonfiction",
+      "label": "Pregnancy interactions",
+      "kind": "interaction"
+    },
+    {
+      "entityType": "ReferenceDoc",
+      "id": "ref-safety-preg",
+      "domain": "nonfiction",
+      "kind": "safety",
+      "title": "Chamomile pregnancy caution",
+      "text": "Consult a qualified practitioner; avoid therapeutic doses in pregnancy without guidance. Not medical advice.",
+      "provenance": {
+        "source": "herbal-safety-desk-ref",
+        "retrievedAt": "2026-09-16"
+      },
+      "tags": [
+        "safety",
+        "pregnancy",
+        "chamomile"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "type": "MOTIVATED_BY",
+      "from": "char-aria",
+      "to": "beat-threshold"
+    },
+    {
+      "type": "INFORMS",
+      "from": "style-01",
+      "to": "char-aria",
+      "meta": {
+        "chapter": 2,
+        "projectIntent": "memory bargain without erasure"
+      }
+    },
+    {
+      "type": "SUPPORTS",
+      "from": "ref-voice-note",
+      "to": "char-aria"
+    },
+    {
+      "type": "SUPPORTS",
+      "from": "ref-style-source",
+      "to": "style-01"
+    },
+    {
+      "type": "HAS_PREP",
+      "from": "taxon-chamomile",
+      "to": "prep-tea"
+    },
+    {
+      "type": "FOR_TAXON",
+      "from": "prep-tea",
+      "to": "taxon-chamomile"
+    },
+    {
+      "type": "SAFETY",
+      "from": "prep-tea",
+      "to": "safety-pregnancy"
+    },
+    {
+      "type": "APPLIES_TO",
+      "from": "contra-preg",
+      "to": "taxon-chamomile"
+    },
+    {
+      "type": "APPLIES_TO",
+      "from": "contra-preg",
+      "to": "prep-tea"
+    },
+    {
+      "type": "DOCUMENTED_BY",
+      "from": "safety-pregnancy",
+      "to": "ref-safety-preg"
+    },
+    {
+      "type": "CITED_IN",
+      "from": "taxon-chamomile",
+      "to": "ref-safety-preg"
+    },
+    {
+      "type": "SUPPORTS",
+      "from": "ref-safety-preg",
+      "to": "contra-preg"
+    }
+  ]
+}
