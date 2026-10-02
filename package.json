@@ -6,7 +6,7 @@
   "scripts": {
     "start": "python -m http.server 8000",
     "serve": "python -m http.server 8000",
-    "lint": "htmlhint \"**/*.html\" || true",
+    "lint": "htmlhint \"**/*.html\"",
     "lint:md": "markdownlint -c .markdownlint.jsonc -p .markdownlintignore \"**/*.md\"",
     "lint:js": "echo 'JavaScript linting not configured yet'",
     "test": "npm run lint && npm run validate-json",
@@ -40,18 +40,21 @@
   },
   "homepage": "https://github.com/bnorth12/AI-Book-Tools#readme",
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=20"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.0",
     "htmlhint": "^1.1.4",
-    "markdownlint-cli": "^0.48.0"
+    "markdownlint-cli": "^0.49.1"
   },
   "browserslist": [
     "last 2 versions",
     "> 1%",
     "not dead"
   ],
+  "overrides": {
+    "js-yaml": "^5.4.2"
+  },
   "dependencies": {
     "dotenv": "^17.4.2"
   }
