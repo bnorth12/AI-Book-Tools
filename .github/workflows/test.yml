@@ -8,6 +8,10 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -19,7 +23,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "18"
+          node-version: "22"
           cache: npm
 
       - name: Install dependencies
@@ -27,12 +31,11 @@ jobs:
 
       - name: Lint HTML files
         run: |
-          npm install -g htmlhint
-          htmlhint "**/*.html" || true
+          npx htmlhint "**/*.html"
 
       - name: Check for console.log statements
         run: |
-          if grep -r "console\.log" --include="*.js" --include="*.html" .; then
+          if grep -r "console\.log" --include="*.js" --include="*.html" --exclude-dir=node_modules --exclude-dir="playwright-report*" .; then
             echo "WARNING: Found console.log statements that should be removed for production"
           else
             echo "OK: No console.log statements found"
@@ -49,24 +52,26 @@ jobs:
           echo "OK: All JSON files are valid"
 
       - name: Grok endpoint smoke test
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         env:
           XAI_API_KEY: '${{ secrets.XAI_API_KEY }}'
+          XAI_SMOKE_MODEL: '${{ vars.XAI_SMOKE_MODEL }}'
         run: |
           set -euo pipefail
           if [ -z "${XAI_API_KEY:-}" ]; then
             echo "INFO: XAI_API_KEY is not available in this run context; skipping endpoint smoke test"
             exit 0
           fi
+          if [ -z "${XAI_SMOKE_MODEL:-}" ]; then
+            echo "INFO: repo variable XAI_SMOKE_MODEL is not set; skipping endpoint smoke test"
+            exit 0
+          fi
 
+          payload=$(jq -n --arg model "$XAI_SMOKE_MODEL" '{model: $model, messages: [{role: "user", content: "Reply with the single token: ok"}], max_tokens: 8, temperature: 0}')
           response=$(curl -sS https://api.x.ai/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${XAI_API_KEY}" \
-            -d '{
-              "model": "grok-4.20-0309-reasoning",
-              "messages": [{"role": "user", "content": "Reply with the single token: ok"}],
-              "max_tokens": 8,
-              "temperature": 0
-            }')
+            -d "$payload")
 
           if ! echo "$response" | jq -e '.choices[0].message.content' >/dev/null; then
             echo "ERROR: Grok endpoint returned an unexpected response shape"
