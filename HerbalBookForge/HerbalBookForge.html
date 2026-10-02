@@ -689,6 +689,7 @@
             };
         }
 
+        const DEFAULT_MODEL = 'grok-4.7';
         let project = {
             meta: { version: "1.0.0", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
             setup: {
@@ -936,7 +937,16 @@
             if (api) api.value = project.setup.apiKey || '';
             if (collections) collections.value = (project.setup.collectionIds || []).join(', ');
             if (webToggle) webToggle.checked = !!project.setup.webSearchEnabled;
-            if (model) model.value = project.setup.preferredModel || 'grok-4.7';
+            if (model) {
+                // Never leave the dropdown blank: fall back to the default when the saved ID is unknown/removed.
+                const savedModel = project.setup.preferredModel || '';
+                const known = Array.from(model.options).some(o => o.value === savedModel);
+                if (!known) {
+                    if (savedModel) console.warn(`[HBF] Saved model '${savedModel}' is not available; falling back to ${DEFAULT_MODEL}.`);
+                    project.setup.preferredModel = DEFAULT_MODEL;
+                }
+                model.value = project.setup.preferredModel;
+            }
             if (version) version.textContent = `v${project.meta.version || '0.12.0'}`;
             if (lastEdited && project.meta.lastEdited) {
                 lastEdited.textContent = new Date(project.meta.lastEdited).toLocaleString();
@@ -968,6 +978,11 @@
 
             document.getElementById('web-search-toggle')?.addEventListener('change', e => {
                 project.setup.webSearchEnabled = e.target.checked;
+                saveProject();
+            });
+
+            document.getElementById('api-endpoint')?.addEventListener('change', e => {
+                project.setup.apiEndpoint = e.target.value;
                 saveProject();
             });
 
@@ -1434,14 +1449,29 @@
 
         // HBF.CHO9: Detect truncated LLM outline response via finish_reason.
         // Returns true if the response appears cut off.
+        // Truncation signals: Chat Completions finish_reason 'length' (or 'max_tokens');
+        // Responses API status 'incomplete' / incomplete_details.reason 'max_output_tokens'.
+        const TRUNCATION_REASONS = ['length', 'max_tokens', 'incomplete', 'max_output_tokens'];
         function isOutlineTruncated(finishReason, outlineText) {
-            if (finishReason === 'length') return true;
+            if (typeof finishReason === 'string' && TRUNCATION_REASONS.includes(finishReason.toLowerCase())) return true;
             // Structural completeness check: must have at least one chapter heading
             if (typeof outlineText === 'string' && outlineText.trim()) {
                 const hasChapter = /###?\s*Chapter\s+\d+/i.test(outlineText);
                 if (!hasChapter) return true;
             }
             return false;
+        }
+
+        // HBF.SU4/HBF.SU11: Resolve the configured API endpoint for both single and multi-agent calls.
+        // Multi-agent models use the Responses API on the same configured host/base path.
+        const DEFAULT_CHAT_ENDPOINT = 'https://api.x.ai/v1/chat/completions';
+        function resolveLlmEndpoint(useResponsesAPI) {
+            const domEndpoint = document.getElementById('api-endpoint')?.value || '';
+            const configured = String(project.setup.apiEndpoint || domEndpoint || DEFAULT_CHAT_ENDPOINT).trim();
+            if (!useResponsesAPI) return configured;
+            if (/\/responses\/?$/.test(configured)) return configured;
+            if (/\/chat\/completions\/?$/.test(configured)) return configured.replace(/\/chat\/completions\/?$/, '/responses');
+            return configured.replace(/\/+$/, '') + '/responses';
         }
 
         // HBF.UNI1: Unified LLM API call function
@@ -1504,7 +1534,7 @@
                 { role: 'system', content: String(systemPrompt || '') },
                 { role: 'user', content: String(userContent || '') }
             ];
-            const modelName = project.setup.preferredModel || '';
+            const modelName = project.setup.preferredModel || DEFAULT_MODEL;
             const useResponsesAPI = typeof modelName === 'string' && modelName.includes('multi-agent');
             const payload = useResponsesAPI
                 ? {
@@ -1527,9 +1557,7 @@
             } catch (e) {
                 console.log('[DEBUG] LLM API payload: [unserializable]', payload);
             }
-            const endpoint = useResponsesAPI
-                ? 'https://api.x.ai/v1/responses'
-                : (project.setup.apiEndpoint || 'https://api.x.ai/v1/chat/completions');
+            const endpoint = resolveLlmEndpoint(useResponsesAPI);
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
@@ -1562,7 +1590,13 @@
                         .join('\n')
                         .trim();
                 }
-                finishReason = data.status || null;
+                // Map Responses API incomplete state to the Chat Completions 'length' signal (HBF.CHO9)
+                if (data.status === 'incomplete') {
+                    const reason = data?.incomplete_details?.reason;
+                    finishReason = (!reason || reason === 'max_output_tokens') ? 'length' : reason;
+                } else {
+                    finishReason = data.status || null;
+                }
             } else {
                 rawReply = data?.choices?.[0]?.message?.content || '';
                 finishReason = data?.choices?.[0]?.finish_reason || null;
