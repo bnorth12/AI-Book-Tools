@@ -61,6 +61,7 @@ const result = await page.evaluate(async () => {
 // ---- B5-0 nameEcho port: run the HTML's own _scoreNameEchoTell (in-page) ----
 const FIX = path.join(SCRIPT_DIR, 'fixtures');
 const neCases = {
+  theX3: 'The door opened onto the quay. The room beyond it was cold. The lamp above the desk flickered twice.',
   theFP: 'The door opened onto the quay. The room was cold. The lamp above it flickered twice. The rain kept falling on ceramic posts.',
   algorithm: 'Algorithm Two voted. Algorithm One demanded. Algorithm Three abstained.',
   truePositive: 'Kwan told Kwan that Kwan would not sign what Kwan had refused yesterday when Kwan arrived.'
@@ -80,6 +81,17 @@ for (const m of JSON.parse(fs.readFileSync(path.join(FIX, 'nw_slop', 'inject_spa
   parity['span+base ' + m.file] = base.replace(/\s+$/, '') + '\n\n' + span;
 }
 for (const f of fs.readdirSync(path.join(FIX, 'slop_corpus')).filter(f => f.endsWith('.txt'))) parity['slop_corpus ' + f] = fs.readFileSync(path.join(FIX, 'slop_corpus', f), 'utf8');
+// every file under scripts/fixtures (all 16): raw file text, plus each chapter of any JSON with a chapters[] array
+const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+const fixtureFiles = walk(FIX).map(f => path.relative(FIX, f).split(path.sep).join('/')).sort();
+for (const rel of fixtureFiles) {
+  const raw = fs.readFileSync(path.join(FIX, rel), 'utf8');
+  parity['file ' + rel] = raw;
+  if (rel.endsWith('.json')) {
+    const j = JSON.parse(raw.replace(/^\uFEFF/, ''));
+    if (j && Array.isArray(j.chapters)) j.chapters.forEach((t, i) => { parity['file ' + rel + ' Ch' + (i + 1)] = String(t || ''); });
+  }
+}
 const all = { ...Object.fromEntries(Object.entries(neCases).map(([k, v]) => ['case ' + k, v])), ...parity };
 const htmlNe = await page.evaluate(texts => {
   const o = {};
@@ -87,6 +99,7 @@ const htmlNe = await page.evaluate(texts => {
   return o;
 }, all);
 const neFails = [];
+if (htmlNe['case theX3'].score !== 0) neFails.push('theX3 (The x3 sentence-initial) must score 0: ' + JSON.stringify(htmlNe['case theX3']));
 if (htmlNe['case theFP'].score !== 0) neFails.push('theFP (The x4 sentence-initial) must score 0: ' + JSON.stringify(htmlNe['case theFP']));
 const algSnip = scoreNameEcho(neCases.algorithm);
 if (!(htmlNe['case algorithm'].score >= 55) || htmlNe['case algorithm'].score !== algSnip.score) neFails.push('Algorithm x3 must foul like snippet: ' + JSON.stringify({ html: htmlNe['case algorithm'], snippet: algSnip }));
@@ -96,12 +109,13 @@ for (const k of Object.keys(all)) {
   const sn = scoreNameEcho(all[k]);
   if (sn.score !== htmlNe[k].score || JSON.stringify(sn.hits) !== JSON.stringify(htmlNe[k].hits)) parityMismatch.push({ unit: k, html: htmlNe[k], snippet: sn });
 }
+if (fixtureFiles.length !== 16) neFails.push('expected 16 fixture files under scripts/fixtures, found ' + fixtureFiles.length);
 if (parityMismatch.length) neFails.push('HTML vs snippet nameEcho parity mismatch on ' + parityMismatch.length + ' unit(s)');
 const watch = ['A3R Ch5', 'B4 Ch4', 'B4 Ch5', 'span+base span_a3r_ch5_chapterecho.txt'];
 watch.forEach(u => { if (!htmlNe[u] || htmlNe[u].score >= 55) neFails.push(u + ' nameEcho must not false-fail in HTML: ' + JSON.stringify(htmlNe[u])); });
 result.nameEchoPort = {
   cases: Object.fromEntries(Object.keys(neCases).map(k => [k, htmlNe['case ' + k]])),
-  parity: { units: Object.keys(all).length, mismatches: parityMismatch },
+  parity: { units: Object.keys(all).length, fixtureFiles, mismatches: parityMismatch },
   fixtures: Object.fromEntries(watch.map(u => [u, htmlNe[u]])),
   fails: neFails
 };
