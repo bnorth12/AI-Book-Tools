@@ -336,12 +336,31 @@ Synced: 2026-04-19
 
 
 
+        // Default model (matches the selected option in Tab 1 and HBF's fallback, #118 39f7562).
+        const DEFAULT_MODEL = "grok-4.7";
+
+        // Never leave the model dropdown blank: if the saved ID is unknown/removed,
+        // warn and fall back to DEFAULT_MODEL. Returns the model ID actually selected.
+        function applyModelSelection(savedModel) {
+            const select = document.getElementById("model");
+            const wanted = typeof savedModel === "string" ? savedModel : "";
+            if (!select) return wanted || DEFAULT_MODEL;
+            const known = Array.from(select.options).some(o => o.value === wanted);
+            if (!known) {
+                if (wanted) console.warn(`[BookEditor] Saved model '${wanted}' is not available; falling back to ${DEFAULT_MODEL}.`);
+                select.value = DEFAULT_MODEL;
+                return DEFAULT_MODEL;
+            }
+            select.value = wanted;
+            return wanted;
+        }
+
         // Call the xAI Grok API with provided messages and handle response
         // Call the xAI Grok API with provided messages and handle response
 		async function callGrokAPI(messages, callback, nextTab, customMaxTokens) {
 		    console.log("Starting API call with messages:", messages.length);
 		    const apiKey = document.getElementById("apiKey").value;
-		    const model = document.getElementById("model").value;
+		    const model = document.getElementById("model").value || DEFAULT_MODEL;
             const useResponsesAPI = model.includes("multi-agent");
 		    const maxTokens = customMaxTokens || parseInt(document.getElementById("maxTokens").value);
 		    const currentTab = document.querySelector(".tab.active");
@@ -979,7 +998,7 @@ Synced: 2026-04-19
 		        function exportSession() {
 		            const sessionData = {
 		                apiKey: document.getElementById("apiKey")?.value || "",
-                        model: document.getElementById("model")?.value || "grok-4.7",
+                        model: document.getElementById("model")?.value || DEFAULT_MODEL,
                         maxTokens: parseInt(document.getElementById("maxTokens")?.value) || 6000,
 		                genre: document.getElementById("genre")?.value || "",
 		                bookText: document.getElementById("bookText")?.value || "",
@@ -1009,7 +1028,7 @@ Synced: 2026-04-19
 			reader.onload = function(e) {
 				const sessionData = JSON.parse(e.target.result);
 				document.getElementById("apiKey").value = sessionData.apiKey || "";
-                document.getElementById("model").value = sessionData.model || "grok-4.7";
+                sessionData.model = applyModelSelection(sessionData.model);
                 document.getElementById("maxTokens").value = sessionData.maxTokens || 6000;
 				document.getElementById("genre").value = sessionData.genre || "";
 				document.getElementById("bookText").value = sessionData.bookText || "";
