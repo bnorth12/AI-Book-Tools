@@ -182,6 +182,15 @@ result.updateChapterCalls = await page.evaluate(async prose => {
     r.textareaSync = document.getElementById('chapterGenContent1').value === 'SYNC-PROBE prose'
       && document.getElementById('chapterEditContent1').value === 'SYNC-PROBE prose'
       && document.getElementById('chapterContent1').value === outlineBefore;
+    // Reviewer minor 6: a growth-guard rollback must restore the prose textareas too, not only novelData
+    const gBase = Array(10).fill('A paragraph of ordinary prose that is long enough to count here.').join('\n\n');
+    novelData.chapters[0] = gBase + ' x'.repeat(4000);
+    syncChapterTextToDom(1, novelData.chapters[0]);
+    const gr = guardChapterReviseGrowth(1, gBase, novelData.chapters[0], { source: 'smoke-textarea' });
+    r.guardTextareas = gr.reverted === true && novelData.chapters[0] === gBase
+      && document.getElementById('chapterGenContent1').value === gBase
+      && document.getElementById('chapterEditContent1').value === gBase
+      && document.getElementById('chapterContent1').value === outlineBefore;
   } catch (e) {
     r.errors.push(String(e && e.message ? e.message : e));
   } finally {
@@ -208,6 +217,7 @@ result.updateChapterCalls = await page.evaluate(async prose => {
   if (u.needUnapplied !== 'residual-staged-notes') f.push('needsQualityMultiPass: unapplied notes must be residual, got ' + u.needUnapplied);
   if (u.needLegacy !== 'residual-staged-notes') f.push('needsQualityMultiPass: ctx without consumedStagedNotes must stay residual, got ' + u.needLegacy);
   if (!u.textareaSync) f.push('syncChapterTextToDom must write chapterGenContent1 + chapterEditContent1 and leave chapterContent1');
+  if (!u.guardTextareas) f.push('growth-guard rollback must restore chapterGenContent1 + chapterEditContent1 and leave chapterContent1');
   if (!u.restored) f.push('call-count smoke did not restore novelData / DOM / requestLog / callAI');
   u.fails = f;
 }
