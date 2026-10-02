@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "0.1",
+  "projectId": "demo-mixed-001",
+  "query": {
+    "goal": "Draft chapter 2 beat with Aria's voice; keep herbal safety note available for sidebar",
+    "filters": {
+      "genre": "literary-fantasy",
+      "chapter": 2,
+      "characterIds": [
+        "char-aria"
+      ],
+      "themes": [
+        "threshold",
+        "memory"
+      ],
+      "domain": "fiction",
+      "projectGoal": "Prove that memory can be bargained without erasing who bargains.",
+      "safetyTopics": [
+        "pregnancy"
+      ],
+      "taxonIds": [
+        "taxon-chamomile"
+      ],
+      "motif": [
+        "motif-river-glass"
+      ],
+      "preparation": [
+        "prep-tea"
+      ]
+    }
+  },
+  "excerpts": [
+    {
+      "refId": "char-aria",
+      "entityType": "Character",
+      "text": "Aria speaks in short clauses; avoids the phrase 'destined for greatness'; baseline: wary hope.",
+      "score": 0.92,
+      "citations": [
+        "ref-voice-note"
+      ]
+    },
+    {
+      "refId": "beat-threshold",
+      "entityType": "PlotBeat",
+      "text": "Threshold crossing: Aria chooses the unfinished bridge; stakes = losing the only map home. Chapter facet: 2.",
+      "score": 0.88,
+      "citations": []
+    },
+    {
+      "refId": "motif-river-glass",
+      "entityType": "Motif",
+      "text": "River-glass imagery: reflected sky, broken light, silence under the surface. Chapters: [2].",
+      "score": 0.81,
+      "citations": []
+    },
+    {
+      "refId": "style-01",
+      "entityType": "StyleExemplar",
+      "text": "She counted the planks by sound, not sight\u2014each hollow note a step she could still unsay.",
+      "score": 0.79,
+      "citations": [
+        "ref-style-source"
+      ]
+    },
+    {
+      "refId": "ref-voice-note",
+      "entityType": "ReferenceDoc",
+      "text": "Author note: Aria never monologues longer than four sentences in early chapters.",
+      "score": 0.68,
+      "citations": []
+    },
+    {
+      "refId": "taxon-chamomile",
+      "entityType": "Taxon",
+      "text": "Matricaria chamomilla \u2014 German chamomile; commonNames: chamomile, wild chamomile.",
+      "score": 0.55,
+      "citations": [
+        "ref-safety-preg"
+      ]
+    },
+    {
+      "refId": "prep-tea",
+      "entityType": "Preparation",
+      "text": "Infusion: dried flower heads; 1 tsp per cup; steep 5\u201310 minutes.",
+      "score": 0.52,
+      "citations": []
+    },
+    {
+      "refId": "contra-preg",
+      "entityType": "Contraindication",
+      "text": "Severity moderate for pregnancy in high doses; evidenceRefs include safety citation.",
+      "score": 0.6,
+      "citations": [
+        "ref-safety-preg"
+      ]
+    },
+    {
+      "refId": "safety-pregnancy",
+      "entityType": "SafetyTopic",
+      "text": "Pregnancy interactions \u2014 prefer documented ReferenceDoc over model recall.",
+      "score": 0.65,
+      "citations": [
+        "ref-safety-preg"
+      ]
+    },
+    {
+      "refId": "ref-safety-preg",
+      "entityType": "ReferenceDoc",
+      "text": "Safety excerpt: consult qualified practitioner; avoid therapeutic doses in pregnancy without guidance.",
+      "score": 0.66,
+      "citations": []
+    }
+  ],
+  "graphPath": [
+    "char-aria",
+    "beat-threshold",
+    "motif-river-glass",
+    "style-01",
+    "ref-voice-note",
+    "taxon-chamomile",
+    "prep-tea",
+    "safety-pregnancy",
+    "ref-safety-preg"
+  ],
+  "expandOrNarrow": "hold",
+  "tokenBudgetHint": 1800,
+  "kbEnabled": true,
+  "_meta": {
+    "estimatedTokens": 217,
+    "source": "novelData-local",
+    "kbEnabled": true
+  }
+}

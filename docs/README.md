@@ -26,3 +26,12 @@ This directory contains process, planning, architecture, and release documentati
 - `architecture/ui-unification/UI_UNIFICATION_MIGRATION_NOTES.md`
 - `architecture/ui-unification/UI_UNIFICATION_VISUAL_CONSISTENCY_CHECKLIST.md`
 - `architecture/ui-unification/UI_UNIFICATION_RELEASE_EVIDENCE_BUNDLE.md`
+
+## Architecture — RAG / layered memory (2026-09-27)
+
+- [RAG Phase 0](architecture/rag/README.md) — contracts + EvidencePack
+- [Story framing](architecture/story-framing/README.md) — world/character/arcs + conflict/tension methods
+- [NovelWriter workflow ↔ RAG](architecture/novelwriter-workflow-rag/README.md) — prompt audit + hooks
+- [book-schema 1.1](architecture/book-schema-1.1/README.md) — paste-bridge + packing policy
+- [RAG implementation TODO](roadmap/RAG_IMPLEMENTATION_TODO.md)
+
