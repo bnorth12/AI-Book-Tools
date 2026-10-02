@@ -172,11 +172,14 @@
                                 <div>
                                     <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">Model</label>
                                     <select id="preferred-model" class="w-full bg-black/40 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-6 py-4 text-lg">
-                                        <option value="grok-4.20-0309-reasoning" selected>grok-4.20-0309-reasoning (Recommended)</option>
-                                        <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
-                                        <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
-                                        <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
-                                        <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
+                                        <option value="grok-4.7" selected>grok-4.7 (Recommended)</option>
+                        <option value="grok-4.6">grok-4.6</option>
+                        <option value="grok-4.5">grok-4.5</option>
+                        <option value="grok-4.3">grok-4.3</option>
+                        <option value="grok-4.20-0309-reasoning">grok-4.20-0309-reasoning</option>
+                        <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
+                        <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
+                        <option value="grok-build-0.1">grok-build-0.1</option>
                                     </select>
                                 </div>
                                 <div>
@@ -686,13 +689,14 @@
             };
         }
 
+        const DEFAULT_MODEL = 'grok-4.7';
         let project = {
             meta: { version: "1.0.0", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
             setup: {
                 apiKey: "",
                 collectionIds: ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"],
                 webSearchEnabled: true,
-                preferredModel: "grok-4.20-0309-reasoning"
+                preferredModel: "grok-4.7"
             },
             prompts: {
                 bookGoalsAgent: `You are the Book Goals Agent – expert herbal book architect focused on helping the user define clear, practical, trustworthy book goals.\n\nWhen responding, always return ONLY the following fields in strict JSON format:\n{\n  \"mainGoal\": \"...\",\n  \"contentTypes\": \"...\",\n  \"tone\": \"...\",\n  \"audience\": \"...\",\n  \"length\": \"...\"\n}\nIf you cannot determine a value, leave it blank. Do not include any explanation or extra text.`,
@@ -933,7 +937,16 @@
             if (api) api.value = project.setup.apiKey || '';
             if (collections) collections.value = (project.setup.collectionIds || []).join(', ');
             if (webToggle) webToggle.checked = !!project.setup.webSearchEnabled;
-            if (model) model.value = project.setup.preferredModel || 'grok-4.20-0309-reasoning';
+            if (model) {
+                // Never leave the dropdown blank: fall back to the default when the saved ID is unknown/removed.
+                const savedModel = project.setup.preferredModel || '';
+                const known = Array.from(model.options).some(o => o.value === savedModel);
+                if (!known) {
+                    if (savedModel) console.warn(`[HBF] Saved model '${savedModel}' is not available; falling back to ${DEFAULT_MODEL}.`);
+                    project.setup.preferredModel = DEFAULT_MODEL;
+                }
+                model.value = project.setup.preferredModel;
+            }
             if (version) version.textContent = `v${project.meta.version || '0.12.0'}`;
             if (lastEdited && project.meta.lastEdited) {
                 lastEdited.textContent = new Date(project.meta.lastEdited).toLocaleString();
@@ -965,6 +978,11 @@
 
             document.getElementById('web-search-toggle')?.addEventListener('change', e => {
                 project.setup.webSearchEnabled = e.target.checked;
+                saveProject();
+            });
+
+            document.getElementById('api-endpoint')?.addEventListener('change', e => {
+                project.setup.apiEndpoint = e.target.value;
                 saveProject();
             });
 
@@ -1431,14 +1449,29 @@
 
         // HBF.CHO9: Detect truncated LLM outline response via finish_reason.
         // Returns true if the response appears cut off.
+        // Truncation signals: Chat Completions finish_reason 'length' (or 'max_tokens');
+        // Responses API status 'incomplete' / incomplete_details.reason 'max_output_tokens'.
+        const TRUNCATION_REASONS = ['length', 'max_tokens', 'incomplete', 'max_output_tokens'];
         function isOutlineTruncated(finishReason, outlineText) {
-            if (finishReason === 'length') return true;
+            if (typeof finishReason === 'string' && TRUNCATION_REASONS.includes(finishReason.toLowerCase())) return true;
             // Structural completeness check: must have at least one chapter heading
             if (typeof outlineText === 'string' && outlineText.trim()) {
                 const hasChapter = /###?\s*Chapter\s+\d+/i.test(outlineText);
                 if (!hasChapter) return true;
             }
             return false;
+        }
+
+        // HBF.SU4/HBF.SU11: Resolve the configured API endpoint for both single and multi-agent calls.
+        // Multi-agent models use the Responses API on the same configured host/base path.
+        const DEFAULT_CHAT_ENDPOINT = 'https://api.x.ai/v1/chat/completions';
+        function resolveLlmEndpoint(useResponsesAPI) {
+            const domEndpoint = document.getElementById('api-endpoint')?.value || '';
+            const configured = String(project.setup.apiEndpoint || domEndpoint || DEFAULT_CHAT_ENDPOINT).trim();
+            if (!useResponsesAPI) return configured;
+            if (/\/responses\/?$/.test(configured)) return configured;
+            if (/\/chat\/completions\/?$/.test(configured)) return configured.replace(/\/chat\/completions\/?$/, '/responses');
+            return configured.replace(/\/+$/, '') + '/responses';
         }
 
         // HBF.UNI1: Unified LLM API call function
@@ -1501,12 +1534,21 @@
                 { role: 'system', content: String(systemPrompt || '') },
                 { role: 'user', content: String(userContent || '') }
             ];
-            const payload = {
-                model: project.setup.preferredModel,
-                messages,
-                temperature,
-                max_tokens
-            };
+            const modelName = project.setup.preferredModel || DEFAULT_MODEL;
+            const useResponsesAPI = typeof modelName === 'string' && modelName.includes('multi-agent');
+            const payload = useResponsesAPI
+                ? {
+                    model: modelName,
+                    input: messages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
+                    temperature,
+                    max_output_tokens: max_tokens
+                }
+                : {
+                    model: modelName,
+                    messages,
+                    temperature,
+                    max_tokens
+                };
             // REMOVE tools for all Outline Q&A chat requests (context: 'specificQA')
             // Do not add tools to the payload for outline chat
             // Debug: log payload for troubleshooting 422 errors
@@ -1515,7 +1557,7 @@
             } catch (e) {
                 console.log('[DEBUG] LLM API payload: [unserializable]', payload);
             }
-            const endpoint = project.setup.apiEndpoint || 'https://api.x.ai/v1/chat/completions';
+            const endpoint = resolveLlmEndpoint(useResponsesAPI);
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
@@ -1535,8 +1577,30 @@
                 throw new Error(httpMessages[response.status] || `HTTP ${response.status}`);
             }
             const data = await response.json();
-            const rawReply = data?.choices?.[0]?.message?.content || '';
-            const finishReason = data?.choices?.[0]?.finish_reason || null;
+            let rawReply = '';
+            let finishReason = null;
+            if (useResponsesAPI) {
+                if (typeof data.output_text === 'string' && data.output_text.length > 0) {
+                    rawReply = data.output_text;
+                } else if (Array.isArray(data.output)) {
+                    rawReply = data.output
+                        .flatMap(item => Array.isArray(item.content) ? item.content : [])
+                        .filter(part => part.type === 'output_text' && typeof part.text === 'string')
+                        .map(part => part.text)
+                        .join('\n')
+                        .trim();
+                }
+                // Map Responses API incomplete state to the Chat Completions 'length' signal (HBF.CHO9)
+                if (data.status === 'incomplete') {
+                    const reason = data?.incomplete_details?.reason;
+                    finishReason = (!reason || reason === 'max_output_tokens') ? 'length' : reason;
+                } else {
+                    finishReason = data.status || null;
+                }
+            } else {
+                rawReply = data?.choices?.[0]?.message?.content || '';
+                finishReason = data?.choices?.[0]?.finish_reason || null;
+            }
             let parsed = rawReply;
             if (typeof parseResponse === 'function') {
                 try { parsed = parseResponse(rawReply); } catch (e) { parsed = rawReply; }

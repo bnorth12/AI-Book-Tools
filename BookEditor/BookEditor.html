@@ -147,11 +147,14 @@ Synced: 2026-04-19
         <input type="text" id="apiKey" placeholder="Enter your xAI API key">
         <label for="model">LLM Model:</label>
         <select id="model">
-            <option value="grok-4.20-0309-reasoning" selected>grok-4.20-0309-reasoning (Recommended)</option>
-            <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
-            <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
-            <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
-            <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
+            <option value="grok-4.7" selected>grok-4.7 (Recommended)</option>
+                        <option value="grok-4.6">grok-4.6</option>
+                        <option value="grok-4.5">grok-4.5</option>
+                        <option value="grok-4.3">grok-4.3</option>
+                        <option value="grok-4.20-0309-reasoning">grok-4.20-0309-reasoning</option>
+                        <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
+                        <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
+                        <option value="grok-build-0.1">grok-build-0.1</option>
         </select>
         <label for="maxTokens">Max Tokens per Operation:</label>
         <input type="number" id="maxTokens" min="500" value="6000">
@@ -976,7 +979,7 @@ Synced: 2026-04-19
 		        function exportSession() {
 		            const sessionData = {
 		                apiKey: document.getElementById("apiKey")?.value || "",
-                        model: document.getElementById("model")?.value || "grok-4.20-0309-reasoning",
+                        model: document.getElementById("model")?.value || "grok-4.7",
                         maxTokens: parseInt(document.getElementById("maxTokens")?.value) || 6000,
 		                genre: document.getElementById("genre")?.value || "",
 		                bookText: document.getElementById("bookText")?.value || "",
@@ -1006,7 +1009,7 @@ Synced: 2026-04-19
 			reader.onload = function(e) {
 				const sessionData = JSON.parse(e.target.result);
 				document.getElementById("apiKey").value = sessionData.apiKey || "";
-                document.getElementById("model").value = sessionData.model || "grok-4.20-0309-reasoning";
+                document.getElementById("model").value = sessionData.model || "grok-4.7";
                 document.getElementById("maxTokens").value = sessionData.maxTokens || 6000;
 				document.getElementById("genre").value = sessionData.genre || "";
 				document.getElementById("bookText").value = sessionData.bookText || "";
