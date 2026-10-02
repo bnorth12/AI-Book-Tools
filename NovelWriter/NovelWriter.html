@@ -2759,7 +2759,7 @@ Synced: 2026-04-19
 			const el = document.getElementById('c3SmokeResult') || document.getElementById('c1SmokeResult');
 			const log = [];
 			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
-			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastQualityJudgeAlign","boundedReviseLog"], []);
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastJudgeGateAlignment","judgeGateAlignments","chapterImprovementLog","bookText","editedChapters","subplots","boundedReviseLog"], []);
 			try {
 				const slop = "In todays world, it is important to note that a vibrant tapestry of innovation will delve deeper into the complexities. Moreover, furthermore, a testament to progress stands as a beacon of seamless robust leverage.";
 				const fail = runQualityGate(slop, { label: 'c3-smoke-slop' });
@@ -3304,9 +3304,12 @@ Synced: 2026-04-19
 
 
 
+		/** Mirror chapter prose into the generated + edit prose textareas (chapterContentN is the Tab 4 outline/arc box). */
 		function syncChapterTextToDom(chapterNum, text) {
-			const el = document.getElementById('chapterContent' + chapterNum) || document.getElementById('chapterEditContent' + chapterNum);
-			if (el) el.value = text;
+			['chapterGenContent', 'chapterEditContent'].forEach(function (id) {
+				const el = document.getElementById(id + chapterNum);
+				if (el) el.value = text;
+			});
 		}
 
 		/** BOUNDED_REVISE: reject runaway growth / lost paragraph structure; restore prior text. */
@@ -3724,7 +3727,7 @@ Synced: 2026-04-19
 			const el = document.getElementById('qe123SmokeResult') || document.getElementById('c3SmokeResult') || document.getElementById('c1SmokeResult');
 			const log = [];
 			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
-			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastQualityJudgeAlign","boundedReviseLog"], ["chapterEditImprovement1","chapterEditContent1"]);
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastJudgeGateAlignment","judgeGateAlignments","chapterImprovementLog","bookText","editedChapters","subplots","boundedReviseLog"], ["chapterEditImprovement1","chapterEditContent1"]);
 			try {
 				ensureChapterImprovementsArray();
 				const n = novelData.numChapters || 2;
@@ -3790,7 +3793,7 @@ Synced: 2026-04-19
 			const el = document.getElementById('qe4SmokeResult') || document.getElementById('qe123SmokeResult') || document.getElementById('c3SmokeResult');
 			const log = [];
 			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
-			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastQualityJudgeAlign","boundedReviseLog"], []);
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastJudgeGateAlignment","judgeGateAlignments","chapterImprovementLog","bookText","editedChapters","subplots","boundedReviseLog"], []);
 			try {
 				if (NW_QUALITY_ROLES.failClosedDriver !== 'heuristics') throw new Error('driver must be heuristics');
 				if (NW_QUALITY_ROLES.advisory !== 'llmJudge') throw new Error('advisory must be llmJudge');
@@ -3822,7 +3825,7 @@ Synced: 2026-04-19
 			const el = document.getElementById('qe5SmokeResult') || document.getElementById('qe4SmokeResult') || document.getElementById('qe123SmokeResult');
 			const log = [];
 			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
-			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastQualityJudgeAlign","boundedReviseLog"], []);
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastJudgeGateAlignment","judgeGateAlignments","chapterImprovementLog","bookText","editedChapters","subplots","boundedReviseLog"], []);
 			try {
 				if (!NW_QUALITY_REVISE || NW_QUALITY_REVISE.maxAutoPasses !== 2) throw new Error('maxAutoPasses must be 2');
 				if (NW_QUALITY_ROLES.reviseOnJudgeAdvisory !== false) throw new Error('reviseOnJudgeAdvisory must stay false');
@@ -3879,7 +3882,7 @@ Synced: 2026-04-19
 			const el = document.getElementById('qe6SmokeResult') || document.getElementById('qe5SmokeResult');
 			const log = [];
 			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
-			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastQualityJudgeAlign","boundedReviseLog"], []);
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastJudgeGateAlignment","judgeGateAlignments","chapterImprovementLog","bookText","editedChapters","subplots","boundedReviseLog"], []);
 			try {
 				if (!NW_QUALITY_GATE || NW_QUALITY_GATE.minConsistency == null) throw new Error('minConsistency missing');
 				if (NW_QUALITY_GATE.minFlow == null || NW_QUALITY_GATE.minPacing == null) throw new Error('flow/pacing thresholds missing');

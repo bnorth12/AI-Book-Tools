@@ -33,18 +33,18 @@ const result = await page.evaluate(async () => {
   novelData.continuityFindings = ['user finding'];
   novelData.continuityTracker = { chapters: [{ chapter: 1, continuityRisks: ['user risk'] }], characterArcProgress: [], storyArcProgress: {} };
   if (typeof updateChapterSubpages === 'function') updateChapterSubpages();
-  const snap = () => JSON.stringify({
-    chapters: novelData.chapters, chapterImprovements: novelData.chapterImprovements, characters: novelData.characters,
-    continuityFindings: novelData.continuityFindings, continuityTracker: novelData.continuityTracker,
-    qualitySamples: novelData.qualitySamples, qualityMultiPassLog: novelData.qualityMultiPassLog,
-    lastQualityGate: novelData.lastQualityGate
-  });
+  // Full novelData snapshot (Copilot r4170466061): every top-level key must survive the smokes unchanged.
+  const snapObj = () => Object.fromEntries(Object.keys(novelData).sort().map(k => [k, JSON.stringify(novelData[k])]));
+  const snap = () => JSON.stringify(snapObj());
   const before = snap();
+  const beforeObj = snapObj();
   const out = {};
   for (const fn of ['runC3Smoke', 'runQe123Smoke', 'runQe4Smoke', 'runQe5Smoke', 'runQe6Smoke']) {
     try { out[fn] = await window[fn](); } catch (e) { out[fn] = 'THREW ' + (e && e.message ? e.message : e); }
   }
   const after = snap();
+  const afterObj = snapObj();
+  const changedKeys = [...new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)])].filter(k => beforeObj[k] !== afterObj[k]);
   const helpers = ['scoreProseQuality', 'runQualityGate', 'scoreSlopTells', 'buildAntiSlopReviseBrief', 'needsQualityMultiPass',
     'runTargetedQualityPass', 'reviseChapterForQuality', 'guardChapterReviseGrowth', 'applyE2eSlopInject', 'ensureQualityAfterGenerate',
     'applyBookCritiqueItem', 'applyTopBookCritiques', 'applyStagedChapterImprovements'].filter(n => typeof window[n] !== 'function' && typeof eval(n) !== 'function');
@@ -55,7 +55,7 @@ const result = await page.evaluate(async () => {
   novelData.chapters[0] = base + ' x'.repeat(4000);
   const g = guardChapterReviseGrowth(1, base, novelData.chapters[0], { source: 'smoke' });
   const reverted = g.reverted === true && novelData.chapters[0] === base;
-  return { out, unchanged: before === after, missingHelpers: helpers, nameEchoFoul: !tell.tells.nameEcho.ok, tells: Object.keys(tell.tells), guardReverted: reverted };
+  return { out, unchanged: before === after, changedKeys, missingHelpers: helpers, nameEchoFoul: !tell.tells.nameEcho.ok, tells: Object.keys(tell.tells), guardReverted: reverted };
 });
 
 // ---- B5-0 nameEcho port: run the HTML's own _scoreNameEchoTell (in-page) ----
@@ -109,7 +109,7 @@ await browser.close();
 
 const fails = [];
 for (const [k, v] of Object.entries(result.out)) if (v !== true) fails.push(k + ' -> ' + v);
-if (!result.unchanged) fails.push('smokes mutated novelData (state not restored)');
+if (!result.unchanged) fails.push('smokes mutated novelData (state not restored): ' + result.changedKeys.join(','));
 if (result.missingHelpers.length) fails.push('missing helpers: ' + result.missingHelpers.join(','));
 if (!result.nameEchoFoul) fails.push('nameEcho narration should foul');
 if (result.tells.length !== 7) fails.push('expected 7 tells, got ' + result.tells.join(','));
