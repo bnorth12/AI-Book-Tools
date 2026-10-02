@@ -1,0 +1,10 @@
+=== nameEcho (Algorithm) ===
+The Conduit Consensus Triad had three algorithms; tonight two were already voting to patch the drift, the third to let it run.
+
+Algorithm Two declared the drift a feature, not a bug.
+
+Algorithm One demanded an immediate patch.
+
+Algorithm Three abstained, its silence louder than any vote.
+
+=== chapterEcho vs Ch4 ===

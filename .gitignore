@@ -39,3 +39,6 @@ secrets/*
 !secrets/*.example
 !secrets/README.md
 .local/
+
+# Local smoke / E2E output (NovelWriter dev scripts)
+out/

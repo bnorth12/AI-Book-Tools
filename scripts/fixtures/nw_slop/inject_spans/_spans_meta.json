@@ -1,0 +1,44 @@
+[
+  {
+    "file": "span_b3r_ch2_overexplain.txt",
+    "tell": "overExplain",
+    "annex": "B3R",
+    "ch": 2,
+    "note": "d27 j=1.00"
+  },
+  {
+    "file": "span_b3r_ch4_chapterecho.txt",
+    "tell": "chapterEcho",
+    "annex": "B3R",
+    "ch": 4,
+    "note": "6 echoed sents"
+  },
+  {
+    "file": "span_b3_ch5_nameecho_chapterecho.txt",
+    "tell": "nameEcho+chapterEcho",
+    "annex": "B3",
+    "ch": 5,
+    "note": "Algorithmx3 + Ch4 replay"
+  },
+  {
+    "file": "span_a3_ch2_overexplain_d39.txt",
+    "tell": "overExplain",
+    "annex": "A3",
+    "ch": 2,
+    "note": "GAP at tip9201514 (±32 miss); d39/d41"
+  },
+  {
+    "file": "span_a3_ch1_overexplain.txt",
+    "tell": "overExplain",
+    "annex": "A3",
+    "ch": 1,
+    "note": "d25 j=1.00"
+  },
+  {
+    "file": "span_a3r_ch5_chapterecho.txt",
+    "tell": "chapterEcho",
+    "annex": "A3R",
+    "ch": 5,
+    "note": "0 echoed"
+  }
+]
