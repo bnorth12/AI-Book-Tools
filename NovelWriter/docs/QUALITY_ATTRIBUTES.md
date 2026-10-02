@@ -1,6 +1,6 @@
 # NovelWriter quality attributes (QE6)
 
-Status: **implemented 2026-09-27** on `feat/nw-token-packing`.
+Status: **implemented 2026-09-27** in `NovelWriter/NovelWriter.html`.
 
 ## Fail-closed vs advisory
 

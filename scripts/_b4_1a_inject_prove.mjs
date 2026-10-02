@@ -1,4 +1,4 @@
-﻿/**
+/**
  * B4-1A lean foul-inject prove-out (minimal LLM burn).
  * Loads B3R annex into live NovelWriter, arms NW inject span, runs ensureQualityAfterGenerate
  * on target chapter so detect→anti-slop nest is exercised without full Tab1–5 regen.

@@ -1,6 +1,6 @@
 # NovelWriter — Judge ↔ Gate alignment (QE4)
 
-**Status:** implemented 2026-09-27 on `feat/nw-token-packing`
+**Status:** implemented 2026-09-27 in `NovelWriter/NovelWriter.html`
 
 ## Decision
 

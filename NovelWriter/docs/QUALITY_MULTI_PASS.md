@@ -1,6 +1,6 @@
 # NovelWriter — Multi-pass quality editing (QE5)
 
-**Status:** implemented 2026-09-27 on `feat/nw-token-packing`
+**Status:** implemented 2026-09-27 in `NovelWriter/NovelWriter.html`
 
 ## What it does
 
