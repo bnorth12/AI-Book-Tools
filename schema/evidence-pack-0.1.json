@@ -80,6 +80,20 @@
             "projectGoal": {
               "type": "string",
               "description": "Tagged query facet (not a graph node); project/outline intent text or id"
+            },
+            "motif": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Recurring images/symbols bound to chapter obligations (NovelWriter)"
+            },
+            "preparation": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Herbal preparation entity filter (HerbalBookForge)"
             }
           }
         }
@@ -114,6 +128,27 @@
     "kbEnabled": {
       "type": "boolean",
       "description": "Optional echo of toggle; orthogonal to provider"
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Optional pack-build metadata (non-normative for retrieval; additive in 0.1)",
+      "additionalProperties": false,
+      "properties": {
+        "estimatedTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "chapterBlueprints-local",
+            "novelData-local"
+          ]
+        },
+        "kbEnabled": {
+          "type": "boolean"
+        }
+      }
     }
   },
   "definitions": {

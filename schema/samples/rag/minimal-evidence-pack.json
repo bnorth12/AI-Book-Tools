@@ -20,6 +20,12 @@
       ],
       "taxonIds": [
         "taxon-chamomile"
+      ],
+      "motif": [
+        "motif-river-glass"
+      ],
+      "preparation": [
+        "prep-tea"
       ]
     }
   },
@@ -118,5 +124,10 @@
   ],
   "expandOrNarrow": "hold",
   "tokenBudgetHint": 1800,
-  "kbEnabled": true
+  "kbEnabled": true,
+  "_meta": {
+    "estimatedTokens": 217,
+    "source": "novelData-local",
+    "kbEnabled": true
+  }
 }
