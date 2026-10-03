@@ -792,18 +792,21 @@ Synced: 2026-04-19
 				if (!calls.length) {
 					body.innerHTML = '<tr><td colspan="6" style="padding:6px;color:#777;">(no calls yet)</td></tr>';
 				} else {
-					body.innerHTML = calls.map((c, i) => {
+					body.textContent = '';
+					calls.forEach((c, i) => {
 						const pc = computeTokenCost(c.prompt_tokens, c.completion_tokens, c.cached_tokens || 0);
-						const op = (c.operationName || 'AI Operation').replace(/</g, '&lt;');
-						return '<tr>' +
-							'<td style="padding:4px;border-bottom:1px solid #eee;">' + (i + 1) + '</td>' +
-							'<td style="padding:4px;border-bottom:1px solid #eee;">' + op + '</td>' +
-							'<td style="padding:4px;border-bottom:1px solid #eee;text-align:right;">' + (c.prompt_tokens || 0) + '</td>' +
-							'<td style="padding:4px;border-bottom:1px solid #eee;text-align:right;">' + (c.completion_tokens || 0) + '</td>' +
-							'<td style="padding:4px;border-bottom:1px solid #eee;text-align:right;">' + (c.total_tokens || 0) + '</td>' +
-							'<td style="padding:4px;border-bottom:1px solid #eee;text-align:right;">' + formatUsd(pc.total_cost_usd) + '</td>' +
-							'</tr>';
-					}).join('');
+						const tr = document.createElement('tr');
+						const cells = [String(i + 1), String(c.operationName || 'AI Operation'), String(Number(c.prompt_tokens) || 0), String(Number(c.completion_tokens) || 0), String(Number(c.total_tokens) || 0), formatUsd(pc.total_cost_usd)];
+						cells.forEach((v, k) => {
+							const td = document.createElement('td');
+							td.style.padding = '4px';
+							td.style.borderBottom = '1px solid #eee';
+							if (k >= 2) td.style.textAlign = 'right';
+							td.textContent = v;
+							tr.appendChild(td);
+						});
+						body.appendChild(tr);
+					});
 				}
 			}
 			// Keep Tab9 Cost in sync with book ledger estimate
