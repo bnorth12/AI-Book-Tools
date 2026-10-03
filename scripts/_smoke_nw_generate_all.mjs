@@ -28,6 +28,17 @@
  *       reason; Part 1 parse failure on ch3 stops at 3 (reason parse, no retry) and Resume regenerates ch3 (same for a
  *       Part 2 parse stop on ch2); coverage resume needs a second click; coverage stop with regenerate on restores the old
  *       text and keeps batchRun.rejectedDraft {chapter,text,detail} in the session export but never in a checkpoint
+ *   M1  must-fix 1: callAI's real malformed-JSON shape ({chapter, _jsonParseError} + valid HTTP envelope in returnedInfo)
+ *       on Part 1 (ch3) and Part 2 (ch2): reason parse, no retry, Part 1 never continues to Part 2, nothing completed
+ *   M2  must-fix 2: HTTP 400 / 401 / 403 / "API Key is missing" -> reason provider, 0 retries, no usageEstimated entry;
+ *       401/403/missing key status says "Check your API key in Setup", 400 shows the provider message truncated (~160)
+ *   M3  must-fix 3: (in G4) cap reached after ch2 -> Resume with the cap unchanged: 0 provider calls, status exactly
+ *       "Token cap reached (4000/3000). Raise the cap to continue."; raising the cap resumes
+ *   M4  must-fix 4: user cap 50000 survives reload + restore + Resume; an imported session's batchRun.cap is kept on Resume
+ *   M5  must-fix 5: numChapters + Tab 7 Apply + Tab 8 Integrate disabled mid-run, direct handler calls refused, batch-owned
+ *       qualityRevise updateChapter still works; activeAICallCount > 0 refuses start and resume with 0 calls, no dialog
+ *   M6  must-fix 6: slow final checkpoint: running stays true, controls locked, second start/resume refused, then released
+ *   M7  must-fix 7: all chapters complete, final checkpoint throws QuotaExceededError: result/status/export say checkpoint
  *   X1  CodeQL DOM-as-HTML: a session whose character name/backstory/arc and subplot are `<img src=x onerror=...>` (plus
  *       attribute/textarea break-out variants) is imported through the real #importFile input and restored through the
  *       IndexedDB "Restore interrupted batch run" path: window.__xss stays undefined, no <img> lands in the Tab 2 lists,
@@ -100,7 +111,23 @@ async function installHarness(page) {
       window[k] = function (m) { h.dialogs.push(k + ': ' + String(m).slice(0, 200)); return k === 'confirm' ? true : (k === 'prompt' ? null : undefined); };
     });
     HTMLAnchorElement.prototype.click = function () { if (this.download) h.downloads.push(this.download); };
-    window.ensureQualityAfterGenerate = async function (n) { if (h.cfg.qualityThrow === n) throw new Error('smoke quality judge unavailable ch' + n); };
+    window.ensureQualityAfterGenerate = async function (n) {
+      if (h.cfg.qualityThrow === n) throw new Error('smoke quality judge unavailable ch' + n);
+      if (h.cfg.reviseAt === n) {
+        // batch-owned quality revise: the real updateChapter with operationTag qualityRevise must still run in a batch
+        novelData.chapterImprovements[n - 1] = 'smoke revise brief: tighten the relay scene';
+        const imp = document.getElementById('chapterEditImprovement' + n); if (imp) imp.value = novelData.chapterImprovements[n - 1];
+        try { await updateChapter(n, { requireImprovements: true, operationTag: 'qualityRevise' }); h.revise = 'ok:' + String(novelData.chapters[n - 1]).slice(0, 20); } catch (e) { h.revise = 'threw:' + String(e.message || e); }
+        try { await updateChapter(n, { requireImprovements: true, operationTag: 'applyCritique' }); h.reviseManual = 'ran'; } catch (e) { h.reviseManual = 'threw:' + String(e.message || e); }
+      }
+    };
+    const realIdbPut = window.nwBatchIdbPut;
+    window.nwBatchIdbPut = function (rec, key) {
+      if (h.cfg.slowFinal && rec && rec.active === false && rec.batchRun && rec.batchRun.reason) {
+        return new Promise((resolve, reject) => { h.releaseFinal = () => realIdbPut(rec, key).then(resolve, reject); h.finalPending = true; });
+      }
+      return realIdbPut(rec, key);
+    };
     window.scoreObligationCoverage = function (text, n) {
       const bad = h.cfg.coverageFail === n;
       return { covered: bad ? 0 : 6, total: 6, ratio: bad ? 0 : 1, words: 120, passed: !bad, failures: bad ? ['smoke: obligations not dramatized'] : [], misses: bad ? ['smoke-obligation'] : [] };
@@ -127,6 +154,15 @@ async function installHarness(page) {
       if (cfg.blankBeatAt === key) novelData.chapterBlueprints[cfg.blankBeatTarget - 1].dialogueTurn = '';
       if (cfg.hangAt === key) { h.hanging = true; return new Promise(() => {}); }
       if (part === 1 && cfg.failProvider && attempt <= (cfg.failProvider[ch] || 0)) throw new Error('HTTP error! Status: 503, Text: smoke upstream unavailable');
+      if (cfg.throwAt && cfg.throwAt.key === key) throw new Error(cfg.throwAt.msg);
+      if (cfg.jsonErrAt === key) {
+        // real gateway shape: usage recorded from the HTTP body, returnedInfo = the valid HTTP envelope, content unparseable
+        const u = { prompt_tokens: 600, completion_tokens: 400, total_tokens: 1000 };
+        recordBookTokenUsage(Object.assign({ operationName: 'generateChapter', originTab: 'tab5', model: 'smoke-stub' }, u));
+        const content = '{"chapter": "Chapter ' + ch + ' truncated mid-str';
+        requestLog.returnedInfo = JSON.stringify({ id: 'smoke', choices: [{ message: { role: 'assistant', content } }], usage: u });
+        return { chapter: content, _jsonParseError: 'SyntaxError: Unterminated string in JSON at position 33' };
+      }
       if (cfg.parseFail === key) { requestLog.returnedInfo = 'smoke: truncated provider body {'; return { chapter: 'garbled' }; }
       const per = cfg.usagePerCall || 1000;
       const usage = cfg.noUsage ? null : { prompt_tokens: Math.round(per * 0.6), completion_tokens: per - Math.round(per * 0.6), total_tokens: per };
@@ -308,6 +344,11 @@ const batchDialogTotals = [];
   check('G4', 'cap 3000 < 2 chapters of usage (4000): stops after ch2 (the chapter that crossed it), reason budget', s.br.reason === 'budget' && s.br.stoppedAt === 2 && s.br.cap === 3000 && s.br.tokensUsed === 4000, JSON.stringify(s.br));
   check('G4', 'ch2 text saved and completed; ch3 never attempted', eq(s.br.completed, [1, 2]) && s.chapters[1].startsWith('Chapter 2') && callsFor(s, 3) === 0, JSON.stringify(s.calls));
   check('G4', 'status names budget and real usage; Resume enabled', /Stopped at ch2 \(budget\): real usage 4000 tokens reached the cap 3000/.test(s.status) && !s.resumeDisabled, s.status);
+  const r0 = await batch(page, { resume: true, resetCounters: true });
+  check('M3', 'cap pre-check: Resume with the cap unchanged makes 0 provider calls, reason budget at ch3, 0 dialogs', r0.calls.length === 0 && r0.br.reason === 'budget' && r0.br.stoppedAt === 3 && r0.br.cap === 3000 && eq(r0.br.completed, [1, 2]) && r0.dialogs.length === 0 && r0.r.started === true, JSON.stringify({ calls: r0.calls, br: r0.br }));
+  check('M3', 'cap pre-check status is exactly "Token cap reached (4000/3000). Raise the cap to continue."', r0.status === 'Token cap reached (4000/3000). Raise the cap to continue.', r0.status);
+  const r1 = await batch(page, { resume: true, cap: 20000, resetCounters: true });
+  check('M3', 'raise the cap and Resume: proceeds from ch3 and finishes [1,2,3,4]', r1.calls[0] && r1.calls[0].ch === 3 && r1.br.cap === 20000 && eq(r1.br.completed, [1, 2, 3, 4]) && r1.br.reason === 'done', JSON.stringify({ calls: r1.calls, br: r1.br }));
   await page.close();
 }
 
@@ -485,13 +526,157 @@ const batchDialogTotals = [];
   check('E4', 'Part 1 parse failure on ch3 stops the batch at 3 (reason parse, detail parse failure, no retry)', p.br.reason === 'parse' && p.br.stoppedAt === 3 && /^Part 1 parse failure \(no retry\)/.test(p.br.detail || '') && p.calls.filter((x) => x.ch === 3).length === 1, JSON.stringify({ br: p.br, calls: p.calls }));
   check('E4', 'parse failure: ch1-2 kept, ch3 empty, ch4 never attempted, 0 dialogs', eq(p.br.completed, [1, 2]) && p.chapters[0] && p.chapters[1] && !p.chapters[2] && callsFor(p, 4) === 0 && p.dialogs.length === 0, JSON.stringify(p.chapters));
   check('E4', 'parse stop status: "(parse)" + parse hint, not the provider wording; Resume enabled', /^Stopped at ch3 \(parse\): Part 1 parse failure \(no retry\).*Response could not be parsed \(no retry\); Resume regenerates ch3\./.test(p.status) && !/\(provider\)|Provider error/.test(p.status) && !p.resumeDisabled, p.status);
-  const pr = await batch(page, { resume: true, resetCounters: true });
+  // explicit cap edit: Resume now keeps the saved run cap (must-fix 4), which this 4-chapter run would reach exactly at ch4
+  const pr = await batch(page, { resume: true, cap: 50000, resetCounters: true });
   check('E4', 'Resume after the Part 1 parse stop on ch3 calls the provider for ch3 again (first call ch3, both parts) and completes it', pr.r.started && pr.calls[0] && pr.calls[0].ch === 3 && callsFor(pr, 3) === 2 && /^Chapter 3 part 1/.test(pr.chapters[2]) && eq(pr.br.completed, [1, 2, 3, 4]) && pr.br.reason === 'done' && pr.br.id === p.br.id, JSON.stringify({ r: pr.r, calls: pr.calls, br: pr.br }));
   const p2 = await batch(page, { nd: ND, cfg: { parseFail: '2:2' }, resetCounters: true });
   check('E4', 'Part 2 parse failure on ch2 also stops (reason parse, parse failure)', p2.br.reason === 'parse' && p2.br.stoppedAt === 2 && /^Part 2 parse failure/.test(p2.br.detail || '') && eq(p2.br.completed, [1]) && p2.dialogs.length === 0 && !p2.chapters[1], JSON.stringify(p2.br));
   const p2r = await batch(page, { resume: true, resetCounters: true });
   check('E4', 'Resume after the Part 2 parse stop on ch2 regenerates ch2 (provider called for ch2 Part 1 + Part 2) and completes it', p2r.r.started && p2r.calls[0] && p2r.calls[0].ch === 2 && p2r.calls[0].part === 1 && callsFor(p2r, 2) === 2 && /^Chapter 2 part 1/.test(p2r.chapters[1]) && eq(p2r.br.completed, [1, 2, 3, 4]) && p2r.br.reason === 'done', JSON.stringify({ r: p2r.r, calls: p2r.calls, br: p2r.br }));
   for (const x of [a, c, c1, c2, cr, g, p, pr, p2, p2r]) batchDialogTotals.push(x.dialogs.length);
+  await page.close();
+}
+
+// ---------------- M1: _jsonParseError marker (real gateway shape) ----------------
+{
+  const page = await openPage();
+  const a = await batch(page, { nd: ND, cfg: { jsonErrAt: '3:1' } });
+  check('M1', 'Part 1 _jsonParseError on ch3: reason parse, stoppedAt 3, detail names the marker, exactly 1 call for ch3 (no retry, no Part 2)', a.br.reason === 'parse' && a.br.stoppedAt === 3 && /^Part 1 parse failure \(no retry\): model JSON parse error \(_jsonParseError\)/.test(a.br.detail || '') && callsFor(a, 3) === 1 && !a.calls.some((c) => c.ch === 3 && c.part === 2), JSON.stringify({ br: a.br, calls: a.calls }));
+  check('M1', 'Part 1 _jsonParseError: malformed text never stored or completed (ch3 empty, completed [1,2]), ch4 not attempted', !a.chapters[2] && !a.genDom[2] && eq(a.br.completed, [1, 2]) && callsFor(a, 4) === 0 && /\(parse\)/.test(a.status), JSON.stringify({ ch3: a.chapters[2], completed: a.br.completed }));
+  const b = await batch(page, { nd: ND, cfg: { jsonErrAt: '2:2' }, resetCounters: true });
+  check('M1', 'Part 2 _jsonParseError on ch2: reason parse, no retry (2 calls: Part 1 + Part 2), ch2 empty, completed [1]', b.br.reason === 'parse' && b.br.stoppedAt === 2 && /^Part 2 parse failure \(no retry\): model JSON parse error/.test(b.br.detail || '') && callsFor(b, 2) === 2 && !b.chapters[1] && eq(b.br.completed, [1]) && b.dialogs.length === 0, JSON.stringify({ br: b.br, calls: b.calls }));
+  batchDialogTotals.push(a.dialogs.length, b.dialogs.length);
+  await page.close();
+}
+
+// ---------------- M2: error classification (no retry for 400/401/403/missing key) ----------------
+{
+  const page = await openPage();
+  const long = 'Bad request: max_tokens exceeds the model limit. ' + 'detail '.repeat(60);
+  const cases = [
+    { label: 'HTTP 400', msg: 'HTTP error! Status: 400, Text: ' + long, want: (st) => /HTTP 400, not retried\): Bad request: max_tokens exceeds the model limit\./.test(st) && !st.includes(long.trim()) && !/Check your API key/.test(st) },
+    { label: 'HTTP 401', msg: 'HTTP error! Status: 401, Text: {"error":"Incorrect API key provided"}', want: (st) => /HTTP 401, not retried\): Check your API key in Setup/.test(st) },
+    { label: 'HTTP 403', msg: 'HTTP error! Status: 403, Text: {"error":"forbidden"}', want: (st) => /HTTP 403, not retried\): Check your API key in Setup/.test(st) },
+    { label: 'missing key', msg: 'API Key is missing', want: (st) => /API key missing, not retried\): Check your API key in Setup/.test(st) }
+  ];
+  for (const c of cases) {
+    const s = await batch(page, { nd: ND, cfg: { throwAt: { key: '2:1', msg: c.msg } }, resetCounters: true });
+    batchDialogTotals.push(s.dialogs.length);
+    check('M2', c.label + ': reason provider at ch2, 0 retries (1 call for ch2), no usageEstimated entry, tokens = ch1 real usage only', s.br.reason === 'provider' && s.br.stoppedAt === 2 && callsFor(s, 2) === 1 && eq(s.br.usageEstimated, []) && s.br.tokensUsed === 2000 && eq(s.br.completed, [1]) && s.dialogs.length === 0, JSON.stringify({ br: s.br, calls: s.calls }));
+    check('M2', c.label + ': status line wording (' + (c.label === 'HTTP 400' ? 'provider message, truncated' : 'Check your API key in Setup') + '), "Not retried", not the parse wording', /^Stopped at ch2 \(provider\): /.test(s.status) && c.want(s.status) && /Not retried; Resume regenerates ch2\./.test(s.status) && !/could not be parsed/.test(s.status), s.status);
+  }
+  await page.close();
+}
+
+// ---------------- M4: user cap kept through reload + restore + Resume, and after import ----------------
+{
+  const page = await openPage();
+  await page.evaluate((nd) => {
+    const h = window.__h; h.load(nd);
+    const c = document.getElementById('batchTokenCap'); c.value = '50000'; c.dispatchEvent(new Event('input'));
+    h.cfg = { hangAt: '2:1' }; window.__p = generateAllChapters();
+  }, ND);
+  await page.waitForFunction(() => window.__h.hanging === true, null, { timeout: 20000 });
+  const capMid = await page.evaluate(() => novelData.batchRun.cap);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof generateAllChapters === 'function' && window.__nwBatchRestoreCheck, null, { timeout: 30000 });
+  await page.evaluate(() => window.__nwBatchRestoreCheck);
+  await installHarness(page);
+  const rest = await page.evaluate(async () => { await restoreInterruptedBatchRun(); const c = document.getElementById('batchTokenCap'); return { cap: novelData.batchRun.cap, input: c.value, edited: c.dataset.userEdited || '' }; });
+  check('M4', 'after reload + restore: br.cap 50000 kept and shown in the cap input (userEdited cleared)', capMid === 50000 && rest.cap === 50000 && rest.input === '50000' && rest.edited === '', JSON.stringify({ capMid, rest }));
+  const r = await batch(page, { resume: true, resetCounters: true });
+  check('M4', 'Resume after restore keeps the user cap 50000 (not a fresh estimate) and finishes', r.br.cap === 50000 && r.br.reason === 'done' && eq(r.br.completed, [1, 2, 3, 4]) && r.calls[0].ch === 2, JSON.stringify(r.br));
+  await page.close();
+  // import path: a session with a paused batchRun (cap 54321); a stale userEdited cap from before the import is ignored
+  const page2 = await openPage();
+  await page2.evaluate(() => { const c = document.getElementById('batchTokenCap'); c.value = '999'; c.dataset.userEdited = '1'; });
+  const sess = clone(ND); sess.chapters = ['Chapter 1 imported text.', 'Chapter 2 imported text.', '', '', ''].slice(0, sess.numChapters || 5);
+  sess.batchRun = { id: 'import|2026-10-03T00:00:00.000Z', startedAt: '2026-10-03T00:00:00.000Z', updatedAt: '2026-10-03T00:00:00.000Z', range: { from: 1, to: 4 }, regenerateExisting: false, perChapterDownload: false, completed: [1, 2], inFlight: null, stoppedAt: 3, reason: 'paused', detail: 'paused before ch3', tokensUsed: 4000, estimate: { perChapter: 4000, total: 16000, source: 'fallback' }, cap: 54321, usageEstimated: [] };
+  await page2.locator('#importFile').setInputFiles({ name: 'cap_session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: sess })) });
+  await page2.waitForFunction(() => window.__h.dialogs.some((d) => /Session imported/.test(d)), null, { timeout: 15000 });
+  const imp = await page2.evaluate(() => { const c = document.getElementById('batchTokenCap'); return { input: c.value, edited: c.dataset.userEdited || '' }; });
+  const ri = await batch(page2, { resume: true, resetCounters: true });
+  check('M4', 'imported session: cap input shows batchRun.cap 54321, Resume keeps cap 54321 and continues at ch3', imp.input === '54321' && imp.edited === '' && ri.br.cap === 54321 && ri.calls[0] && ri.calls[0].ch === 3 && ri.br.reason === 'done', JSON.stringify({ imp, br: ri.br, calls: ri.calls.slice(0, 2) }));
+  await page2.close();
+}
+
+// ---------------- M5: lock scope ----------------
+{
+  const page = await openPage();
+  await page.evaluate((nd) => {
+    const h = window.__h; h.load(nd);
+    novelData.bookImprovementsWithStatus = [{ text: 'Chapter 2: tighten the relay scene.', status: 'To Incorporate', breakdown: 'Chapter 2: cut the second lab tour.' }];
+    updateBookImprovementsTable('Chapter 2: tighten the relay scene.');
+    h.cfg = { hangAt: '2:1' }; window.__p = generateAllChapters();
+  }, ND);
+  await page.waitForFunction(() => window.__h.hanging === true, null, { timeout: 20000 });
+  const lk = await page.evaluate(async () => {
+    const race = (p) => Promise.race([Promise.resolve().then(p), new Promise((r) => setTimeout(() => r('timeout: handler ran and did not return'), 3000))]);
+    const q = (sel) => Array.from(document.querySelectorAll(sel));
+    const top = q('#tab7 button[onclick*="applyTopBookCritiques"]'), row = q('#improvementsTableBody button[onclick*="applyBookCritiqueItem"]'), integ = q('#tab8 button[onclick*="integrateBreakdownSuggestions"]');
+    const before = window.__h.calls.length;
+    const impBefore = JSON.stringify(novelData.chapterImprovements);
+    const res = {};
+    for (const [k, fn] of [['applyTop', () => applyTopBookCritiques(1)], ['applyItem', () => applyBookCritiqueItem(0)], ['updateChapter', () => updateChapter(3, { requireImprovements: false })]]) {
+      try { const v = await race(fn); res[k] = typeof v === 'string' && /^timeout/.test(v) ? v : 'ran'; } catch (e) { res[k] = String(e.message || e); }
+    }
+    try { res.integrate = await race(() => integrateBreakdownSuggestions()); } catch (e) { res.integrate = 'threw: ' + String(e.message || e); }
+    return {
+      numChaptersDisabled: document.getElementById('numChapters').disabled, top: top.length, topDisabled: top.every((b) => b.disabled), row: row.length, rowDisabled: row.every((b) => b.disabled),
+      integ: integ.length, integDisabled: integ.every((b) => b.disabled), res, calls: window.__h.calls.length - before, impSame: impBefore === JSON.stringify(novelData.chapterImprovements), dialogs: window.__h.dialogs.slice()
+    };
+  }).catch((e) => ({ error: String(e && e.message || e), res: {} }));
+  check('M5', 'mid-run: numChapters control disabled', lk.numChaptersDisabled === true, JSON.stringify(lk));
+  check('M5', 'mid-run: Tab 7 Apply Top Critique + row Apply buttons and Tab 8 Integrate Suggestions disabled', lk.top === 1 && lk.topDisabled && lk.row === 1 && lk.rowDisabled && lk.integ === 1 && lk.integDisabled, JSON.stringify(lk));
+  check('M5', 'mid-run: direct applyTopBookCritiques / applyBookCritiqueItem / updateChapter / integrateBreakdownSuggestions refused (0 calls, no staged notes, 0 dialogs)', /applyTopBookCritiques locked/.test(lk.res.applyTop) && /applyBookCritiqueItem locked/.test(lk.res.applyItem) && /updateChapter locked/.test(lk.res.updateChapter) && lk.res.integrate === false && lk.calls === 0 && lk.impSame && lk.dialogs.length === 0, JSON.stringify(lk));
+  await page.close();
+  const page2 = await openPage();
+  const rv = await batch(page2, { nd: ND, to: 2, cfg: { reviseAt: 2 } });
+  const probe = await page2.evaluate(() => ({ revise: window.__h.revise, manual: window.__h.reviseManual }));
+  batchDialogTotals.push(rv.dialogs.length);
+  check('M5', 'batch-owned qualityRevise updateChapter still runs inside the batch; a manual-tag updateChapter in the same window is refused', /^ok:Chapter 2 part 1/.test(probe.revise || '') && /^threw:updateChapter locked/.test(probe.manual || '') && rv.br.reason === 'done' && eq(rv.br.completed, [1, 2]), JSON.stringify({ probe, br: rv.br }));
+  const busy = await page2.evaluate(async (nd) => {
+    const h = window.__h; h.load(nd); h.calls.length = 0; h.dialogs.length = 0; h.cfg = {};
+    activeAICallCount = 1;
+    const a = await generateAllChapters(); const sa = document.getElementById('batchRunStatus').textContent;
+    const b = await resumeBatchRun(); const sb = document.getElementById('batchRunStatus').textContent;
+    activeAICallCount = 0;
+    return { a, b, sa, sb, calls: h.calls.length, dialogs: h.dialogs.slice(), br: novelData.batchRun === undefined ? 'absent' : 'present', running: nwBatchState.running, quiet: nwBatchState.quiet };
+  }, ND);
+  check('M5', 'activeAICallCount > 0: start and Resume refused (reason ai-busy), 0 calls, status message, no dialog, no batchRun', busy.a.started === false && busy.a.reason === 'ai-busy' && busy.b.reason === 'ai-busy' && busy.calls === 0 && busy.dialogs.length === 0 && busy.br === 'absent' && /^Another AI request is still running \(1 in flight\)\. Wait for it to finish, then start Generate All\./.test(busy.sa) && /then Resume\./.test(busy.sb) && !busy.running && !busy.quiet, JSON.stringify(busy));
+  await page2.close();
+}
+
+// ---------------- M6: lock kept through finalization ----------------
+{
+  const page = await openPage();
+  await page.evaluate((nd) => { const h = window.__h; h.load(nd); h.cfg = { slowFinal: true }; window.__p1 = generateAllChapters(); }, ND);
+  await page.waitForFunction(() => window.__h.finalPending === true, null, { timeout: 30000 });
+  const mid = await page.evaluate(async () => {
+    const h = window.__h; const before = h.calls.length;
+    const second = await generateAllChapters(); const third = await resumeBatchRun();
+    return {
+      running: nwBatchState.running, reasonSoFar: novelData.batchRun.reason, second, third, calls: h.calls.length - before,
+      genAllDisabled: document.getElementById('batchGenerateAllBtn').disabled, genBtnsDisabled: Array.from(document.querySelectorAll('#chapterGenContainer button')).every((b) => b.disabled),
+      importDisabled: document.getElementById('importFile').disabled, numChaptersDisabled: document.getElementById('numChapters').disabled, pauseEnabled: !document.getElementById('batchPauseBtn').disabled
+    };
+  });
+  check('M6', 'during the slow final checkpoint: running true, controls locked (Generate All, per-chapter Generate, import, numChapters)', mid.running === true && mid.genAllDisabled && mid.genBtnsDisabled && mid.importDisabled && mid.numChaptersDisabled, JSON.stringify(mid));
+  check('M6', 'during finalization a second start and a Resume are refused (already-running), 0 provider calls', mid.second.started === false && mid.second.reason === 'already-running' && mid.third.reason === 'already-running' && mid.calls === 0, JSON.stringify(mid));
+  const fin = await page.evaluate(async () => { window.__h.releaseFinal(); const r = await window.__p1; return { r, running: nwBatchState.running, owner: nwBatchState.owner, quiet: nwBatchState.quiet, genAllDisabled: document.getElementById('batchGenerateAllBtn').disabled, state: document.getElementById('batchRunStatus').dataset.state }; });
+  check('M6', 'after the final checkpoint resolves: run done, lock released by its own finally (running false, owner null), controls unlocked', fin.r.reason === 'done' && fin.running === false && fin.owner === null && fin.quiet === false && fin.genAllDisabled === false && fin.state === 'done', JSON.stringify(fin));
+  await page.close();
+}
+
+// ---------------- M7: final checkpoint failure ----------------
+{
+  const page = await openPage();
+  const s = await batch(page, { nd: ND, cfg: { putThrowAfter: 8 } });
+  const exp = await page.evaluate(async () => { const b = window.__h.lastExport; if (!b) return null; const j = JSON.parse(await b.text()); return j.novelData.batchRun; });
+  batchDialogTotals.push(s.dialogs.length);
+  check('M7', 'all 4 chapters complete, the final checkpoint throws QuotaExceededError: result + batchRun reason checkpoint (not done)', eq(s.br.completed, [1, 2, 3, 4]) && s.r.reason === 'checkpoint' && s.br.reason === 'checkpoint' && s.br.stoppedAt === 4 && /final checkpoint write failed after ch4: .*quota exceeded/i.test(s.br.detail || '') && s.puts === 9, JSON.stringify({ r: s.r, br: s.br, puts: s.puts }));
+  check('M7', 'status state checkpoint, "Checkpoint failed: run stopped. Export your session now." + Export button', s.state === 'checkpoint' && /^Checkpoint failed: run stopped\. Export your session now\. Stopped at ch4 \(checkpoint\): final checkpoint write failed/.test(s.status) && s.exportNow, s.status);
+  check('M7', 'auto-export fired once and the exported batchRun.reason is checkpoint', sessionDl(s) === 1 && exp && exp.reason === 'checkpoint' && exp.stoppedAt === 4, JSON.stringify({ dl: s.downloads, exp: exp && { reason: exp.reason, stoppedAt: exp.stoppedAt } }));
   await page.close();
 }
 

@@ -6877,6 +6877,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		async function applyBookCritiqueItem(index, opts) {
 			opts = opts || {};
+			if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) throw new Error('applyBookCritiqueItem locked: Generate All Chapters run is active or awaiting restore.');
 			collectData();
 			ensureChapterImprovementsArray();
 			if (!Array.isArray(novelData.bookImprovementsWithStatus) || !novelData.bookImprovementsWithStatus[index]) {
@@ -6923,6 +6924,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		async function applyTopBookCritiques(maxItems, opts) {
 			opts = opts || {};
+			if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) throw new Error('applyTopBookCritiques locked: Generate All Chapters run is active or awaiting restore.');
 			const max = maxItems != null ? maxItems : 1;
 			collectData();
 			const list = novelData.bookImprovementsWithStatus || [];
@@ -8314,6 +8316,10 @@ return c && c.name && c.backstory && c.arc; });
 		    // NW.T8.F4: integrateBreakdownSuggestions() SHALL skip chapters that have no breakdown instructions targeting them.
 		    // NW.T8.F5: integrateBreakdownSuggestions() SHALL update novelData.chapters, sync Tab 5 and Tab 6 textareas, update the Book tab, and refresh Tab 7 status dropdowns after all integrations complete.
 		    async function integrateBreakdownSuggestions() {
+		        if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
+		            console.warn('integrateBreakdownSuggestions locked: Generate All Chapters run is active or awaiting restore.');
+		            return false;
+		        }
 		        collectData();
 		    // Agent Skill I/O pack (tab8.integrateBreakdown)
 		    window.__lastSkillPack = packSkillInputs('tab8.integrateBreakdown', { novelData: novelData });
@@ -8820,6 +8826,7 @@ return c && c.name && c.backstory && c.arc; });
 		    updateBookTab();
 			renderContinuityStatusPanel();
 			renderBlueprintBeatStatus();
+			if (typeof nwBatchSyncCapFromRun === 'function') nwBatchSyncCapFromRun();
 		}
 
         // Import a session from a JSON file.
@@ -9614,6 +9621,9 @@ return c && c.name && c.backstory && c.arc; });
 		    try {
 		        const part1Response = await callAI(messagesPart1, document.getElementById('tab5'), { max_tokens: maxTokens });
 		        console.log('Part 1 Response:', part1Response);
+		        // Generate All (must-fix 1): callAI returns malformed model JSON as { chapter, _jsonParseError } with a valid
+		        // HTTP envelope in requestLog.returnedInfo. In a batch that is a parse failure: stop before Part 2.
+		        if (opts.batch && part1Response && part1Response._jsonParseError) throw new Error('model JSON parse error (_jsonParseError): ' + part1Response._jsonParseError);
 		        const chapterPt1 = part1Response.chapter || '';
 		        console.log('Part 1 chapterPt1 Length:', chapterPt1.length, 'Content:', chapterPt1.substring(0, 200) + '...');
 		        chapterContent = chapterPt1;
@@ -9629,7 +9639,7 @@ return c && c.name && c.backstory && c.arc; });
 		    } catch (error) {
 		        console.error('Part 1 generation failed:', error);
 		        // Record the failure so Generate All can tell provider errors (one retry) from parse failures (stop).
-		        window.__nwLastPartFailure = { chapter: chapterNum, part: 1, message: String((error && error.message) || error).slice(0, 300), provider: (typeof nwIsProviderError === 'function') ? nwIsProviderError(error) : false };
+		        window.__nwLastPartFailure = { chapter: chapterNum, part: 1, message: String((error && error.message) || error).slice(0, 300), kind: (typeof nwClassifyError === 'function') ? nwClassifyError(error) : 'parse' };
 		        if (typeof nwNotify === 'function') nwNotify('Chapter ' + chapterNum + ' Part 1 failed: ' + window.__nwLastPartFailure.message, { level: 'warn' });
 		        requestLog.status = 'Failed - Part 1';
 		        updateRequestLog();
@@ -9658,6 +9668,7 @@ return c && c.name && c.backstory && c.arc; });
 		    try {
 		        const part2Response = await callAI(messagesPart2, document.getElementById('tab5'), { max_tokens: maxTokens });
 		        console.log('Part 2 Response:', part2Response);
+		        if (opts.batch && part2Response && part2Response._jsonParseError) throw new Error('model JSON parse error (_jsonParseError): ' + part2Response._jsonParseError);
 		        const chapterPt2 = part2Response.chapter || '';
 		        console.log('Part 2 chapterPt2 Length:', chapterPt2.length, 'Content:', chapterPt2.substring(0, 200) + '...');
 		        console.log('Before Concatenation, chapterContent Length:', chapterContent.length, 'Content:', chapterContent.substring(0, 200) + '...');
@@ -9674,7 +9685,7 @@ return c && c.name && c.backstory && c.arc; });
 		    } catch (error) {
 		        console.error('Part 2 generation failed:', error);
 		        // Record the failure so Generate All can tell provider errors (one retry) from parse failures (stop).
-		        window.__nwLastPartFailure = { chapter: chapterNum, part: 2, message: String((error && error.message) || error).slice(0, 300), provider: (typeof nwIsProviderError === 'function') ? nwIsProviderError(error) : false };
+		        window.__nwLastPartFailure = { chapter: chapterNum, part: 2, message: String((error && error.message) || error).slice(0, 300), kind: (typeof nwClassifyError === 'function') ? nwClassifyError(error) : 'parse' };
 		        if (typeof nwNotify === 'function') nwNotify('Chapter ' + chapterNum + ' Part 2 failed: ' + window.__nwLastPartFailure.message, { level: 'warn' });
 		        requestLog.status = 'Failed - Part 2';
 		        updateRequestLog();
@@ -9745,6 +9756,14 @@ return c && c.name && c.backstory && c.arc; });
         //          rejected draft in novelData.batchRun.rejectedDraft {chapter, text, detail} (latest only; it goes into the
         //          session export but is stripped from the IndexedDB checkpoint). The session auto-export runs only when the
         //          run stops (or a checkpoint write fails), not after a clean finish.
+        // Must-fix (#134): failures are classified by type (nwClassifyError): 'retryable' (HTTP 429/5xx, network; one retry),
+        //          'provider' (other HTTP status incl. 400/401/403, "API Key is missing"; no retry, no estimated usage) and
+        //          'parse' (unparseable response, incl. callAI's _jsonParseError marker; no retry). Before each chapter, used >= cap
+        //          stops with "Token cap reached (used/cap). Raise the cap to continue." and no provider call. Resume keeps the
+        //          saved br.cap (restored or imported) unless the cap input is edited afterwards. running stays true until the
+        //          final checkpoint + status are done (released only in nwBatchStart's finally, by the run that set it). A failed
+        //          final checkpoint after a clean finish is a 'checkpoint' stop. Start/Resume is refused while a manual AI call
+        //          is in flight (activeAICallCount > 0).
         // NW.T5.10: The batch SHALL write an IndexedDB checkpoint (db novelwriter, store checkpoints) when a chapter goes in
         //          flight and after it finishes; any write failure stops the run before the next chapter is generated.
         // NW.T5.11: While a batch runs (or an interrupted one awaits restore) per-chapter Generate, Tab 6 editors, Update
@@ -9754,7 +9773,7 @@ return c && c.name && c.backstory && c.arc; });
         //          estimate is used only when that delta is 0 (chapter listed in batchRun.usageEstimated).
         // novelData.batchRun is NovelWriter-only (schema/ allows additional properties; no schema edit).
         var NW_BATCH = { retryDelayMs: 2000, idbName: 'novelwriter', idbStore: 'checkpoints', minOutlineWords: 80, capFactor: 1.25 };
-        var nwBatchState = { running: false, quiet: false, pauseRequested: false, interrupted: null, windows: [], coverageAck: null, log: [], lastStatus: '', lastPromise: null };
+        var nwBatchState = { running: false, owner: null, chapterInFlight: null, quiet: false, pauseRequested: false, interrupted: null, windows: [], coverageAck: null, log: [], lastStatus: '', lastPromise: null };
         window.NW_BATCH = NW_BATCH;
         window.nwBatchState = nwBatchState;
 
@@ -9808,6 +9827,30 @@ return c && c.name && c.backstory && c.arc; });
             if (/HTTP error! Status: (429|5\d\d)\b/.test(m)) return true;
             if (/Failed to fetch|NetworkError|network error|ERR_NETWORK|ERR_CONNECTION|ECONNRESET|ETIMEDOUT|Load failed/i.test(m)) return true;
             return false;
+        }
+
+        /** Failure type (not retry eligibility): 'retryable' | 'provider' (no response body to use; no retry) | 'parse'. */
+        function nwClassifyError(e) {
+            if (nwIsProviderError(e)) return 'retryable';
+            var m = nwBatchErrText(e);
+            if (/HTTP error! Status: \d{3}\b/.test(m) || /API Key is missing/i.test(m)) return 'provider';
+            return 'parse';
+        }
+
+        /** Provider (non-retryable) failure detail: auth problems point at Setup; 400 shows the provider message (~160 chars). */
+        function nwProviderDetail(part, msg) {
+            var m = String(msg || '');
+            var st = (m.match(/HTTP error! Status: (\d{3})/) || [])[1] || '';
+            if (/API Key is missing/i.test(m)) return 'Part ' + part + ' provider error (API key missing, not retried): Check your API key in Setup.';
+            if (st === '401' || st === '403') return 'Part ' + part + ' provider error (HTTP ' + st + ', not retried): Check your API key in Setup.';
+            var body = m.replace(/^HTTP error! Status: \d{3},?\s*(Text:\s*)?/, '');
+            return 'Part ' + part + ' provider error (' + (st ? 'HTTP ' + st : 'no response') + ', not retried): ' + nwBatchShort(body, 160);
+        }
+
+        /** True while a batch chapter is in flight and the call is one of its own quality passes (not a user action). */
+        function nwBatchOwnsRevise(chapterNum, opts) {
+            var tag = opts && opts.operationTag;
+            return !!(nwBatchState.running && nwBatchState.chapterInFlight === chapterNum && (tag === 'qualityRevise' || tag === 'qualityMultiPass'));
         }
 
         function nwBatchNumChapters() {
@@ -9999,7 +10042,9 @@ return c && c.name && c.backstory && c.arc; });
             var locked = nwBatchIsLocked();
             document.querySelectorAll('#chapterGenContainer button, #chapterEditContainer button').forEach(function (b) { b.disabled = locked; });
             document.querySelectorAll('textarea[id^="chapterEditContent"]').forEach(function (t) { t.readOnly = locked; t.disabled = locked; });
-            ['importFile', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap'].forEach(function (id) {
+            // Tab 7 Apply (updateChapter) and Tab 8 Integrate Suggestions are writers too.
+            document.querySelectorAll('#tab7 button[onclick*="applyTopBookCritiques"], #improvementsTableBody button[onclick*="applyBookCritiqueItem"], #tab8 button[onclick*="integrateBreakdownSuggestions"]').forEach(function (b) { b.disabled = locked; });
+            ['importFile', 'numChapters', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap'].forEach(function (id) {
                 var el = nwBatchEl(id);
                 if (el) el.disabled = locked;
             });
@@ -10029,6 +10074,16 @@ return c && c.name && c.backstory && c.arc; });
             window.URL.revokeObjectURL(url);
         }
 
+        /** After restore/import: show the saved run cap and clear userEdited, so Resume keeps br.cap unless the user edits it. */
+        function nwBatchSyncCapFromRun() {
+            var br = novelData && novelData.batchRun;
+            var capEl = nwBatchEl('batchTokenCap');
+            if (!capEl || !br || !(Number(br.cap) > 0)) return false;
+            capEl.value = String(br.cap);
+            capEl.dataset.userEdited = '';
+            return true;
+        }
+
         /** Prefill range "to" and the token cap (estimate x 1.25) unless the user typed a cap. */
         function nwBatchRefreshEstimate() {
             if (nwBatchState.running) return null;
@@ -10054,6 +10109,7 @@ return c && c.name && c.backstory && c.arc; });
             for (;;) {
                 attempts += 1;
                 window.__nwLastPartFailure = null;
+                nwBatchState.chapterInFlight = n;
                 try {
                     await generateChapter(n, { batch: true });
                 } catch (e) {
@@ -10061,15 +10117,21 @@ return c && c.name && c.backstory && c.arc; });
                     if (/^STAGE GATE FAIL-CLOSED/.test(m)) return { ok: false, reason: 'gate', detail: m, attempts: attempts };
                     if (/^OBLIGATION COVERAGE FAIL-CLOSED/.test(m)) return { ok: false, reason: 'coverage', detail: m, attempts: attempts };
                     return { ok: false, reason: 'provider', detail: 'Unexpected error: ' + m, attempts: attempts };
+                } finally {
+                    nwBatchState.chapterInFlight = null;
                 }
                 var f = window.__nwLastPartFailure;
                 var st = String((typeof requestLog !== 'undefined' && requestLog && requestLog.status) || '');
                 var partFailed = !!f || /^Failed - Part/.test(st);
                 if (!partFailed && nwBatchChapterHasText(n)) return { ok: true, attempts: attempts };
-                if (partFailed && f && !f.provider) {
+                if (partFailed && f && f.kind === 'parse') {
                     return { ok: false, reason: 'parse', parse: true, detail: 'Part ' + f.part + ' parse failure (no retry): ' + f.message, attempts: attempts };
                 }
-                if (partFailed && f && f.provider && attempts < 2) {
+                if (partFailed && f && f.kind === 'provider') {
+                    // 400/401/403/missing key: no response came back, so no retry and no estimated usage.
+                    return { ok: false, reason: 'provider', noRetry: true, detail: nwProviderDetail(f.part, f.message), attempts: attempts };
+                }
+                if (partFailed && f && f.kind === 'retryable' && attempts < 2) {
                     nwBatchSetStatus('ch' + n + ' Part ' + f.part + ' provider error; retrying once in ' + Math.round(NW_BATCH.retryDelayMs / 1000) + ' s: ' + nwBatchShort(f.message, 160), 'running');
                     await nwBatchSleep(NW_BATCH.retryDelayMs);
                     continue;
@@ -10105,6 +10167,11 @@ return c && c.name && c.backstory && c.arc; });
                 nwBatchSetStatus('Restore or discard the interrupted batch run first.', 'interrupted');
                 return { started: false, reason: 'interrupted' };
             }
+            if (typeof activeAICallCount !== 'undefined' && activeAICallCount > 0) {
+                nwBatchSetStatus('Another AI request is still running (' + activeAICallCount + ' in flight). Wait for it to finish, then ' + (resume ? 'Resume' : 'start Generate All') + '.', 'blocked');
+                return { started: false, reason: 'ai-busy' };
+            }
+            var myRun = {};
             nwBatchState.quiet = true;
             nwBatchShow('batchGoTab4', false);
             nwBatchShow('batchExportNow', false);
@@ -10157,7 +10224,9 @@ return c && c.name && c.backstory && c.arc; });
                 var est = nwBatchEstimate(plan.planned.length);
                 var used = resume ? (Number(br.tokensUsed) || 0) : 0;
                 var defaultCap = Math.ceil(est.total * NW_BATCH.capFactor) + used;
-                var cap = (o.capUserEdited && o.capInput > 0) ? o.capInput : defaultCap;
+                // Resume keeps the saved run cap (also after restore/import) unless the user edited the cap input since.
+                var savedCap = resume ? Number(br.cap) : 0;
+                var cap = (o.capUserEdited && o.capInput > 0) ? o.capInput : (savedCap > 0 ? savedCap : defaultCap);
                 var now = new Date().toISOString();
                 if (resume) {
                     br.stoppedAt = null;
@@ -10189,15 +10258,20 @@ return c && c.name && c.backstory && c.arc; });
                 var capEl = nwBatchEl('batchTokenCap');
                 if (capEl) capEl.value = String(cap);
                 nwBatchState.running = true;
+                nwBatchState.owner = myRun;
                 nwBatchState.pauseRequested = false;
                 nwBatchState.coverageAck = null;
                 nwBatchState.log = [];
                 nwBatchApplyLock();
                 return await nwBatchLoop(br, plan, est);
             } finally {
-                nwBatchState.running = false;
-                nwBatchState.pauseRequested = false;
-                nwBatchState.quiet = false;
+                // Only the run that took the lock releases it (after its final checkpoint + status).
+                if (nwBatchState.owner === myRun) {
+                    nwBatchState.running = false;
+                    nwBatchState.owner = null;
+                    nwBatchState.pauseRequested = false;
+                }
+                if (!nwBatchState.running) nwBatchState.quiet = false;
                 nwBatchApplyLock();
             }
         }
@@ -10210,6 +10284,7 @@ return c && c.name && c.backstory && c.arc; });
             for (var i = 0; i < plan.planned.length; i++) {
                 var n = plan.planned[i];
                 if (nwBatchState.pauseRequested) { stop = { reason: 'paused', at: n, detail: 'paused before ch' + n }; break; }
+                if (br.tokensUsed >= br.cap) { stop = { reason: 'budget', at: n, capPre: true, detail: 'Token cap reached (' + br.tokensUsed + '/' + br.cap + '). Raise the cap to continue.' }; break; }
                 br.inFlight = n;
                 nwBatchSetStatus('Generating ch' + n + ' (' + (i + 1) + '/' + plan.planned.length + '). Tokens ' + br.tokensUsed + '/' + br.cap + '.' + skippedNote, 'running');
                 try {
@@ -10248,7 +10323,7 @@ return c && c.name && c.backstory && c.arc; });
                 } catch (e) {
                     checkpointFailed = nwBatchErrText(e);
                 }
-                if (!outcome.ok) { stop = { reason: outcome.reason, at: n, detail: outcome.detail }; break; }
+                if (!outcome.ok) { stop = { reason: outcome.reason, at: n, detail: outcome.detail, noRetry: !!outcome.noRetry }; break; }
                 if (checkpointFailed) { stop = { reason: 'checkpoint', at: n, detail: 'checkpoint write failed after ch' + n + ': ' + checkpointFailed }; break; }
                 if (br.perChapterDownload) {
                     try { nwBatchDownloadText((novelData.title || 'Untitled_Novel') + '_ch' + n + '.txt', novelData.chapters[n - 1]); } catch (e) { console.warn('[batch] chapter download', e); }
@@ -10260,19 +10335,28 @@ return c && c.name && c.backstory && c.arc; });
             br.reason = stop ? stop.reason : 'done';
             br.detail = stop ? nwBatchShort(stop.detail, 300) : null;
             br.updatedAt = new Date().toISOString();
-            nwBatchState.running = false;
+            // running stays true through the final checkpoint and status (released in nwBatchStart's finally).
             if (!checkpointFailed) {
                 try { await nwBatchCheckpoint(false); } catch (e) { checkpointFailed = nwBatchErrText(e); }
+                if (checkpointFailed && !stop) {
+                    // generation finished but the final checkpoint failed: this is a checkpoint stop, not 'done'
+                    var lastN = plan.planned[plan.planned.length - 1];
+                    stop = { reason: 'checkpoint', at: lastN, detail: 'final checkpoint write failed after ch' + lastN + ': ' + checkpointFailed };
+                    br.stoppedAt = stop.at;
+                    br.reason = stop.reason;
+                    br.detail = nwBatchShort(stop.detail, 300);
+                }
             }
             var text = stop
                 ? (stop.reason === 'paused' ? 'Paused before ch' + stop.at + '.' : 'Stopped at ch' + stop.at + ' (' + stop.reason + '): ' + nwBatchShort(stop.detail, 240) + '.')
                 : 'Done: ch' + br.range.from + '-' + br.range.to + '.';
             if (stop && stop.reason === 'parse') text += ' Response could not be parsed (no retry); Resume regenerates ch' + stop.at + '.';
-            else if (stop && stop.reason === 'provider') text += ' Provider error (retried once where retryable); Resume regenerates ch' + stop.at + '.';
+            else if (stop && stop.reason === 'provider') text += (stop.noRetry ? ' Not retried;' : ' Provider error (retried once where retryable);') + ' Resume regenerates ch' + stop.at + '.';
             else if (stop && stop.reason === 'coverage' && rejectedNow) text += ' Old ch' + stop.at + ' text restored; rejected draft kept aside in session export (batchRun.rejectedDraft).';
             text += ' Completed: ' + (br.completed.length ? br.completed.join(', ') : 'none') + '.' + skippedNote;
             if (br.usageEstimated.length) text += ' Usage estimated (no provider usage) for: ' + br.usageEstimated.join(', ') + '.';
             text += ' Tokens ' + br.tokensUsed + '/' + br.cap + '.';
+            if (stop && stop.capPre) text = stop.detail;
             if (checkpointFailed) {
                 text = 'Checkpoint failed: run stopped. Export your session now. ' + text;
                 nwBatchShow('batchExportNow', true);
@@ -10320,6 +10404,7 @@ return c && c.name && c.backstory && c.arc; });
             if (!Array.isArray(br.usageEstimated)) br.usageEstimated = [];
             nwBatchState.interrupted = null;
             try { applySessionDataToUI(); } catch (e) { console.warn('[batch] restore UI', e); }
+            nwBatchSyncCapFromRun();
             try { await nwBatchCheckpoint(false); } catch (e) { console.warn('[batch] restore checkpoint', e); }
             nwBatchShow('batchRestoreBox', false);
             nwBatchApplyLock();
@@ -10360,6 +10445,10 @@ return c && c.name && c.backstory && c.arc; });
 	    // Update an existing chapter with improvements
 	    async function updateChapter(chapterNum, opts) {
 		    opts = opts || {};
+		    // Generate All single writer: only the batch's own quality revise passes (chapter in flight) may update a chapter.
+		    if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked() && !(typeof nwBatchOwnsRevise === 'function' && nwBatchOwnsRevise(chapterNum, opts))) {
+		        throw new Error('updateChapter locked: Generate All Chapters run is active or awaiting restore.');
+		    }
 		    collectData();
 		    // Agent Skill I/O pack (tab6.updateChapter)
 		    window.__lastSkillPack = packSkillInputs('tab6.updateChapter', { novelData: novelData, chapterNum: chapterNum, updateBrief: (opts && opts.brief) || '' });
