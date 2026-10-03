@@ -2359,7 +2359,7 @@ let activeAICallCount = 0;
 		// This is the main function used to provide prompts and request information from the AI API.
 		// PR1 carry-in 4: an unknown saved model slug leaves the <select> blank (value ''). Fall back to the default
 		// model, else the first option, so callAI never sends model: ''.
-		const NW_DEFAULT_MODEL = 'grok-4.20-0309-reasoning';
+		const NW_DEFAULT_MODEL = 'grok-4.7';
 		function ensureModelSelected() {
 			const sel = document.getElementById('model');
 			if (!sel) return '';
