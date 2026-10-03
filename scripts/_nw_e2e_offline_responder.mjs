@@ -121,6 +121,10 @@ export function createOfflineResponder(seed) {
       json: () => ({ characters: characters(0).map((c) => ({ name: c.name })) }) },
     { id: 'judgeProseQualityLLM', test: (p) => /terse literary quality rater|Score this prose sample/i.test(p),
       json: () => ({ interest: 72, readability: 74, aiSlopRisk: 28, humanLikeness: 70, rationale: 'offline fixture judge (deterministic)' }) },
+    // Gate fix 1: Enrich Chapter Blueprints (auto after a thin outline, or NW_E2E_ENRICH) and its targeted retries.
+    // Returns the seed's blueprints as-is: a six-beat seed passes, an old-shape seed stays thin (deterministic fail).
+    { id: 'enrichChapterBlueprints', test: (p) => /Enrich \(densify\) chapterBlueprints|BLUEPRINT BEAT RETRY/i.test(p),
+      json: () => ({ chapterBlueprints: blueprints }) },
     { id: 'runChapterContinuityAudit', test: (p) => /Audit continuity for Chapter/i.test(p),
       json: (p) => {
         const n = firstChapterNum(p, /Audit continuity for Chapter\s+(\d+)/i);

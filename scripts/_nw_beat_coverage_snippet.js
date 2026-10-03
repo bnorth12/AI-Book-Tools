@@ -57,6 +57,7 @@ function normalizeChapterBeatPack(raw, chapterNum) {
 		worldHooks: bp.worldHooks,
 		allowedPayoffs: bp.allowedPayoffs,
 		deferredThreads: bp.deferredThreads,
+		threads: bp.threads, // optional ledger hints (PR1 stores + passes through; nothing gates on it yet)
 		role: bp.role || '',
 		arcStep: bp.arcStep || ''
 	};

@@ -706,6 +706,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   await doStep(4, 'Outlines', 'generateNovelOutlines', async () => {
     // Always run macro outline agent (fixture previously skipped -> empty novelOutline/plotOutline/blueprints).
     return page.evaluate(async () => {
+      window.__lastAutoBeatEnrich = null;
       await generateNovelOutlines();
       const richSubs = (novelData.subplots || []).filter((s) => {
         if (!s) return false;
@@ -747,6 +748,20 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       ]);
     }
   });
+
+  // Gate fix 1: generateNovelOutlines auto-enriches blueprint beats only when thin (window.__lastAutoBeatEnrich).
+  // Same row as the in-page runner: skip when the outline already had six dense beats, pass/fail otherwise.
+  await doStep(4, 'Outlines', 'autoEnrichChapterBlueprints', async () => {
+    if (!(await page.evaluate(() => typeof maybeAutoEnrichBlueprints === 'function'))) return { skipped: true, reason: 'maybeAutoEnrichBlueprints absent from this HTML' };
+    const a = await page.evaluate(() => window.__lastAutoBeatEnrich || null);
+    if (!a) throw new Error('no auto-enrich record (generateNovelOutlines did not reach the beat check)');
+    if (!a.ran && a.before && a.before.passed) return { skipped: true, reason: 'beats already pass (six-beat outline)', before: a.before };
+    if (a.after && a.after.passed) return { ran: a.ran, before: a.before, after: a.after };
+    throw new Error('beats still thin after auto-enrich: ' + ((a.after && a.after.failCount) || (a.before && a.before.failCount) || 0) +
+      ' failures' + (a.error ? ' (' + a.error + ')' : ''));
+  }, (a, r) => (r && r.skipped)
+    ? 'Blueprint beats already pass after the outline call; auto-enrich not run.'
+    : ('Auto-enrich ran=' + !!(r && r.ran) + ' after=' + JSON.stringify((r && r.after) || null)), { allowNoCall: true });
 
   await doStep(4, 'Outlines', 'generateChapterOutline1', async () => {
     return page.evaluate(async () => {
@@ -845,6 +860,8 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       if (typeof enrichChapterBlueprints !== 'function') return { error: 'enrichChapterBlueprints missing' };
       const cap = Number(novelData.numChapters) || Math.max((novelData.chapterBlueprints || []).length, 1);
       const before = (typeof scoreBeatCoverage === 'function') ? scoreBeatCoverage(novelData, { chapterCap: cap }) : null;
+      // Gate fix 1: never densify twice - the outline step (or its auto-enrich) may already have passed the beats.
+      if (before && before.passed) return { skipped: true, reason: 'beats already pass (six-beat outline or auto-enrich)' };
       try {
         const after = await enrichChapterBlueprints();
         return {
@@ -869,7 +886,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     : ('Blueprint beat enrich passed=' + !!(r && r.afterPassed) + ' fails=' + (((r && r.failures) || []).join(' | ') || 'none')), {
     allowNoCall: true,
     stageGate: (res) => {
-      if (!enrichMode) return;
+      if (!enrichMode || (res && res.skipped)) return;
       assertStageGate('Tab4-enrichChapterBlueprints', [
         { ok: !!res && !res.error && res.afterPassed, msg: 'enrichChapterBlueprints failed: ' + ((res && res.error) || ((res && res.failures) || []).join(' | ')) }
       ]);

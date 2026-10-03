@@ -1029,7 +1029,7 @@ let activeAICallCount = 0;
 			},
 			tab4: {
 				enrichChapterBlueprints: { name: 'Chapter Blueprint Enrichment Agent', systemPrompt: 'You densify existing chapter blueprints into six dramatizable beats per chapter. No pad-to-N. Name cast. Hard floors before prose.' },
-				generateNovelOutlines: { name: 'Novel Outline Agent', systemPrompt: 'You are a structural narrative planner for full-length novels. Produce coherent macro-structure (novelOutline/plotOutline/storyArcOutline) with clear phase transitions, rising stakes, named subplot placement, and thematic throughline. Always emit chapterBlueprints with role, arcStep, subplotPressure, characterBeats (named), allowedPayoffs, deferredThreads, and worldHooks (factions/locations from the world bible). Meet stated word floors; never return empty shells.' },
+				generateNovelOutlines: { name: 'Novel Outline Agent', systemPrompt: 'You are a structural narrative planner for full-length novels. Produce coherent macro-structure (novelOutline/plotOutline/storyArcOutline) with clear phase transitions, rising stakes, named subplot placement, and thematic throughline. Always emit chapterBlueprints with the six beats (sceneGoal, castArcBeat, subplotPressure, dialogueTurn, sensoryWorldHook, turnOrPayoff; each >=40 chars) plus role, arcStep, characterBeats (named), allowedPayoffs, deferredThreads, and worldHooks (factions/locations from the world bible). Meet stated word floors; never return empty shells.' },
 				generateChapterOutline: { name: 'Chapter Outline Agent', systemPrompt: 'You are a chapter planning specialist. Convert macro outline goals into a 300-400 word outline and 200-300 word arc with structured beats tied to named characters, the chapter blueprint arcStep, active subplot pressure, and concrete worldHooks (factions/locations from the world bible). Advance plot and unresolved threads; never return soft one-liner beats or ignore the world bible when provided.' },
 				updateChapterOutline: { name: 'Outline Update Agent', systemPrompt: 'You are an outline revision editor. Integrate requested changes while preserving continuity, causality, and role of the chapter in the broader narrative sequence.' },
 				incorporateOutlineSuggestions: { name: 'Outline Incorporation Agent', systemPrompt: 'You are a narrative restructuring assistant. Apply improvement notes across all outline layers without breaking thematic consistency or story logic.' }
@@ -4639,6 +4639,7 @@ const messages = [
 		worldHooks: bp.worldHooks,
 		allowedPayoffs: bp.allowedPayoffs,
 		deferredThreads: bp.deferredThreads,
+		threads: bp.threads, // optional ledger hints (PR1 stores + passes through; nothing gates on it yet)
 		role: bp.role || '',
 		arcStep: bp.arcStep || ''
 			};
@@ -4891,6 +4892,52 @@ const messages = [
 				beat: beat,
 				message: fmt.failures.length ? ('STAGE GATE FAIL-CLOSED [generateChapter ' + ch + ']: ' + fmt.text + tail) : ''
 			};
+		}
+
+		/**
+		 * Fix 1: after the outline call, densify blueprint beats only when they are thin. `opts.enrich` is injectable
+		 * (defaults to enrichChapterBlueprints) so the offline smoke can spy on it; `opts.onStatus({text, state})`
+		 * receives the user-visible status. Never throws. Records window.__lastAutoBeatEnrich = nd.lastAutoBeatEnrich =
+		 * { ran, before: {passed, failCount}, after: {passed, failCount} | null, error | null, ts }.
+		 */
+		async function maybeAutoEnrichBlueprints(nd, opts) {
+			nd = nd || (typeof novelData !== 'undefined' ? novelData : {});
+			opts = opts || {};
+			var status = typeof opts.onStatus === 'function' ? opts.onStatus : function () {};
+			var enrich = typeof opts.enrich === 'function' ? opts.enrich
+				: (typeof enrichChapterBlueprints === 'function' ? enrichChapterBlueprints : null);
+			var capOf = function () { return Number(nd.numChapters) || Math.max((nd.chapterBlueprints || []).length, 1); };
+			var before = scoreBeatCoverage(nd, { chapterCap: capOf() });
+			var rec = {
+				ran: false,
+				before: { passed: !!before.passed, failCount: (before.failures || []).length },
+				after: null,
+				error: null,
+				ts: new Date().toISOString()
+			};
+			if (before.passed) {
+				status({ text: 'Blueprint beats OK (6/6 × ' + capOf() + ')', state: 'ok' });
+			} else {
+				var thinK = (before.perChapter || []).filter(function (r) { return r && !r.ok; }).length;
+				status({ text: 'Blueprint beats thin in ' + thinK + ' chapters. Running ' + NW_ENRICH_BP_BUTTON + '…', state: 'running' });
+				rec.ran = true;
+				try {
+					if (!enrich) throw new Error('enrichChapterBlueprints unavailable');
+					await enrich();
+				} catch (e) {
+					rec.error = (e && e.message) ? e.message : String(e);
+				}
+				var after = scoreBeatCoverage(nd, { chapterCap: capOf() });
+				rec.after = { passed: !!after.passed, failCount: (after.failures || []).length };
+				if (after.passed) {
+					status({ text: 'Blueprint beats OK after auto-enrich (6/6 × ' + capOf() + ')', state: 'ok' });
+				} else {
+					status({ text: 'Beats still thin: ' + nwFormatGateFailures(nwGroupBeatFailures(after.failures), 3).text + '. Click ' + NW_ENRICH_BP_BUTTON + '.', state: 'thin' });
+				}
+			}
+			nd.lastAutoBeatEnrich = rec;
+			if (typeof window !== 'undefined') window.__lastAutoBeatEnrich = rec;
+			return rec;
 		}
 		// === GATE_HELPERS_END ===
 
@@ -7372,11 +7419,23 @@ return c && c.name && c.backstory && c.arc; });
 				});
 
 				await step('generateNovelOutlines', async () => {
+					window.__lastAutoBeatEnrich = null;
 					await generateNovelOutlines();
 					return {
 						novelOutlineLen: (novelData.novelOutline || '').length,
 						plotOutlineLen: (novelData.plotOutline || '').length
 					};
+				});
+
+				// Fix 1 (NW_GATE_FIX_SPEC): auto-enrich runs inside generateNovelOutlines only when beats are thin.
+				// Report it as its own row: skip when the outline already had six dense beats, pass when enrich fixed them.
+				await step('autoEnrichChapterBlueprints', async () => {
+					const a = window.__lastAutoBeatEnrich || null;
+					if (!a) throw new Error('no auto-enrich record (generateNovelOutlines did not reach the beat check)');
+					if (!a.ran && a.before && a.before.passed) return { skipped: true, reason: 'beats already pass (six-beat outline)', before: a.before };
+					if (a.after && a.after.passed) return { ran: a.ran, before: a.before, after: a.after };
+					throw new Error('beats still thin after auto-enrich: ' + ((a.after && a.after.failCount) || (a.before && a.before.failCount) || 0) +
+						' failures' + (a.error ? ' (' + a.error + ')' : ''));
 				});
 
 				await step('generateChapterOutline1', async () => {
@@ -8786,8 +8845,8 @@ return c && c.name && c.backstory && c.arc; });
 		                '- Annotated Plot Outline: 600-750 words, chapter-by-chapter (1-2 events each) with escalating stakes, 4-6 subplot connections, and sensory details, ensuring narrative flow and tension in the selected style.',
 		                '- Annotated Story Arc Outline: 500-600 words, a thematic odyssey with 4-6 emotional beats per act (beginning, middle, end), linked to character arcs and subplots, no names, emphasizing universal resonance.',
 		                'Minimum word counts for depth, reflecting style’s tone, structure, and prose for a novel with vivid world, plot, and character synergy.',
-		                `- Chapter Blueprints: one entry per chapter (1 through ${novelData.numChapters || 10}). For each chapter specify: role (e.g. 'opening setup', 'midpoint reversal', 'climax'), arcStep (the story-arc beat this chapter must advance), subplotPressure (subplots active and what they must accomplish), characterBeats (named characters and the internal shift they undergo), worldHooks (1-2 factions or locations from the world bible that must appear), allowedPayoffs (what may be resolved this chapter), and deferredThreads (what must remain open for later chapters). Enforce escalation discipline: early chapters seed and complicate; middle chapters escalate and reframe; late chapters execute payoffs only. Never allow climax-grade resolutions in opening chapters.`,
-		                'Return as JSON: {"novelOutline": "<outline>", "plotOutline": "<plot outline>", "storyArcOutline": "<arc outline>", "chapterBlueprints": [{"chapter": 1, "role": "...", "arcStep": "...", "subplotPressure": ["..."], "characterBeats": [{"name": "...", "beat": "..."}], "worldHooks": ["..."], "allowedPayoffs": ["..."], "deferredThreads": ["..."]}]}.',
+		                `- Chapter Blueprints: one entry per chapter (1 through ${novelData.numChapters || 10}). Each entry MUST carry the SIX BEATS, each a dramatizable string of at least 40 characters (no pad-to-N adjective filler): sceneGoal (what the POV character must achieve or decide in-scene), castArcBeat (names an EXISTING cast member from the characters list, then their internal shift), subplotPressure (the subplot id/title and what it forces this chapter), dialogueTurn (who speaks to whom, about what, and what the exchange changes), sensoryWorldHook (a faction or location from the world bible plus one concrete sensory anchor), turnOrPayoff (the turn, or the payoff allowed here). Also keep the planning fields: role (e.g. 'opening setup', 'midpoint reversal', 'climax'), arcStep (the story-arc beat this chapter advances), characterBeats (named characters and their internal shift), worldHooks (1-2 factions or locations from the world bible), allowedPayoffs (what may be resolved this chapter) and deferredThreads (what must stay open). Optional threads: {"opens": [{"key", "kind", "text"}], "advances": [keys], "pays": [keys]}; every thread key is a lowercase hyphen id (setup-<slug>, subplot-<n>, arc-<name-slug>, e.g. subplot-1, setup-field-escape, arc-elena-voss), never underscores or spaces. Enforce escalation discipline: early chapters seed and complicate; middle chapters escalate and reframe; late chapters execute payoffs only. Never allow climax-grade resolutions in opening chapters.`,
+		                'Return as JSON: {"novelOutline": "<outline>", "plotOutline": "<plot outline>", "storyArcOutline": "<arc outline>", "chapterBlueprints": [{"chapter": 1, "role": "<chapter role>", "arcStep": "<story-arc beat this chapter advances>", "sceneGoal": "<what the POV must achieve/decide in-scene, >=40 chars>", "castArcBeat": "<Named Character: internal shift>", "subplotPressure": "<subplot id/title + what it forces this chapter>", "dialogueTurn": "<A confronts B about X; exchange changes Y>", "sensoryWorldHook": "<faction/location + concrete sensory anchor>", "turnOrPayoff": "<the turn, or the payoff allowed here>", "characterBeats": [{"name": "...", "beat": "..."}], "worldHooks": ["..."], "allowedPayoffs": ["..."], "deferredThreads": ["..."], "threads": {"opens": [{"key": "setup-field-escape", "kind": "setup", "text": "..."}], "advances": ["subplot-1", "arc-elena-voss"], "pays": ["setup-crowe-motive"]}}]}.',
 		                'Do not imitate short stub outlines. Meet the word floors above with concrete chapter roles, named subplot pressure, and worldHooks from the world bible.'
 		            ].join('\n')
 		        }
@@ -8799,7 +8858,11 @@ return c && c.name && c.backstory && c.arc; });
 		    updateRequestLog();
 
 		    try {
-		        const response = await callAI(messages, document.getElementById('tab4'));
+		        // Fix 1: six beats + legacy fields x N chapters + macros truncate at the UI default; floor the budget like enrich does.
+		        const response = await callAI(messages, document.getElementById('tab4'), {
+		            max_tokens: Math.max(12000, parseInt(document.getElementById('maxTokens')?.value || '0', 10) || 0),
+		            operationName: 'generateNovelOutlines'
+		        });
 		        console.log('Novel Outlines response:', response);
 
 		        let outlines;
@@ -8892,13 +8955,7 @@ return c && c.name && c.backstory && c.arc; });
 		        const bpEl = document.getElementById('chapterBlueprints');
 		        if (Array.isArray(outlines.chapterBlueprints) && outlines.chapterBlueprints.length) {
 		            novelData.chapterBlueprints = outlines.chapterBlueprints;
-		            if (bpEl) {
-		                bpEl.value = outlines.chapterBlueprints.map(bp =>
-		                    `Ch ${bp.chapter} [${bp.role || ''}]: ${bp.arcStep || ''}` +
-		                    (bp.allowedPayoffs?.length ? `\n  Payoffs: ${bp.allowedPayoffs.join('; ')}` : '') +
-		                    (bp.deferredThreads?.length ? `\n  Deferred: ${bp.deferredThreads.join('; ')}` : '')
-		                ).join('\n\n');
-		            }
+		            if (bpEl) bpEl.value = formatChapterBlueprintsForDisplay(novelData.chapterBlueprints);
 		            console.log(`Stored ${novelData.chapterBlueprints.length} chapter blueprints.`);
 		        } else {
 		            novelData.chapterBlueprints = [];
@@ -8909,6 +8966,14 @@ return c && c.name && c.backstory && c.arc; });
 
 		        requestLog.status = 'Completed';
 		        updateRequestLog();
+
+		        // Fix 1: auto-enrich only when beats are thin; visible on the Tab 4 status line; never throws out of the
+		        // outline step (the outlines themselves succeeded).
+		        try {
+		            await maybeAutoEnrichBlueprints(novelData, { enrich: enrichChapterBlueprints, onStatus: renderBlueprintBeatStatus });
+		        } catch (autoErr) {
+		            console.warn('generateNovelOutlines: auto-enrich decision failed', autoErr);
+		        }
 		    } catch (error) {
 		        console.error('Error fetching novel outlines:', error);
 		        alert('An error occurred while fetching novel outlines: ' + error.message);
@@ -8921,6 +8986,22 @@ return c && c.name && c.backstory && c.arc; });
 
 
 
+
+		/** Fix 1: compact read-only Tab 4 blueprint view (six beats + planning fields); used by outline and enrich. */
+		function formatChapterBlueprintsForDisplay(list) {
+		    return (Array.isArray(list) ? list : []).map(function (raw, i) {
+		        const bp = normalizeChapterBeatPack(raw, i + 1) || { chapter: i + 1 };
+		        const line = function (label, v) { const t = nwBeatFieldText(v); return t ? '\n  ' + label + ': ' + t : ''; };
+		        return 'Ch ' + (bp.chapter != null ? bp.chapter : i + 1) + (bp.role ? ' [' + bp.role + ']' : '') + (bp.arcStep ? ': ' + bp.arcStep : '') +
+		            line('Scene goal', bp.sceneGoal) +
+		            line('Cast arc', bp.castArcBeat) +
+		            line('Subplot', bp.subplotPressure) +
+		            line('Dialogue turn', bp.dialogueTurn) +
+		            line('World hook', bp.sensoryWorldHook) +
+		            line('Turn/payoff', bp.turnOrPayoff) +
+		            line('Deferred', bp.deferredThreads);
+		    }).join('\n\n');
+		}
 
 		/**
 		 * Fix 5 (NW_GATE_FIX_SPEC): Tab 4 status line for blueprint beats (all chapters, same scope as Tab 4->5 readiness).
@@ -9045,7 +9126,8 @@ return c && c.name && c.backstory && c.arc; });
 		            characterBeats: upd.characterBeats || existing.characterBeats,
 		            worldHooks: upd.worldHooks || existing.worldHooks,
 		            allowedPayoffs: upd.allowedPayoffs || existing.allowedPayoffs,
-		            deferredThreads: existing.deferredThreads || upd.deferredThreads
+		            deferredThreads: existing.deferredThreads || upd.deferredThreads,
+		            threads: existing.threads || upd.threads
 		        };
 		    });
 		    let after = scoreBeatCoverage(novelData, { chapterCap: cap });
@@ -9098,7 +9180,7 @@ return c && c.name && c.backstory && c.arc; });
 		        }
 		    }
 		    const ta = document.getElementById('chapterBlueprints');
-		    if (ta) ta.value = JSON.stringify(novelData.chapterBlueprints, null, 2);
+		    if (ta) ta.value = formatChapterBlueprintsForDisplay(novelData.chapterBlueprints);
 		    
 		    // Dual densify retry (cast-enrich pattern): second targeted pass if still below floors
 		    if (!after.passed && !window.__enrichBpRetry2) {
@@ -9189,11 +9271,14 @@ return c && c.name && c.backstory && c.arc; });
 		            `- Chapter Blueprint (pre-planned by novel outline agent):`,
 		            `  Role: ${blueprint.role || chapterStage}`,
 		            `  Arc Step: ${blueprint.arcStep || structuralRule}`,
-		            `  Subplot Pressure: ${(blueprint.subplotPressure || []).join('; ') || 'See subplots above'}`,
-		            `  Character Beats: ${(blueprint.characterBeats || []).map(b => `${b.name}: ${b.beat}`).join('; ') || 'See characters above'}`,
-		            `  World Hooks: ${(blueprint.worldHooks || []).join('; ') || 'Use world bible locations/factions'}`,
-		            `  Allowed Payoffs This Chapter: ${(blueprint.allowedPayoffs || []).join('; ') || 'none specified'}`,
-		            `  Deferred Threads (must remain unresolved): ${(blueprint.deferredThreads || []).join('; ') || 'none specified'}`,
+		            ...(blueprint.sceneGoal ? [`  Scene Goal: ${nwBeatFieldText(blueprint.sceneGoal)}`] : []),
+		            `  Subplot Pressure: ${nwBeatFieldText(blueprint.subplotPressure) || 'See subplots above'}`,
+		            `  Character Beats: ${nwBeatFieldText(blueprint.castArcBeat) || nwBeatFieldText(blueprint.characterBeats) || 'See characters above'}`,
+		            ...(blueprint.dialogueTurn ? [`  Dialogue Turn: ${nwBeatFieldText(blueprint.dialogueTurn)}`] : []),
+		            `  World Hooks: ${nwBeatFieldText(blueprint.sensoryWorldHook) || nwBeatFieldText(blueprint.worldHooks) || 'Use world bible locations/factions'}`,
+		            ...(blueprint.turnOrPayoff ? [`  Turn / Payoff: ${nwBeatFieldText(blueprint.turnOrPayoff)}`] : []),
+		            `  Allowed Payoffs This Chapter: ${nwBeatFieldText(blueprint.allowedPayoffs) || 'none specified'}`,
+		            `  Deferred Threads (must remain unresolved): ${nwBeatFieldText(blueprint.deferredThreads) || 'none specified'}`,
 		        ].join('\n')
 		        : [
 		            `- Chapter Position: ${chapterNum} of ${totalChapters} (${chapterStage})`,
