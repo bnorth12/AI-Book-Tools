@@ -10643,6 +10643,12 @@ return c && c.name && c.backstory && c.arc; });
                 var el = nwBatchEl(id);
                 if (el) el.addEventListener('change', nwBatchRefreshEstimate);
             });
+            var skipEl = nwBatchEl('skipAutoRevision');
+            if (skipEl) skipEl.addEventListener('change', function () {
+                // SLOT8C: samples from one revision mode must not estimate the other (a too-low cap stops a batch).
+                if (typeof nwBatchState !== 'undefined' && nwBatchState) nwBatchState.windows = [];
+                if (typeof nwBatchRefreshEstimate === 'function') nwBatchRefreshEstimate();
+            });
             try { nwBatchRefreshEstimate(); } catch (e) { console.warn('[batch] estimate', e); }
             window.__nwBatchRestoreCheck = nwBatchCheckForInterrupted();
         });

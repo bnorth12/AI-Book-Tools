@@ -14,6 +14,9 @@
  *       counts logged, pass marked reverted, gate re-run
  *   D7  boundaries: 19% accepted, 21% rejected, before.length <= 400 not guarded
  *   D8  session: flag survives export/import; legacy import without the flag is false
+ *   D9  Copilot 4174871747/4174871730: draft-only batch fills windows; toggling skip OFF
+ *       clears those samples, falls back to the full-pass estimate, refreshes the prefilled
+ *       cap, and a follow-up full-pass batch is not stopped early by a stale draft-only cap
  *
  * Usage: node scripts/_smoke_nw_draft_only.mjs
  * Env:   NW_HTML_PATH (default this checkout's NovelWriter/NovelWriter.html), NW_OUT_DIR (default out/nw-smoke)
@@ -133,8 +136,9 @@ async function installHarness(page) {
       }
       if (/qualityRevise|qualityMultiPass|applyChapterImprovements/.test(opName)) {
         const cur = String(novelData.chapters[ch - 1] || 'revised');
-        recordBookTokenUsage({ operationName: opName, originTab: 'tab6', model: 'smoke-stub', prompt_tokens: 40, completion_tokens: 40, total_tokens: 80 });
-        requestLog.returnedInfo = JSON.stringify({ usage: { total_tokens: 80 } });
+        const tok = Number(cfg.reviseTokens) > 0 ? Number(cfg.reviseTokens) : 80;
+        recordBookTokenUsage({ operationName: opName, originTab: 'tab6', model: 'smoke-stub', prompt_tokens: 40, completion_tokens: tok - 40, total_tokens: tok });
+        requestLog.returnedInfo = JSON.stringify({ usage: { total_tokens: tok } });
         return { chapter: cur };
       }
       const usage = { prompt_tokens: 600, completion_tokens: 400, total_tokens: 1000 };
@@ -549,6 +553,79 @@ function ops(calls) { return (calls || []).map((c) => c.operationName); }
     return { flag: novelData.skipAutoRevision, checkbox: document.getElementById('skipAutoRevision').checked, hasKey: Object.prototype.hasOwnProperty.call(novelData, 'skipAutoRevision') };
   }, ND);
   check('D8', 'legacy import without the flag gives false', legacy.flag === false && legacy.checkbox === false, JSON.stringify(legacy));
+  await page.close();
+}
+
+// ---------------- D9: toggle draft-only clears windows + refreshes cap ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (nd) => {
+    const h = window.__h;
+    h.load(nd);
+    h.setSkip(true);
+    h.setAudit(false);
+    document.getElementById('batchFrom').value = '1';
+    document.getElementById('batchTo').value = '2';
+    h.calls.length = 0;
+    const first = await generateAllChapters();
+    const windowsAfterDraft = (nwBatchState.windows || []).map((w) => ({ chapter: w.chapter, tokens: w.tokens }));
+    const capAfterDraft = document.getElementById('batchTokenCap').value;
+    const estAfterDraft = nwBatchEstimate(2);
+
+    document.getElementById('batchFrom').value = '3';
+    document.getElementById('batchTo').value = '4';
+
+    const origRefresh = nwBatchRefreshEstimate;
+    let refreshCalls = 0;
+    const wrapped = function () {
+      refreshCalls += 1;
+      return origRefresh.apply(this, arguments);
+    };
+    nwBatchRefreshEstimate = wrapped;
+    window.nwBatchRefreshEstimate = wrapped;
+
+    const el = document.getElementById('skipAutoRevision');
+    el.click();
+
+    const windowsAfterToggle = (nwBatchState.windows || []).map((w) => ({ chapter: w.chapter, tokens: w.tokens }));
+    const capAfterToggle = document.getElementById('batchTokenCap').value;
+    const estAfterToggle = nwBatchEstimate(2);
+    const fallbackPer = nwBatchMaxTokens() * nwBatchPasses();
+    const expectedCap = String(Math.ceil(estAfterToggle.total * NW_BATCH.capFactor));
+
+    nwBatchRefreshEstimate = origRefresh;
+    window.nwBatchRefreshEstimate = origRefresh;
+
+    h.cfg = { reviseTokens: 2000 };
+    h.calls.length = 0;
+    const second = await generateAllChapters();
+    const br2 = novelData.batchRun;
+    return {
+      firstReason: first && first.reason,
+      windowsAfterDraft,
+      capAfterDraft,
+      estAfterDraft,
+      refreshCalls,
+      windowsAfterToggle,
+      capAfterToggle,
+      estAfterToggle,
+      fallbackPer,
+      expectedCap,
+      skipChecked: el.checked,
+      skipFlag: novelData.skipAutoRevision,
+      secondReason: second && second.reason,
+      secondCompleted: (second && second.completed) || (br2 && br2.completed) || [],
+      secondCap: br2 && br2.cap,
+      secondStoppedAt: second && second.stoppedAt,
+      secondEstimate: br2 && br2.estimate,
+      secondRevise: h.calls.filter((c) => /qualityRevise|qualityMultiPass|reviseChapterForQuality|runTargetedQualityPass/i.test(String(c.operationName || ''))).length
+    };
+  }, ND);
+  check('D9', 'draft-only batch filled windows with session samples', Array.isArray(r.windowsAfterDraft) && r.windowsAfterDraft.length === 2 && r.windowsAfterDraft.every((w) => w && w.tokens > 0) && r.firstReason === 'done', JSON.stringify({ firstReason: r.firstReason, windows: r.windowsAfterDraft, est: r.estAfterDraft, cap: r.capAfterDraft }));
+  check('D9', 'toggling draft-only OFF clears nwBatchState.windows', Array.isArray(r.windowsAfterToggle) && r.windowsAfterToggle.length === 0, JSON.stringify(r.windowsAfterToggle));
+  check('D9', 'next estimate does not reuse draft-only samples (fallback full-pass)', r.estAfterToggle && r.estAfterToggle.source === 'fallback' && r.estAfterToggle.perChapter === r.fallbackPer && r.fallbackPer === 4000 && !(r.estAfterDraft && r.estAfterDraft.source === 'session' && r.estAfterToggle.perChapter === r.estAfterDraft.perChapter && r.windowsAfterDraft && r.windowsAfterDraft.length > 0 && r.estAfterToggle.source === 'session'), JSON.stringify({ afterDraft: r.estAfterDraft, afterToggle: r.estAfterToggle, fallbackPer: r.fallbackPer }));
+  check('D9', 'nwBatchRefreshEstimate ran on toggle and prefilled cap matches full-pass estimate', r.refreshCalls >= 1 && r.capAfterToggle === r.expectedCap && r.expectedCap !== r.capAfterDraft, JSON.stringify({ refreshCalls: r.refreshCalls, capAfterDraft: r.capAfterDraft, capAfterToggle: r.capAfterToggle, expectedCap: r.expectedCap }));
+  check('D9', 'follow-up full-pass batch is not stopped early by a too-low draft-only cap', Array.isArray(r.secondCompleted) && r.secondCompleted.indexOf(3) >= 0 && r.secondCompleted.indexOf(4) >= 0 && r.secondStoppedAt !== 3 && r.secondCap === 10000, JSON.stringify({ reason: r.secondReason, completed: r.secondCompleted, cap: r.secondCap, stoppedAt: r.secondStoppedAt, estimate: r.secondEstimate, reviseCalls: r.secondRevise, skipChecked: r.skipChecked, skipFlag: r.skipFlag }));
   await page.close();
 }
 
