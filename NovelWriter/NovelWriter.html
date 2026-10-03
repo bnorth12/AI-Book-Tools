@@ -458,6 +458,7 @@ Synced: 2026-04-19
 	        <h2>Generate Chapters</h2>
 	        <label><input type="checkbox" id="continuityStrictMode" checked> Strict Continuity Mode</label>
 	        <label><input type="checkbox" id="autoContinuityAudit" checked> Auto Continuity Audit After Chapter Generation</label>
+	        <label title="Writes each chapter from your outline and blueprint with no automatic rewrite passes. Use it when you want to revise by hand; quality scores are still shown."><input type="checkbox" id="skipAutoRevision"> Skip automatic revision passes (draft only)</label>
 	        <button onclick="rebuildContinuityPackets()">Rebuild Continuity Packets</button>
 	        <button onclick="runContinuityAuditAll()">Run Continuity Audit (All Chapters)</button>
 	        <label for="continuityStatusPanel">Continuity Tracker:</label>
@@ -694,6 +695,7 @@ Synced: 2026-04-19
 	        chapterImprovements: [],
 	        continuityStrictMode: true,
 	        autoContinuityAudit: true,
+	        skipAutoRevision: false,
 	        chapterContinuityPackets: [],
 	        continuityTracker: { chapters: [], characterArcProgress: [], storyArcProgress: {} },
 	        continuityFindings: [],
@@ -6067,7 +6069,7 @@ return c && c.name && c.backstory && c.arc; });
 
 
 		// ---- #120 QE 1/2/3: apply-critique, fail-closed revise, chapter improvement apply ----
-		const NW_QUALITY_REVISE = { maxAttempts: 1, maxAutoPasses: 2, maxGrowthRatio: 1.35, maxGrowthChars: 3500, requireParagraphPreserve: true }; // QE5 + bounded revise
+		const NW_QUALITY_REVISE = { maxAttempts: 1, maxAutoPasses: 2, maxGrowthRatio: 1.35, maxGrowthChars: 3500, maxShrinkRatio: 0.20, requireParagraphPreserve: true }; // QE5 + bounded revise
 
 		function ensureChapterImprovementsArray() {
 			const n = Math.max(1, Number(novelData.numChapters) || (novelData.chapters || []).length || 1);
@@ -6542,7 +6544,7 @@ return c && c.name && c.backstory && c.arc; });
 				});
 				const __beforeMp = novelData.chapters[chapterNum - 1] || '';
 				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityMultiPass' });
-				guardChapterReviseGrowth(chapterNum, __beforeMp, novelData.chapters[chapterNum - 1] || '', { source: 'qualityMultiPass:' + kind });
+				const __guardMp = guardChapterReviseGrowth(chapterNum, __beforeMp, novelData.chapters[chapterNum - 1] || '', { source: 'qualityMultiPass:' + kind });
 				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', {
 					label: 'chapter' + chapterNum + '-afterMultiPass' + pass
 				});
@@ -6550,12 +6552,18 @@ return c && c.name && c.backstory && c.arc; });
 					source: 'heuristics-multipass',
 					rationale: (gateAfter.passed ? 'multipass pass' : 'multipass still fail') + ' kind=' + kind
 				}), (novelData.chapters[chapterNum - 1] || '').length);
+				if (__guardMp && __guardMp.reverted) {
+					opts._revertedGuard = __guardMp;
+				}
 			} else {
 				const forced = before.passed
 					? { passed: false, failures: (before.failures || []).slice().concat(['qe5-gate-retry']), scores: before.scores || {} }
 					: before;
 				const r = await reviseChapterForQuality(chapterNum, forced, { maxAttempts: 1 });
 				gateAfter = r.gateAfter || before;
+				if (r && r.reverted) {
+					opts._revertedGuard = { reverted: true, reasons: (r.reasons || []).slice() };
+				}
 			}
 			if (!Array.isArray(novelData.qualityReviseLog)) novelData.qualityReviseLog = [];
 			novelData.qualityReviseLog.push({
@@ -6570,7 +6578,7 @@ return c && c.name && c.backstory && c.arc; });
 				failuresAfter: (gateAfter.failures || []).slice(),
 				multiPass: true
 			});
-			pushQualityMultiPassLog({
+			const __mpEntry = {
 				ts: new Date().toISOString(),
 				chapter: chapterNum,
 				pass: pass,
@@ -6579,8 +6587,14 @@ return c && c.name && c.backstory && c.arc; });
 				passedAfter: !!gateAfter.passed,
 				failuresAfter: (gateAfter.failures || []).slice(),
 				scoresAfter: gateAfter.scores || null
-			});
-			return { revised: true, attempts: 1, gateBefore: before, gateAfter: gateAfter, pass: pass, kind: kind };
+			};
+			// SLOT8C: reverted marking
+			if (opts._revertedGuard && opts._revertedGuard.reverted) {
+				__mpEntry.reverted = true;
+				__mpEntry.reasons = (opts._revertedGuard.reasons || []).slice();
+			}
+			pushQualityMultiPassLog(__mpEntry);
+			return { revised: true, attempts: 1, gateBefore: before, gateAfter: gateAfter, pass: pass, kind: kind, reverted: !!(opts._revertedGuard && opts._revertedGuard.reverted), reasons: (opts._revertedGuard && opts._revertedGuard.reasons) || [] };
 		}
 
 		window.getChapterContinuityFindings = getChapterContinuityFindings;
@@ -6599,7 +6613,12 @@ return c && c.name && c.backstory && c.arc; });
 			});
 		}
 
-		/** BOUNDED_REVISE: reject runaway growth / lost paragraph structure; restore prior text. */
+		function nwCountWords(text) {
+			const s = String(text || '').trim();
+			return s ? s.split(/\s+/).length : 0;
+		}
+
+		/** BOUNDED_REVISE: reject runaway growth / lost paragraph structure / excessive shrink; restore prior text. */
 		function guardChapterReviseGrowth(chapterNum, beforeText, afterText, meta) {
 			meta = meta || {};
 			const before = String(beforeText || '');
@@ -6607,6 +6626,9 @@ return c && c.name && c.backstory && c.arc; });
 			const cfg = NW_QUALITY_REVISE || {};
 			const maxRatio = cfg.maxGrowthRatio != null ? cfg.maxGrowthRatio : 1.35;
 			const maxExtra = cfg.maxGrowthChars != null ? cfg.maxGrowthChars : 3500;
+			const maxShrink = cfg.maxShrinkRatio != null ? cfg.maxShrinkRatio : 0.20;
+			const beforeWords = nwCountWords(before);
+			const afterWords = nwCountWords(after);
 			const reasons = [];
 			if (before.length > 400 && after.length > before.length * maxRatio) {
 				reasons.push('growth_ratio>' + maxRatio + ' (' + before.length + '→' + after.length + ')');
@@ -6614,23 +6636,34 @@ return c && c.name && c.backstory && c.arc; });
 			if (before.length > 400 && (after.length - before.length) > maxExtra) {
 				reasons.push('growth_chars>' + maxExtra + ' (Δ' + (after.length - before.length) + ')');
 			}
+			// SLOT8C: shrink guard
+			if (before.length > 400 && after.length < before.length * (1 - maxShrink)) {
+				reasons.push('shrink_ratio>' + maxShrink + ' (' + before.length + '→' + after.length + ')');
+			}
 			const beforeParas = before.split(/\n\s*\n/).filter(function (p) { return p.trim().length > 40; }).length;
 			const afterParas = after.split(/\n\s*\n/).filter(function (p) { return p.trim().length > 40; }).length;
 			if (cfg.requireParagraphPreserve !== false && beforeParas >= 3 && afterParas < 2 && after.length > before.length * 0.8) {
 				reasons.push('lost_paragraph_breaks (' + beforeParas + '→' + afterParas + ')');
 			}
 			if (!reasons.length) {
-				return { ok: true, text: after, reasons: [] };
+				return { ok: true, text: after, reasons: [], beforeWords: beforeWords, afterWords: afterWords };
 			}
 			novelData.chapters[chapterNum - 1] = before;
 			syncChapterTextToDom(chapterNum, before);
 			if (!Array.isArray(novelData.boundedReviseLog)) novelData.boundedReviseLog = [];
 			novelData.boundedReviseLog.push({
 				chapter: chapterNum, ts: new Date().toISOString(), reasons: reasons,
-				beforeLen: before.length, afterLen: after.length, source: meta.source || 'revise'
+				beforeLen: before.length, afterLen: after.length, beforeWords: beforeWords, afterWords: afterWords, source: meta.source || 'revise'
 			});
 			console.warn('[BOUNDED_REVISE] restored chapter', chapterNum, reasons);
-			return { ok: false, text: before, reasons: reasons, reverted: true };
+			if (typeof nwNotify === 'function' && typeof nwBatchState !== 'undefined' && nwBatchState && nwBatchState.running) {
+				const shrinkReason = reasons.filter(function (r) { return /^shrink_ratio>/.test(r); })[0];
+				if (shrinkReason) {
+					const pct = before.length ? Math.round((1 - after.length / before.length) * 100) : 0;
+					nwNotify('Chapter ' + chapterNum + ' revision rejected: it cut the chapter by ' + pct + '%; original kept.', { level: 'warn' });
+				}
+			}
+			return { ok: false, text: before, reasons: reasons, reverted: true, beforeWords: beforeWords, afterWords: afterWords };
 		}
 
 
@@ -6644,13 +6677,14 @@ return c && c.name && c.backstory && c.arc; });
 			if (before.passed) return { revised: false, attempts: 0, gateBefore: before, gateAfter: before };
 			let gateAfter = before;
 			let attempts = 0;
+			let lastGuard = { ok: true, reasons: [] };
 			for (let a = 0; a < maxAttempts; a++) {
 				attempts++;
 				const brief = buildQualityReviseBrief(gateAfter);
 				stageChapterImprovement(chapterNum, brief, { mode: 'replace', source: 'quality-revise' });
 				const __beforeRev = novelData.chapters[chapterNum - 1] || '';
 				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityRevise' });
-				guardChapterReviseGrowth(chapterNum, __beforeRev, novelData.chapters[chapterNum - 1] || '', { source: 'qualityRevise' });
+				lastGuard = guardChapterReviseGrowth(chapterNum, __beforeRev, novelData.chapters[chapterNum - 1] || '', { source: 'qualityRevise' });
 				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-afterRevise' + attempts });
 				pushQualitySample('chapter' + chapterNum + '-afterRevise', Object.assign({}, gateAfter.scores || {}, {
 					source: 'heuristics-revise',
@@ -6660,7 +6694,7 @@ return c && c.name && c.backstory && c.arc; });
 			}
 			// Fail-closed: last gate result stays on novelData.lastQualityGate (set by runQualityGate)
 			if (!Array.isArray(novelData.qualityReviseLog)) novelData.qualityReviseLog = [];
-			novelData.qualityReviseLog.push({
+			const __revEntry = {
 				ts: new Date().toISOString(),
 				chapter: chapterNum,
 				attempts: attempts,
@@ -6668,8 +6702,14 @@ return c && c.name && c.backstory && c.arc; });
 				passedAfter: gateAfter.passed,
 				failuresBefore: (before.failures || []).slice(),
 				failuresAfter: (gateAfter.failures || []).slice()
-			});
-			return { revised: true, attempts: attempts, gateBefore: before, gateAfter: gateAfter };
+			};
+			// SLOT8C: reverted marking
+			if (lastGuard && lastGuard.reverted) {
+				__revEntry.reverted = true;
+				__revEntry.reasons = (lastGuard.reasons || []).slice();
+			}
+			novelData.qualityReviseLog.push(__revEntry);
+			return { revised: true, attempts: attempts, gateBefore: before, gateAfter: gateAfter, reverted: !!(lastGuard && lastGuard.reverted), reasons: (lastGuard && lastGuard.reasons) || [] };
 		}
 
 
@@ -6765,6 +6805,17 @@ return c && c.name && c.backstory && c.arc; });
 			const passResults = [];
 			const maxPasses = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : 2;
 			let passesDone = 0;
+			// SLOT8C: draft-only — skip automatic revision passes (generateChapter path)
+			if (novelData.skipAutoRevision) {
+				pushQualityMultiPassLog({
+					chapter: chapterNum,
+					skipped: 'draftOnly',
+					gate: gate.scores || null
+				});
+				const draftMsg = 'Chapter ' + chapterNum + ' drafted (draft only: automatic revision skipped)';
+				if (typeof nwBatchSetStatus === 'function') nwBatchSetStatus(draftMsg, (typeof nwBatchState !== 'undefined' && nwBatchState && nwBatchState.running) ? 'running' : 'idle');
+				return { gate: gate, revise: null, multi: null, advisory: null, multiPass: [], passesDone: 0, skipped: 'draftOnly' };
+			}
 			// Pass 1 (QE2): heuristics gate fail → auto-revise once
 			if (!gate.passed && passesDone < maxPasses) {
 				console.warn('[QE2] gate FAIL — auto-revise pass1', gate.failures);
@@ -6776,7 +6827,7 @@ return c && c.name && c.backstory && c.arc; });
 					last.pass = 1;
 					last.kind = 'gate-fail';
 				}
-				pushQualityMultiPassLog({
+				const __qe2Entry = {
 					ts: new Date().toISOString(),
 					chapter: chapterNum,
 					pass: 1,
@@ -6785,8 +6836,14 @@ return c && c.name && c.backstory && c.arc; });
 					passedAfter: !!gate.passed,
 					failuresAfter: (gate.failures || []).slice(),
 					scoresAfter: gate.scores || null
-				});
-				passResults.push({ pass: 1, kind: 'gate-fail', passedAfter: !!gate.passed });
+				};
+				// SLOT8C: reverted marking
+				if (revise && revise.reverted) {
+					__qe2Entry.reverted = true;
+					__qe2Entry.reasons = (revise.reasons || []).slice();
+				}
+				pushQualityMultiPassLog(__qe2Entry);
+				passResults.push({ pass: 1, kind: 'gate-fail', passedAfter: !!gate.passed, reverted: !!(revise && revise.reverted) });
 			}
 			// B3-fix: loop nested multipass under maxAutoPasses (continuity then anti-slop if budget remains)
 			let didContinuityPass = false;
@@ -6959,7 +7016,7 @@ return c && c.name && c.backstory && c.arc; });
 			const beforeScores = scoreProseQuality(novelData.chapters[chapterNum - 1] || '');
 			const __beforeStaged = novelData.chapters[chapterNum - 1] || '';
 			await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'applyChapterImprovements' });
-			guardChapterReviseGrowth(chapterNum, __beforeStaged, novelData.chapters[chapterNum - 1] || '', { source: 'applyStaged' });
+			const __guardStaged = guardChapterReviseGrowth(chapterNum, __beforeStaged, novelData.chapters[chapterNum - 1] || '', { source: 'applyStaged' });
 			const afterScores = scoreProseQuality(novelData.chapters[chapterNum - 1] || '');
 			pushQualitySample('chapter' + chapterNum + '-afterChapterImprovements', Object.assign({}, afterScores, {
 				source: 'heuristics-chapter-improve',
@@ -6968,7 +7025,7 @@ return c && c.name && c.backstory && c.arc; });
 			// QE5: after first apply-staged, optional second targeted pass (cap 2)
 			let multi = null;
 			let gate = runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-afterApplyStaged' });
-			pushQualityMultiPassLog({
+			const __stagedEntry = {
 				ts: new Date().toISOString(),
 				chapter: chapterNum,
 				pass: 1,
@@ -6977,12 +7034,20 @@ return c && c.name && c.backstory && c.arc; });
 				passedAfter: !!gate.passed,
 				failuresAfter: (gate.failures || []).slice(),
 				scoresAfter: gate.scores || null
-			});
+			};
+			// SLOT8C: reverted marking
+			if (__guardStaged && __guardStaged.reverted) {
+				__stagedEntry.reverted = true;
+				__stagedEntry.reasons = (__guardStaged.reasons || []).slice();
+			}
+			pushQualityMultiPassLog(__stagedEntry);
 			let passesDoneApply = 1;
 			let didContinuityPass = false;
 			let didAntiSlopPass = false;
 			let consumedStagedNotes = text;
 			const maxPassesApply = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : 2;
+			// SLOT8C: draft-only — skip follow-up auto-pass loop
+			if (!novelData.skipAutoRevision) {
 			while (passesDoneApply < maxPassesApply) {
 				const need = needsQualityMultiPass(chapterNum, gate, {
 					passesDone: passesDoneApply,
@@ -7012,7 +7077,8 @@ return c && c.name && c.backstory && c.arc; });
 				if (kind === 'anti-slop') didAntiSlopPass = true;
 				if (kind === 'residual-staged') consumedStagedNotes = notesForPass;
 			}
-			return { beforeScores: beforeScores, afterScores: afterScores, multi: multi, gate: gate };
+			}
+			return { beforeScores: beforeScores, afterScores: afterScores, multi: multi, gate: gate, reverted: !!(__guardStaged && __guardStaged.reverted), reasons: (__guardStaged && __guardStaged.reasons) || [] };
 		}
 
 		async function runQe123Smoke() {
@@ -8732,6 +8798,7 @@ return c && c.name && c.backstory && c.arc; });
 		            chapterImprovements: Array.isArray(normalizedNovelData.chapterImprovements) ? normalizedNovelData.chapterImprovements : [],
 		            continuityStrictMode: typeof normalizedNovelData.continuityStrictMode === 'boolean' ? normalizedNovelData.continuityStrictMode : true,
 		            autoContinuityAudit: typeof normalizedNovelData.autoContinuityAudit === 'boolean' ? normalizedNovelData.autoContinuityAudit : true,
+		            skipAutoRevision: typeof normalizedNovelData.skipAutoRevision === 'boolean' ? normalizedNovelData.skipAutoRevision : false,
 		            chapterContinuityPackets: Array.isArray(normalizedNovelData.chapterContinuityPackets) ? normalizedNovelData.chapterContinuityPackets : [],
 		            continuityFindings: Array.isArray(normalizedNovelData.continuityFindings) ? normalizedNovelData.continuityFindings : [],
 		            continuityTracker: normalizedNovelData.continuityTracker && typeof normalizedNovelData.continuityTracker === 'object'
@@ -8792,8 +8859,10 @@ return c && c.name && c.backstory && c.arc; });
 		    document.getElementById('chapterLength').value = novelData.chapterLength || 2000;
 			const strictModeEl = document.getElementById('continuityStrictMode');
 			const autoAuditEl = document.getElementById('autoContinuityAudit');
+			const skipRevEl = document.getElementById('skipAutoRevision');
 			if (strictModeEl) strictModeEl.checked = !!novelData.continuityStrictMode;
 			if (autoAuditEl) autoAuditEl.checked = !!novelData.autoContinuityAudit;
+			if (skipRevEl) skipRevEl.checked = !!novelData.skipAutoRevision;
 
 		    // CodeQL (DOM text reinterpreted as HTML): session/checkpoint data is never interpolated into innerHTML here.
 		    // renderCharacters()/renderSubplots() build fixed markup and set every user field through .value.
@@ -9754,6 +9823,7 @@ return c && c.name && c.backstory && c.arc; });
 			}
 		    console.log('Post-final updateRequestLog - chapterContent Length:', chapterContent.length);
 		    try {
+		        // SLOT8C: draft-only skip lives in ensureQualityAfterGenerate (novelData.skipAutoRevision)
 		        await ensureQualityAfterGenerate(chapterNum);
 		    } catch (qgErr) {
 		        console.warn('qualityGate/revise after generateChapter', qgErr);
@@ -9987,8 +10057,14 @@ return c && c.name && c.backstory && c.arc; });
             return ensureBookTokenUsage().calls.slice(idx).reduce(function (s, c) { return s + (Number(c && c.total_tokens) || 0); }, 0);
         }
 
+        function nwBatchSkipAutoRevision() {
+            var el = nwBatchEl('skipAutoRevision');
+            if (el) return !!el.checked;
+            return !!(novelData && novelData.skipAutoRevision);
+        }
+
         function nwBatchPasses() {
-            var maxAuto = (typeof NW_QUALITY_REVISE !== 'undefined' && NW_QUALITY_REVISE) ? (Number(NW_QUALITY_REVISE.maxAutoPasses) || 0) : 0;
+            var maxAuto = nwBatchSkipAutoRevision() ? 0 : ((typeof NW_QUALITY_REVISE !== 'undefined' && NW_QUALITY_REVISE) ? (Number(NW_QUALITY_REVISE.maxAutoPasses) || 0) : 0);
             return 2 + (novelData.autoContinuityAudit ? 1 : 0) + maxAuto;
         }
 
@@ -10162,7 +10238,7 @@ return c && c.name && c.backstory && c.arc; });
             document.querySelectorAll('#tab7 button[onclick*="applyTopBookCritiques"], #improvementsTableBody button[onclick*="applyBookCritiqueItem"], #tab8 button[onclick*="integrateBreakdownSuggestions"]').forEach(function (b) { b.disabled = locked; });
             // #134 follow-up 4: the Tab 5 continuity writers are locked the same way.
             document.querySelectorAll('#tab5 button[onclick*="rebuildContinuityPackets"], #tab5 button[onclick*="runContinuityAuditAll"]').forEach(function (b) { b.disabled = locked; });
-            ['importFile', 'numChapters', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap'].forEach(function (id) {
+            ['importFile', 'numChapters', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap', 'skipAutoRevision'].forEach(function (id) {
                 var el = nwBatchEl(id);
                 if (el) el.disabled = locked;
             });
@@ -10647,7 +10723,7 @@ return c && c.name && c.backstory && c.arc; });
 		    requestLog.originTab = 'tab6';
 		    clearReturnedInfo();
 		    updateRequestLog();
-		    await callAI(messages, document.getElementById('tab6')).then(response => {
+		    await callAI(messages, document.getElementById('tab6'), opts.operationTag ? { operationName: opts.operationTag } : {}).then(response => {
 		        console.log(`Updated Chapter ${chapterNum} response:`, response);
 		        const contentElement = document.getElementById(`chapterEditContent${chapterNum}`);
 		        if (contentElement) {
@@ -11025,6 +11101,7 @@ return c && c.name && c.backstory && c.arc; });
 	       });
 		   novelData.continuityStrictMode = !!document.getElementById('continuityStrictMode')?.checked;
 		   novelData.autoContinuityAudit = !!document.getElementById('autoContinuityAudit')?.checked;
+		   novelData.skipAutoRevision = !!document.getElementById('skipAutoRevision')?.checked;
 		   novelData.chapterContinuityPackets = Array.isArray(novelData.chapterContinuityPackets) ? novelData.chapterContinuityPackets : [];
 		   novelData.continuityFindings = Array.isArray(novelData.continuityFindings) ? novelData.continuityFindings : [];
 		   if (!novelData.continuityTracker || typeof novelData.continuityTracker !== 'object') {
@@ -11067,6 +11144,7 @@ return c && c.name && c.backstory && c.arc; });
 		        outlineImprovements: '', chapterImprovements: [],
 				continuityStrictMode: true,
 				autoContinuityAudit: true,
+				skipAutoRevision: false,
 				chapterContinuityPackets: [],
 				continuityTracker: { chapters: [], characterArcProgress: [], storyArcProgress: {} },
 				continuityFindings: [],
@@ -11092,6 +11170,7 @@ return c && c.name && c.backstory && c.arc; });
 		    document.getElementById('chapterLength').value = '2000';
 			document.getElementById('continuityStrictMode').checked = true;
 			document.getElementById('autoContinuityAudit').checked = true;
+			document.getElementById('skipAutoRevision').checked = false;
 			if (typeof renderBlueprintBeatStatus === 'function') renderBlueprintBeatStatus();
 		    document.getElementById('characterList').innerHTML = '<div class="character"><label>Name:</label><input type="text" class="charName"><label>Backstory:</label><textarea class="charBackstory"></textarea><label>Arc:</label><textarea class="charArc"></textarea></div>';
 		    document.getElementById('subplotList').innerHTML = '<div class="subplot-section"><label>Subplot 1:</label><textarea class="subplot" style="height: 300px;"></textarea></div>';
