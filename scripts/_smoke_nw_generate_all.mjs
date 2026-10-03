@@ -42,7 +42,9 @@
  *   F1  #134 follow-up 1: a batch starts while importSession's FileReader is reading; onload rechecks the lock: toast
  *       "Import cancelled: a Generate All run is active. Import again after it stops.", novelData/requestLog unchanged, 0 dialogs
  *   F2  #134 follow-up 2: import without batchRun over a stopped run: no batchRun, interrupted cleared, old IndexedDB
- *       checkpoint deleted; after reload no restore prompt and Resume unavailable. An import WITH a batchRun keeps it
+ *       checkpoint deleted (gone at the success dialog; no race); after reload no restore prompt and Resume unavailable.
+ *       An import WITH a batchRun keeps it. A stale custom cap / data-user-edited from the previous run is cleared and
+ *       the field shows the fresh estimate; a new Generate All uses that estimate, not the old cap.
  *   F3  #134 follow-up 3: after restore, nwBatchRefreshEstimate (and a range change) keeps showing br.cap
  *   F4  #134 follow-up 4: Rebuild Continuity Packets / Run Continuity Audit (All) disabled mid-run; direct calls return
  *       with a toast (no throw, no console error, no dialog, no work); the batch's own audit still runs
@@ -764,22 +766,46 @@ const IMPORT_CANCELLED = 'Import cancelled: a Generate All run is active. Import
     // the old run's checkpoint is still active (e.g. the tab died during the final write): without cleanup a reload would offer it
     const rec = await h.idbGet(oldId); rec.active = true; await nwBatchIdbPut(rec, oldId);
     const resumableBefore = nwBatchIsResumable();
+    const cap = document.getElementById('batchTokenCap');
+    cap.value = '50000'; cap.dataset.userEdited = '1';
     const nd2 = JSON.parse(JSON.stringify(novelData)); delete nd2.batchRun; delete nd2.apiKey; nd2.title = 'Other Book';
     const realRead = FileReader.prototype.readAsText;
     FileReader.prototype.readAsText = function (f) { const r = this; f.text().then((t) => r.onload({ target: { result: t } })); };
+    // Delay the actual IDB delete so a success-before-await race is visible at the success dialog.
+    const origDel = nwBatchIdbDelete;
+    nwBatchIdbDelete = function (key) {
+      return new Promise(function (resolve, reject) {
+        setTimeout(function () { origDel(key).then(resolve, reject); }, 250);
+      });
+    };
     h.dialogs.length = 0;
     importSession({ target: { files: [new File([JSON.stringify({ schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: nd2 })], 'other.json')], value: 'other.json' } });
     for (let i = 0; i < 200 && !h.dialogs.some((d) => /Session imported/.test(d)); i++) await new Promise((r) => setTimeout(r, 25));
-    await nwBatchState.lastForget;
-    const keys = await h.idbKeys();
-    const out = { oldId, resumableBefore, title: novelData.title, hasRun: 'batchRun' in novelData, interrupted: nwBatchState.interrupted, resumeDisabled: document.getElementById('batchResumeBtn').disabled, resumable: nwBatchIsResumable(), oldRecLeft: keys.includes(oldId), imported: h.dialogs.some((d) => /Session imported/.test(d)) };
+    const keysAtSuccess = await h.idbKeys();
+    const capEl = document.getElementById('batchTokenCap');
+    const o = nwBatchReadOptions();
+    const plan = nwBatchPlan({ from: o.from, to: o.to }, o.regenerateExisting, [], null);
+    const estCap = String(Math.ceil(nwBatchEstimate(plan.planned.length).total * NW_BATCH.capFactor));
+    const out = {
+      oldId, resumableBefore, title: novelData.title, hasRun: 'batchRun' in novelData, interrupted: nwBatchState.interrupted,
+      resumeDisabled: document.getElementById('batchResumeBtn').disabled, resumable: nwBatchIsResumable(),
+      oldRecLeft: keysAtSuccess.includes(oldId), imported: h.dialogs.some((d) => /Session imported/.test(d)),
+      capValue: capEl.value, capHasAttr: capEl.hasAttribute('data-user-edited'), capEdited: capEl.dataset.userEdited || '', estCap
+    };
+    nwBatchIdbDelete = origDel;
+    h.cfg = {};
+    h.calls.length = 0;
+    const ga = await generateAllChapters();
+    out.newRunCap = novelData.batchRun && novelData.batchRun.cap;
+    out.newRunReason = ga && ga.reason;
     // an import that carries a batchRun keeps it
     const nd3 = JSON.parse(JSON.stringify(nd2)); nd3.title = 'Third Book';
     nd3.batchRun = { id: 'third|2026-10-03T00:00:00.000Z', startedAt: '2026-10-03T00:00:00.000Z', updatedAt: '2026-10-03T00:00:00.000Z', range: { from: 1, to: 4 }, regenerateExisting: false, perChapterDownload: false, completed: [1], inFlight: null, stoppedAt: 2, reason: 'provider', detail: 'smoke', tokensUsed: 2000, estimate: { perChapter: 2000, total: 8000, source: 'fallback' }, cap: 43210, usageEstimated: [] };
     h.dialogs.length = 0;
     importSession({ target: { files: [new File([JSON.stringify({ schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: nd3 })], 'third.json')], value: 'third.json' } });
     for (let i = 0; i < 200 && !h.dialogs.some((d) => /Session imported/.test(d)); i++) await new Promise((r) => setTimeout(r, 25));
-    out.keep = { id: novelData.batchRun && novelData.batchRun.id, cap: novelData.batchRun && novelData.batchRun.cap };
+    const keepCap = document.getElementById('batchTokenCap');
+    out.keep = { id: novelData.batchRun && novelData.batchRun.id, cap: novelData.batchRun && novelData.batchRun.cap, input: keepCap.value, edited: keepCap.dataset.userEdited || '' };
     // back to the run-less book for the reload check
     h.dialogs.length = 0;
     importSession({ target: { files: [new File([JSON.stringify({ schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: nd2 })], 'other.json')], value: 'other.json' } });
@@ -790,7 +816,10 @@ const IMPORT_CANCELLED = 'Import cancelled: a Generate All run is active. Import
     return out;
   });
   check('F2', 'import without batchRun over a stopped run: no batchRun, interrupted null, Resume disabled/not resumable, old IndexedDB checkpoint deleted', st.br && st.br.reason === 'provider' && f2.resumableBefore && f2.imported && f2.title === 'Other Book' && !f2.hasRun && f2.interrupted === null && f2.resumeDisabled && !f2.resumable && !f2.oldRecLeft, JSON.stringify(f2));
-  check('F2', 'an import that carries a batchRun keeps it (id + cap); a later run-less import drops it again', f2.keep.id === 'third|2026-10-03T00:00:00.000Z' && f2.keep.cap === 43210 && !f2.hasRunAgain, JSON.stringify({ keep: f2.keep, hasRunAgain: f2.hasRunAgain }));
+  check('F2', 'run-less import: stale cap 50000/user-edited cleared; field shows the fresh estimate', !f2.capHasAttr && f2.capEdited !== '1' && f2.capValue !== '50000' && f2.capValue === f2.estCap && f2.estCap !== '50000', JSON.stringify({ capValue: f2.capValue, capHasAttr: f2.capHasAttr, capEdited: f2.capEdited, estCap: f2.estCap }));
+  check('F2', 'run-less import: old checkpoint is gone at the moment the import reports success (no race)', f2.imported && !f2.oldRecLeft, JSON.stringify({ imported: f2.imported, oldRecLeft: f2.oldRecLeft, oldId: f2.oldId }));
+  check('F2', 'run-less import: a new Generate All uses the estimate-based cap, not 50000', f2.newRunCap === Number(f2.estCap) && f2.newRunCap !== 50000, JSON.stringify({ newRunCap: f2.newRunCap, estCap: f2.estCap, reason: f2.newRunReason }));
+  check('F2', 'an import that carries a batchRun keeps it (id + cap shown); a later run-less import drops it again', f2.keep.id === 'third|2026-10-03T00:00:00.000Z' && f2.keep.cap === 43210 && f2.keep.input === '43210' && !f2.hasRunAgain, JSON.stringify({ keep: f2.keep, hasRunAgain: f2.hasRunAgain }));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => typeof restoreInterruptedBatchRun === 'function' && window.__nwBatchRestoreCheck, null, { timeout: 30000 });
   await page.evaluate(() => window.__nwBatchRestoreCheck);

@@ -8855,7 +8855,7 @@ return c && c.name && c.backstory && c.arc; });
 		    if (!file) return;
 
 		    const reader = new FileReader();
-		    reader.onload = function(e) {
+		    reader.onload = async function(e) {
 		        // #134 follow-up 1 (NW.T5.14): a Generate All run may have started while the file was being read.
 		        // Recheck the lock before touching anything; nothing from the file is applied.
 		        if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
@@ -8870,9 +8870,20 @@ return c && c.name && c.backstory && c.arc; });
 		            novelData = importedNovelData;
 		            requestLog = importedRequestLog;
 		            // #134 follow-up 2 (NW.T5.15): a book imported without a batchRun must not inherit the previous book's run.
-		            if (!novelData.batchRun && typeof nwBatchForgetRun === 'function') nwBatchForgetRun(priorRunId);
+		            // Await checkpoint delete before reporting success; IDB failures are logged inside nwBatchForgetRun.
+		            if (!novelData.batchRun && typeof nwBatchForgetRun === 'function') await nwBatchForgetRun(priorRunId);
 
 		            applySessionDataToUI();
+
+		            // Run-less import: drop the previous book's custom cap so Generate All uses a fresh estimate.
+		            if (!novelData.batchRun) {
+		                var capElRunless = document.getElementById('batchTokenCap');
+		                if (capElRunless) {
+		                    capElRunless.removeAttribute('data-user-edited');
+		                    capElRunless.value = '';
+		                }
+		                if (typeof nwBatchRefreshEstimate === 'function') nwBatchRefreshEstimate();
+		            }
 
 		            if (warnings.length > 0) {
 		                console.warn('Import completed with warnings:', warnings);
@@ -9911,7 +9922,7 @@ return c && c.name && c.backstory && c.arc; });
             });
         }
 
-        /** Import of a book without a run: forget the previous run (interrupted state, restore box, its checkpoint). */
+        /** Import of a book without a run: forget the previous run (interrupted state, restore box, its checkpoint). Import must await this before reporting success. */
         function nwBatchForgetRun(priorRunId) {
             var rec = nwBatchState.interrupted;
             var keys = [];
