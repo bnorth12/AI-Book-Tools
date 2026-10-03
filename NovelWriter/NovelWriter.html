@@ -9748,8 +9748,13 @@ return c && c.name && c.backstory && c.arc; });
         //          floor for every planned chapter before any API call, and SHALL NOT start when either fails.
         // NW.T5.9: Each batch chapter SHALL go through generateChapter(n, { batch: true }) and therefore the same per-chapter
         //          gate as single-chapter Generate (scoreGenerateChapterGate, chapters n and n+1). A gate, coverage, provider
-        //          (after one retry for HTTP 429/5xx/network only) or Part 1/2 parse failure stops the batch cleanly and
-        //          records batchRun.stoppedAt / reason / detail. No alert/confirm/prompt during a batch (nwNotify).
+        //          (after one retry for HTTP 429/5xx/network only) or Part 1/2 parse failure (reason 'parse', no retry) stops
+        //          the batch cleanly and records batchRun.stoppedAt / reason / detail. No alert/confirm/prompt during a batch
+        //          (nwNotify). Resume after a parse (or provider) stop regenerates the stopped chapter; only a coverage stop
+        //          is skipped on Resume. A coverage stop with "Regenerate existing" on restores the old text and keeps the
+        //          rejected draft in novelData.batchRun.rejectedDraft {chapter, text, detail} (latest only; it goes into the
+        //          session export but is stripped from the IndexedDB checkpoint). The session auto-export runs only when the
+        //          run stops (or a checkpoint write fails), not after a clean finish.
         // NW.T5.10: The batch SHALL write an IndexedDB checkpoint (db novelwriter, store checkpoints) when a chapter goes in
         //          flight and after it finishes; any write failure stops the run before the next chapter is generated.
         // NW.T5.11: While a batch runs (or an interrupted one awaits restore) per-chapter Generate, Tab 6 editors, Update
@@ -9966,7 +9971,9 @@ return c && c.name && c.backstory && c.arc; });
             var nd = JSON.parse(JSON.stringify(novelData));
             delete nd.apiKey;
             delete nd.batchRun;
-            var rec = { key: br.id, savedAt: br.updatedAt, active: active !== false, novelData: nd, batchRun: JSON.parse(JSON.stringify(br)) };
+            var brCopy = JSON.parse(JSON.stringify(br));
+            delete brCopy.rejectedDraft; // session export only, never checkpointed
+            var rec = { key: br.id, savedAt: br.updatedAt, active: active !== false, novelData: nd, batchRun: brCopy };
             return nwBatchIdbPut(rec, br.id);
         }
 
@@ -9993,6 +10000,7 @@ return c && c.name && c.backstory && c.arc; });
             var br = novelData.batchRun;
             if (!br || !br.range || nwBatchState.running) return false;
             if (br.reason == null || br.reason === 'done') return false;
+            // Only a coverage stop skips its chapter; a parse/provider/gate stop regenerates the stopped chapter on Resume.
             var skip = br.reason === 'coverage' ? br.stoppedAt : null;
             return nwBatchPlan(br.range, br.regenerateExisting, br.completed, skip).planned.length > 0;
         }
@@ -10069,7 +10077,7 @@ return c && c.name && c.backstory && c.arc; });
                 var partFailed = !!f || /^Failed - Part/.test(st);
                 if (!partFailed && nwBatchChapterHasText(n)) return { ok: true, attempts: attempts };
                 if (partFailed && f && !f.provider) {
-                    return { ok: false, reason: 'provider', parse: true, detail: 'Part ' + f.part + ' parse failure (no retry): ' + f.message, attempts: attempts };
+                    return { ok: false, reason: 'parse', parse: true, detail: 'Part ' + f.part + ' parse failure (no retry): ' + f.message, attempts: attempts };
                 }
                 if (partFailed && f && f.provider && attempts < 2) {
                     nwBatchSetStatus('ch' + n + ' Part ' + f.part + ' provider error; retrying once in ' + Math.round(NW_BATCH.retryDelayMs / 1000) + ' s: ' + nwBatchShort(f.message, 160), 'running');
@@ -10207,6 +10215,7 @@ return c && c.name && c.backstory && c.arc; });
         async function nwBatchLoop(br, plan, est) {
             var stop = null;
             var checkpointFailed = null;
+            var rejectedNow = false;
             var skippedNote = plan.skipped.length ? ' Skipped (existing text): ' + plan.skipped.join(', ') + '.' : '';
             for (var i = 0; i < plan.planned.length; i++) {
                 var n = plan.planned[i];
@@ -10226,6 +10235,12 @@ return c && c.name && c.backstory && c.arc; });
                 var outcome = await nwBatchRunChapter(n);
                 // Restore the pre-chapter text on any failure when regenerating; a coverage failure keeps the new text
                 // only when there was no old text (regenerate off). Gate failures never cleared the text.
+                // Coverage failure with regenerate on: the rejected new draft is kept aside (latest only) in
+                // batchRun.rejectedDraft so it reaches the session export; nwBatchCheckpoint strips it.
+                if (!outcome.ok && outcome.reason === 'coverage' && br.regenerateExisting) {
+                    br.rejectedDraft = { chapter: n, text: String((novelData.chapters || [])[n - 1] || ''), detail: nwBatchShort(outcome.detail, 300) };
+                    rejectedNow = true;
+                }
                 if (!outcome.ok && !(outcome.reason === 'coverage' && !br.regenerateExisting)) nwBatchSetChapterText(n, old);
                 var rows = ensureBookTokenUsage().calls.length - mark;
                 var delta = nwBatchUsageSince(mark);
@@ -10262,6 +10277,9 @@ return c && c.name && c.backstory && c.arc; });
             var text = stop
                 ? (stop.reason === 'paused' ? 'Paused before ch' + stop.at + '.' : 'Stopped at ch' + stop.at + ' (' + stop.reason + '): ' + nwBatchShort(stop.detail, 240) + '.')
                 : 'Done: ch' + br.range.from + '-' + br.range.to + '.';
+            if (stop && stop.reason === 'parse') text += ' Response could not be parsed (no retry); Resume regenerates ch' + stop.at + '.';
+            else if (stop && stop.reason === 'provider') text += ' Provider error (retried once where retryable); Resume regenerates ch' + stop.at + '.';
+            else if (stop && stop.reason === 'coverage' && rejectedNow) text += ' Old ch' + stop.at + ' text restored; rejected draft kept aside in session export (batchRun.rejectedDraft).';
             text += ' Completed: ' + (br.completed.length ? br.completed.join(', ') : 'none') + '.' + skippedNote;
             if (br.usageEstimated.length) text += ' Usage estimated (no provider usage) for: ' + br.usageEstimated.join(', ') + '.';
             text += ' Tokens ' + br.tokensUsed + '/' + br.cap + '.';
@@ -10270,7 +10288,10 @@ return c && c.name && c.backstory && c.arc; });
                 nwBatchShow('batchExportNow', true);
             }
             nwBatchSetStatus(text, stop ? (checkpointFailed ? 'checkpoint' : 'stopped') : 'done');
-            try { exportSession(); } catch (e) { console.warn('[batch] session export', e); }
+            // Auto-export only for a stopped run or a checkpoint failure; a clean finish does not download.
+            if (stop || checkpointFailed) {
+                try { exportSession(); } catch (e) { console.warn('[batch] session export', e); }
+            }
             return { started: true, reason: br.reason, stoppedAt: br.stoppedAt, completed: br.completed.slice(), detail: br.detail };
         }
 

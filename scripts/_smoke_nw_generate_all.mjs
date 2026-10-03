@@ -10,20 +10,24 @@
  * alert/confirm/prompt are stubbed to RECORD and return normally (E4 amendment), so a remaining modal is counted.
  *
  *   PS  thin ch5: readiness assert not-ready, Generate All refuses (0 provider calls), single-chapter Generate hard-blocked
- *   G1  full run 1..4: completed [1,2,3,4], reason done, one session download, 0 per-chapter downloads; opt-in downloads
+ *   G1  full run 1..4: completed [1,2,3,4], reason done, 0 session downloads (clean run: no auto-export), 0 per-chapter
+ *       downloads; opt-in downloads
  *   G2  (a) thin ch3 before start: preflight blocks, names the Enrich button, 0 calls; outline floor (b) ch3 thinned
  *       mid-run (stub blanks ch3 dialogueTurn while serving ch2 Part 2): stop at 3, reason gate, ch4 never attempted
  *   G3  pause during ch2: ch2 finishes, reason paused, ch3 not started; Resume starts at 3 and finishes
  *   G4  cap below 2 chapters of stub usage: stops after the chapter that crossed it, text saved, reason budget
  *   G5  ch2 pre-filled: skipped, unchanged, not in completed; regenerate on + provider failure on ch2 restores old text
  *   G6  generateChapter(1) outside a batch: no batchRun, no checkpoint, gate unchanged (alerts once when thin)
- *   G7  ch2 fails twice (HTTP 503): exactly 2 attempts, reason provider, ch1 kept, 2 s backoff; one failure then recovers
+ *   G7  ch2 fails twice (HTTP 503): exactly 2 attempts, reason provider, ch1 kept, 2 s backoff, 1 session export (stopped);
+ *       one failure then recovers
  *   E1  IndexedDB put throws QuotaExceededError after ch1: run stops, "Checkpoint failed", ch2 callAI never invoked
  *   E2  during a run per-chapter controls are locked; reload mid-ch2 offers restore, ch2 not completed, inFlight null,
  *       Resume enabled and resumes at 2; provider calls per chapter prove no completed chapter is regenerated
  *   E3  real usage 3x the estimate: stop after ch1 by real usage (estimate under cap); no usage -> estimate + usageEstimated
  *   E4  zero alert/confirm/prompt in batches; quality-gate error -> status line, run continues; coverage and gate stop with
- *       reason; Part 1 parse failure on ch3 stops at 3 (no retry); coverage resume needs a second click
+ *       reason; Part 1 parse failure on ch3 stops at 3 (reason parse, no retry) and Resume regenerates ch3 (same for a
+ *       Part 2 parse stop on ch2); coverage resume needs a second click; coverage stop with regenerate on restores the old
+ *       text and keeps batchRun.rejectedDraft {chapter,text,detail} in the session export but never in a checkpoint
  *
  * Usage: node scripts/_smoke_nw_generate_all.mjs
  * Env:   NW_HTML_PATH (default this checkout's NovelWriter/NovelWriter.html), NW_OUT_DIR (default out/nw-smoke)
@@ -84,7 +88,9 @@ const networkSeen = [];
 /** In-page harness (re-installed after a reload). */
 async function installHarness(page) {
   await page.evaluate(() => {
-    const h = window.__h = { calls: [], dialogs: [], downloads: [], puts: 0, cfg: {}, hanging: false, statusSeen: [] };
+    const h = window.__h = { calls: [], dialogs: [], downloads: [], puts: 0, putsWithRejected: 0, cfg: {}, hanging: false, statusSeen: [], lastExport: null };
+    const realCOU = URL.createObjectURL;
+    URL.createObjectURL = function (b) { if (b && /json/.test(String(b.type))) h.lastExport = b; return realCOU.call(URL, b); };
     window.collectData = function () {};
     ['alert', 'confirm', 'prompt'].forEach((k) => {
       window[k] = function (m) { h.dialogs.push(k + ': ' + String(m).slice(0, 200)); return k === 'confirm' ? true : (k === 'prompt' ? null : undefined); };
@@ -98,6 +104,8 @@ async function installHarness(page) {
     const realPut = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function () {
       h.puts += 1;
+      const rec0 = arguments[0];
+      if (rec0 && ((rec0.batchRun && 'rejectedDraft' in rec0.batchRun) || (rec0.novelData && rec0.novelData.batchRun))) h.putsWithRejected += 1;
       if (h.cfg.putThrowAfter != null && h.puts > h.cfg.putThrowAfter) throw new DOMException('smoke: quota exceeded', 'QuotaExceededError');
       return realPut.apply(this, arguments);
     };
@@ -194,7 +202,7 @@ async function batch(page, opts) {
     if (o.perChapterDownload != null) document.getElementById('batchPerChapterDownload').checked = !!o.perChapterDownload;
     if (o.cap) { const c = document.getElementById('batchTokenCap'); c.value = String(o.cap); c.dispatchEvent(new Event('input')); }
     h.cfg = o.cfg || {};
-    if (o.resetCounters) { h.calls.length = 0; h.dialogs.length = 0; h.downloads.length = 0; h.statusSeen.length = 0; }
+    if (o.resetCounters) { h.calls.length = 0; h.dialogs.length = 0; h.downloads.length = 0; h.statusSeen.length = 0; h.lastExport = null; }
     const t0 = Date.now();
     const r = o.resume ? await resumeBatchRun() : await generateAllChapters();
     const s = h.snap(r);
@@ -237,7 +245,7 @@ const batchDialogTotals = [];
   const s = await batch(page, { nd: ND });
   batchDialogTotals.push(s.dialogs.length);
   check('G1', 'full run 1..4: completed [1,2,3,4], reason done, stoppedAt null, inFlight null', s.r.started && eq(s.br.completed, [1, 2, 3, 4]) && s.br.reason === 'done' && s.br.stoppedAt === null && s.br.inFlight === null, JSON.stringify(s.br));
-  check('G1', 'one session download, 0 per-chapter downloads', sessionDl(s) === 1 && chapterDl(s) === 0 && s.downloads.length === 1, JSON.stringify(s.downloads));
+  check('G1', 'clean run: 0 session downloads (auto-export only on stop), 0 per-chapter downloads', sessionDl(s) === 0 && chapterDl(s) === 0 && s.downloads.length === 0, JSON.stringify(s.downloads));
   check('G1', '8 provider calls (2 parts x 4), chapters 1-4 text in novelData and Tab 5 textareas, ch5 untouched', s.calls.length === 8 && s.chapters.slice(0, 4).every((t, i) => t.startsWith('Chapter ' + (i + 1) + ' part 1')) && s.genDom.every((t, i) => t === s.chapters[i]) && !s.chapters[4], JSON.stringify(s.calls));
   check('G1', 'tokensUsed = real recorded usage (8 x 1000), estimate source fallback = maxTokens 1000 x 4 passes, default cap = ceil(total x 1.25)', s.br.tokensUsed === 8000 && s.br.estimate.source === 'fallback' && s.br.estimate.perChapter === 4000 && s.br.cap === 20000 && eq(s.br.usageEstimated, []), JSON.stringify(s.br));
   check('G1', 'status "Done ... Completed: 1, 2, 3, 4", controls unlocked, Pause disabled, Resume disabled (done)', /^Done: ch1-4\. Completed: 1, 2, 3, 4\./.test(s.status) && s.pauseDisabled && s.resumeDisabled && !s.running && !s.quiet, s.status);
@@ -251,7 +259,7 @@ const batchDialogTotals = [];
   check('G1', 'IndexedDB novelwriter/checkpoints holds the run (key title|startedAt), inactive after done, novelData has no apiKey', (idb || []).length === 1 && rec.key === s.br.id && /\|\d{4}-/.test(rec.key) && rec.active === false && rec.batchRun.reason === 'done' && rec.novelData && !('apiKey' in rec.novelData) && rec.novelData.chapters[3].startsWith('Chapter 4'), JSON.stringify({ n: (idb || []).length, key: rec.key, active: rec.active, hasKey: rec.novelData && 'apiKey' in rec.novelData }));
   check('G1', 'checkpoint writes: inFlight + done per chapter (8) + final (1)', s.puts === 9, s.puts);
   const s2 = await batch(page, { nd: ND, perChapterDownload: true, resetCounters: true });
-  check('G1', 'opt-in per-chapter download: 4 x <title>_ch<n>.txt + 1 session export', chapterDl(s2) === 4 && sessionDl(s2) === 1 && s2.downloads.slice(0, 4).every((d, i) => d.endsWith('_ch' + (i + 1) + '.txt')), JSON.stringify(s2.downloads));
+  check('G1', 'opt-in per-chapter download: 4 x <title>_ch<n>.txt, 0 session exports (clean run)', chapterDl(s2) === 4 && sessionDl(s2) === 0 && s2.downloads.length === 4 && s2.downloads.slice(0, 4).every((d, i) => d.endsWith('_ch' + (i + 1) + '.txt')), JSON.stringify(s2.downloads));
   await page.close();
 }
 
@@ -284,6 +292,7 @@ const batchDialogTotals = [];
   const r = await batch(page, { resume: true, resetCounters: true });
   check('G3', 'resume starts at 3 (first call ch3) and finishes: completed [1,2,3,4], reason done', r.calls.length === 4 && r.calls[0].ch === 3 && callsFor(r, 1) === 0 && callsFor(r, 2) === 0 && eq(r.br.completed, [1, 2, 3, 4]) && r.br.reason === 'done' && r.br.id === s.br.id, JSON.stringify(r.calls));
   check('G3', 'tokensUsed carries across resume (8 x 1000)', r.br.tokensUsed === 8000, r.br.tokensUsed);
+  check('G3', 'export only on stop: paused run 1 session export, clean resumed finish 0', sessionDl(s) === 1 && sessionDl(r) === 0, JSON.stringify([s.downloads, r.downloads]));
   await page.close();
 }
 
@@ -343,6 +352,7 @@ const batchDialogTotals = [];
   check('G7', 'ch2 fails twice (HTTP 503): exactly 2 attempts (1 retry), reason provider, stoppedAt 2', ch2p1 === 2 && s.br.reason === 'provider' && s.br.stoppedAt === 2 && /after 1 retry: HTTP error! Status: 503/.test(s.br.detail || ''), JSON.stringify({ calls: s.calls, br: s.br }));
   check('G7', 'ch1 kept and completed, ch2 empty, ch3 never attempted', eq(s.br.completed, [1]) && s.chapters[0] && !s.chapters[1] && !s.genDom[1] && callsFor(s, 3) === 0, JSON.stringify(s.chapters));
   check('G7', 'single retry waits NW_BATCH.retryDelayMs = 2000 (no loop)', s.ms >= 1900 && s.ms < 15000, s.ms);
+  check('G7', 'provider stop: status "(provider)" + provider hint (not parse); stopped run => exactly 1 session export', /^Stopped at ch2 \(provider\): .*Provider error \(retried once where retryable\); Resume regenerates ch2\./.test(s.status) && !/\(parse\)|could not be parsed/.test(s.status) && sessionDl(s) === 1, s.status + ' / ' + JSON.stringify(s.downloads));
   const r = await batch(page, { nd: ND, cfg: { failProvider: { 2: 1 } }, resetCounters: true });
   check('G7', 'one 503 on ch2 then success: retry recovers, run completes [1,2,3,4]', r.br.reason === 'done' && eq(r.br.completed, [1, 2, 3, 4]) && r.calls.filter((c) => c.ch === 2 && c.part === 1).length === 2, JSON.stringify(r.br));
   await page.close();
@@ -444,14 +454,40 @@ const batchDialogTotals = [];
   check('E4', 'coverage resume: first Resume asks for confirmation on the status line (no modal, no calls)', c1.r.started === false && c1.r.reason === 'confirm-coverage' && /ch2 failed obligation coverage and needs review/.test(c1.status) && c1.calls.length === 0 && c1.dialogs.length === 0, JSON.stringify(c1.r));
   const c2 = await batch(page, { resume: true, resetCounters: true });
   check('E4', 'coverage resume: second Resume continues from ch3; ch2 text kept and still not completed', c2.r.started && c2.calls[0].ch === 3 && callsFor(c2, 2) === 0 && eq(c2.br.completed, [1, 3, 4]) && /^Chapter 2 part 1/.test(c2.chapters[1]) && c2.br.reason === 'done', JSON.stringify(c2.br));
+  // coverage stop with regenerate on: old text restored, rejected draft kept aside (export only, never checkpointed)
+  const OLD2 = 'Hand-written chapter two that must be restored after a coverage failure.';
+  const putsRejBefore = await page.evaluate(() => window.__h.putsWithRejected);
+  const cr = await batch(page, { nd: ND, prefill: { 2: OLD2 }, regenerate: true, cfg: { coverageFail: 2 }, resetCounters: true });
+  const crx = await page.evaluate(async (id) => {
+    const h = window.__h;
+    const exp = h.lastExport ? JSON.parse(await h.lastExport.text()) : null;
+    const recs = await new Promise((res) => {
+      const q = indexedDB.open('novelwriter');
+      q.onsuccess = () => { const g = q.result.transaction('checkpoints').objectStore('checkpoints').getAll(); g.onsuccess = () => res(g.result); };
+      q.onerror = () => res([]);
+    });
+    const rec = recs.find((x) => x.key === id) || null;
+    return { exp: exp && exp.novelData && exp.novelData.batchRun ? exp.novelData.batchRun.rejectedDraft || null : 'no-export', recBr: rec ? rec.batchRun : null, recNdHasBr: !!(rec && rec.novelData && rec.novelData.batchRun), putsWithRejected: h.putsWithRejected };
+  }, cr.br.id);
+  const rd = cr.br.rejectedDraft || {};
+  check('E4', 'coverage stop (regenerate on): reason coverage at ch2, OLD ch2 text restored in novelData + Tab 5', cr.br.reason === 'coverage' && cr.br.stoppedAt === 2 && cr.chapters[1] === OLD2 && cr.genDom[1] === OLD2 && eq(cr.br.completed, [1]), JSON.stringify({ br: cr.br, ch2: cr.chapters[1] }));
+  check('E4', 'coverage stop (regenerate on): batchRun.rejectedDraft = {chapter 2, rejected new text, coverage detail}', rd.chapter === 2 && /^Chapter 2 part 1/.test(rd.text || '') && /^OBLIGATION COVERAGE FAIL-CLOSED \[chapter 2\]/.test(rd.detail || '') && eq(Object.keys(rd).sort(), ['chapter', 'detail', 'text']), JSON.stringify(rd));
+  check('E4', 'coverage stop status says the rejected draft was kept aside in the session export', /Stopped at ch2 \(coverage\): .*Old ch2 text restored; rejected draft kept aside in session export/.test(cr.status), cr.status);
+  check('E4', 'rejectedDraft is never written to an IndexedDB checkpoint (no put carried it; stored record has none)', crx.putsWithRejected === putsRejBefore && crx.recBr && !('rejectedDraft' in crx.recBr) && !crx.recNdHasBr, JSON.stringify({ before: putsRejBefore, after: crx.putsWithRejected, recBrKeys: crx.recBr && Object.keys(crx.recBr) }));
+  check('E4', 'session export (1 download) contains batchRun.rejectedDraft for ch2', sessionDl(cr) === 1 && crx.exp && crx.exp.chapter === 2 && crx.exp.text === rd.text && crx.exp.detail === rd.detail, JSON.stringify({ dl: cr.downloads, exp: crx.exp }));
   const g = await batch(page, { nd: ND, cfg: { blankBeatAt: '1:2', blankBeatTarget: 2 }, resetCounters: true });
   check('E4', 'gate failure stops with reason gate recorded in batchRun.stoppedAt/reason, 0 dialogs', g.br.reason === 'gate' && g.br.stoppedAt === 2 && g.dialogs.length === 0 && eq(g.br.completed, [1]), JSON.stringify(g.br));
   const p = await batch(page, { nd: ND, cfg: { parseFail: '3:1' }, resetCounters: true });
-  check('E4', 'Part 1 parse failure on ch3 stops the batch at 3 (reason provider, detail parse failure, no retry)', p.br.reason === 'provider' && p.br.stoppedAt === 3 && /^Part 1 parse failure \(no retry\)/.test(p.br.detail || '') && p.calls.filter((x) => x.ch === 3).length === 1, JSON.stringify({ br: p.br, calls: p.calls }));
+  check('E4', 'Part 1 parse failure on ch3 stops the batch at 3 (reason parse, detail parse failure, no retry)', p.br.reason === 'parse' && p.br.stoppedAt === 3 && /^Part 1 parse failure \(no retry\)/.test(p.br.detail || '') && p.calls.filter((x) => x.ch === 3).length === 1, JSON.stringify({ br: p.br, calls: p.calls }));
   check('E4', 'parse failure: ch1-2 kept, ch3 empty, ch4 never attempted, 0 dialogs', eq(p.br.completed, [1, 2]) && p.chapters[0] && p.chapters[1] && !p.chapters[2] && callsFor(p, 4) === 0 && p.dialogs.length === 0, JSON.stringify(p.chapters));
+  check('E4', 'parse stop status: "(parse)" + parse hint, not the provider wording; Resume enabled', /^Stopped at ch3 \(parse\): Part 1 parse failure \(no retry\).*Response could not be parsed \(no retry\); Resume regenerates ch3\./.test(p.status) && !/\(provider\)|Provider error/.test(p.status) && !p.resumeDisabled, p.status);
+  const pr = await batch(page, { resume: true, resetCounters: true });
+  check('E4', 'Resume after the Part 1 parse stop on ch3 calls the provider for ch3 again (first call ch3, both parts) and completes it', pr.r.started && pr.calls[0] && pr.calls[0].ch === 3 && callsFor(pr, 3) === 2 && /^Chapter 3 part 1/.test(pr.chapters[2]) && eq(pr.br.completed, [1, 2, 3, 4]) && pr.br.reason === 'done' && pr.br.id === p.br.id, JSON.stringify({ r: pr.r, calls: pr.calls, br: pr.br }));
   const p2 = await batch(page, { nd: ND, cfg: { parseFail: '2:2' }, resetCounters: true });
-  check('E4', 'Part 2 parse failure on ch2 also stops (reason provider, parse failure)', p2.br.reason === 'provider' && p2.br.stoppedAt === 2 && /^Part 2 parse failure/.test(p2.br.detail || '') && eq(p2.br.completed, [1]) && p2.dialogs.length === 0, JSON.stringify(p2.br));
-  for (const x of [a, c, c1, c2, g, p, p2]) batchDialogTotals.push(x.dialogs.length);
+  check('E4', 'Part 2 parse failure on ch2 also stops (reason parse, parse failure)', p2.br.reason === 'parse' && p2.br.stoppedAt === 2 && /^Part 2 parse failure/.test(p2.br.detail || '') && eq(p2.br.completed, [1]) && p2.dialogs.length === 0 && !p2.chapters[1], JSON.stringify(p2.br));
+  const p2r = await batch(page, { resume: true, resetCounters: true });
+  check('E4', 'Resume after the Part 2 parse stop on ch2 regenerates ch2 (provider called for ch2 Part 1 + Part 2) and completes it', p2r.r.started && p2r.calls[0] && p2r.calls[0].ch === 2 && p2r.calls[0].part === 1 && callsFor(p2r, 2) === 2 && /^Chapter 2 part 1/.test(p2r.chapters[1]) && eq(p2r.br.completed, [1, 2, 3, 4]) && p2r.br.reason === 'done', JSON.stringify({ r: p2r.r, calls: p2r.calls, br: p2r.br }));
+  for (const x of [a, c, c1, c2, cr, g, p, pr, p2, p2r]) batchDialogTotals.push(x.dialogs.length);
   await page.close();
 }
 
