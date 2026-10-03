@@ -7578,6 +7578,19 @@ return c && c.name && c.backstory && c.arc; });
 			return packet;
 		}
 
+		/**
+		 * Fix 7 (NW_GATE_FIX_SPEC): after Chapter N is generated, only Chapter N+1's packet has new inputs
+		 * (prevChapterSummary comes from Chapter N's text). Rebuild just that one; no collectData(), no alert.
+		 * Chapter N+2.. rebuild their own packet right before they generate (generateChapter pre-gen call).
+		 */
+		function refreshContinuityAfterChapter(chapterNum) {
+			const n = Number(chapterNum) || 0;
+			const total = Number(novelData.numChapters) || 0;
+			if (n >= 1 && n < total) buildChapterContinuityPacket(n + 1);
+			renderContinuityStatusPanel();
+		}
+
+		// Tab 5 "Rebuild Continuity Packets" button: rebuilds every chapter and confirms with an alert (unchanged).
 		function rebuildContinuityPackets() {
 			collectData();
 			for (let i = 1; i <= novelData.numChapters; i++) {
@@ -9628,7 +9641,7 @@ return c && c.name && c.backstory && c.arc; });
 		    requestLog.returnedInfo = JSON.stringify({ chapter: novelData.chapters[chapterNum-1] }, null, 2);
 		    console.log('Pre-final updateRequestLog - chapterContent Length:', chapterContent.length);
 		    updateRequestLog();
-			rebuildContinuityPackets();
+			refreshContinuityAfterChapter(chapterNum);
 			if (novelData.autoContinuityAudit) {
 				await runChapterContinuityAudit(chapterNum, { silent: true });
 			}
