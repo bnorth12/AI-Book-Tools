@@ -9,7 +9,8 @@ import vm from 'vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const snippet = fs.readFileSync(path.join(__dirname, '_nw_beat_coverage_snippet.js'), 'utf8');
-const PLAN = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/novelwriter';
+// Repo-relative output (gitignored out/); override with NW_OUT_DIR.
+const OUT_DIR = path.resolve(process.env.NW_OUT_DIR || path.join(__dirname, '..', 'out', 'nw-smoke'));
 
 const sandbox = {
   console,
@@ -81,7 +82,10 @@ const legacy = normalizeChapterBeatPack({
   worldHooks: ['Philippine Sea freighter, Bridge Lock badge chirp, salt and yellow NOTAM wash.'],
   allowedPayoffs: ['Refusal is logged and later becomes clause language in the opacity treaty.']
 }, 1);
-assert(legacy.sceneGoal.length >= 40, 'legacy role -> sceneGoal');
+// Fix 2 (NW_GATE_FIX_SPEC): `role` is a chapter label, not a scene goal. It must NOT feed sceneGoal any more
+// (this used to assert the opposite). `goal` still maps.
+assert(legacy.sceneGoal === '', 'legacy role must not feed sceneGoal (Fix 2)');
+assert(legacy.role.length >= 40, 'role kept on the pack for display');
 assert(legacy.castArcBeat.toLowerCase().includes('kwan'), 'legacy characterBeats -> castArcBeat');
 assert(legacy.sensoryWorldHook.length >= 40, 'legacy worldHooks');
 assert(legacy.turnOrPayoff.length >= 40, 'legacy allowedPayoffs');
@@ -89,7 +93,7 @@ assert(legacy.turnOrPayoff.length >= 40, 'legacy allowedPayoffs');
 const legacyScore = scoreBeatCoverage({
   characters: chars,
   subplots: subs,
-  chapterBlueprints: [legacy, denseBeat(2, 'Marshal Ife Okafor'), denseBeat(3, 'Dr. Lumen Kwan'), denseBeat(4, 'Marshal Ife Okafor'), denseBeat(5, 'Dr. Lumen Kwan')],
+  chapterBlueprints: [Object.assign({}, legacy, { sceneGoal: 'Kwan must decide at the docks whether to open the opacity window before the NOTAM lapses.' }), denseBeat(2, 'Marshal Ife Okafor'), denseBeat(3, 'Dr. Lumen Kwan'), denseBeat(4, 'Marshal Ife Okafor'), denseBeat(5, 'Dr. Lumen Kwan')],
   numChapters: 5
 }, { chapterCap: 5 });
 assert(legacyScore.passed, 'legacy-mapped dense should pass');
@@ -114,8 +118,8 @@ const report = {
   legacyPassed: legacyScore.passed,
   required: NW_BEAT_REQUIRED
 };
-fs.mkdirSync(PLAN, { recursive: true });
-fs.writeFileSync(path.join(PLAN, 'A1_BEAT_SMOKE_REPORT.json'), JSON.stringify(report, null, 2));
+fs.mkdirSync(OUT_DIR, { recursive: true });
+fs.writeFileSync(path.join(OUT_DIR, 'A1_BEAT_SMOKE_REPORT.json'), JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));
 if (fails.length) {
   console.error('A1 SMOKE FAIL', fails);

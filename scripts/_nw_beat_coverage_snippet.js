@@ -9,8 +9,8 @@ function nwBeatFieldText(v) {
 	if (typeof v === 'string') return v.trim();
 	if (Array.isArray(v)) return v.map(function (x) { return nwBeatFieldText(x); }).filter(Boolean).join('; ');
 	if (typeof v === 'object') {
-		if (v.name && (v.beat || v.text || v.summary)) {
-			return String(v.name).trim() + ': ' + String(v.beat || v.text || v.summary || '').trim();
+		if (v.name && (v.beat || v.text || v.summary || v.detail || v.description)) {
+			return String(v.name).trim() + ': ' + String(v.beat || v.text || v.summary || v.detail || v.description || '').trim();
 		}
 		if (v.beat || v.text || v.summary || v.goal) return String(v.beat || v.text || v.summary || v.goal || '').trim();
 		try { return JSON.stringify(v); } catch (_) { return String(v); }
@@ -25,7 +25,8 @@ function normalizeChapterBeatPack(raw, chapterNum) {
 		try { bp = JSON.parse(raw); } catch (_) { bp = { arcStep: raw }; }
 	}
 	if (typeof bp !== 'object') return null;
-	var sceneGoal = nwBeatFieldText(bp.sceneGoal || bp.goal || bp.role || '');
+	// Fix 2 (NW_GATE_FIX_SPEC): `role` (e.g. 'rising action') is a label, not a scene goal; it stays on the pack for display only.
+		var sceneGoal = nwBeatFieldText(bp.sceneGoal || bp.goal || '');
 	var castArcBeat = nwBeatFieldText(bp.castArcBeat || '');
 	if (!castArcBeat && Array.isArray(bp.characterBeats) && bp.characterBeats.length) {
 		castArcBeat = bp.characterBeats.map(nwBeatFieldText).filter(Boolean).join('; ');
@@ -35,11 +36,12 @@ function normalizeChapterBeatPack(raw, chapterNum) {
 	var dialogueTurn = nwBeatFieldText(bp.dialogueTurn || bp.dialogue || bp.dialogueObligation || '');
 	var sensoryWorldHook = nwBeatFieldText(bp.sensoryWorldHook || '');
 	if (!sensoryWorldHook && Array.isArray(bp.worldHooks) && bp.worldHooks.length) {
-		sensoryWorldHook = bp.worldHooks.map(String).filter(Boolean).join('; ');
+		// Fix 2: nwBeatFieldText, not String() (object hooks became [object Object]). No arcStep fallback here by design.
+		sensoryWorldHook = bp.worldHooks.map(nwBeatFieldText).filter(Boolean).join('; ');
 	}
 	var turnOrPayoff = nwBeatFieldText(bp.turnOrPayoff || bp.payoff || '');
 	if (!turnOrPayoff && Array.isArray(bp.allowedPayoffs) && bp.allowedPayoffs.length) {
-		turnOrPayoff = bp.allowedPayoffs.map(String).filter(Boolean).join('; ');
+		turnOrPayoff = bp.allowedPayoffs.map(nwBeatFieldText).filter(Boolean).join('; ');
 	}
 	if (!turnOrPayoff) turnOrPayoff = nwBeatFieldText(bp.arcStep || '');
 	return {
