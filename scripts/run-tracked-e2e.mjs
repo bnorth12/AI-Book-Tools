@@ -6,7 +6,8 @@
  * OFFLINE BY DEFAULT. Without NW_E2E_LIVE=1 every xAI request is answered by the vendored fixture
  * responder (scripts/_nw_e2e_offline_responder.mjs, seeded from scripts/fixtures/nw_slop/b3r_seed.json),
  * every other http(s) request is aborted, and no key file is read. Live mode needs NW_E2E_LIVE=1 plus
- * XAI_API_KEY (or GROK_API_KEY) and is refused when CI / GITHUB_ACTIONS is set.
+ * XAI_API_KEY (or GROK_API_KEY) and is refused when CI or GITHUB_ACTIONS is set to ANY non-empty value
+ * (CI=false, CI=0 and CI=on all count as CI).
  *
  * Usage: node scripts/run-tracked-e2e.mjs   (see scripts/README.md for every NW_* variable)
  * Exit codes: 0 pass; 1 fatal; 2 one or more steps failed; 3 live mode refused / key missing;
@@ -37,9 +38,10 @@ const ANNEX_JSON = path.join(OUT_DIR, 'TRACKED_E2E_ANNEX_NOVELDATA.json');
 const ANNEX_MD = path.join(OUT_DIR, 'TRACKED_E2E_ANNEXES.md');
 const TOKENS_MD = path.join(OUT_DIR, 'TRACKED_E2E_TOKENS_BY_STAGE.md');
 
-const truthy = (v) => /^(1|true|yes)$/i.test(String(v || '').trim());
+// Any non-empty CI / GITHUB_ACTIONS value means CI (CI=false, CI=0, CI=on included): fail safe, never parse it.
+const isSet = (v) => v != null && String(v) !== '';
 const LIVE = process.env.NW_E2E_LIVE === '1';
-const IN_CI = truthy(process.env.CI) || truthy(process.env.GITHUB_ACTIONS);
+const IN_CI = isSet(process.env.CI) || isSet(process.env.GITHUB_ACTIONS);
 const STRICT = process.env.NW_E2E_STRICT === '1';
 const MODE = LIVE ? 'live' : 'offline';
 // Placeholder so the page's "key present" checks pass; offline requests never leave the browser.
@@ -50,7 +52,7 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 let apiKey = OFFLINE_KEY;
 if (LIVE) {
   if (IN_CI) {
-    console.error('run-tracked-e2e: NW_E2E_LIVE=1 is refused under CI (CI/GITHUB_ACTIONS set). CI runs offline fixtures only.');
+    console.error('run-tracked-e2e: NW_E2E_LIVE=1 is refused under CI (CI or GITHUB_ACTIONS is non-empty). CI runs offline fixtures only.');
     process.exit(3);
   }
   const dotenv = (await import('dotenv')).default;
@@ -86,6 +88,23 @@ function normUsage(u) {
     total_tokens: u.total_tokens || 0
   };
 }
+
+// Known pre-existing race on main (#130): updateChapterSubpages() queues requestAnimationFrame callbacks that write
+// chapterGenContentN / chapterEditContentN / chapterEditImprovementN after the node was replaced. Only that exact error
+// ('Cannot set properties of null' with its top NovelWriter.html frame on that line) is exempt; any other page error fails the run.
+const KNOWN_RAF_RACE_LINE = /getElementById\(`chapter(?:GenContent|EditContent|EditImprovement)\$\{i\}`\)\.value = novelData\.(?:chapters|chapterImprovements)\[i-1\]/;
+let htmlLinesCache = null;
+function isKnownRafRace(e) {
+  const msg = String(e && e.message ? e.message : e);
+  if (!/Cannot set properties of null/.test(msg)) return false;
+  const m = String(e && e.stack || '').match(/NovelWriter\.html:(\d+):\d+/);
+  if (!m) return false;
+  try { htmlLinesCache = htmlLinesCache || fs.readFileSync(HTML_PATH, 'utf8').split(/\r?\n/); } catch (_) { return false; }
+  return KNOWN_RAF_RACE_LINE.test(htmlLinesCache[parseInt(m[1], 10) - 1] || '');
+}
+
+// Step rows carry status 'pass' | 'fail' | 'skip'. A skip has ok:null, so it never reads as ok:true, and only 'fail' fails the run.
+const stepFailed = (s) => (s.status ? s.status === 'fail' : !s.ok);
 
 function writeStatus(tab, step, status) {
   fs.writeFileSync(STATUS, JSON.stringify({ tab, step, status, updatedAt: new Date().toISOString() }, null, 2));
@@ -226,6 +245,15 @@ const PAGE_HELPERS = ['getSessionUsage', 'getSessionQuality', 'resetBookTokenUsa
   'enrichCharacters', 'enrichSubplots', 'enrichChapterBlueprints', 'scoreBeatCoverage', 'scoreOutlineObligations', 'buildPromptContextPack',
   'digestWorldBible', 'applyStagedChapterImprovements', 'reviseChapterForQuality', 'applyTopBookCritiques', 'applyE2eSlopInject', 'runTrackedE2E'];
 
+// The lean LATEST.md is written before the builder runs; if the build fails, it must not keep saying OK: true.
+function markLatestIncomplete(error) {
+  try {
+    const md = fs.readFileSync(REPORT_MD_LATEST, 'utf8');
+    const note = '- OK: false (INCOMPLETE - unified report build failed: ' + String(error || 'unknown').replace(/\s+/g, ' ').slice(0, 300) + ')';
+    fs.writeFileSync(REPORT_MD_LATEST, /^- OK: .*$/m.test(md) ? md.replace(/^- OK: .*$/m, note) : (note + '\n' + md));
+  } catch (_) {}
+}
+
 function buildUnifiedReport() {
   if (!fs.existsSync(BUILDER)) return { ok: false, error: 'report builder not found: ' + BUILDER };
   const py = process.env.NW_PYTHON ? [process.env.NW_PYTHON] : (process.platform === 'win32' ? ['py', '-3'] : ['python3']);
@@ -239,17 +267,20 @@ function buildUnifiedReport() {
   return { ok: true, report: m ? path.basename(m[1].trim()) : null };
 }
 
+let browser = null;
 (async () => {
   appendProgress('### Phase - tracked E2E - launching\n- Status: running\n- Tokens: n/a\n- Eval: mode=' + MODE + ' html=' + report.config.htmlPath + (LIVE ? '; injecting API key (not logged)' : '; offline fixture responder, all other network blocked') + '; lean config 2ch/500w/3chars/2subplots.\n');
   writeStatus(0, 'e2e-launch', 'running');
 
-  const browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   page.setDefaultTimeout(LIVE ? 600000 : 60000);
   page.on('dialog', (d) => d.dismiss().catch(() => {}));
   const pageErrors = [];
-  page.on('pageerror', (e) => pageErrors.push(String(e && e.message ? e.message : e).slice(0, 300)));
+  const knownPageErrors = [];
+  page.on('pageerror', (e) => (isKnownRafRace(e) ? knownPageErrors : pageErrors).push(String(e && e.message ? e.message : e).slice(0, 300)));
   report.pageErrors = pageErrors;
+  report.knownPageErrors = knownPageErrors;
   if (!LIVE) {
     const seed = JSON.parse(fs.readFileSync(OFFLINE_SEED, 'utf8'));
     offline = createOfflineResponder(seed);
@@ -494,7 +525,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     const r = await runStep(page, tab, name, stepLabel, fn, evalFn);
     // HARD_STOP_ENRICH_STEP: enrich evaluate/throw must abort before outlines
     if (enrichMode && !r.ok && /enrichCharacters|enrichSubplots|enrichChapterBlueprints/.test(stepLabel)) {
-      report.steps.push({ name: stepLabel, ok: false, error: r.err });
+      report.steps.push({ name: stepLabel, ok: false, status: 'fail', error: r.err });
       fs.writeFileSync(REPORT_JSON, JSON.stringify(Object.assign({}, report, { partial: true }), null, 2));
       throw new Error('ENRICH HARD-STOP [' + stepLabel + ']: ' + (r.err || 'failed'));
     }
@@ -523,7 +554,10 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         }
       }
     }
-    report.steps.push({ name: stepLabel, ok: r.ok, error: r.err });
+    const skipped = r.ok && !!(r.result && r.result.skipped);
+    const status = !r.ok ? 'fail' : (skipped ? 'skip' : 'pass');
+    if (skipped) writeStatus(tab, stepLabel, 'skip');
+    report.steps.push({ name: stepLabel, ok: skipped ? null : r.ok, status: status, error: r.err, reason: skipped ? (r.result.reason || null) : undefined });
     fs.writeFileSync(REPORT_JSON, JSON.stringify(Object.assign({}, report, {
       partial: true,
       bookTokenUsage: await page.evaluate(() => (typeof getSessionUsage === 'function' ? getSessionUsage() : null)),
@@ -535,10 +569,17 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   const useFixture = !!fixturePath && !regenBible;
 
   await doStep(1, 'API & Story Info', 'c1Smoke', async () => {
-    return page.evaluate(async () => (typeof runC1Smoke === 'function' ? await runC1Smoke() : false));
-  }, (a, r, ok) => ok && r
-    ? 'Local digest asserts passed (no full-manuscript dump). Packing path looks healthy for lean run.'
-    : 'C1 smoke failed or returned false - digests/packing may be weak; continuing carefully.');
+    // Missing helper = skip (arrives with PR1). A false / passed:false result is a FAIL, never a pass.
+    const c1 = await page.evaluate(async () => (typeof runC1Smoke === 'function' ? { present: true, value: await runC1Smoke() } : { present: false }));
+    if (!c1.present) return { skipped: true, reason: 'runC1Smoke absent from this HTML (arrives with PR1)' };
+    const v = c1.value;
+    if (v === false || v == null || (typeof v === 'object' && v.passed === false)) {
+      throw new Error('runC1Smoke returned ' + (v && typeof v === 'object' ? JSON.stringify(v).slice(0, 200) : String(v)));
+    }
+    return { passed: true };
+  }, (a, r, ok, err) => (r && r.skipped)
+    ? 'Skipped: ' + r.reason
+    : (ok ? 'Local digest asserts passed (no full-manuscript dump). Packing path looks healthy for lean run.' : ('C1 smoke FAILED: ' + err)));
 
   await doStep(1, 'API & Story Info', 'fetchAuthors', async () => {
     return page.evaluate(async () => {
@@ -904,7 +945,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       outlineOnlyErr = e.message;
     }
     appendProgress('### Phase - outline-only proof\n- Status: ' + (outlineOnlyOk ? 'ok' : 'fail') + (outlineOnlyErr ? (' - ' + outlineOnlyErr) : '') + '\n- Eval: novel=' + outlineProof.novelOutlineLen + ' plot=' + outlineProof.plotOutlineLen + ' arc=' + outlineProof.storyArcOutlineLen + ' bp=' + outlineProof.blueprints + ' subplots=' + outlineProof.subplots + ' ch1words=' + outlineProof.ch1Words + ' world=' + outlineProof.worldBible + ' promptWorld=' + outlineProof.lastPromptHasWorld + ' slopRisk=' + outlineProof.aiSlopRisk + ' consistency=' + outlineProof.consistency + ' sample=\"' + String(outlineProof.subplot0 || '').replace(/\n/g, ' ') + '\"\n');
-    report.steps.push({ tab: 5, name: 'outline-only-skip', stage: 'Chapters', ok: outlineOnlyOk, error: outlineOnlyErr, eval: outlineOnlyOk ? 'Skipped prose generation (outline-only); early-stage gates passed.' : ('outline-only gates failed: ' + outlineOnlyErr) });
+    report.steps.push({ tab: 5, name: 'outline-only-skip', stage: 'Chapters', ok: outlineOnlyOk, status: outlineOnlyOk ? 'pass' : 'fail', error: outlineOnlyErr, eval: outlineOnlyOk ? 'Skipped prose generation (outline-only); early-stage gates passed.' : ('outline-only gates failed: ' + outlineOnlyErr) });
     if (!outlineOnlyOk) throw new Error(outlineOnlyErr || 'outline-only stage gates failed');
   }
 
@@ -973,7 +1014,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       report.preProseSpine = spine;
     } catch (gateErr) {
       appendProgress('### Phase - pre-prose spine gate\n- Status: fail\n- Eval: ' + gateErr.message + '\n');
-      report.steps.push({ tab: 5, name: 'pre-prose-spine-gate', stage: 'Chapters', ok: false, error: gateErr.message });
+      report.steps.push({ tab: 5, name: 'pre-prose-spine-gate', stage: 'Chapters', ok: false, status: 'fail', error: gateErr.message });
       report.preProseSpine = spine;
       throw gateErr;
     }
@@ -1298,7 +1339,11 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   const finalQuality = await page.evaluate(() => (typeof getSessionQuality === 'function'
     ? getSessionQuality()
     : { source: 'novelData.qualitySamples', samples: (novelData.qualitySamples || []).slice() }));
-  report.ok = report.steps.every(s => s.ok);
+  // Unexpected page errors fail the run; only the exact #130 rAF race is exempt (counted in report.knownPageErrors).
+  if (pageErrors.length) {
+    report.steps.push({ name: 'pageErrors', ok: false, status: 'fail', error: pageErrors.length + ' unexpected page error(s): ' + pageErrors.slice(0, 3).join(' | ') });
+  }
+  report.ok = !report.steps.some(stepFailed);
   report.finishedAt = new Date().toISOString();
   report.bookTokenUsage = finalUsage;
   report.sessionUsage = finalUsage;
@@ -1312,7 +1357,8 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       total_tokens: finalUsage.total_tokens
     },
     contextPackCharsSum: finalUsage.contextPackCharsSum,
-    failedSteps: report.steps.filter(s => !s.ok).map(s => s.name),
+    failedSteps: report.steps.filter(stepFailed).map(s => s.name),
+    skippedSteps: report.steps.filter(s => s.status === 'skip').map(s => s.name),
     leanConfig: report.config
   };
   report.network = {
@@ -1396,6 +1442,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     '- Calls: ' + report.summary.callCount,
     '- Book tokens prompt/comp/total: ' + report.summary.totals.prompt_tokens + '/' + report.summary.totals.completion_tokens + '/' + report.summary.totals.total_tokens,
     '- Failed steps: ' + (report.summary.failedSteps.join(', ') || 'none'),
+    '- Skipped steps: ' + (report.summary.skippedSteps.join(', ') || 'none'),
     '',
     '## Cost / efficiency (tokens) - not quality',
     '',
@@ -1458,7 +1505,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   }
   fs.writeFileSync(TOKENS_MD, tokMd.join('\n') + '\n');
 
-  // Do not write TRACKED_E2E_ANNEXES.md - book annexes live only in TRACKED_E2E_REPORT.md.
+  // Do not write TRACKED_E2E_ANNEXES.md - book annexes live only in the dated TRACKED_E2E_REPORT_<stamp>.md (+ LATEST copy).
   if (fs.existsSync(ANNEX_MD)) {
     fs.unlinkSync(ANNEX_MD);
   }
@@ -1477,6 +1524,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     report.incomplete = true;
     report.ok = false;
     fs.writeFileSync(REPORT_JSON, JSON.stringify(report, null, 2));
+    markLatestIncomplete(report.reportBuild.error);
     appendProgress('### Phase - unified report\n- Status: FAIL\n- Eval: ' + report.reportBuild.error + '\n');
   } else {
     // The builder rewrote REPORT_JSON (adds cost); merge the build result into that file instead of overwriting it.
@@ -1489,6 +1537,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       report.incomplete = true;
       report.ok = false;
       fs.writeFileSync(REPORT_JSON, JSON.stringify(report, null, 2));
+      markLatestIncomplete(report.reportBuild.error);
     }
   }
   if (report.reportBuild.ok) {
@@ -1498,6 +1547,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   writeStatus(7, 'final', report.ok ? 'pass' : 'fail');
 
   await browser.close();
+  browser = null;
   console.log(JSON.stringify({
     ok: report.ok,
     mode: MODE,
@@ -1507,9 +1557,11 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     reportBuild: report.reportBuild,
     outDir: OUT_DIR
   }, null, 2));
-  const stepsOk = report.steps.every(s => s.ok);
+  const stepsOk = !report.steps.some(stepFailed);
   process.exit(!stepsOk ? 2 : (!report.reportBuild.ok ? 4 : 0));
-})().catch(err => {
+})().catch(async (err) => {
+  // Close the browser on the fatal path too, so a thrown gate never leaves Chromium running.
+  if (browser) { try { await browser.close(); } catch (_) {} browser = null; }
   appendProgress('### Phase - tracked E2E - fatal\n- Status: fail\n- Eval: ' + String(err && err.message || err).slice(0, 300) + '\n');
   try {
     fs.writeFileSync(REPORT_JSON, JSON.stringify(Object.assign({}, report, { ok: false, fatal: String(err && err.message || err), network: { calls: netCalls.length, blockedRequests: blockedRequests.slice(0, 50) }, offline: offline ? Object.assign({}, report.offline, { unmatched: offline.unmatched.slice() }) : undefined }), null, 2));

@@ -7,9 +7,10 @@ TRACKED_E2E_REPORT_LATEST.md copy into the same folder. Makes no network or API 
 
 Usage: python3 scripts/build_unified_report.py   (Windows: py -3 scripts/build_unified_report.py)
 Env:   NW_OUT_DIR    runner artifact folder (input and output)
-       NW_REPORT_TZ  IANA zone for the filename stamp (default America/Chicago). If the zone
-                     database is unavailable (Windows without the `tzdata` package) the stamp
-                     falls back to the machine's local zone instead of crashing.
+       NW_REPORT_TZ  IANA zone for the filename stamp (default America/Chicago). Common US Windows
+                     zone names ("Central Standard Time", ...) are mapped to IANA. If the zone is
+                     unknown or the zone database is unavailable (Windows without the `tzdata`
+                     package) the stamp falls back to the machine's local zone, with a note.
 """
 from __future__ import annotations
 
@@ -28,16 +29,31 @@ LATEST_MD = PLAN / "TRACKED_E2E_REPORT_LATEST.md"
 LEGACY_MD = PLAN / "TRACKED_E2E_REPORT.md"
 
 
+# Windows zone names (Get-TimeZone / tzutil) for the common US zones -> IANA.
+WINDOWS_TZ_TO_IANA = {
+    "Eastern Standard Time": "America/New_York",
+    "Central Standard Time": "America/Chicago",
+    "Mountain Standard Time": "America/Denver",
+    "US Mountain Standard Time": "America/Phoenix",
+    "Pacific Standard Time": "America/Los_Angeles",
+    "Alaskan Standard Time": "America/Anchorage",
+    "Hawaiian Standard Time": "Pacific/Honolulu",
+    "UTC": "UTC",
+}
+
+
 def _load_tz() -> tuple[tzinfo, str]:
     """Report zone with a Windows-safe fallback (Copilot #117: tzdata missing on Windows)."""
-    name = os.environ.get("NW_REPORT_TZ") or "America/Chicago"
+    raw = (os.environ.get("NW_REPORT_TZ") or "America/Chicago").strip()
+    name = WINDOWS_TZ_TO_IANA.get(raw, raw)
+    mapped = f" (mapped from Windows zone '{raw}')" if name != raw else ""
     try:
         from zoneinfo import ZoneInfo  # stdlib on 3.9+, needs system tzdb or the `tzdata` package
 
-        return ZoneInfo(name), name
+        return ZoneInfo(name), name + mapped
     except Exception:  # ZoneInfoNotFoundError, ImportError, ValueError
         local = datetime.now().astimezone().tzinfo
-        return local, f"local ({local}; {name} unavailable - install `tzdata`)"
+        return local, f"local ({local}; {name}{mapped} unavailable - unknown zone or install `tzdata`)"
 
 
 TZ, TZ_LABEL = _load_tz()
@@ -73,19 +89,50 @@ def report_md_path(report: dict) -> Path:
 
 # Official docs.x.ai (fetched 2026-09-27): grok-4-1-fast-non-reasoning retired / redirects to grok-4.3
 # grok-4.3 (<200k prompt): input $1.25 / 1M, output $2.50 / 1M, cached input $0.20 / 1M
-RATE_CARD = {
-    "model_requested": "grok-4-1-fast-non-reasoning",
+_GROK_43_CARD = {
     "billing_model": "grok-4.3",
-    "note": "Requested slug is retired on xAI and redirects to grok-4.3; costs use official grok-4.3 list rates (<200k prompt band).",
+    "note": "Costs use official grok-4.3 list rates (<200k prompt band).",
     "source": "https://docs.x.ai/docs/models",
     "as_of": "2026-09-27",
     "input_per_1m_usd": 1.25,
     "output_per_1m_usd": 2.50,
     "cached_input_per_1m_usd": 0.20,
 }
+# The card is chosen by the REQUESTED model. Only models with a verified card are listed; any other model is
+# reported with an `unknown` card and no cost (never silently priced as grok-4.3).
+RATE_CARDS = {
+    "grok-4.3": _GROK_43_CARD,
+    "grok-4-1-fast-non-reasoning": dict(
+        _GROK_43_CARD,
+        note="Requested slug is retired on xAI and redirects to grok-4.3; costs use official grok-4.3 list rates (<200k prompt band).",
+    ),
+}
 
 
-def money(x: float) -> str:
+def rate_card_for(model) -> dict:
+    model = as_text(model).strip()
+    card = RATE_CARDS.get(model)
+    if card:
+        return dict(card, model_requested=model)
+    return {
+        "model_requested": model or "unknown",
+        "billing_model": "unknown",
+        "note": f"No rate card for requested model `{model or 'unknown'}`; cost is not computed (shown as unknown).",
+        "source": "https://docs.x.ai/docs/models",
+        "as_of": _GROK_43_CARD["as_of"],
+        "input_per_1m_usd": None,
+        "output_per_1m_usd": None,
+        "cached_input_per_1m_usd": None,
+    }
+
+
+# Set from the report's requested model in main(); defaults to unknown until then.
+RATE_CARD = rate_card_for(None)
+
+
+def money(x) -> str:
+    if x is None:
+        return "unknown"
     if x >= 1:
         return f"${x:,.2f}"
     if x >= 0.01:
@@ -158,6 +205,10 @@ def compute_cost(prompt: int, completion: int, cached: int = 0) -> dict:
     # Conservative: if cached unknown, bill all prompt at input rate.
     cached = max(0, min(cached or 0, prompt))
     uncached = max(0, prompt - cached)
+    if RATE_CARD.get("input_per_1m_usd") is None:
+        keys = ("input_cost_usd", "cached_cost_usd", "output_cost_usd", "total_cost_usd", "blended_per_token_usd",
+                "input_per_token_usd", "output_per_token_usd")
+        return dict({k: None for k in keys}, cached_tokens_billed=cached, uncached_prompt_tokens=uncached)
     input_cost = (uncached / 1_000_000.0) * RATE_CARD["input_per_1m_usd"]
     cached_cost = (cached / 1_000_000.0) * RATE_CARD["cached_input_per_1m_usd"]
     output_cost = (completion / 1_000_000.0) * RATE_CARD["output_per_1m_usd"]
@@ -210,7 +261,7 @@ def build_report(report: dict, nd: dict) -> str:
     else:
         lines.append(f"- **Mode:** `{mode}`")
     lines.append(f"- **Finished:** {report.get('finishedAt') or ''}")
-    lines.append(f"- **Model requested:** `{cfg.get('model') or RATE_CARD['model_requested']}`")
+    lines.append(f"- **Model requested:** `{cfg.get('model') or RATE_CARD['model_requested']}` (rate card: `{RATE_CARD['billing_model']}`)")
     lines.append(f"- **Lean config:** {cfg.get('numChapters')} chapters · {cfg.get('chapterLength')} words · {cfg.get('numCharacters')} characters · {cfg.get('minSubplots')} subplots · genre `{cfg.get('genre')}`")
     lines.append(f"- **Total tokens:** **{total_tok:,}** (prompt {prompt:,} · completion {completion:,} · {calls} calls)")
     lines.append(f"- **Total cost:** **{money(cost['total_cost_usd'])}**")
@@ -305,7 +356,7 @@ def build_report(report: dict, nd: dict) -> str:
             lines.append(f"- **Automated edit delta (Ch1):** {', '.join(deltas)}")
     if ch2_gen:
         lines.append(f"- **Ch2 at generate (heur):** {_score_line(ch2_gen)}")
-    llm = q_by.get("chapter1-llmJudge")
+    llm = q_by.get("chapter1-llmJudge") or q_by.get("chapter1-generate-llmJudge")
     if llm:
         lines.append(f"- **Ch1 LLM judge:** {_score_line(llm)} (informational; gate uses heuristics)")
     n_book = len(book_imps) if isinstance(book_imps, list) else 0
@@ -326,17 +377,20 @@ def build_report(report: dict, nd: dict) -> str:
     lines.append("## 2. Run outcome")
     lines.append("")
     failed = summary.get("failedSteps") or []
-    lines.append(f"- OK: `{report.get('ok')}`")
+    skipped = summary.get("skippedSteps") or [s.get("name") for s in (report.get("steps") or []) if s.get("status") == "skip"]
+    lines.append(f"- OK: `{report.get('ok')}`" + (" (INCOMPLETE)" if report.get("incomplete") else ""))
     lines.append(f"- Failed steps: {', '.join(failed) if failed else 'none'}")
+    lines.append(f"- Skipped steps: {', '.join(skipped) if skipped else 'none'}")
     lines.append(f"- Started: {report.get('startedAt')}")
     lines.append(f"- Finished: {report.get('finishedAt')}")
     steps = report.get("steps") or []
     if steps:
         lines.append("")
-        lines.append("| Step | OK |")
+        lines.append("| Step | Status |")
         lines.append("| --- | --- |")
         for s in steps:
-            lines.append(f"| {s.get('name')} | {'pass' if s.get('ok') else 'FAIL'} |")
+            st = s.get("status") or ("pass" if s.get("ok") else "fail")
+            lines.append(f"| {s.get('name')} | {'FAIL' if st == 'fail' else st} |")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -711,7 +765,8 @@ def build_report(report: dict, nd: dict) -> str:
     lines.append("## 7. Artifacts")
     lines.append("")
     lines.append(
-        "- **`TRACKED_E2E_REPORT.md`** — **this document** (canonical human deliverable: summary + full annexes)"
+        "- **`TRACKED_E2E_REPORT_<YYYY-MM-DD_HHMMSS>.md`** (+ `TRACKED_E2E_REPORT_LATEST.md` copy) — **this document** "
+        "(canonical human deliverable: summary + full annexes)"
     )
     lines.append("- `TRACKED_E2E_REPORT.json` — machine-readable steps, tokensByPrompt, tokensByStage, cost meta")
     lines.append(
@@ -721,8 +776,8 @@ def build_report(report: dict, nd: dict) -> str:
     lines.append("- `TRACKED_E2E_TOKENS_BY_STAGE.md` — optional tokens-only companion")
     lines.append("")
     lines.append(
-        "_Deprecated / no longer emitted as a second main report: `TRACKED_E2E_UNIFIED_REPORT.md`, "
-        "former `TRACKED_E2E_ANNEXES.md` (removed; content folded into this file)._"
+        "_Deprecated / no longer emitted (removed if present): undated `TRACKED_E2E_REPORT.md`, "
+        "`TRACKED_E2E_UNIFIED_REPORT.md`, former `TRACKED_E2E_ANNEXES.md` (content folded into this file)._"
     )
     lines.append("")
     lines.append(f"_Generated {datetime.now().astimezone().isoformat()}_")
@@ -735,8 +790,10 @@ def main() -> None:
     for p in (REPORT_JSON, ANNEX_JSON):
         if not p.exists():
             raise SystemExit(f"build_unified_report: missing input {p} (run scripts/run-tracked-e2e.mjs first or set NW_OUT_DIR)")
+    global RATE_CARD
     report = json.loads(REPORT_JSON.read_text(encoding="utf-8"))
     nd = json.loads(ANNEX_JSON.read_text(encoding="utf-8"))
+    RATE_CARD = rate_card_for((report.get("config") or {}).get("model"))
     # ensure token arrays exist
     if not report.get("tokensByPrompt"):
         calls = (report.get("bookTokenUsage") or {}).get("calls") or []
@@ -820,6 +877,7 @@ def main() -> None:
     print("latest", LATEST_MD)
     print("chapters_inlined", [len(c) for c in ch if c.strip()])
     print("stamp_tz", TZ_LABEL)
+    print("rate_card", RATE_CARD["billing_model"], "for", RATE_CARD["model_requested"])
     print("total_cost_usd", cost["total_cost_usd"])
     print("blended_per_token", cost["blended_per_token_usd"])
 

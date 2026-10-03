@@ -4017,7 +4017,8 @@ Synced: 2026-04-19
 				},
 				contextPackCharsSum: u.contextPackCharsSum == null ? null : u.contextPackCharsSum,
 				qualitySamples: (report.sessionQuality.samples || []).length,
-				failedSteps: report.steps.filter(s => !s.ok).map(s => s.name)
+				failedSteps: report.steps.filter(s => s.status === 'fail').map(s => s.name),
+				skippedSteps: report.steps.filter(s => s.status === 'skip').map(s => s.name)
 			};
 			return report;
 		}
@@ -4043,6 +4044,8 @@ Synced: 2026-04-19
 					chapterLength: 500,
 					numCharacters: 3,
 					minSubplots: 2,
+					// Deliberately below the product default (6000, used by scripts/run-tracked-e2e.mjs): this button makes
+					// live paid calls, and 2000 covers a 500-word chapter. The PR3 split plan does not fix a value.
 					maxTokens: 2000
 				},
 				steps: [],
@@ -4051,15 +4054,24 @@ Synced: 2026-04-19
 				errors: []
 			};
 			const step = async (name, fn) => {
-				const row = { name, ok: false, error: null, startedAt: new Date().toISOString(), finishedAt: null };
+				const row = { name, ok: false, status: 'fail', error: null, startedAt: new Date().toISOString(), finishedAt: null };
 				log('STEP start: ' + name);
 				try {
 					const result = await fn();
-					row.ok = true;
 					row.result = result === undefined ? null : result;
-					log('STEP pass: ' + name);
+					if (result && result.skipped) {
+						// A skip is neither a pass nor a failure: ok stays null so it never reads as ok:true.
+						row.ok = null;
+						row.status = 'skip';
+						log('STEP skip: ' + name + (result.reason ? ' - ' + result.reason : ''));
+					} else {
+						row.ok = true;
+						row.status = 'pass';
+						log('STEP pass: ' + name);
+					}
 				} catch (err) {
 					row.ok = false;
+					row.status = 'fail';
 					row.error = (err && err.message) ? err.message : String(err);
 					report.errors.push({ step: name, error: row.error });
 					log('STEP FAIL: ' + name + ' - ' + row.error);
@@ -4076,8 +4088,6 @@ Synced: 2026-04-19
 			};
 
 			log('Tracked E2E (lean) starting...');
-			if (typeof resetBookTokenUsage === 'function') resetBookTokenUsage();
-			novelData.qualitySamples = [];
 
 			// Keep the API key across resetState (resetState prompts only when the key is empty).
 			const savedKey = (document.getElementById('apiKey') || {}).value || '';
@@ -4087,6 +4097,9 @@ Synced: 2026-04-19
 				_trackedFinalize(report);
 				return publish();
 			}
+			// Clear usage/quality only once the run will actually start (not before the key check).
+			if (typeof resetBookTokenUsage === 'function') resetBookTokenUsage();
+			novelData.qualitySamples = [];
 
 			try {
 				if (typeof resetState === 'function') {
@@ -4109,7 +4122,8 @@ Synced: 2026-04-19
 				if (typeof syncCharacterEntries === 'function') syncCharacterEntries();
 				if (typeof syncSubplotEntries === 'function') syncSubplotEntries();
 				if (typeof collectData === 'function') collectData();
-				log('Config: 2 ch / 500 words / 3 chars / 2 subplots / maxTokens=2000 / genre=scifi');
+				const cfg = report.config;
+				log('Config: ' + cfg.numChapters + ' ch / ' + cfg.chapterLength + ' words / ' + cfg.numCharacters + ' chars / ' + cfg.minSubplots + ' subplots / maxTokens=' + cfg.maxTokens + ' / genre=' + cfg.genre);
 
 				const modelSel = document.getElementById('model');
 				if (modelSel) {
@@ -4119,11 +4133,12 @@ Synced: 2026-04-19
 				}
 
 				await step('c1Smoke', async () => {
-					if (typeof runC1Smoke === 'function') {
-						const ok = await runC1Smoke();
-						return { passed: !!ok };
+					if (typeof runC1Smoke !== 'function') return { skipped: true, reason: 'runC1Smoke absent (PR1)' };
+					const c1 = await runC1Smoke();
+					if (c1 === false || c1 == null || (typeof c1 === 'object' && c1.passed === false)) {
+						throw new Error('runC1Smoke returned ' + (c1 && typeof c1 === 'object' ? JSON.stringify(c1).slice(0, 200) : String(c1)));
 					}
-					return { skipped: true, reason: 'runC1Smoke absent (PR1)' };
+					return { passed: true };
 				});
 
 				await step('fetchAuthors', async () => {
@@ -4181,18 +4196,27 @@ Synced: 2026-04-19
 				});
 
 				await step('generateChapter1+quality', async () => {
+					const priorAlign = novelData.lastJudgeGateAlignment || null;
 					await generateChapter(1);
 					const text = novelData.chapters[0] || '';
+					// A failed generation (e.g. HTTP 500) leaves the chapter empty; that is a FAIL, never ok with textLen 0.
+					if (!text.trim()) throw new Error('generateChapter(1) produced empty text (textLen ' + text.length + ')');
 					const heur = scoreProseQuality(text);
 					pushQualitySample('chapter1-heuristics', heur, text.length);
-					const judged = await judgeProseQualityLLM(text, document.getElementById('tab5') || document.getElementById('tab1'));
-					pushQualitySample('chapter1-llmJudge', judged, text.length);
+					// generateChapter(1) already runs the advisory judge (sample chapter1-generate-llmJudge); reuse it instead of a second call.
+					const align = novelData.lastJudgeGateAlignment || null;
+					let judged = (align && align !== priorAlign && align.judgeScores) ? align.judgeScores : null;
+					if (!judged) {
+						judged = await judgeProseQualityLLM(text, document.getElementById('tab5') || document.getElementById('tab1'));
+						pushQualitySample('chapter1-llmJudge', judged, text.length);
+					}
 					return { textLen: text.length, heuristics: heur, judged: { interest: judged.interest, readability: judged.readability, aiSlopRisk: judged.aiSlopRisk, humanLikeness: judged.humanLikeness, source: judged.source } };
 				});
 
 				await step('generateChapter2+quality', async () => {
 					await generateChapter(2);
 					const text = novelData.chapters[1] || '';
+					if (!text.trim()) throw new Error('generateChapter(2) produced empty text (textLen ' + text.length + ')');
 					const heur = scoreProseQuality(text);
 					pushQualitySample('chapter2-heuristics', heur, text.length);
 					return { textLen: text.length, heuristics: heur };
@@ -4237,7 +4261,7 @@ Synced: 2026-04-19
 					};
 				});
 
-				report.ok = report.steps.every(s => s.ok);
+				report.ok = report.steps.every(s => s.status !== 'fail');
 				report.finishedAt = new Date().toISOString();
 				_trackedFinalize(report);
 				log('==== FINAL ' + (report.ok ? 'PASS' : 'PARTIAL/FAIL') + ' ====');

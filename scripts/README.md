@@ -78,14 +78,22 @@ Token counts in offline reports are chars/4 estimates, and the report marks its 
 
 Some steps need page helpers that arrive with split PR1: the token rollup, enrich agents, Tab 5 readiness, the blueprint draft pack and World Bible packing. If the HTML lacks one of those helpers, the runner lists it in `report.config.missingHelpers` and skips only the gate or step that needs it, recording the skip in the progress log and the report. Set `NW_E2E_STRICT=1` to fail instead. When the page has no token rollup, the runner counts calls at the network layer.
 
+Every step row (runner and in-page report) has a `status` of `pass`, `fail` or `skip`. A skipped step has `ok: null`, never `ok: true`, and is listed in `summary.skippedSteps`; only `fail` rows fail the run. `c1Smoke` is a skip when the page has no `runC1Smoke` helper and a FAIL when it returns `false`. A chapter step whose generation leaves the chapter text empty (for example after HTTP 500s) is a FAIL. Any page error fails the runner (step `pageErrors`, exit 2) except the known `updateChapterSubpages` requestAnimationFrame race (#130): only a `Cannot set properties of null` error whose top `NovelWriter.html` frame is that callback line is exempt, and those are counted in `report.knownPageErrors`.
+
+The rate card in the report is picked by the requested model. Only `grok-4.3` (and the retired `grok-4-1-fast-non-reasoning` slug, which redirects to it) has a card; any other model is shown with an `unknown` card and no cost.
+
+`maxTokens`: the PR3 split plan does not fix a value. The runner uses the product default of 6000 (override with `NW_E2E_MAX_TOKENS`). The in-page Tab 1 button uses 2000 on purpose, because it makes live paid calls and 2000 covers a 500-word chapter.
+
 `_smoke_tracked_e2e_offline.mjs` checks:
 
 - an offline run exits 0, with 0 unmatched prompts and all artifacts under `NW_OUT_DIR`;
 - `git status` is unchanged after the run;
-- `NW_E2E_LIVE=1` exits 3 under CI and exits 3 without a key. In both cases the runner exits before a browser starts;
-- a failing report build exits 4 and marks the run `incomplete`;
-- the builder survives structured `generalPlot`/`storyArc` values and an unknown `NW_REPORT_TZ`, and exits non-zero on missing inputs;
-- the in-page `runTrackedE2E()` (Tab 1 button "Tracked E2E (lean, live)") completes against the same responder and reads usage from the session ledger.
+- `NW_E2E_LIVE=1` exits 3 under CI (`CI=true`, `CI=false` and `CI=on` all count) and exits 3 without a key. In every case the runner exits before a browser starts or any network request;
+- a failing report build exits 4, marks the run `incomplete`, and `TRACKED_E2E_REPORT_LATEST.md` says `OK: false (INCOMPLETE ...)`;
+- `c1Smoke` is recorded as `skip` when the helper is absent and as a FAIL (exit 2) when `runC1Smoke()` returns `false`;
+- an unexpected page error fails the run (exit 2, step `pageErrors`);
+- the builder survives structured `generalPlot`/`storyArc` values, an unknown `NW_REPORT_TZ` and a Windows zone name, labels an unpriced model `unknown`, and exits non-zero on missing inputs;
+- the in-page `runTrackedE2E()` (Tab 1 button "Tracked E2E (lean, live)") completes against the same responder and reads usage from the session ledger. Cancelling its confirm leaves `novelData` unchanged with zero xAI requests; HTTP 500s on the chapter calls make both chapter steps FAIL; a `runC1Smoke()` that returns `false` makes `c1Smoke` FAIL.
 
 The smoke writes `out/nw-e2e-smoke/SMOKE_TRACKED_E2E_OFFLINE.json`.
 
@@ -95,13 +103,13 @@ The smoke writes `out/nw-e2e-smoke/SMOKE_TRACKED_E2E_OFFLINE.json`.
 NW_E2E_LIVE=1 node scripts/run-tracked-e2e.mjs
 ```
 
-On PowerShell, set `$env:NW_E2E_LIVE='1'` first. Live mode reads `XAI_API_KEY` (falling back to `GROK_API_KEY`) from the environment or from the dotenv file at `NW_ENV_FILE` (default: the gitignored `secrets/xai.local.env`). The runner exits 3 when `CI` or `GITHUB_ACTIONS` is set, so a workflow cannot make paid calls even if it sets `NW_E2E_LIVE` or has a key. The in-page Tab 1 button is a manual dev tool that uses the key typed into the page.
+On PowerShell, set `$env:NW_E2E_LIVE='1'` first. Live mode reads `XAI_API_KEY` (falling back to `GROK_API_KEY`) from the environment or from the dotenv file at `NW_ENV_FILE` (default: the gitignored `secrets/xai.local.env`). The runner exits 3 when `CI` or `GITHUB_ACTIONS` is set to any non-empty value (including `CI=false`, `CI=0` and `CI=on`; the value is never parsed), so a workflow cannot make paid calls even if it sets `NW_E2E_LIVE` or has a key. The check runs before the key is read and before a browser starts. The in-page Tab 1 button is a manual dev tool that uses the key typed into the page.
 
 ### Runner environment variables
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `NW_E2E_LIVE` | unset (offline) | `1` = real xAI calls. Refused under CI |
+| `NW_E2E_LIVE` | unset (offline) | `1` = real xAI calls. Refused (exit 3) when `CI` or `GITHUB_ACTIONS` is non-empty |
 | `NW_HTML_PATH` | `<repo>/NovelWriter/NovelWriter.html` | HTML under test |
 | `NW_OUT_DIR` | `<repo>/out/nw-e2e` | All runner and report artifacts (gitignored) |
 | `NW_ENV_FILE` | `<repo>/secrets/xai.local.env` | dotenv file for the key (live only) |
@@ -117,9 +125,9 @@ On PowerShell, set `$env:NW_E2E_LIVE='1'` first. Live mode reads `XAI_API_KEY` (
 | `NW_E2E_SLOP_INJECT` (+ `_SPAN`, `_CHAPTER`, `_AFTER_CONTINUITY`) | unset | Arm the B4-1A slop inject with a span from `<fixtures>/inject_spans/` |
 | `NW_E2E_REPORT_BUILDER` | `scripts/build_unified_report.py` | Report builder script |
 | `NW_PYTHON` | `py -3` on Windows, `python3` elsewhere | Interpreter for the builder |
-| `NW_REPORT_TZ` | `America/Chicago` | Zone for the report filename stamp. Falls back to the machine's local zone if the zone database is missing (on Windows, `pip install tzdata` fixes that) |
+| `NW_REPORT_TZ` | `America/Chicago` | IANA zone for the report filename stamp. Common US Windows names (`Central Standard Time`, `Eastern Standard Time`, `Mountain Standard Time`, `US Mountain Standard Time`, `Pacific Standard Time`, `Alaskan Standard Time`, `Hawaiian Standard Time`, `UTC`) are mapped to IANA. An unknown zone, or a missing zone database (on Windows, `pip install tzdata` fixes that), falls back to the machine's local zone and the builder prints a note |
 
-Exit codes: `0` pass, `1` fatal, `2` a step failed, `3` live mode refused or key missing, `4` the steps passed but the report build failed (run marked incomplete).
+Exit codes: `0` pass, `1` fatal, `2` a step failed (including unexpected page errors), `3` live mode refused or key missing, `4` the steps passed but the report build failed (run marked incomplete).
 
 ### Output (`NW_OUT_DIR`, default `out/nw-e2e/`)
 
