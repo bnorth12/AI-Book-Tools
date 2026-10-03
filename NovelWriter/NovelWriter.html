@@ -435,6 +435,7 @@ Synced: 2026-04-19
 	            <button onclick="generateNovelOutlines()">AI Suggest Novel Outline</button>
 	            <button onclick="enrichChapterBlueprints()">Enrich Chapter Blueprints (six beats)</button>
 	            <button onclick="incorporateOutlineSuggestions()">Incorporate Suggestions</button>
+	            <div id="blueprintBeatStatus" data-testid="nw-bp-beat-status" role="status" aria-live="polite" style="margin:8px 0 4px;padding:6px 10px;font-size:13px;border:1px solid #ccd;border-radius:4px;background:#f7f7ff;">Blueprint beats: no chapter blueprints yet.</div>
 	        </div>
 	        <div id="chapterOutlinesNav" class="chapter-nav" data-testid="nw-outline-nav"></div>
 	        <div id="chapterOutlines" data-testid="nw-outline-chapters"></div>
@@ -2301,7 +2302,10 @@ let activeAICallCount = 0;
 	        if (selectedTab) selectedTab.classList.add('active');
 	        if (selectedButton) selectedButton.classList.add('active');
 
-	        if (tabNum === 4) showChapterSubpage(0);
+	        if (tabNum === 4) {
+	            showChapterSubpage(0);
+	            if (typeof renderBlueprintBeatStatus === 'function') renderBlueprintBeatStatus();
+	        }
 	        if (tabNum === 5) showGenChapterSubpage(1);
 	        if (tabNum === 6) {
 	            updateChapterSubpages();
@@ -8719,6 +8723,7 @@ return c && c.name && c.backstory && c.arc; });
 		            updateRequestLog();
 		            updateBookTab();
 					renderContinuityStatusPanel();
+					renderBlueprintBeatStatus();
 
 		            if (warnings.length > 0) {
 		                console.warn('Import completed with warnings:', warnings);
@@ -8900,6 +8905,7 @@ return c && c.name && c.backstory && c.arc; });
 		            if (bpEl) bpEl.value = '';
 		            console.warn('generateNovelOutlines: no chapterBlueprints in response.');
 		        }
+		        renderBlueprintBeatStatus();
 
 		        requestLog.status = 'Completed';
 		        updateRequestLog();
@@ -8915,6 +8921,48 @@ return c && c.name && c.backstory && c.arc; });
 
 
 
+
+		/**
+		 * Fix 5 (NW_GATE_FIX_SPEC): Tab 4 status line for blueprint beats (all chapters, same scope as Tab 4->5 readiness).
+		 * Pass { text, state } to show a transient message (e.g. auto-enrich running).
+		 */
+		function renderBlueprintBeatStatus(override) {
+		    const el = document.getElementById('blueprintBeatStatus');
+		    let text;
+		    let state;
+		    if (override && override.text) {
+		        text = override.text;
+		        state = override.state || 'info';
+		    } else {
+		        const nd = novelData || {};
+		        const list = Array.isArray(nd.chapterBlueprints) ? nd.chapterBlueprints : [];
+		        const cap = Number(nd.numChapters) || Math.max(list.length, 1);
+		        if (!list.length) {
+		            text = 'Blueprint beats: no chapter blueprints yet (AI Suggest Novel Outline creates them).';
+		            state = 'empty';
+		        } else {
+		            const beat = scoreBeatCoverage(nd, { chapterCap: cap });
+		            if (beat.passed) {
+		                text = 'Blueprint beats: OK for all ' + cap + ' chapters';
+		                state = 'ok';
+		            } else {
+		                const thin = (beat.perChapter || []).filter(function (r) { return r && !r.ok; });
+		                const ex = thin.slice(0, 2).map(function (r) {
+		                    const keys = (r.missing || []).concat(r.stub || []);
+		                    if (!keys.length && r.castNamed === false) keys.push('castArcBeat (no cast named)');
+		                    return 'ch' + r.chapter + ' ' + keys.join(', ');
+		                }).join('; ');
+		                text = 'Blueprint beats not enriched: ' + thin.length + '/' + cap + ' chapters thin (e.g. ' + ex + '). Run ' + NW_ENRICH_BP_BUTTON + '.';
+		                state = 'thin';
+		            }
+		        }
+		    }
+		    if (el) {
+		        el.textContent = text;
+		        el.dataset.state = state;
+		    }
+		    return { text: text, state: state };
+		}
 
 		//Generate a chapter outline and arc
 
@@ -9105,6 +9153,7 @@ return c && c.name && c.backstory && c.arc; });
 		    
 		    novelData.lastBeatEnrich = { before: before, after: after, ts: new Date().toISOString() };
 		    window.__lastBeatEnrich = novelData.lastBeatEnrich;
+		    renderBlueprintBeatStatus();
 		    requestLog.status = after.passed ? 'Completed' : 'Completed (still below beat floors)';
 		    if (typeof updateRequestLog === 'function') updateRequestLog();
 		    if (!after.passed) {
@@ -10029,6 +10078,7 @@ return c && c.name && c.backstory && c.arc; });
 		    document.getElementById('chapterLength').value = '2000';
 			document.getElementById('continuityStrictMode').checked = true;
 			document.getElementById('autoContinuityAudit').checked = true;
+			if (typeof renderBlueprintBeatStatus === 'function') renderBlueprintBeatStatus();
 		    document.getElementById('characterList').innerHTML = '<div class="character"><label>Name:</label><input type="text" class="charName"><label>Backstory:</label><textarea class="charBackstory"></textarea><label>Arc:</label><textarea class="charArc"></textarea></div>';
 		    document.getElementById('subplotList').innerHTML = '<div class="subplot-section"><label>Subplot 1:</label><textarea class="subplot" style="height: 300px;"></textarea></div>';
 			document.getElementById('numCharacters').value = '10';
