@@ -4,7 +4,9 @@
  *  1. Runs scripts/run-tracked-e2e.mjs in its default offline mode against this checkout's HTML:
  *     exit 0, every xAI request answered by the fixture responder (0 unmatched prompts), artifacts
  *     only under NW_OUT_DIR, dated + LATEST report built with Annex E prose, git status unchanged.
- *     c1Smoke is recorded as a skip (status 'skip', ok null) because this HTML has no runC1Smoke.
+ *     c1Smoke: with PR1's real runC1Smoke() it is a pass (gate fix carry-in, Reviewer note (a): the runner must not
+ *     false-fail on it); on an HTML without runC1Smoke it is a skip (status 'skip', ok null).
+ *     autoEnrichChapterBlueprints (gate fix 1) is a skip: the six-beat seed's outline already passes the beats.
  *  2. Live-mode guards: NW_E2E_LIVE=1 under CI (CI=true, CI=false, CI=on) exits 3; NW_E2E_LIVE=1 without
  *     a key exits 3 (key vars scrubbed, NW_ENV_FILE pointed at a missing file) - all before a browser starts.
  *  3. A failing report build marks the run incomplete and exits 4 (Copilot #117 high); LATEST.md says so.
@@ -65,6 +67,11 @@ function listFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => d.isDirectory() ? listFiles(path.join(dir, d.name)) : [path.join(dir, d.name)]);
 }
 
+// PR1 HTML (merged into feat/nw-token-packing) defines runC1Smoke and the gate-fix auto-enrich helper.
+const HTML_SRC = fs.readFileSync(HTML_PATH, 'utf8');
+const HAS_C1 = /async function runC1Smoke\s*\(/.test(HTML_SRC);
+const HAS_AUTO_ENRICH = /async function maybeAutoEnrichBlueprints\s*\(/.test(HTML_SRC);
+
 fs.rmSync(OUT_DIR, { recursive: true, force: true });
 fs.mkdirSync(OUT_DIR, { recursive: true });
 const gitBefore = gitStatus();
@@ -83,7 +90,15 @@ if (rep1) {
   check('no key value in report JSON', !/xai-[A-Za-z0-9]{10,}/.test(JSON.stringify(rep1)), '');
   check('report build ok', rep1.reportBuild && rep1.reportBuild.ok === true, JSON.stringify(rep1.reportBuild));
   const c1Row = (rep1.steps || []).find((s) => s.name === 'c1Smoke');
-  check('c1Smoke absent helper recorded as skip (status skip, ok not true)', !!c1Row && c1Row.status === 'skip' && c1Row.ok !== true && ((rep1.summary || {}).skippedSteps || []).includes('c1Smoke'), JSON.stringify(c1Row));
+  if (HAS_C1) {
+    check('c1Smoke: real runC1Smoke() is a pass in the runner (status pass, ok true)', !!c1Row && c1Row.status === 'pass' && c1Row.ok === true, JSON.stringify(c1Row));
+  } else {
+    check('c1Smoke absent helper recorded as skip (status skip, ok not true)', !!c1Row && c1Row.status === 'skip' && c1Row.ok !== true && ((rep1.summary || {}).skippedSteps || []).includes('c1Smoke'), JSON.stringify(c1Row));
+  }
+  if (HAS_AUTO_ENRICH) {
+    const aeRow = (rep1.steps || []).find((s) => s.name === 'autoEnrichChapterBlueprints');
+    check('autoEnrichChapterBlueprints row is skip for the six-beat seed (runner)', !!aeRow && aeRow.status === 'skip' && aeRow.ok === null, JSON.stringify(aeRow));
+  }
   check('every step row has a pass/fail/skip status', (rep1.steps || []).length > 0 && (rep1.steps || []).every((s) => ['pass', 'fail', 'skip'].includes(s.status)), JSON.stringify((rep1.steps || []).filter((s) => !['pass', 'fail', 'skip'].includes(s.status)).map((s) => s.name)));
   check('no unexpected page errors in the offline run', Array.isArray(rep1.pageErrors) && rep1.pageErrors.length === 0 && !(rep1.steps || []).some((s) => s.name === 'pageErrors'), JSON.stringify(rep1.pageErrors).slice(0, 300));
   check('rate card follows requested model (unknown for ' + (rep1.config || {}).model + ')', rep1.cost && (/^grok-4\.3$/.test((rep1.config || {}).model) ? rep1.cost.billing_model === 'grok-4.3' : (rep1.cost.billing_model === 'unknown' && rep1.cost.total_cost_usd === null)), JSON.stringify(rep1.cost && { m: rep1.cost.billing_model, c: rep1.cost.total_cost_usd }));
@@ -268,6 +283,7 @@ if (rep1) {
       btn, hasRollup,
       ok: r.ok, steps: r.steps.map((s) => s.name + ':' + s.status + (s.status === 'fail' ? ' ' + s.error : '')),
       c1: r.steps.find((s) => s.name === 'c1Smoke') || null,
+      autoEnrich: r.steps.find((s) => s.name === 'autoEnrichChapterBlueprints') || null,
       judgeLabels: (r.qualitySamples || []).map((s) => s.label).filter((l) => /^chapter1-.*llmJudge$/.test(l)),
       fatal: (r.errors || []).filter((e) => e.step === 'fatal'),
       summary: r.summary,
@@ -276,6 +292,17 @@ if (rep1) {
     };
   });
   const pageErrorsHappy = pageErrors.slice();
+  // 5b'. runC1Smoke() returning null must FAIL too (the runner treats null, false and {passed:false} as FAIL).
+  const resNull = HAS_C1 ? await page.evaluate(async () => {
+    window.confirm = () => true;
+    const real = window.runC1Smoke;
+    window.runC1Smoke = async () => null;
+    document.getElementById('apiKey').value = 'offline-fixture-not-a-key';
+    let r;
+    try { r = await runTrackedE2E(); } catch (e) { return { threw: String(e && e.message || e) }; } finally { window.runC1Smoke = real; }
+    const s = r.steps.find((x) => x.name === 'c1Smoke');
+    return { c1: s ? { status: s.status, ok: s.ok, error: s.error } : null };
+  }) : null;
   // 5c. HTTP 500 on every chapter-generation call + runC1Smoke() returning false: both must FAIL, not pass.
   chapter500 = true;
   const res500 = await page.evaluate(async () => {
@@ -295,7 +322,15 @@ if (rep1) {
   check('in-page 500: generateChapter2+quality is FAIL (ok:false)', !res500.threw && res500.ch2 && res500.ch2.status === 'fail' && res500.ch2.ok === false, res500.threw || JSON.stringify(res500.ch2));
   check('in-page 500: report ok:false', res500.ok === false, JSON.stringify(res500.failed));
   check('in-page: runC1Smoke() === false makes c1Smoke FAIL', res500.c1 && res500.c1.status === 'fail' && res500.c1.ok === false, JSON.stringify(res500.c1));
-  check('in-page: absent runC1Smoke is a skip (status skip, ok not true)', res.c1 && res.c1.status === 'skip' && res.c1.ok !== true, JSON.stringify(res.c1));
+  if (HAS_C1) {
+    check('in-page: real runC1Smoke() makes c1Smoke PASS (no false-fail)', res.c1 && res.c1.status === 'pass' && res.c1.ok === true, JSON.stringify(res.c1));
+    check('in-page: runC1Smoke() === null makes c1Smoke FAIL', resNull && !resNull.threw && resNull.c1 && resNull.c1.status === 'fail' && resNull.c1.ok === false, JSON.stringify(resNull));
+  } else {
+    check('in-page: absent runC1Smoke is a skip (status skip, ok not true)', res.c1 && res.c1.status === 'skip' && res.c1.ok !== true, JSON.stringify(res.c1));
+  }
+  if (HAS_AUTO_ENRICH) {
+    check('in-page: autoEnrichChapterBlueprints row is skip for the six-beat seed', res.autoEnrich && res.autoEnrich.status === 'skip' && res.autoEnrich.ok === null, JSON.stringify(res.autoEnrich));
+  }
   check('in-page: Ch1 judged once (reuses the generateChapter advisory judge, no duplicate call)', Array.isArray(res.judgeLabels) && res.judgeLabels.length === 1, JSON.stringify(res.judgeLabels));
   check('in-page: Tracked E2E button present', res.btn, '');
   check('in-page: runTrackedE2E did not throw', !res.threw, res.threw || '');

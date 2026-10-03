@@ -68,6 +68,7 @@ if (LIVE) {
 const netCalls = [];
 const blockedRequests = [];
 let offline = null;
+let offlineSeedWorld = null;
 
 function netUsage() {
   const sum = (k) => netCalls.reduce((a, c) => a + (c[k] || 0), 0);
@@ -284,6 +285,7 @@ let browser = null;
   if (!LIVE) {
     const seed = JSON.parse(fs.readFileSync(OFFLINE_SEED, 'utf8'));
     offline = createOfflineResponder(seed);
+    offlineSeedWorld = seed.world || seed.worldBible || null;
     report.offline = { seed: path.relative(REPO_ROOT, OFFLINE_SEED) || OFFLINE_SEED };
     await page.route('**/*', async (route) => {
       const req = route.request();
@@ -388,6 +390,12 @@ let browser = null;
     targetChapter: slopInjectChapter,
     afterContinuity: process.env.NW_E2E_SLOP_INJECT_AFTER_CONTINUITY !== '0'
   } : { enabled: false };
+  // PR1 HTML has digestWorldBible, so the world-bible gates are enforced. The product has no world-bible generation
+  // step, so offline runs without NW_E2E_FIXTURE take the world from the offline seed (fiction fixture data only).
+  if (!fixturePath && offline && offlineSeedWorld) {
+    await page.evaluate((w) => { novelData.worldBible = w; }, offlineSeedWorld);
+    report.offline.worldBibleSeeded = true;
+  }
   if (fixturePath) {
     const absFix = path.isAbsolute(fixturePath) ? fixturePath : path.join(REPO_ROOT, fixturePath);
     const seed = JSON.parse(fs.readFileSync(absFix, 'utf8'));

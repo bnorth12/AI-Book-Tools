@@ -6,6 +6,7 @@
  "storyArc": "Begin in total-recall Conduit life. A twelve-millisecond freighter latency spike exposes hidden fragility. Middle: forks, patches, and counter-patches while physical infrastructure degrades under unlogged entropy; Kwan, Rook, and Marshal Okafor collide over whether opacity is treason. End: negotiated opacity treaty — deliberate dark windows — not victory, a priced mercy. Sinta's absence becomes a permanent clause; the Unlogged Child crosses one bridge free.",
  "generalPlot": "",
  "setting": "",
+ "world": {"name": "Pan-Pacific Ledger Conduit", "summary": "Physical-data hybrid infrastructure: ~14,000 LEO cubesats coated in retroreflective metamaterial plus ground ceramic sensor posts every ~400m along ports, rail, and highways. Every object and many human actions are registered, timestamped, and monetized. Themes: systemic trust, engineered obsolescence, price of perfect recall.", "factions": ["Conduit Consensus Triad (three competing algorithms)", "Municipal Traffic AI guilds", "Lofoten data haven brokers", "Harbor chaplaincy networks (unlogged rituals)", "Mesh ops (cubesat coats)"], "locations": ["Bitung parasol docks", "Philippine Sea freighter lanes", "Seattle Memory Market", "Lofoten black-market haven", "Pan-Pacific bridge corridors"]},
  "numChapters": 8,
  "chapterLength": 900,
  "authorStyle": "nealstephenson",

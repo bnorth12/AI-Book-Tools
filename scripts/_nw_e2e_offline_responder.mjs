@@ -107,7 +107,10 @@ export function createOfflineResponder(seed) {
 
   // Ordered: first match wins. `test` gets the full prompt text (system + user).
   const rules = [
-    { id: 'fetchAuthors', test: (p) => /List 100 notable authors/i.test(p),
+    // PR1 HTML: runC1Smoke() makes one cheap ping call.
+    { id: 'c1SmokePing', test: (p) => /Reply with exactly: ok/i.test(p), json: () => ({ reply: 'ok' }) },
+    // main: 'List 100 notable authors ...'; PR1: 'List 100 authors suited to drafting a <genre> book ...'
+    { id: 'fetchAuthors', test: (p) => /List 100 (?:notable )?authors/i.test(p),
       json: () => ({ authors: [
         { value: 'kimstanleyrobinson', name: 'Kim Stanley Robinson' },
         { value: 'marthawells', name: 'Martha Wells' },
