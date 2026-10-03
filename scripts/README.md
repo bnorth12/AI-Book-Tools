@@ -123,6 +123,7 @@ On PowerShell, set `$env:NW_E2E_LIVE='1'` first. Live mode reads `XAI_API_KEY` (
 | Variable | Default | Meaning |
 |---|---|---|
 | `NW_E2E_LIVE` | unset (offline) | `1` = real xAI calls. Refused (exit 3) when `CI` or `GITHUB_ACTIONS` is non-empty |
+| `CI` / `GITHUB_ACTIONS` | unset | Any non-empty value, including whitespace, blocks live mode; values are not trimmed or parsed |
 | `NW_HTML_PATH` | `<repo>/NovelWriter/NovelWriter.html` | HTML under test |
 | `NW_OUT_DIR` | `<repo>/out/nw-e2e` | All runner and report artifacts (gitignored) |
 | `NW_ENV_FILE` | `<repo>/secrets/xai.local.env` | dotenv file for the key (live only) |

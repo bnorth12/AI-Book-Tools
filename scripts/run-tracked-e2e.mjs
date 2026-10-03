@@ -38,7 +38,7 @@ const ANNEX_JSON = path.join(OUT_DIR, 'TRACKED_E2E_ANNEX_NOVELDATA.json');
 const ANNEX_MD = path.join(OUT_DIR, 'TRACKED_E2E_ANNEXES.md');
 const TOKENS_MD = path.join(OUT_DIR, 'TRACKED_E2E_TOKENS_BY_STAGE.md');
 
-// Any non-empty CI / GITHUB_ACTIONS value means CI (CI=false, CI=0, CI=on included): fail safe, never parse it.
+// Any non-empty CI / GITHUB_ACTIONS value means CI (including whitespace): fail safe, never trim or parse it.
 const isSet = (v) => v != null && String(v) !== '';
 const LIVE = process.env.NW_E2E_LIVE === '1';
 const IN_CI = isSet(process.env.CI) || isSet(process.env.GITHUB_ACTIONS);
@@ -107,6 +107,15 @@ function isKnownRafRace(e) {
 // Step rows carry status 'pass' | 'fail' | 'skip'. A skip has ok:null, so it never reads as ok:true, and only 'fail' fails the run.
 const stepFailed = (s) => (s.status ? s.status === 'fail' : !s.ok);
 
+function stepReportRow(stepLabel, r) {
+  const skipped = r.ok && !!(r.result && r.result.skipped);
+  const status = !r.ok ? 'fail' : (skipped ? 'skip' : 'pass');
+  const row = { name: stepLabel, ok: skipped ? null : r.ok, status, error: r.err, reason: skipped ? (r.result.reason || null) : undefined };
+  const chapter = !r.ok && /^generateChapter(\d+)\+quality$/.exec(stepLabel);
+  if (chapter) row.textLen = Number((r.after.chapterLens || [])[Number(chapter[1]) - 1]) || 0;
+  return row;
+}
+
 function writeStatus(tab, step, status) {
   fs.writeFileSync(STATUS, JSON.stringify({ tab, step, status, updatedAt: new Date().toISOString() }, null, 2));
 }
@@ -125,6 +134,7 @@ async function bookSnap(page) {
       genre: novelData.genre || '',
       chars: (novelData.characters || []).length,
       subplots: (novelData.subplots || []).length,
+      chapterLens: (novelData.chapters || []).map(c => (c || '').length),
       ch1Len: ((novelData.chapters && novelData.chapters[0]) || '').length,
       ch2Len: ((novelData.chapters && novelData.chapters[1]) || '').length,
       ch1Snippet: (((novelData.chapters && novelData.chapters[0]) || '').replace(/\s+/g, ' ').slice(0, 140)),
@@ -269,6 +279,13 @@ function buildUnifiedReport() {
 }
 
 let browser = null;
+if (process.argv.includes('--self-test')) {
+  const row = stepReportRow('generateChapter2+quality', { ok: false, err: 'offline self-test', after: { chapterLens: [40, 0] } });
+  if (isSet(' ') !== true) throw new Error("self-test failed: isSet(' ') must be true");
+  if (typeof row.textLen !== 'number' || row.textLen !== 0) throw new Error('self-test failed: failed chapter row textLen must be numeric and zero when empty');
+  console.log("PASS isSet(' ') === true; failed chapter row textLen is numeric and zero when empty");
+  process.exit(0);
+}
 (async () => {
   appendProgress('### Phase - tracked E2E - launching\n- Status: running\n- Tokens: n/a\n- Eval: mode=' + MODE + ' html=' + report.config.htmlPath + (LIVE ? '; injecting API key (not logged)' : '; offline fixture responder, all other network blocked') + '; lean config 2ch/500w/3chars/2subplots.\n');
   writeStatus(0, 'e2e-launch', 'running');
@@ -563,9 +580,8 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       }
     }
     const skipped = r.ok && !!(r.result && r.result.skipped);
-    const status = !r.ok ? 'fail' : (skipped ? 'skip' : 'pass');
     if (skipped) writeStatus(tab, stepLabel, 'skip');
-    report.steps.push({ name: stepLabel, ok: skipped ? null : r.ok, status: status, error: r.err, reason: skipped ? (r.result.reason || null) : undefined });
+    report.steps.push(stepReportRow(stepLabel, r));
     fs.writeFileSync(REPORT_JSON, JSON.stringify(Object.assign({}, report, {
       partial: true,
       bookTokenUsage: await page.evaluate(() => (typeof getSessionUsage === 'function' ? getSessionUsage() : null)),
