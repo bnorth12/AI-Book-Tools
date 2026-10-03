@@ -1,9 +1,17 @@
-﻿/**
+/**
  * B4-1A lean foul-inject prove-out (minimal LLM burn).
  * Loads B3R annex into live NovelWriter, arms NW inject span, runs ensureQualityAfterGenerate
  * on target chapter so detect→anti-slop nest is exercised without full Tab1–5 regen.
  *
+ * LIVE: spends LLM tokens. Needs an xAI key in NW_ENV_FILE (default secrets/xai.local.env,
+ * var XAI_API_KEY; GROK_API_KEY accepted). Writes evidence JSON only to NW_OUT_DIR.
+ * Offline harness check (no key, no LLM): NW_B4_PRECHECK_ONLY=1 stops after the in-page preCheck.
+ *
  * Env:
+ *   NW_HTML_PATH             NovelWriter.html under test (default: this checkout's NovelWriter/NovelWriter.html)
+ *   NW_ENV_FILE              dotenv file with XAI_API_KEY (default secrets/xai.local.env)
+ *   NW_FIXTURES_DIR          fixtures (default scripts/fixtures/nw_slop: b3r_seed.json + inject_spans/)
+ *   NW_OUT_DIR               evidence output (default out/nw-smoke, gitignored)
  *   NW_E2E_SLOP_INJECT_SPAN  basename or path (default span_b3r_ch2_overexplain.txt)
  *   NW_E2E_SLOP_INJECT_CHAPTER  default 2
  *   NW_E2E_SLOP_INJECT_AFTER_CONTINUITY  default 1 (set 0 to inject immediately)
@@ -12,19 +20,33 @@ import fs from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
 import dotenv from 'dotenv';
+import { fileURLToPath, pathToFileURL } from 'url';
 
-const PLAN = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/novelwriter';
-const LIVE = 'file:///C:/NovelWriterSite/NovelWriter/NovelWriter.html';
-const ENV = 'C:/NovelWriterSite/.env';
-const SPANS = path.join(PLAN, 'b4_inject_spans');
-const ANNEX = path.join(PLAN, 'B3R_5CH_TRACKED_E2E_ANNEX_NOVELDATA.json');
-const OUT_JSON = path.join(PLAN, 'B4_1A_INJECT_PROVE.json');
-
-dotenv.config({ path: ENV });
-const apiKey = process.env.GROK_API_KEY || '';
-if (!apiKey) {
-  console.error('GROK_API_KEY missing from', ENV);
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+const HTML_PATH = path.resolve(process.env.NW_HTML_PATH || path.join(REPO_ROOT, 'NovelWriter', 'NovelWriter.html'));
+const HTML_URL = pathToFileURL(HTML_PATH).href;
+const ENV = path.resolve(process.env.NW_ENV_FILE || path.join(REPO_ROOT, 'secrets', 'xai.local.env'));
+const FIXTURES = path.resolve(process.env.NW_FIXTURES_DIR || path.join(SCRIPT_DIR, 'fixtures', 'nw_slop'));
+const OUT_DIR = path.resolve(process.env.NW_OUT_DIR || path.join(REPO_ROOT, 'out', 'nw-smoke'));
+const SPANS = path.join(FIXTURES, 'inject_spans');
+const ANNEX = path.resolve(process.env.NW_E2E_SEED || path.join(FIXTURES, 'b3r_seed.json'));
+const PRECHECK_ONLY = process.env.NW_B4_PRECHECK_ONLY === '1';
+fs.mkdirSync(OUT_DIR, { recursive: true });
+const OUT_JSON = path.join(OUT_DIR, PRECHECK_ONLY ? 'B4_1A_INJECT_PRECHECK.json' : 'B4_1A_INJECT_PROVE.json');
+if (!fs.existsSync(HTML_PATH)) {
+  console.error('NovelWriter.html not found:', HTML_PATH);
   process.exit(1);
+}
+
+let apiKey = '';
+if (!PRECHECK_ONLY) {
+  dotenv.config({ path: ENV });
+  apiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY || '';
+  if (!apiKey) {
+    console.error('XAI_API_KEY missing (env or', ENV + '). Set NW_B4_PRECHECK_ONLY=1 for the offline harness check.');
+    process.exit(1);
+  }
 }
 
 const spanEnv = (process.env.NW_E2E_SLOP_INJECT_SPAN || 'span_b3r_ch2_overexplain.txt').trim();
@@ -60,7 +82,7 @@ page.on('console', msg => {
   if (/B4-1A|anti-slop|QE5|QE2|slop inject|BOUNDED_REVISE/i.test(t)) console.log('[browser]', t);
 });
 
-await page.goto(LIVE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+await page.goto(HTML_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await page.waitForFunction(() => typeof ensureQualityAfterGenerate === 'function' && typeof scoreSlopTells === 'function' && typeof applyE2eSlopInject === 'function');
 
 await page.evaluate(({ key, seedObj, spanText, spanName, targetChapter, afterContinuity }) => {
@@ -86,11 +108,12 @@ await page.evaluate(({ key, seedObj, spanText, spanName, targetChapter, afterCon
   novelData.lastSlopInject = null;
   novelData.qualityJudgeEveryChapter = false;
   // Clear continuity findings so inject can land pre-nest and anti-slop gets budget under maxAutoPasses=2
+  // Keep both as arrays (Copilot #129): updateChapterSubpages() calls .slice() on continuityTracker.chapters.
   if (novelData.continuityFindings && typeof novelData.continuityFindings === 'object') {
-    novelData.continuityFindings = {};
+    novelData.continuityFindings = [];
   }
   if (novelData.continuityTracker && novelData.continuityTracker.chapters) {
-    novelData.continuityTracker.chapters = {};
+    novelData.continuityTracker.chapters = [];
   }
   novelData.autoContinuityAudit = false;
 
@@ -161,6 +184,13 @@ if (preCheck.tellPassed) {
   await browser.close();
   process.exit(1);
 }
+if (PRECHECK_ONLY) {
+  const ok = !preCheck.tellPassed && preCheck.helpers.applyE2eSlopInject && preCheck.helpers.ensureQualityAfterGenerate && preCheck.helpers.scoreSlopTells;
+  fs.writeFileSync(OUT_JSON, JSON.stringify({ ok, mode: 'precheck-only', spanName, targetChapter, preCheck }, null, 2));
+  console.log(ok ? 'B4-1A PRECHECK PASS (offline; no LLM call made)' : 'B4-1A PRECHECK FAIL');
+  await browser.close();
+  process.exit(ok ? 0 : 1);
+}
 
 console.log('Running ensureQualityAfterGenerate(', targetChapter, ') …');
 const nestResult = await page.evaluate(async (chapterNum) => {
@@ -206,7 +236,7 @@ const evidence = {
   ok: false,
   when: new Date().toISOString(),
   spanName,
-  spanPath,
+  spanFile: spanName,
   targetChapter,
   afterContinuity,
   preCheck,

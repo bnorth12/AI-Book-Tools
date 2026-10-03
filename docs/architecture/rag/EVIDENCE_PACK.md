@@ -35,7 +35,9 @@ Rules:
       "domain": "fiction",
       "projectGoal": "",
       "safetyTopics": [],
-      "taxonIds": []
+      "taxonIds": [],
+      "motif": [],
+      "preparation": []
     }
   },
   "excerpts": [
@@ -49,7 +51,8 @@ Rules:
   ],
   "graphPath": ["entityId", "..."],
   "expandOrNarrow": "hold",
-  "tokenBudgetHint": 0
+  "tokenBudgetHint": 0,
+  "_meta": { "estimatedTokens": 0, "source": "novelData-local", "kbEnabled": true }
 }
 ```
 
@@ -61,6 +64,7 @@ Rules:
 | `projectId` | Owning project / session id |
 | `query.goal` | Natural-language retrieve goal |
 | `query.filters` | Structured narrowers (fiction + nonfiction fields coexist; unused keys omitted or empty) |
+| `query.filters.motif` / `.preparation` | Optional string arrays: recurring images/symbols bound to chapter obligations (NovelWriter) / herbal preparation entity filter (HerbalBookForge) |
 | `excerpts[].refId` | Source entity or ReferenceDoc id |
 | `excerpts[].entityType` | Discriminator — see enum below |
 | `excerpts[].text` | Trimmed excerpt for the prompt |
@@ -69,6 +73,7 @@ Rules:
 | `graphPath` | Ordered neighbor walk that justified inclusion |
 | `expandOrNarrow` | `expand` \| `narrow` \| `hold` — next retrieve hint |
 | `tokenBudgetHint` | Soft cap for total excerpt tokens injected into the prompt |
+| `_meta` | Optional, closed object: `estimatedTokens` (integer >= 0), `source` (`chapterBlueprints-local` \| `novelData-local`), `kbEnabled` (boolean); additive in 0.1, no version bump |
 
 ---
 

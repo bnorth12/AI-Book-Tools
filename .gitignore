@@ -33,3 +33,15 @@ test-results/
 
 # Session exports may contain API keys - never commit
 *_session.json
+
+# Local secrets (never commit real keys)
+secrets/*
+!secrets/*.example
+!secrets/README.md
+.local/
+
+# Local smoke / E2E output (NovelWriter dev scripts)
+out/
+
+# Python bytecode (scripts/build_unified_report.py)
+__pycache__/

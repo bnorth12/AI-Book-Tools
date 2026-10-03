@@ -1,0 +1,17 @@
+[prior Ch4 s82] Sister Mireya emerged from the shadow of post 419-C, her gray rain cape beaded with water.
+[cur Ch5 s24 j=1.00] Sister Mireya emerged from the shadow of post 419-C, her gray rain cape beaded with water.
+
+[prior Ch4 s83] She carried a small ledger bound in oilcloth—the private ritual record of unlogged names that she recited during every sensor-post maintenance window.
+[cur Ch5 s25 j=1.00] She carried a small ledger bound in oilcloth—the private ritual record of unlogged names that she recited during every sensor-post maintenance window.
+
+[prior Ch4 s84] Theo Bramble followed two steps behind, his courier tag displaying the single unlogged coffee-cup label that had survived three consensus updates.
+[cur Ch5 s26 j=1.00] Theo Bramble followed two steps behind, his courier tag displaying the single unlogged coffee-cup label that had survived three consensus updates.
+
+[prior Ch4 s85] The intern’s eyes were wide; he had never seen a live evacuation drill from the blind side.
+[cur Ch5 s27 j=1.00] The intern’s eyes were wide; he had never seen a live evacuation drill from the blind side.
+
+[prior Ch4 s86] “The Unlogged Child appeared again,” Mireya said quietly.
+[cur Ch5 s28 j=1.00] “The Unlogged Child appeared again,” Mireya said quietly.
+
+[prior Ch4 s87] “Three camera gaps, same timestamp as the freighter spike.
+[cur Ch5 s29 j=1.00] “Three camera gaps, same timestamp as the freighter spike.

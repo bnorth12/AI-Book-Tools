@@ -243,11 +243,14 @@ Synced: 2026-04-19
 			        <input type="text" id="apiKey" placeholder="Enter your xAI API key">
 			        <label for="model">Model:</label>
 			        <select id="model">
-			            <option value="grok-4.20-0309-reasoning" selected>grok-4.20-0309-reasoning (Recommended)</option>
-			            <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
-			            <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
-			            <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
-			            <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
+			            <option value="grok-4.7" selected>grok-4.7 (Recommended)</option>
+                        <option value="grok-4.6">grok-4.6</option>
+                        <option value="grok-4.5">grok-4.5</option>
+                        <option value="grok-4.3">grok-4.3</option>
+                        <option value="grok-4.20-0309-reasoning">grok-4.20-0309-reasoning</option>
+                        <option value="grok-4.20-0309-non-reasoning">grok-4.20-0309-non-reasoning</option>
+                        <option value="grok-4.20-multi-agent-0309">grok-4.20-multi-agent-0309</option>
+                        <option value="grok-build-0.1">grok-build-0.1</option>
 			        </select>
 			        <label for="maxTokens">Max Tokens per Update:</label>
 			        <input type="number" id="maxTokens" min="500" value="6000">
@@ -267,9 +270,9 @@ Synced: 2026-04-19
                         <pre id="c3SmokeResult" style="margin:4px 0 4px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#fff7f0;border:1px solid #edc;white-space:pre-wrap;"></pre>
                         <pre id="qualityGateResult" style="margin:4px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f5f5ff;border:1px solid #ccd;white-space:pre-wrap;">Quality gate: (none yet)</pre>
 			<pre id="qualityJudgeAlignResult" style="white-space:pre-wrap;font-size:12px;"></pre>
-			        <button type="button" id="trackedE2EBtn" onclick="runTrackedE2E()" title="Lean start-to-finish tracked E2E: tokens + prose quality (#120 C3)">Tracked E2E (lean)</button>
+			<button type="button" id="trackedE2EBtn" onclick="runTrackedE2E()" title="Lean start-to-finish tracked E2E with LIVE calls (uses the key above). Offline/no-key: node scripts/run-tracked-e2e.mjs">Tracked E2E (lean, live)</button>
 			        <pre id="c1SmokeResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7f7f7;border:1px solid #ddd;border-radius:4px;white-space:pre-wrap;max-height:220px;overflow:auto;">C1 smoke idle — click to validate digests (no full manuscript dump).</pre>
-			        <pre id="trackedE2EResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f0f4ff;border:1px solid #b8c7e8;border-radius:4px;white-space:pre-wrap;max-height:360px;overflow:auto;">Tracked E2E idle - click for lean 2-chapter token+quality run.</pre>
+			<pre id="trackedE2EResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f0f4ff;border:1px solid #b8c7e8;border-radius:4px;white-space:pre-wrap;max-height:360px;overflow:auto;">Tracked E2E idle - click for a lean 2-chapter token + quality run (live API calls).</pre>
 
 			        <div id="tokenCostDiagnostics" class="ui-subpanel" data-testid="nw-token-cost-diagnostics" style="margin:12px 0;padding:10px 12px;border:1px solid #b8c7e8;border-radius:6px;background:#f7f9ff;">
 			        	<h3 style="margin:0 0 8px;font-size:15px;">Token &amp; cost diagnostics (book ledger)</h3>
@@ -641,7 +644,7 @@ Synced: 2026-04-19
 	    // Global data structures
 	    let novelData = {
 	        apiKey: '',
-	        model: 'grok-4.20-0309-reasoning',
+	        model: 'grok-4.7',
 	        maxTokens: 6000,
 	        genre: 'scifi',
 	        title: '',
@@ -2370,7 +2373,8 @@ let activeAICallCount = 0;
 		        throw new Error('API Key is missing');
 		    }
 
-		    const endpoint = 'https://api.x.ai/v1/chat/completions';
+		    const useResponsesAPI = typeof model === 'string' && model.includes('multi-agent');
+		    const endpoint = useResponsesAPI ? 'https://api.x.ai/v1/responses' : 'https://api.x.ai/v1/chat/completions';
 		    const genre = document.getElementById('genre')?.value;
 		    const adjustedMessages = Array.isArray(messages) ? [...messages] : [];
 		    if (genre === 'scifi') {
@@ -2379,26 +2383,34 @@ let activeAICallCount = 0;
 		            content: 'When writing science fiction, prioritize hard-science plausibility, coherent cause-and-effect, and realistic technological constraints. Avoid space-opera tropes unless explicitly requested.'
 		        });
 		    }
-		    console.log('Attempting API call to:', endpoint, 'Model:', model, 'Max Tokens:', maxTokens, 'Messages:', messages);
+		    console.log('Attempting API call to:', endpoint, 'Model:', model, 'Max Tokens:', maxTokens, 'Messages:', messages, 'useResponsesAPI:', useResponsesAPI);
 		    if (loadingDiv) loadingDiv.style.display = 'block';
 			activeAICallCount += 1;
 			setExecutionStatus(operationName, 'running', 'Preparing request payload.');
 
 		    try {
 				setExecutionStatus(operationName, 'waiting', 'Waiting on LLM response...');
+		        const requestBody = useResponsesAPI
+		            ? {
+		                model: model,
+		                input: adjustedMessages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
+		                max_output_tokens: maxTokens,
+		                temperature: 0.65
+		            }
+		            : {
+		                model: model,
+		                messages: adjustedMessages,
+		                max_tokens: maxTokens,
+		                stream: false,
+		                temperature: 0.65
+		            };
 		        const response = await fetch(endpoint, {
 		            method: 'POST',
 		            headers: {
 		                'Content-Type': 'application/json',
 		                'Authorization': `Bearer ${apiKey}`
 		            },
-		            body: JSON.stringify({
-		                model: model,
-		                messages: adjustedMessages,
-		                max_tokens: maxTokens,
-		                stream: false,
-		                temperature: 0.65
-		            })
+		            body: JSON.stringify(requestBody)
 		        });
 		        if (!response.ok) {
 		            throw new Error(`HTTP error! Status: ${response.status}, Text: ${await response.text()}`);
@@ -2425,8 +2437,25 @@ let activeAICallCount = 0;
 		            });
 		        }
 		        requestLog.contextPackChars = null;
-		        let content = jsonResponse.choices && jsonResponse.choices[0] && jsonResponse.choices[0].message ?
-		                      jsonResponse.choices[0].message.content : text;
+		        let content = '';
+		        if (useResponsesAPI) {
+		            if (typeof jsonResponse.output_text === 'string' && jsonResponse.output_text.length > 0) {
+		                content = jsonResponse.output_text;
+		            } else if (Array.isArray(jsonResponse.output)) {
+		                content = jsonResponse.output
+		                    .flatMap(item => Array.isArray(item.content) ? item.content : [])
+		                    .filter(part => part.type === 'output_text' && typeof part.text === 'string')
+		                    .map(part => part.text)
+		                    .join('\n')
+		                    .trim();
+		            }
+		            if (!content) {
+		                throw new Error('Invalid responses API response: missing output text');
+		            }
+		        } else {
+		            content = jsonResponse.choices && jsonResponse.choices[0] && jsonResponse.choices[0].message ?
+		                          jsonResponse.choices[0].message.content : text;
+		        }
 
 		        // Parse content if it’s JSON
 				// CALLAI_JSON_PARSE_GATE: treat Return JSON / JSON only / fence / leading {|[ as structured
@@ -5154,6 +5183,18 @@ return c && c.name && c.backstory && c.arc; });
 			return !failed;
 		}
 
+		// Offline smoke isolation (Copilot highs on #117 QE1-3/QE5/QE6): snapshot novelData keys + DOM values, restore in finally.
+		function _nwSmokeSnapshot(keys, domIds) {
+			const snap = {};
+			(keys || []).forEach(function (k) { snap[k] = { had: Object.prototype.hasOwnProperty.call(novelData, k), v: novelData[k] === undefined ? undefined : JSON.parse(JSON.stringify(novelData[k])) }; });
+			const dom = {};
+			(domIds || []).forEach(function (id) { const el = document.getElementById(id); if (el) dom[id] = el.value; });
+			return function restore() {
+				Object.keys(snap).forEach(function (k) { if (snap[k].had) novelData[k] = snap[k].v; else delete novelData[k]; });
+				Object.keys(dom).forEach(function (id) { const el = document.getElementById(id); if (el) el.value = dom[id]; });
+			};
+		}
+
 		// ---- #120 C3: Prose quality heuristics + optional LLM judge (scores attach to current book) ----
 		/**
 		 * Local heuristics for prose quality (0-100 ints).
@@ -5810,7 +5851,8 @@ return c && c.name && c.backstory && c.arc; });
 		async function runC3Smoke() {
 			const el = document.getElementById('c3SmokeResult') || document.getElementById('c1SmokeResult');
 			const log = [];
-			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\\n'); };
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastJudgeGateAlignment","judgeGateAlignments","chapterImprovementLog","bookText","editedChapters","subplots","boundedReviseLog"], []);
 			try {
 				const slop = "In todays world, it is important to note that a vibrant tapestry of innovation will delve deeper into the complexities. Moreover, furthermore, a testament to progress stands as a beacon of seamless robust leverage.";
 				const fail = runQualityGate(slop, { label: 'c3-smoke-slop' });
@@ -5825,6 +5867,8 @@ return c && c.name && c.backstory && c.arc; });
 			} catch (e) {
 				say('C3 Smoke FAIL: ' + (e && e.message ? e.message : e));
 				return false;
+			} finally {
+				__restore();
 			}
 		}
 
@@ -6054,6 +6098,22 @@ return c && c.name && c.backstory && c.arc; });
 			if (worst >= 3) hits.push('hedgeWindow=' + worst);
 			return { score: _slopClamp(worst >= 3 ? 40 + worst * 15 : worst * 10), hits: hits };
 		}
+		/** B5-0 (mirrors scripts/_nw_slop_tells_snippet.mjs NAME_ECHO_STOPWORDS): capitalized function/common words are never names. */
+		const NW_NAME_ECHO_STOPWORDS = new Set([
+			'the', 'this', 'that', 'these', 'those', 'then', 'than', 'there', 'their', 'they', 'them',
+			'she', 'her', 'hers', 'his', 'him', 'its', 'our', 'ours', 'you', 'your', 'yours', 'who', 'whom', 'whose',
+			'and', 'but', 'for', 'nor', 'yet', 'not', 'nothing', 'something', 'everything', 'someone', 'everyone', 'nobody',
+			'when', 'while', 'where', 'what', 'which', 'why', 'how', 'whether', 'because', 'though', 'although', 'unless', 'until', 'since',
+			'after', 'before', 'now', 'here', 'only', 'just', 'even', 'still', 'once', 'also', 'too', 'again', 'instead',
+			'each', 'every', 'all', 'any', 'some', 'both', 'few', 'many', 'most', 'such', 'another', 'other', 'either', 'neither',
+			'into', 'onto', 'from', 'with', 'without', 'over', 'under', 'above', 'below', 'through', 'behind', 'beside', 'between',
+			'inside', 'outside', 'across', 'against', 'along', 'around', 'beyond', 'near', 'past', 'toward', 'towards', 'upon', 'within',
+			'was', 'were', 'had', 'has', 'have', 'did', 'does', 'can', 'could', 'would', 'should', 'will', 'may', 'might', 'must',
+			'yes', 'out', 'off', 'down', 'back', 'later', 'somewhere', 'nowhere', 'everywhere'
+		]);
+		function _slopIsNameToken(tok) {
+			return /^[A-Z][a-z]{2,}$/.test(tok) && !NW_NAME_ECHO_STOPWORDS.has(tok.toLowerCase());
+		}
 		function _scoreNameEchoTell(text) {
 			const narr = _slopStripDialogue(text);
 			const w = _slopWords(narr);
@@ -6064,7 +6124,7 @@ return c && c.name && c.backstory && c.arc; });
 				const window = w.slice(i, i + 25);
 				const counts = {};
 				window.forEach(function (tok) {
-					if (/^[A-Z][a-z]{2,}$/.test(tok)) counts[tok] = (counts[tok] || 0) + 1;
+					if (_slopIsNameToken(tok)) counts[tok] = (counts[tok] || 0) + 1;
 				});
 				Object.keys(counts).forEach(function (name) {
 					const c = counts[name];
@@ -6230,8 +6290,11 @@ return c && c.name && c.backstory && c.arc; });
 			if (cont.hasAny && !ctx.didContinuityPass) return { needed: true, reason: 'continuity-findings' };
 			if (ctx.afterApplyStaged) {
 				const notes = String((novelData.chapterImprovements || [])[chapterNum - 1] || '').trim();
+				// #129 review: notes this run's revise pass already consumed are not residual (no second paid call on the same notes).
+				const consumed = ctx.consumedStagedNotes != null ? String(ctx.consumedStagedNotes).trim() : null;
 				if (
 					notes &&
+					notes !== consumed &&
 					!/^QUALITY GATE FAIL-CLOSED REVISE/i.test(notes) &&
 					!/^CONTINUITY-FOCUSED QUALITY PASS/i.test(notes) &&
 					!/^ANTI-SLOP QUALITY PASS/i.test(notes)
@@ -6345,9 +6408,12 @@ return c && c.name && c.backstory && c.arc; });
 
 
 
+		/** Mirror chapter prose into the generated + edit prose textareas (chapterContentN is the Tab 4 outline/arc box). */
 		function syncChapterTextToDom(chapterNum, text) {
-			const el = document.getElementById('chapterContent' + chapterNum) || document.getElementById('chapterEditContent' + chapterNum);
-			if (el) el.value = text;
+			['chapterGenContent', 'chapterEditContent'].forEach(function (id) {
+				const el = document.getElementById(id + chapterNum);
+				if (el) el.value = text;
+			});
 		}
 
 		/** BOUNDED_REVISE: reject runaway growth / lost paragraph structure; restore prior text. */
@@ -6730,13 +6796,15 @@ return c && c.name && c.backstory && c.arc; });
 			let passesDoneApply = 1;
 			let didContinuityPass = false;
 			let didAntiSlopPass = false;
+			let consumedStagedNotes = text;
 			const maxPassesApply = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : 2;
 			while (passesDoneApply < maxPassesApply) {
 				const need = needsQualityMultiPass(chapterNum, gate, {
 					passesDone: passesDoneApply,
 					didContinuityPass: didContinuityPass,
 					didAntiSlopPass: didAntiSlopPass,
-					afterApplyStaged: true
+					afterApplyStaged: true,
+					consumedStagedNotes: consumedStagedNotes
 				});
 				if (!need.needed) {
 					// B4-1A: if inject still pending (continuity idle path missed), splice then re-evaluate
@@ -6751,11 +6819,13 @@ return c && c.name && c.backstory && c.arc; });
 						? 'residual-staged'
 						: (need.reason === 'anti-slop-tells' ? 'anti-slop' : 'gate-fail'));
 				console.warn('[QE5/B3fix] after apply-staged → pass', passesDoneApply + 1, kind);
+				const notesForPass = String((novelData.chapterImprovements || [])[chapterNum - 1] || '').trim();
 				multi = await runTargetedQualityPass(chapterNum, gate, { pass: passesDoneApply + 1, kind: kind, tellReport: need.tellReport || null });
 				passesDoneApply++;
 				gate = multi.gateAfter || gate;
 				if (kind === 'continuity') didContinuityPass = true;
 				if (kind === 'anti-slop') didAntiSlopPass = true;
+				if (kind === 'residual-staged') consumedStagedNotes = notesForPass;
 			}
 			return { beforeScores: beforeScores, afterScores: afterScores, multi: multi, gate: gate };
 		}
@@ -6763,7 +6833,8 @@ return c && c.name && c.backstory && c.arc; });
 		async function runQe123Smoke() {
 			const el = document.getElementById('qe123SmokeResult') || document.getElementById('c3SmokeResult') || document.getElementById('c1SmokeResult');
 			const log = [];
-			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\\n'); };
+			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastJudgeGateAlignment","judgeGateAlignments","chapterImprovementLog","bookText","editedChapters","subplots","boundedReviseLog"], ["chapterEditImprovement1","chapterEditContent1"]);
 			try {
 				ensureChapterImprovementsArray();
 				const n = novelData.numChapters || 2;
@@ -6813,6 +6884,8 @@ return c && c.name && c.backstory && c.arc; });
 			} catch (e) {
 				say('QE 1/2/3 Smoke FAIL: ' + (e && e.message ? e.message : e));
 				return false;
+			} finally {
+				__restore();
 			}
 		}
 
@@ -6827,6 +6900,7 @@ return c && c.name && c.backstory && c.arc; });
 			const el = document.getElementById('qe4SmokeResult') || document.getElementById('qe123SmokeResult') || document.getElementById('c3SmokeResult');
 			const log = [];
 			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastJudgeGateAlignment","judgeGateAlignments","chapterImprovementLog","bookText","editedChapters","subplots","boundedReviseLog"], []);
 			try {
 				if (NW_QUALITY_ROLES.failClosedDriver !== 'heuristics') throw new Error('driver must be heuristics');
 				if (NW_QUALITY_ROLES.advisory !== 'llmJudge') throw new Error('advisory must be llmJudge');
@@ -6848,6 +6922,8 @@ return c && c.name && c.backstory && c.arc; });
 			} catch (e) {
 				say('QE4 Smoke FAIL: ' + (e && e.message ? e.message : e));
 				return false;
+			} finally {
+				__restore();
 			}
 		}
 		window.runQe4Smoke = runQe4Smoke;
@@ -6856,6 +6932,7 @@ return c && c.name && c.backstory && c.arc; });
 			const el = document.getElementById('qe5SmokeResult') || document.getElementById('qe4SmokeResult') || document.getElementById('qe123SmokeResult');
 			const log = [];
 			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastJudgeGateAlignment","judgeGateAlignments","chapterImprovementLog","bookText","editedChapters","subplots","boundedReviseLog"], []);
 			try {
 				if (!NW_QUALITY_REVISE || NW_QUALITY_REVISE.maxAutoPasses !== 2) throw new Error('maxAutoPasses must be 2');
 				if (NW_QUALITY_ROLES.reviseOnJudgeAdvisory !== false) throw new Error('reviseOnJudgeAdvisory must stay false');
@@ -6902,6 +6979,8 @@ return c && c.name && c.backstory && c.arc; });
 			} catch (e) {
 				say('QE5 Smoke FAIL: ' + (e && e.message ? e.message : e));
 				return false;
+			} finally {
+				__restore();
 			}
 		}
 		window.runQe5Smoke = runQe5Smoke;
@@ -6910,12 +6989,16 @@ return c && c.name && c.backstory && c.arc; });
 			const el = document.getElementById('qe6SmokeResult') || document.getElementById('qe5SmokeResult');
 			const log = [];
 			const say = (m) => { log.push(m); if (el) el.textContent = log.join('\n'); };
+			const __restore = _nwSmokeSnapshot(["chapters","chapterImprovements","characters","continuityFindings","continuityTracker","qualitySamples","qualityMultiPassLog","lastQualityMultiPass","qualityReviseLog","lastQualityGate","qualityFindings","lastJudgeGateAlignment","judgeGateAlignments","chapterImprovementLog","bookText","editedChapters","subplots","boundedReviseLog"], []);
 			try {
 				if (!NW_QUALITY_GATE || NW_QUALITY_GATE.minConsistency == null) throw new Error('minConsistency missing');
 				if (NW_QUALITY_GATE.minFlow == null || NW_QUALITY_GATE.minPacing == null) throw new Error('flow/pacing thresholds missing');
 				if (NW_QUALITY_ROLES.failClosedDriver !== 'heuristics') throw new Error('fail-closed must stay heuristics');
 				if (NW_QUALITY_REVISE.maxAutoPasses !== 2) throw new Error('maxAutoPasses must stay 2');
 				say('thresholds OK');
+				// isolated fixture state (restored in finally): user continuity findings must not steer the anti-slop nest checks
+				novelData.continuityFindings = [];
+				novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
 				novelData.characters = [
 					{ name: 'Dr. Lumen Kwan', role: 'lead', backstory: 'x', arc: 'y' },
 					{ name: 'Rook Velasquez', role: 'foil', backstory: 'x', arc: 'y' }
@@ -6979,6 +7062,8 @@ return c && c.name && c.backstory && c.arc; });
 			} catch (e) {
 				say('QE6 Attributes Smoke FAIL: ' + (e && e.message ? e.message : e));
 				return false;
+			} finally {
+				__restore();
 			}
 		}
 		window.runQe6Smoke = runQe6Smoke;
@@ -6989,21 +7074,65 @@ return c && c.name && c.backstory && c.arc; });
 
 		window.runQe123Smoke = runQe123Smoke;
 
-
-
-		// ---- #120 C3: Lean tracked E2E (2 chapters / 500 words / 3 chars / 2 subplots) ----
+		// ---- #117 split PR3 / #120 C3: in-page lean Tracked E2E (2 chapters / 500 words / 3 chars / 2 subplots) ----
+		// Dev tool: makes real LLM calls with the key in #apiKey. The offline, no-key path is scripts/run-tracked-e2e.mjs
+		// (fixture responder); see scripts/README.md. Token rollup helpers (getSessionUsage/ensureBookTokenUsage) arrive
+		// with split PR1; until then the report records usage as unavailable instead of throwing.
 		function _trackedLog(lines, msg) {
 			lines.push(msg);
 			const el = document.getElementById('trackedE2EResult');
 			if (el) el.textContent = lines.join('\n');
-			console.log('[TrackedE2E]', msg);
+		}
+
+		function _trackedUsage() {
+			if (typeof getSessionUsage === 'function') {
+				const u = getSessionUsage() || {};
+				return Object.assign({ available: true }, u, { calls: (u.calls || []).slice() });
+			}
+			return { available: false, source: 'none (token rollup arrives with PR1)', prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, calls: [] };
+		}
+
+		function _trackedQuality() {
+			if (typeof getSessionQuality === 'function') return getSessionQuality();
+			return { source: 'novelData.qualitySamples', samples: (novelData.qualitySamples || []).slice() };
+		}
+
+		function _trackedFinalize(report) {
+			// Copilot #117 high (HTML ~7219): read usage from the session ledger, never from report.* methods.
+			report.finishedAt = report.finishedAt || new Date().toISOString();
+			report.sessionUsage = _trackedUsage();
+			report.bookTokenUsage = report.sessionUsage;
+			report.sessionQuality = _trackedQuality();
+			report.qualitySamples = (novelData.qualitySamples || []).slice();
+			const u = report.sessionUsage;
+			report.summary = {
+				callCount: u.calls.length,
+				usageAvailable: !!u.available,
+				totals: {
+					prompt_tokens: u.prompt_tokens || 0,
+					completion_tokens: u.completion_tokens || 0,
+					total_tokens: u.total_tokens || 0
+				},
+				contextPackCharsSum: u.contextPackCharsSum == null ? null : u.contextPackCharsSum,
+				qualitySamples: (report.sessionQuality.samples || []).length,
+				failedSteps: report.steps.filter(s => s.status === 'fail').map(s => s.name),
+				skippedSteps: report.steps.filter(s => s.status === 'skip').map(s => s.name)
+			};
+			return report;
 		}
 
 		async function runTrackedE2E() {
+			// Engineering gate: resetState() wipes the current novel and this run makes live API calls; ask first.
+			if (!window.confirm('This resets the current novel and makes live API calls. Continue?')) {
+				const cancelEl = document.getElementById('trackedE2EResult');
+				if (cancelEl) cancelEl.textContent = 'Tracked E2E cancelled - novel unchanged, no API calls made.';
+				return null;
+			}
 			const lines = [];
 			const log = (m) => _trackedLog(lines, m);
 			const report = {
 				ok: false,
+				mode: 'in-page',
 				startedAt: new Date().toISOString(),
 				finishedAt: null,
 				config: {
@@ -7013,6 +7142,8 @@ return c && c.name && c.backstory && c.arc; });
 					chapterLength: 500,
 					numCharacters: 3,
 					minSubplots: 2,
+					// Deliberately below the product default (6000, used by scripts/run-tracked-e2e.mjs): this button makes
+					// live paid calls, and 2000 covers a 500-word chapter. The PR3 split plan does not fix a value.
 					maxTokens: 2000
 				},
 				steps: [],
@@ -7021,48 +7152,57 @@ return c && c.name && c.backstory && c.arc; });
 				errors: []
 			};
 			const step = async (name, fn) => {
-				const row = { name, ok: false, error: null, startedAt: new Date().toISOString(), finishedAt: null };
+				const row = { name, ok: false, status: 'fail', error: null, startedAt: new Date().toISOString(), finishedAt: null };
 				log('STEP start: ' + name);
 				try {
 					const result = await fn();
-					row.ok = true;
 					row.result = result === undefined ? null : result;
-					log('STEP pass: ' + name);
+					if (result && result.skipped) {
+						// A skip is neither a pass nor a failure: ok stays null so it never reads as ok:true.
+						row.ok = null;
+						row.status = 'skip';
+						log('STEP skip: ' + name + (result.reason ? ' - ' + result.reason : ''));
+					} else {
+						row.ok = true;
+						row.status = 'pass';
+						log('STEP pass: ' + name);
+					}
 				} catch (err) {
 					row.ok = false;
+					row.status = 'fail';
 					row.error = (err && err.message) ? err.message : String(err);
 					report.errors.push({ step: name, error: row.error });
-					log('STEP FAIL: ' + name + ' â€” ' + row.error);
+					log('STEP FAIL: ' + name + ' - ' + row.error);
 				}
 				row.finishedAt = new Date().toISOString();
 				report.steps.push(row);
 				return row;
 			};
+			const publish = () => {
+				const el = document.getElementById('trackedE2EResult');
+				if (el) el.textContent = lines.join('\n') + '\n\n--- REPORT JSON ---\n' + JSON.stringify(report, null, 2);
+				try { window.__lastTrackedE2EReport = report; } catch (e) {}
+				return report;
+			};
 
-			log('Tracked E2E (lean) startingâ€¦');
-			resetBookTokenUsage();
-			novelData.qualitySamples = [];
+			log('Tracked E2E (lean) starting...');
 
-			// Preserve API key across resetState (resetState prompts if empty â€” keep existing)
+			// Keep the API key across resetState (resetState prompts only when the key is empty).
 			const savedKey = (document.getElementById('apiKey') || {}).value || '';
 			if (!savedKey.trim()) {
-				log('FATAL: #apiKey empty â€” paste key before running');
+				log('FATAL: #apiKey empty - paste a key before running (offline runs: node scripts/run-tracked-e2e.mjs)');
 				report.errors.push({ step: 'init', error: 'apiKey missing' });
-				report.finishedAt = new Date().toISOString();
-				report.sessionUsage = getSessionUsage(); report.bookTokenUsage = report.sessionUsage;
-				report.sessionQuality = getSessionQuality(); report.qualitySamples = (novelData.qualitySamples || []).slice();
-				const el0 = document.getElementById('trackedE2EResult');
-				if (el0) el0.textContent = lines.join('\n') + '\n\n' + JSON.stringify(report, null, 2);
-				return report;
+				_trackedFinalize(report);
+				return publish();
 			}
+			// Clear usage/quality only once the run will actually start (not before the key check).
+			if (typeof resetBookTokenUsage === 'function') resetBookTokenUsage();
+			novelData.qualitySamples = [];
 
 			try {
-				// Soft reset without prompt: mimic lean config on current form
 				if (typeof resetState === 'function') {
-					// Avoid prompt by ensuring key stays set
 					document.getElementById('apiKey').value = savedKey;
 					try {
-						// resetState prompts only if key empty; key is set
 						resetState();
 					} catch (e) {
 						log('resetState warning: ' + (e.message || e));
@@ -7080,28 +7220,23 @@ return c && c.name && c.backstory && c.arc; });
 				if (typeof syncCharacterEntries === 'function') syncCharacterEntries();
 				if (typeof syncSubplotEntries === 'function') syncSubplotEntries();
 				if (typeof collectData === 'function') collectData();
-				log('Config: 2 ch / 500 words / 3 chars / 2 subplots / maxTokens=2000 / genre=scifi');
+				const cfg = report.config;
+				log('Config: ' + cfg.numChapters + ' ch / ' + cfg.chapterLength + ' words / ' + cfg.numCharacters + ' chars / ' + cfg.minSubplots + ' subplots / maxTokens=' + cfg.maxTokens + ' / genre=' + cfg.genre);
 
-				// Prefer grok-4.7 if present
 				const modelSel = document.getElementById('model');
 				if (modelSel) {
-					const opts = Array.from(modelSel.options || []);
-					const grok47 = opts.find(o => /grok-4\.7/i.test(o.value) || /grok-4\.7/i.test(o.textContent));
-					if (grok47) modelSel.value = grok47.value;
-					else if (opts.length) {
-						// keep selected or first
-						if (!modelSel.value) modelSel.value = opts[0].value;
-					}
+					if (!modelSel.value && modelSel.options && modelSel.options.length) modelSel.value = modelSel.options[0].value;
 					report.config.model = modelSel.value;
 					log('Model: ' + modelSel.value);
 				}
 
 				await step('c1Smoke', async () => {
-					if (typeof runC1Smoke === 'function') {
-						const ok = await runC1Smoke();
-						return { passed: !!ok, note: 'api skip ignored if any' };
+					if (typeof runC1Smoke !== 'function') return { skipped: true, reason: 'runC1Smoke absent (PR1)' };
+					const c1 = await runC1Smoke();
+					if (c1 === false || c1 == null || (typeof c1 === 'object' && c1.passed === false)) {
+						throw new Error('runC1Smoke returned ' + (c1 && typeof c1 === 'object' ? JSON.stringify(c1).slice(0, 200) : String(c1)));
 					}
-					return { skipped: true };
+					return { passed: true };
 				});
 
 				await step('fetchAuthors', async () => {
@@ -7159,32 +7294,47 @@ return c && c.name && c.backstory && c.arc; });
 				});
 
 				await step('generateChapter1+quality', async () => {
+					const priorAlign = novelData.lastJudgeGateAlignment || null;
 					await generateChapter(1);
 					const text = novelData.chapters[0] || '';
+					// A failed generation (e.g. HTTP 500) leaves the chapter empty; that is a FAIL, never ok with textLen 0.
+					if (!text.trim()) throw new Error('generateChapter(1) produced empty text (textLen ' + text.length + ')');
 					const heur = scoreProseQuality(text);
 					pushQualitySample('chapter1-heuristics', heur, text.length);
-					const judged = await judgeProseQualityLLM(text, document.getElementById('tab5') || document.getElementById('tab1'));
-					pushQualitySample('chapter1-llmJudge', judged, text.length);
+					// generateChapter(1) already runs the advisory judge (sample chapter1-generate-llmJudge); reuse it instead of a second call.
+					const align = novelData.lastJudgeGateAlignment || null;
+					let judged = (align && align !== priorAlign && align.judgeScores) ? align.judgeScores : null;
+					if (!judged) {
+						judged = await judgeProseQualityLLM(text, document.getElementById('tab5') || document.getElementById('tab1'));
+						pushQualitySample('chapter1-llmJudge', judged, text.length);
+					}
 					return { textLen: text.length, heuristics: heur, judged: { interest: judged.interest, readability: judged.readability, aiSlopRisk: judged.aiSlopRisk, humanLikeness: judged.humanLikeness, source: judged.source } };
 				});
 
 				await step('generateChapter2+quality', async () => {
 					await generateChapter(2);
 					const text = novelData.chapters[1] || '';
+					if (!text.trim()) throw new Error('generateChapter(2) produced empty text (textLen ' + text.length + ')');
 					const heur = scoreProseQuality(text);
 					pushQualitySample('chapter2-heuristics', heur, text.length);
 					return { textLen: text.length, heuristics: heur };
 				});
 
 				await step('updateChapter1', async () => {
-					const editEl = document.getElementById('chapterEditContent1');
-					const improvEl = document.getElementById('chapterEditImprovement1');
-					if (!editEl) throw new Error('chapterEditContent1 missing â€” ensure chapter subpages exist');
-					if (!editEl.value && novelData.chapters[0]) editEl.value = novelData.chapters[0];
-					if (improvEl) improvEl.value = 'Tighten opening; add one concrete sensory detail; keep under target length.';
-					// Ensure tab6 edit surfaces exist
 					if (typeof showTab === 'function') showTab(6);
-					await updateChapter(1);
+					const editEl = document.getElementById('chapterEditContent1');
+					if (!editEl) throw new Error('chapterEditContent1 missing - ensure chapter subpages exist');
+					if (!editEl.value && novelData.chapters[0]) editEl.value = novelData.chapters[0];
+					const note = 'Tighten opening; add one concrete sensory detail; keep under target length.';
+					// Same path as the Tab 6 "Update Chapter" button (#129): stage notes, then apply them once.
+					if (typeof applyStagedChapterImprovements === 'function' && typeof stageChapterImprovement === 'function') {
+						stageChapterImprovement(1, note, { mode: 'replace', source: 'tracked-e2e' });
+						await applyStagedChapterImprovements(1);
+					} else {
+						const improvEl = document.getElementById('chapterEditImprovement1');
+						if (improvEl) improvEl.value = note;
+						await updateChapter(1);
+					}
 					const text = novelData.chapters[0] || '';
 					const heur = scoreProseQuality(text);
 					pushQualitySample('chapter1-afterUpdate', heur, text.length);
@@ -7193,41 +7343,32 @@ return c && c.name && c.backstory && c.arc; });
 
 				await step('suggestBookImprovements', async () => {
 					if (typeof showTab === 'function') showTab(7);
-					const beforeCalls = ensureBookTokenUsage().calls.length;
-					// Record payload size expectation via digests path
+					const beforeCalls = _trackedUsage().calls.length;
 					const packProbe = typeof buildPromptContextPack === 'function'
 						? buildPromptContextPack({ includePacket: false })
 						: null;
 					const packChars = packProbe ? ((packProbe._approxChars) || JSON.stringify(packProbe).length) : null;
 					await suggestBookImprovements();
-					const lastCall = ensureBookTokenUsage().calls[ensureBookTokenUsage().calls.length - 1] || null;
+					const after = _trackedUsage();
+					const lastCall = after.calls[after.calls.length - 1] || null;
 					return {
 						packChars,
 						improvementCount: (novelData.bookImprovements || []).length,
 						lastCallTokens: lastCall ? lastCall.total_tokens : null,
-						callsAdded: ensureBookTokenUsage().calls.length - beforeCalls
+						callsAdded: after.available ? after.calls.length - beforeCalls : null
 					};
 				});
 
-				ensureBookTokenUsage().updatedAt = new Date().toISOString();
-				report.ok = report.steps.every(s => s.ok);
+				report.ok = report.steps.every(s => s.status !== 'fail');
 				report.finishedAt = new Date().toISOString();
-				report.sessionUsage = getSessionUsage(); report.bookTokenUsage = report.sessionUsage;
-				report.sessionQuality = getSessionQuality(); report.qualitySamples = (novelData.qualitySamples || []).slice();
-				report.summary = {
-					callCount: report.ensureBookTokenUsage().calls.length,
-					totals: report.sessionUsage.totals,
-					contextPackCharsSum: report.sessionUsage.contextPackCharsSum,
-					qualitySamples: report.sessionQuality.samples.length,
-					failedSteps: report.steps.filter(s => !s.ok).map(s => s.name)
-				};
+				_trackedFinalize(report);
 				log('==== FINAL ' + (report.ok ? 'PASS' : 'PARTIAL/FAIL') + ' ====');
-				log('Calls: ' + report.summary.callCount +
+				log('Calls: ' + (report.summary.usageAvailable ? report.summary.callCount : 'n/a (no token rollup)') +
 					' | tokens prompt/comp/total: ' +
 					report.summary.totals.prompt_tokens + '/' +
 					report.summary.totals.completion_tokens + '/' +
 					report.summary.totals.total_tokens);
-				report.sessionQuality.samples.forEach(s => {
+				(report.sessionQuality.samples || []).forEach(s => {
 					log('Quality[' + s.label + ']: interest=' + s.interest +
 						' readability=' + s.readability +
 						' aiSlopRisk=' + s.aiSlopRisk +
@@ -7241,20 +7382,10 @@ return c && c.name && c.backstory && c.arc; });
 				report.ok = false;
 				report.errors.push({ step: 'fatal', error: fatal && fatal.message ? fatal.message : String(fatal) });
 				report.finishedAt = new Date().toISOString();
-				ensureBookTokenUsage().updatedAt = report.finishedAt;
-				report.sessionUsage = getSessionUsage(); report.bookTokenUsage = report.sessionUsage;
-				report.sessionQuality = getSessionQuality(); report.qualitySamples = (novelData.qualitySamples || []).slice();
+				_trackedFinalize(report);
 				log('FATAL: ' + (fatal && fatal.message ? fatal.message : fatal));
 			}
-
-			const el = document.getElementById('trackedE2EResult');
-			if (el) {
-				el.textContent = lines.join('\n') + '\n\n--- REPORT JSON ---\n' + JSON.stringify(report, null, 2);
-			}
-			try {
-				window.__lastTrackedE2EReport = report;
-			} catch (e) {}
-			return report;
+			return publish();
 		}
 
 		window.runTrackedE2E = runTrackedE2E;
@@ -8406,7 +8537,7 @@ return c && c.name && c.backstory && c.arc; });
 		            requestLog = importedRequestLog;
 
 		            document.getElementById('apiKey').value = novelData.apiKey || '';
-		            document.getElementById('model').value = novelData.model || 'grok-4.20-0309-reasoning';
+		            document.getElementById('model').value = novelData.model || 'grok-4.7';
 		            document.getElementById('maxTokens').value = novelData.maxTokens || 6000;
 		            document.getElementById('genre').value = novelData.genre || 'scifi';
 		            const authorSelect = document.getElementById('authorStyle');
@@ -9359,9 +9490,8 @@ return c && c.name && c.backstory && c.arc; });
 		    if (opts.requireImprovements !== false) {
 		        // QE3: do not silently edit with empty improvement notes (allow explicit opt-out)
 		        const require = (opts.requireImprovements === true) || (opts.operationTag === 'applyCritique') || (opts.operationTag === 'qualityRevise') || (opts.operationTag === 'applyChapterImprovements');
-		        // Default Tab6 button: warn but allow if user confirms empty? — hard-block when requireImprovements true; soft-block default
 		        if (!(String(improvements || '').trim())) {
-		            if (require || opts.requireImprovements === true) {
+		            if (require) {
 		                const msg = 'Chapter ' + chapterNum + ': improvement notes are empty. Stage a critique or enter notes before updating.';
 		                alert(msg);
 		                throw new Error(msg);
@@ -9812,7 +9942,7 @@ return c && c.name && c.backstory && c.arc; });
 		// Reset state for tests with real API setup
 		function resetState() {
 		    novelData = {
-		        apiKey: '', model: 'grok-4.20-0309-reasoning', maxTokens: 6000,
+		        apiKey: '', model: 'grok-4.7', maxTokens: 6000,
 		        genre: 'scifi', title: '', storyArc: '', generalPlot: '', setting: '',
 		        numChapters: 10, chapterLength: 2000, authorStyle: '', styleGuide: '',
 		        authors: [], characters: [], subplots: [], novelOutline: '', plotOutline: '',
@@ -9832,7 +9962,7 @@ return c && c.name && c.backstory && c.arc; });
 		    if (typeof resetBookTokenUsage === 'function') resetBookTokenUsage();
 		    novelData.qualitySamples = [];
 		    // API key is not persisted to localStorage per NW.GEN8
-		    document.getElementById('model').value = 'grok-4.20-0309-reasoning';
+		    document.getElementById('model').value = 'grok-4.7';
 		    document.getElementById('maxTokens').value = '6000';
 		    document.getElementById('genre').value = 'scifi';
 		    document.getElementById('authorStyle').value = '';

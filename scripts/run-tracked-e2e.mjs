@@ -1,30 +1,110 @@
-﻿/**
- * Lean Tracked E2E driver â€” step-by-step with live progress
+/**
+ * NovelWriter Tracked E2E runner (PR3 of the #117 split): drives this checkout's NovelWriter.html
+ * stage by stage in headless Chromium, writes progress/status/JSON/Markdown under NW_OUT_DIR, then
+ * builds the single-file report with scripts/build_unified_report.py.
+ *
+ * OFFLINE BY DEFAULT. Without NW_E2E_LIVE=1 every xAI request is answered by the vendored fixture
+ * responder (scripts/_nw_e2e_offline_responder.mjs, seeded from scripts/fixtures/nw_slop/b3r_seed.json),
+ * every other http(s) request is aborted, and no key file is read. Live mode needs NW_E2E_LIVE=1 plus
+ * XAI_API_KEY (or GROK_API_KEY) and is refused when CI or GITHUB_ACTIONS is set to ANY non-empty value
+ * (CI=false, CI=0 and CI=on all count as CI).
+ *
+ * Usage: node scripts/run-tracked-e2e.mjs   (see scripts/README.md for every NW_* variable)
+ * Exit codes: 0 pass; 1 fatal; 2 one or more steps failed; 3 live mode refused / key missing;
+ *             4 steps passed but the unified report build failed (run marked incomplete).
  */
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { chromium } from 'playwright';
-import dotenv from 'dotenv';
+import { createOfflineResponder, promptTextFromBody, toXaiResponse } from './_nw_e2e_offline_responder.mjs';
 
-const PLAN = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/novelwriter';
-const LIVE = 'file:///C:/NovelWriterSite/NovelWriter/NovelWriter.html';
-const ENV = 'C:/NovelWriterSite/.env';
-const REPORT_JSON = path.join(PLAN, 'TRACKED_E2E_REPORT.json');
-const REPORT_MD_LATEST = path.join(PLAN, 'TRACKED_E2E_REPORT_LATEST.md');
-const PROGRESS = path.join(PLAN, 'TRACKED_E2E_PROGRESS.md');
-const STATUS = path.join(PLAN, 'TRACKED_E2E_STATUS.json');
-const ANNEX_JSON = path.join(PLAN, 'TRACKED_E2E_ANNEX_NOVELDATA.json');
-const ANNEX_MD = path.join(PLAN, 'TRACKED_E2E_ANNEXES.md');
-const TOKENS_MD = path.join(PLAN, 'TRACKED_E2E_TOKENS_BY_STAGE.md');
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+const HTML_PATH = path.resolve(process.env.NW_HTML_PATH || path.join(REPO_ROOT, 'NovelWriter', 'NovelWriter.html'));
+const HTML_URL = pathToFileURL(HTML_PATH).href;
+const ENV = path.resolve(process.env.NW_ENV_FILE || path.join(REPO_ROOT, 'secrets', 'xai.local.env'));
+const FIXTURES = path.resolve(process.env.NW_FIXTURES_DIR || path.join(SCRIPT_DIR, 'fixtures', 'nw_slop'));
+const OUT_DIR = path.resolve(process.env.NW_OUT_DIR || path.join(REPO_ROOT, 'out', 'nw-e2e'));
+const SPANS_DIR = path.join(FIXTURES, 'inject_spans');
+const OFFLINE_SEED = path.resolve(process.env.NW_E2E_OFFLINE_SEED || path.join(FIXTURES, 'b3r_seed.json'));
+const BUILDER = path.resolve(process.env.NW_E2E_REPORT_BUILDER || path.join(SCRIPT_DIR, 'build_unified_report.py'));
+const REPORT_JSON = path.join(OUT_DIR, 'TRACKED_E2E_REPORT.json');
+const REPORT_MD_LATEST = path.join(OUT_DIR, 'TRACKED_E2E_REPORT_LATEST.md');
+const PROGRESS = path.join(OUT_DIR, 'TRACKED_E2E_PROGRESS.md');
+const STATUS = path.join(OUT_DIR, 'TRACKED_E2E_STATUS.json');
+const ANNEX_JSON = path.join(OUT_DIR, 'TRACKED_E2E_ANNEX_NOVELDATA.json');
+const ANNEX_MD = path.join(OUT_DIR, 'TRACKED_E2E_ANNEXES.md');
+const TOKENS_MD = path.join(OUT_DIR, 'TRACKED_E2E_TOKENS_BY_STAGE.md');
 
-dotenv.config({ path: ENV });
-const apiKey = process.env.GROK_API_KEY || '';
-if (!apiKey) {
-  console.error('GROK_API_KEY missing from .env');
-  process.exit(1);
+// Any non-empty CI / GITHUB_ACTIONS value means CI (CI=false, CI=0, CI=on included): fail safe, never parse it.
+const isSet = (v) => v != null && String(v) !== '';
+const LIVE = process.env.NW_E2E_LIVE === '1';
+const IN_CI = isSet(process.env.CI) || isSet(process.env.GITHUB_ACTIONS);
+const STRICT = process.env.NW_E2E_STRICT === '1';
+const MODE = LIVE ? 'live' : 'offline';
+// Placeholder so the page's "key present" checks pass; offline requests never leave the browser.
+const OFFLINE_KEY = 'offline-fixture-not-a-key';
+
+fs.mkdirSync(OUT_DIR, { recursive: true });
+
+let apiKey = OFFLINE_KEY;
+if (LIVE) {
+  if (IN_CI) {
+    console.error('run-tracked-e2e: NW_E2E_LIVE=1 is refused under CI (CI or GITHUB_ACTIONS is non-empty). CI runs offline fixtures only.');
+    process.exit(3);
+  }
+  const dotenv = (await import('dotenv')).default;
+  dotenv.config({ path: ENV, quiet: true });
+  apiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY || '';
+  if (!apiKey) {
+    console.error('run-tracked-e2e: live mode needs XAI_API_KEY (or GROK_API_KEY) in the environment or in NW_ENV_FILE (' + ENV + ').');
+    process.exit(3);
+  }
 }
+
+// Network-level call ledger. Works with or without the page's token rollup helpers (PR1).
+const netCalls = [];
+const blockedRequests = [];
+let offline = null;
+
+function netUsage() {
+  const sum = (k) => netCalls.reduce((a, c) => a + (c[k] || 0), 0);
+  return {
+    source: 'network',
+    prompt_tokens: sum('prompt_tokens'),
+    completion_tokens: sum('completion_tokens'),
+    total_tokens: sum('total_tokens'),
+    calls: netCalls.slice()
+  };
+}
+
+function normUsage(u) {
+  u = u || {};
+  return {
+    prompt_tokens: u.prompt_tokens != null ? u.prompt_tokens : (u.input_tokens || 0),
+    completion_tokens: u.completion_tokens != null ? u.completion_tokens : (u.output_tokens || 0),
+    total_tokens: u.total_tokens || 0
+  };
+}
+
+// Known pre-existing race on main (#130): updateChapterSubpages() queues requestAnimationFrame callbacks that write
+// chapterGenContentN / chapterEditContentN / chapterEditImprovementN after the node was replaced. Only that exact error
+// ('Cannot set properties of null' with its top NovelWriter.html frame on that line) is exempt; any other page error fails the run.
+const KNOWN_RAF_RACE_LINE = /getElementById\(`chapter(?:GenContent|EditContent|EditImprovement)\$\{i\}`\)\.value = novelData\.(?:chapters|chapterImprovements)\[i-1\]/;
+let htmlLinesCache = null;
+function isKnownRafRace(e) {
+  const msg = String(e && e.message ? e.message : e);
+  if (!/Cannot set properties of null/.test(msg)) return false;
+  const m = String(e && e.stack || '').match(/NovelWriter\.html:(\d+):\d+/);
+  if (!m) return false;
+  try { htmlLinesCache = htmlLinesCache || fs.readFileSync(HTML_PATH, 'utf8').split(/\r?\n/); } catch (_) { return false; }
+  return KNOWN_RAF_RACE_LINE.test(htmlLinesCache[parseInt(m[1], 10) - 1] || '');
+}
+
+// Step rows carry status 'pass' | 'fail' | 'skip'. A skip has ok:null, so it never reads as ok:true, and only 'fail' fails the run.
+const stepFailed = (s) => (s.status ? s.status === 'fail' : !s.ok);
 
 function writeStatus(tab, step, status) {
   fs.writeFileSync(STATUS, JSON.stringify({ tab, step, status, updatedAt: new Date().toISOString() }, null, 2));
@@ -35,23 +115,11 @@ function appendProgress(block) {
 }
 
 async function bookSnap(page) {
-  return page.evaluate(() => {
-    const u = (typeof getSessionUsage === 'function') ? getSessionUsage() : (novelData.tokenUsage || {});
-    const last = (u.calls && u.calls.length) ? u.calls[u.calls.length - 1] : null;
+  const snap = await page.evaluate(() => {
+    const u = (typeof getSessionUsage === 'function') ? getSessionUsage() : null;
     const q = (novelData.qualitySamples || []).slice(-1)[0] || null;
     return {
-      totals: {
-        prompt_tokens: u.prompt_tokens || 0,
-        completion_tokens: u.completion_tokens || 0,
-        total_tokens: u.total_tokens || 0,
-        calls: (u.calls || []).length
-      },
-      last: last ? {
-        name: last.operationName,
-        prompt: last.prompt_tokens,
-        completion: last.completion_tokens,
-        total: last.total_tokens
-      } : null,
+      pageUsage: u ? { prompt_tokens: u.prompt_tokens || 0, completion_tokens: u.completion_tokens || 0, total_tokens: u.total_tokens || 0, calls: (u.calls || []).map(c => ({ operationName: c.operationName, prompt_tokens: c.prompt_tokens, completion_tokens: c.completion_tokens, total_tokens: c.total_tokens })) } : null,
       title: novelData.title || '',
       genre: novelData.genre || '',
       chars: (novelData.characters || []).length,
@@ -64,6 +132,20 @@ async function bookSnap(page) {
       quality: q
     };
   });
+  // Prefer the page's book-scoped rollup (PR1) when it exists; otherwise count calls at the network layer.
+  const u = snap.pageUsage || netUsage();
+  const last = (u.calls && u.calls.length) ? u.calls[u.calls.length - 1] : null;
+  delete snap.pageUsage;
+  return Object.assign(snap, {
+    usageSource: u.source || 'page',
+    totals: {
+      prompt_tokens: u.prompt_tokens || 0,
+      completion_tokens: u.completion_tokens || 0,
+      total_tokens: u.total_tokens || 0,
+      calls: (u.calls || []).length
+    },
+    last: last ? { name: last.operationName, prompt: last.prompt_tokens, completion: last.completion_tokens, total: last.total_tokens } : null
+  });
 }
 
 
@@ -73,7 +155,7 @@ function assertApiStep(label, beforeCalls, after, opts) {
   const minChars = opts.minChars || 0;
   const contentLen = opts.contentLen != null ? opts.contentLen : null;
   if (!grew && !opts.allowNoCall) {
-    throw new Error(label + ': expected API call to increase book tokenUsage.calls (before=' + beforeCalls + ' after=' + after.totals.calls + ') â€” likely auth failure or silent no-op');
+    throw new Error(label + ': expected API call to increase book tokenUsage.calls (before=' + beforeCalls + ' after=' + after.totals.calls + ') - likely auth failure or silent no-op');
   }
   if (contentLen != null && contentLen < minChars) {
     throw new Error(label + ': expected content >= ' + minChars + ' chars, got ' + contentLen + ' (false pass / empty generation)');
@@ -123,7 +205,7 @@ function tokLine(snap, beforeCalls) {
 
 async function runStep(page, tab, name, stepLabel, fn, evalFn) {
   writeStatus(tab, stepLabel, 'running');
-  appendProgress('### Tab ' + tab + ' â€” ' + name + ' â€” ' + stepLabel + '\n- Status: running\n- Tokens: pending\n- Eval: startingâ€¦\n');
+  appendProgress('### Tab ' + tab + ' - ' + name + ' - ' + stepLabel + '\n- Status: running\n- Tokens: pending\n- Eval: starting...\n');
   const before = await bookSnap(page);
   const beforeCalls = before.totals.calls;
   let ok = true;
@@ -140,8 +222,8 @@ async function runStep(page, tab, name, stepLabel, fn, evalFn) {
   const status = ok ? 'pass' : 'fail';
   writeStatus(tab, stepLabel, status);
   appendProgress(
-    '### Tab ' + tab + ' â€” ' + name + ' â€” ' + stepLabel + '\n' +
-    '- Status: ' + status + (err ? (' â€” ' + String(err).replace(/\n/g, ' ').slice(0, 200)) : '') + '\n' +
+    '### Tab ' + tab + ' - ' + name + ' - ' + stepLabel + '\n' +
+    '- Status: ' + status + (err ? (' - ' + String(err).replace(/\n/g, ' ').slice(0, 200)) : '') + '\n' +
     '- Tokens this call / book cumulative: ' + tokLine(after, beforeCalls) + '\n' +
     '- Eval: ' + evalText + '\n'
   );
@@ -150,25 +232,105 @@ async function runStep(page, tab, name, stepLabel, fn, evalFn) {
 
 const report = {
   ok: false,
+  mode: MODE,
   steps: [],
   startedAt: new Date().toISOString(),
-  config: { numChapters: 2, chapterLength: 500, numCharacters: 3, minSubplots: 2, maxTokens: 6000, genre: 'scifi' }
+  config: { numChapters: 2, chapterLength: 500, numCharacters: 3, minSubplots: 2, maxTokens: 6000, genre: 'scifi', htmlPath: path.relative(REPO_ROOT, HTML_PATH) || HTML_PATH }
 };
 
+// Page helpers the full flow uses. Several arrive with split PR1 (token rollup, enrich, readiness, blueprint
+// pack); when absent the runner records them and skips only the steps that need them (NW_E2E_STRICT=1 fails instead).
+const PAGE_HELPERS = ['getSessionUsage', 'getSessionQuality', 'resetBookTokenUsage', 'runC1Smoke', 'scoreAdvanceToTab5Readiness',
+  'buildGenerateChapterUserContent', 'scoreObligationCoverage', 'getPlotDigestText', 'getSettingDigestText', 'getChapterBlueprint',
+  'enrichCharacters', 'enrichSubplots', 'enrichChapterBlueprints', 'scoreBeatCoverage', 'scoreOutlineObligations', 'buildPromptContextPack',
+  'digestWorldBible', 'applyStagedChapterImprovements', 'reviseChapterForQuality', 'applyTopBookCritiques', 'applyE2eSlopInject', 'runTrackedE2E'];
+
+// The lean LATEST.md is written before the builder runs; if the build fails, it must not keep saying OK: true.
+function markLatestIncomplete(error) {
+  try {
+    const md = fs.readFileSync(REPORT_MD_LATEST, 'utf8');
+    const note = '- OK: false (INCOMPLETE - unified report build failed: ' + String(error || 'unknown').replace(/\s+/g, ' ').slice(0, 300) + ')';
+    fs.writeFileSync(REPORT_MD_LATEST, /^- OK: .*$/m.test(md) ? md.replace(/^- OK: .*$/m, note) : (note + '\n' + md));
+  } catch (_) {}
+}
+
+function buildUnifiedReport() {
+  if (!fs.existsSync(BUILDER)) return { ok: false, error: 'report builder not found: ' + BUILDER };
+  const py = process.env.NW_PYTHON ? [process.env.NW_PYTHON] : (process.platform === 'win32' ? ['py', '-3'] : ['python3']);
+  const r = spawnSync(py[0], py.slice(1).concat([BUILDER]), {
+    encoding: 'utf-8',
+    env: Object.assign({}, process.env, { NW_OUT_DIR: OUT_DIR, PYTHONDONTWRITEBYTECODE: '1' })
+  });
+  if (r.error) return { ok: false, error: 'report builder could not start (' + py.join(' ') + '): ' + r.error.message };
+  if (r.status !== 0) return { ok: false, error: 'report builder exited ' + r.status + ': ' + String(r.stderr || r.stdout || '').trim().slice(-600) };
+  const m = String(r.stdout || '').match(/^wrote (.+?) bytes/m);
+  return { ok: true, report: m ? path.basename(m[1].trim()) : null };
+}
+
+let browser = null;
 (async () => {
-  appendProgress('### Phase â€” lean E2E â€” launching\n- Status: running\n- Tokens: n/a\n- Eval: Opening live NovelWriter via Playwright; injecting API key (not logged); lean config 2ch/500w/3chars/2subplots.\n');
+  appendProgress('### Phase - tracked E2E - launching\n- Status: running\n- Tokens: n/a\n- Eval: mode=' + MODE + ' html=' + report.config.htmlPath + (LIVE ? '; injecting API key (not logged)' : '; offline fixture responder, all other network blocked') + '; lean config 2ch/500w/3chars/2subplots.\n');
   writeStatus(0, 'e2e-launch', 'running');
 
-  const browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
-  page.setDefaultTimeout(600000);
-  await page.goto(LIVE);
-  await page.waitForFunction(() => typeof runTrackedE2E === 'function' && typeof callAI === 'function');
+  page.setDefaultTimeout(LIVE ? 600000 : 60000);
+  page.on('dialog', (d) => d.dismiss().catch(() => {}));
+  const pageErrors = [];
+  const knownPageErrors = [];
+  page.on('pageerror', (e) => (isKnownRafRace(e) ? knownPageErrors : pageErrors).push(String(e && e.message ? e.message : e).slice(0, 300)));
+  report.pageErrors = pageErrors;
+  report.knownPageErrors = knownPageErrors;
+  if (!LIVE) {
+    const seed = JSON.parse(fs.readFileSync(OFFLINE_SEED, 'utf8'));
+    offline = createOfflineResponder(seed);
+    report.offline = { seed: path.relative(REPO_ROOT, OFFLINE_SEED) || OFFLINE_SEED };
+    await page.route('**/*', async (route) => {
+      const req = route.request();
+      const url = req.url();
+      if (!/^https?:/i.test(url)) return route.continue();
+      if (/^https:\/\/api\.x\.ai\//i.test(url)) {
+        let body = {};
+        try { body = JSON.parse(req.postData() || '{}'); } catch (_) { body = {}; }
+        const result = offline.respond(body);
+        netCalls.push(Object.assign({ operationName: result.rule, originTab: 'offline', model: body.model || '', ts: new Date().toISOString(), contextPackChars: promptTextFromBody(body).length }, result.usage));
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(toXaiResponse(body, result, url)) });
+      }
+      blockedRequests.push(url);
+      return route.abort('blockedbyclient');
+    });
+  } else {
+    page.on('response', async (resp) => {
+      if (!/^https:\/\/api\.x\.ai\//i.test(resp.url())) return;
+      let usage = {};
+      let model = '';
+      try { const j = await resp.json(); usage = normUsage(j.usage); model = j.model || ''; } catch (_) {}
+      netCalls.push(Object.assign({ operationName: 'unknown', originTab: '', model, ts: new Date().toISOString(), status: resp.status() }, usage));
+    });
+  }
+  await page.goto(HTML_URL);
+  await page.waitForFunction(() => typeof callAI === 'function' && typeof generateChapter === 'function');
+  report.config.pageCapabilities = await page.evaluate((names) => Object.fromEntries(names.map((n) => [n, typeof window[n] === 'function' || (function () { try { return typeof eval(n) === 'function'; } catch (_) { return false; } })()])), PAGE_HELPERS);
+  const missingHelpers = Object.keys(report.config.pageCapabilities).filter((k) => !report.config.pageCapabilities[k]);
+  report.config.missingHelpers = missingHelpers;
+  if (missingHelpers.length) {
+    appendProgress('### Phase - page capabilities\n- Status: ' + (STRICT ? 'fail (NW_E2E_STRICT=1)' : 'partial') + '\n- Eval: helpers absent from this HTML (steps needing them are skipped): ' + missingHelpers.join(', ') + '\n');
+    if (STRICT) throw new Error('NW_E2E_STRICT=1 and page helpers missing: ' + missingHelpers.join(', '));
+  }
+  const hasHelper = (n) => !!report.config.pageCapabilities[n];
+  // World Bible packing (digestWorldBible) arrives with PR1; without it the world-bible gates are recorded as skipped.
+  const worldGate = hasHelper('digestWorldBible');
+  report.config.worldBibleGate = worldGate ? 'enforced' : 'skipped (digestWorldBible absent; arrives with PR1)';
 
-  await page.evaluate(({ key, cfg }) => {
+  await page.evaluate(({ key, cfg, live }) => {
     document.getElementById('apiKey').value = key;
     const modelSel = document.getElementById('model');
-    if (modelSel) {
+    if (modelSel && !live) {
+      // Offline: any chat-completions model; the responder answers every request.
+      const opts = Array.from(modelSel.options || []);
+      const chat = opts.find(o => o.value && !/multi-agent/i.test(o.value));
+      if (chat) modelSel.value = chat.value;
+    } else if (modelSel) {
       const opts = Array.from(modelSel.options || []);
       const g47 = opts.find(o => /grok-4\.7/i.test(o.value) || /grok-4\.7/i.test(o.textContent || ''));
       const fast = opts.find(o => /fast-non-reasoning/i.test(o.value));
@@ -189,19 +351,18 @@ const report = {
     if (typeof syncCharacterEntries === 'function') syncCharacterEntries();
     if (typeof syncSubplotEntries === 'function') syncSubplotEntries();
     if (typeof collectData === 'function') collectData();
-  }, { key: apiKey, cfg: Object.assign({}, report.config, { title: 'Tracked E2E Lean ' + new Date().toISOString().slice(0, 16) }) });
+  }, { key: apiKey, live: LIVE, cfg: Object.assign({}, report.config, { title: 'Tracked E2E Lean ' + new Date().toISOString().slice(0, 16) }) });
 
-  
+
   // Track B: optional rich fixture seed (skip bible regen unless NW_E2E_REGEN_BIBLE=1)
   const fixturePath = process.env.NW_E2E_FIXTURE || '';
   const regenBible = process.env.NW_E2E_REGEN_BIBLE === '1';
   const enrichMode = process.env.NW_E2E_ENRICH === '1' || regenBible;
   report.config.enrichMode = enrichMode;
-  report.config.fixture = fixturePath || null;
+  report.config.fixture = fixturePath ? (path.isAbsolute(fixturePath) ? path.relative(REPO_ROOT, fixturePath) : fixturePath) : null;
 
-  // B4-1A foul-inject prove-out (detect → anti-slop nest). Span from catalog or basename under b4_inject_spans.
+  // B4-1A foul-inject prove-out (detect -> anti-slop nest). Span from catalog or basename under b4_inject_spans.
   const slopInjectOn = process.env.NW_E2E_SLOP_INJECT === '1';
-  const SPANS_DIR = path.join(PLAN, 'b4_inject_spans');
   const slopInjectSpanEnv = (process.env.NW_E2E_SLOP_INJECT_SPAN || 'span_b3r_ch2_overexplain.txt').trim();
   let slopInjectSpanPath = '';
   let slopInjectSpanText = '';
@@ -223,12 +384,12 @@ const report = {
   report.config.slopInject = slopInjectOn ? {
     enabled: true,
     span: slopInjectSpanName,
-    spanPath: slopInjectSpanPath,
+    spanPath: path.relative(REPO_ROOT, slopInjectSpanPath) || slopInjectSpanPath,
     targetChapter: slopInjectChapter,
     afterContinuity: process.env.NW_E2E_SLOP_INJECT_AFTER_CONTINUITY !== '0'
   } : { enabled: false };
   if (fixturePath) {
-    const absFix = path.isAbsolute(fixturePath) ? fixturePath : path.join(path.dirname(fileURLToPath(import.meta.url)), '..', fixturePath);
+    const absFix = path.isAbsolute(fixturePath) ? fixturePath : path.join(REPO_ROOT, fixturePath);
     const seed = JSON.parse(fs.readFileSync(absFix, 'utf8'));
     appendProgress('### Phase - fixture seed\n- Status: loading\n- Eval: ' + absFix + '\n');
     await page.evaluate(({ seedObj, doRegen }) => {
@@ -335,7 +496,7 @@ const report = {
       if (Number.isFinite(envLen) && envLen >= 500) chLen = envLen;
       else if (fixturePath) {
         try {
-          const absFix2 = path.isAbsolute(fixturePath) ? fixturePath : path.join(path.dirname(fileURLToPath(import.meta.url)), '..', fixturePath);
+          const absFix2 = path.isAbsolute(fixturePath) ? fixturePath : path.join(REPO_ROOT, fixturePath);
           const seed2 = JSON.parse(fs.readFileSync(absFix2, 'utf8'));
           const tw = parseInt(seed2.targetWordsPerChapter || seed2.chapterLength || '', 10);
           if (Number.isFinite(tw) && tw >= 500) chLen = tw;
@@ -364,7 +525,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     const r = await runStep(page, tab, name, stepLabel, fn, evalFn);
     // HARD_STOP_ENRICH_STEP: enrich evaluate/throw must abort before outlines
     if (enrichMode && !r.ok && /enrichCharacters|enrichSubplots|enrichChapterBlueprints/.test(stepLabel)) {
-      report.steps.push({ name: stepLabel, ok: false, error: r.err });
+      report.steps.push({ name: stepLabel, ok: false, status: 'fail', error: r.err });
       fs.writeFileSync(REPORT_JSON, JSON.stringify(Object.assign({}, report, { partial: true }), null, 2));
       throw new Error('ENRICH HARD-STOP [' + stepLabel + ']: ' + (r.err || 'failed'));
     }
@@ -385,7 +546,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       } catch (assertErr) {
         r.ok = false;
         r.err = assertErr.message;
-        appendProgress('### Tab ' + tab + ' â€” ' + name + ' â€” ' + stepLabel + ' (assert)\n- Status: fail â€” ' + assertErr.message + '\n- Tokens this call / book cumulative: ' + tokLine(r.after, beforeCalls) + '\n- Eval: FAIL-CLOSED stage gate (empty/stub-thin/sloppy early input must not multiply into later stages).\n');
+        appendProgress('### Tab ' + tab + ' - ' + name + ' - ' + stepLabel + ' (assert)\n- Status: fail - ' + assertErr.message + '\n- Tokens this call / book cumulative: ' + tokLine(r.after, beforeCalls) + '\n- Eval: FAIL-CLOSED stage gate (empty/stub-thin/sloppy early input must not multiply into later stages).\n');
         writeStatus(tab, stepLabel, 'fail');
         // HARD_STOP_ENRICH_GATE: densify failures must not leak into outlines/chapters
         if (enrichMode && /enrichCharacters|enrichSubplots|enrichChapterBlueprints/.test(stepLabel)) {
@@ -393,7 +554,10 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         }
       }
     }
-    report.steps.push({ name: stepLabel, ok: r.ok, error: r.err });
+    const skipped = r.ok && !!(r.result && r.result.skipped);
+    const status = !r.ok ? 'fail' : (skipped ? 'skip' : 'pass');
+    if (skipped) writeStatus(tab, stepLabel, 'skip');
+    report.steps.push({ name: stepLabel, ok: skipped ? null : r.ok, status: status, error: r.err, reason: skipped ? (r.result.reason || null) : undefined });
     fs.writeFileSync(REPORT_JSON, JSON.stringify(Object.assign({}, report, {
       partial: true,
       bookTokenUsage: await page.evaluate(() => (typeof getSessionUsage === 'function' ? getSessionUsage() : null)),
@@ -405,10 +569,17 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   const useFixture = !!fixturePath && !regenBible;
 
   await doStep(1, 'API & Story Info', 'c1Smoke', async () => {
-    return page.evaluate(async () => (typeof runC1Smoke === 'function' ? await runC1Smoke() : false));
-  }, (a, r, ok) => ok && r
-    ? 'Local digest asserts passed (no full-manuscript dump). Packing path looks healthy for lean run.'
-    : 'C1 smoke failed or returned false â€” digests/packing may be weak; continuing carefully.');
+    // Missing helper = skip (arrives with PR1). A false / passed:false result is a FAIL, never a pass.
+    const c1 = await page.evaluate(async () => (typeof runC1Smoke === 'function' ? { present: true, value: await runC1Smoke() } : { present: false }));
+    if (!c1.present) return { skipped: true, reason: 'runC1Smoke absent from this HTML (arrives with PR1)' };
+    const v = c1.value;
+    if (v === false || v == null || (typeof v === 'object' && v.passed === false)) {
+      throw new Error('runC1Smoke returned ' + (v && typeof v === 'object' ? JSON.stringify(v).slice(0, 200) : String(v)));
+    }
+    return { passed: true };
+  }, (a, r, ok, err) => (r && r.skipped)
+    ? 'Skipped: ' + r.reason
+    : (ok ? 'Local digest asserts passed (no full-manuscript dump). Packing path looks healthy for lean run.' : ('C1 smoke FAILED: ' + err)));
 
   await doStep(1, 'API & Story Info', 'fetchAuthors', async () => {
     return page.evaluate(async () => {
@@ -430,7 +601,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       await fetchStyleGuide();
       return { author: author, len: ((document.getElementById('styleGuide') || {}).value || '').length };
     });
-  }, (a, r) => (r && r.skipped) ? 'Skipped â€” no author set.' : ('Style guide length ' + ((r && r.len) || 0) + '. Prefer concrete craft notes over vague cheerleading.'));
+  }, (a, r) => (r && r.skipped) ? 'Skipped - no author set.' : ('Style guide length ' + ((r && r.len) || 0) + '. Prefer concrete craft notes over vague cheerleading.'));
 
   await doStep(1, 'API & Story Info', 'suggestStoryInfo', async () => {
     if (useFixture) return page.evaluate(() => ({ title: novelData.title || '', skipped: true, reason: 'fixture' }));
@@ -438,7 +609,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       await suggestStoryInfo();
       return { title: document.getElementById('title').value };
     });
-  }, (a, r) => (r && r.skipped) ? ('Fixture title/arc reused: "' + (a.storyArcSnippet || a.title || 'â€¦') + '".') : ('Title/arc filled. Snippet: "' + (a.storyArcSnippet || 'â€¦') + '". Looking for concrete stakes vs stock openers.'), { minChars: 0, allowNoCall: true });
+  }, (a, r) => (r && r.skipped) ? ('Fixture title/arc reused: "' + (a.storyArcSnippet || a.title || '...') + '".') : ('Title/arc filled. Snippet: "' + (a.storyArcSnippet || '...') + '". Looking for concrete stakes vs stock openers.'), { minChars: 0, allowNoCall: true });
 
   await doStep(2, 'Characters', 'suggestCharacters', async () => {
     if (useFixture) return page.evaluate(() => ({ count: (novelData.characters || []).length, skipped: true }));
@@ -533,7 +704,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   });
 
   await doStep(4, 'Outlines', 'generateNovelOutlines', async () => {
-    // Always run macro outline agent (fixture previously skipped â†’ empty novelOutline/plotOutline/blueprints).
+    // Always run macro outline agent (fixture previously skipped -> empty novelOutline/plotOutline/blueprints).
     return page.evaluate(async () => {
       await generateNovelOutlines();
       const richSubs = (novelData.subplots || []).filter((s) => {
@@ -570,7 +741,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         { ok: !!res && (res.arc || 0) >= 300, msg: 'storyArcOutline stub-thin len=' + ((res && res.arc) || 0) },
         { ok: !!res && (res.subplots || 0) >= 2, msg: 'subplots missing at macro stage count=' + ((res && res.subplots) || 0) },
         { ok: !!res && (res.blueprints || 0) >= 1, msg: 'chapterBlueprints missing (macro spine incomplete)' },
-        { ok: !!res && (res.worldPacked === true), msg: 'worldBible not packed/present for macro stage' },
+        { ok: !worldGate || (!!res && res.worldPacked === true), msg: 'worldBible not packed/present for macro stage' },
         { ok: !!res && (res.aiSlopRisk == null || res.aiSlopRisk <= 65), msg: 'macro outline AI-slop risk too high: ' + (res && res.aiSlopRisk) + ' notes=' + ((res && res.slopNotes) || []).join(';') },
         { ok: !!res && (res.consistency == null || res.consistency >= 35), msg: 'macro outline consistency too low: ' + (res && res.consistency) }
       ]);
@@ -610,13 +781,13 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     }
   });
 
-  // Pass3: outline refine / incorporate (obligations) when enrich mode on â€” once after macros / ch1
+  // Pass3: outline refine / incorporate (obligations) when enrich mode on - once after macros / ch1
   await doStep(4, 'Outlines', 'outlineRefine', async () => {
     if (!enrichMode) return page.evaluate(() => ({ skipped: true }));
     return page.evaluate(async () => {
       const notes = [
         'Name cast members and active subplots in novel/plot/arc outlines.',
-        'Ensure world/location hooks and conflictâ†’resolution beats are explicit.',
+        'Ensure world/location hooks and conflict->resolution beats are explicit.',
         'Preserve chapterBlueprints subplotPressure and characterBeats.'
       ].join(' ');
       const box = document.getElementById('outlineImprovements');
@@ -707,12 +878,11 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
 
   // Fail-closed readiness before Tab5 burn: fixture stubs (~6-7% of floors) need NW_E2E_ENRICH=1 or REGEN_BIBLE=1.
   {
-    const readySnap = await page.evaluate(() => {
-      if (typeof scoreAdvanceToTab5Readiness !== 'function') return { passed: false, failures: ['helpers-missing'] };
-      return scoreAdvanceToTab5Readiness(novelData);
-    });
+    const readySnap = hasHelper('scoreAdvanceToTab5Readiness')
+      ? await page.evaluate(() => scoreAdvanceToTab5Readiness(novelData))
+      : { passed: true, skipped: true, failures: [], reason: 'scoreAdvanceToTab5Readiness absent from this HTML (arrives with PR1)' };
     report.config.tab5Readiness = readySnap;
-    appendProgress('### Tab5 readiness\n- passed: ' + !!readySnap.passed + '\n- failures: ' + ((readySnap.failures || []).slice(0, 8).join(' | ') || 'none') + '\n- enrichMode: ' + enrichMode + '\n');
+    appendProgress('### Tab5 readiness\n- passed: ' + !!readySnap.passed + (readySnap.skipped ? ' (skipped: ' + readySnap.reason + ')' : '') + '\n- failures: ' + ((readySnap.failures || []).slice(0, 8).join(' | ') || 'none') + '\n- enrichMode: ' + enrichMode + '\n');
     if (!readySnap.passed && process.env.NW_E2E_OUTLINE_ONLY !== '1') {
       const msg = 'TAB5 READINESS FAIL-CLOSED before chapter burn: ' + (readySnap.failures || []).slice(0, 8).join(' | ') +
         '. Re-run with NW_E2E_ENRICH=1 (or NW_E2E_REGEN_BIBLE=1) so densify path runs; do not accept stub cast/subplots.';
@@ -765,17 +935,17 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         { ok: outlineProof.plotOutlineLen >= 400, msg: 'plotOutline stub-thin/empty ' + outlineProof.plotOutlineLen },
         { ok: outlineProof.subplots >= 2, msg: 'subplots empty ' + outlineProof.subplots },
         { ok: outlineProof.ch1Words >= 180, msg: 'ch1 outline stub-thin words=' + outlineProof.ch1Words },
-        { ok: outlineProof.worldBible, msg: 'worldBible missing' },
+        { ok: !worldGate || outlineProof.worldBible, msg: 'worldBible missing' },
         { ok: outlineProof.blueprints >= 1, msg: 'chapterBlueprints missing' },
-        { ok: outlineProof.lastPromptHasWorld, msg: 'chapter outline prompt missing World Bible packing' },
+        { ok: !worldGate || outlineProof.lastPromptHasWorld, msg: 'chapter outline prompt missing World Bible packing' },
         { ok: earlyPack.aiSlopRisk == null || earlyPack.aiSlopRisk <= 65, msg: 'early outline AI-slop risk too high: ' + earlyPack.aiSlopRisk + ' notes=' + (earlyPack.slopNotes || []).join(';') }
       ]);
     } catch (e) {
       outlineOnlyOk = false;
       outlineOnlyErr = e.message;
     }
-    appendProgress('### Phase - outline-only proof\n- Status: ' + (outlineOnlyOk ? 'ok' : 'fail') + (outlineOnlyErr ? (' â€” ' + outlineOnlyErr) : '') + '\n- Eval: novel=' + outlineProof.novelOutlineLen + ' plot=' + outlineProof.plotOutlineLen + ' arc=' + outlineProof.storyArcOutlineLen + ' bp=' + outlineProof.blueprints + ' subplots=' + outlineProof.subplots + ' ch1words=' + outlineProof.ch1Words + ' world=' + outlineProof.worldBible + ' promptWorld=' + outlineProof.lastPromptHasWorld + ' slopRisk=' + outlineProof.aiSlopRisk + ' consistency=' + outlineProof.consistency + ' sample=\"' + String(outlineProof.subplot0 || '').replace(/\n/g, ' ') + '\"\n');
-    report.steps.push({ tab: 5, name: 'Chapters', step: 'outline-only-skip', ok: outlineOnlyOk, error: outlineOnlyErr, eval: outlineOnlyOk ? 'Skipped prose generation (outline-only); early-stage gates passed.' : ('outline-only gates failed: ' + outlineOnlyErr) });
+    appendProgress('### Phase - outline-only proof\n- Status: ' + (outlineOnlyOk ? 'ok' : 'fail') + (outlineOnlyErr ? (' - ' + outlineOnlyErr) : '') + '\n- Eval: novel=' + outlineProof.novelOutlineLen + ' plot=' + outlineProof.plotOutlineLen + ' arc=' + outlineProof.storyArcOutlineLen + ' bp=' + outlineProof.blueprints + ' subplots=' + outlineProof.subplots + ' ch1words=' + outlineProof.ch1Words + ' world=' + outlineProof.worldBible + ' promptWorld=' + outlineProof.lastPromptHasWorld + ' slopRisk=' + outlineProof.aiSlopRisk + ' consistency=' + outlineProof.consistency + ' sample=\"' + String(outlineProof.subplot0 || '').replace(/\n/g, ' ') + '\"\n');
+    report.steps.push({ tab: 5, name: 'outline-only-skip', stage: 'Chapters', ok: outlineOnlyOk, status: outlineOnlyOk ? 'pass' : 'fail', error: outlineOnlyErr, eval: outlineOnlyOk ? 'Skipped prose generation (outline-only); early-stage gates passed.' : ('outline-only gates failed: ' + outlineOnlyErr) });
     if (!outlineOnlyOk) throw new Error(outlineOnlyErr || 'outline-only stage gates failed');
   }
 
@@ -794,7 +964,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       };
       if (typeof NW_QUALITY_GATE === 'object' && NW_QUALITY_GATE) {
         window.__NW_GATE_BACKUP = Object.assign({}, NW_QUALITY_GATE);
-        // High bar so first draft fails closed â†’ pass1 revise; continuity still open â†’ pass2
+        // High bar so first draft fails closed -> pass1 revise; continuity still open -> pass2
         NW_QUALITY_GATE.minInterest = Math.max(NW_QUALITY_GATE.minInterest || 0, 92);
         NW_QUALITY_GATE.minHumanLikeness = Math.max(NW_QUALITY_GATE.minHumanLikeness || 0, 90);
       }
@@ -836,7 +1006,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         { ok: spine.plotLen >= 400, msg: 'plotOutline empty/stub before prose len=' + spine.plotLen },
         { ok: spine.novelLen >= 400, msg: 'novelOutline empty/stub before prose len=' + spine.novelLen },
         { ok: spine.ch1Words >= 180, msg: 'Ch1 outline stub-thin before prose words=' + spine.ch1Words },
-        { ok: spine.world, msg: 'worldBible missing before prose' },
+        { ok: !worldGate || spine.world, msg: 'worldBible missing before prose' },
         { ok: (spine.blueprints || 0) >= 1, msg: 'chapterBlueprints missing before prose bp=' + spine.blueprints },
         { ok: spine.aiSlopRisk == null || spine.aiSlopRisk <= 65, msg: 'early-spine AI-slop risk too high before prose: ' + spine.aiSlopRisk + ' notes=' + (spine.slopNotes || []).join(';') }
       ]);
@@ -844,7 +1014,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       report.preProseSpine = spine;
     } catch (gateErr) {
       appendProgress('### Phase - pre-prose spine gate\n- Status: fail\n- Eval: ' + gateErr.message + '\n');
-      report.steps.push({ tab: 5, name: 'Chapters', step: 'pre-prose-spine-gate', ok: false, error: gateErr.message });
+      report.steps.push({ tab: 5, name: 'pre-prose-spine-gate', stage: 'Chapters', ok: false, status: 'fail', error: gateErr.message });
       report.preProseSpine = spine;
       throw gateErr;
     }
@@ -852,7 +1022,10 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
 
   if (!report.config.outlineOnly) {
   // Prove Tab5 Draft pack binds chapterBlueprints + digests (no API burn).
+  const draftPackHelpers = ['buildGenerateChapterUserContent', 'scoreObligationCoverage', 'getPlotDigestText', 'getSettingDigestText'];
+  const draftPackMissing = draftPackHelpers.filter((n) => !hasHelper(n));
   await doStep(5, 'Generate Chapters', 'draftPack-blueprint-bind', async () => {
+    if (draftPackMissing.length) return { skipped: true, reason: 'helpers absent (PR1): ' + draftPackMissing.join(', ') };
     return page.evaluate(() => {
       if (typeof buildGenerateChapterUserContent !== 'function') {
         throw new Error('buildGenerateChapterUserContent missing');
@@ -891,7 +1064,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       if (!String(novelData.setting || '').trim() && hasWb && (!setDig || setDig === 'No setting provided')) {
         throw new Error('setting digest empty despite worldBible');
       }
-      // Coverage gate exists: score a deliberately empty text â†’ must fail
+      // Coverage gate exists: score a deliberately empty text -> must fail
       const emptyCov = scoreObligationCoverage('', 1);
       if (emptyCov.passed) throw new Error('coverage gate false-passed on empty prose');
       // Score against blueprint with synthetic prose containing beat names
@@ -914,7 +1087,8 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       };
     });
   }, (a, r) => {
-    // runStep calls evalFn(after, result) â€” result is 2nd arg
+    // runStep calls evalFn(after, result) - result is 2nd arg
+    if (r && r.skipped) return 'Skipped: ' + r.reason;
     if (!r || !r.hasBlueprint) return 'FAIL: no chapter blueprint for Ch1';
     if (r.emptyPassed) return 'FAIL: empty coverage must fail-closed';
     return 'packChars=' + r.packChars + ' plotDig=' + r.plotDigChars + ' setDig=' + r.setDigChars +
@@ -923,6 +1097,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   }, {
     allowNoCall: true,
     stageGate: (result) => {
+      if (result && result.skipped) return;
       if (!result || !result.hasBlueprint) throw new Error('draftPack-blueprint-bind: no chapter blueprint for Ch1');
       if (result.emptyPassed) throw new Error('draftPack-blueprint-bind: empty coverage must fail-closed');
     }
@@ -1061,7 +1236,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   await doStep(6, 'Edit Chapters', 'applyStagedChapterImprovements1', async () => {
     return page.evaluate(async () => {
       if (typeof showTab === 'function') showTab(6);
-      if (typeof applyStagedChapterImprovements !== 'function') throw new Error('applyStagedChapterImprovements missing â€” refresh live HTML');
+      if (typeof applyStagedChapterImprovements !== 'function') throw new Error('applyStagedChapterImprovements missing - refresh live HTML');
       const editEl = document.getElementById('chapterEditContent1');
       if (!editEl) throw new Error('chapterEditContent1 missing');
       if (!editEl.value && novelData.chapters[0]) editEl.value = novelData.chapters[0];
@@ -1092,7 +1267,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
 
   await doStep(6, 'Edit Chapters', 'reviseChapterForQuality1', async () => {
     return page.evaluate(async () => {
-      if (typeof reviseChapterForQuality !== 'function') throw new Error('reviseChapterForQuality missing â€” refresh live HTML');
+      if (typeof reviseChapterForQuality !== 'function') throw new Error('reviseChapterForQuality missing - refresh live HTML');
       const prior = (novelData.qualityReviseLog || []).slice();
       const autoRevise = prior.length > 0;
       let result;
@@ -1117,7 +1292,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       };
     });
   }, (a, r) => {
-    return 'QE2 revise: skipped=' + (r && r.skipped) + ' reason=' + ((r && r.reason) || '') + ' attempts=' + ((r && r.attempts) || 0) + ' gate ' + (r && r.passedBefore) + 'â†’' + (r && r.passedAfter) + ' log=' + (r && r.reviseLogLen) + '.';
+    return 'QE2 revise: skipped=' + (r && r.skipped) + ' reason=' + ((r && r.reason) || '') + ' attempts=' + ((r && r.attempts) || 0) + ' gate ' + (r && r.passedBefore) + '->' + (r && r.passedAfter) + ' log=' + (r && r.reviseLogLen) + '.';
   }, { minChars: 200, contentFromResult: true, allowNoCall: true });
 
   await doStep(7, 'Book', 'suggestBookImprovements', async () => {
@@ -1133,7 +1308,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
 
   await doStep(7, 'Book', 'applyTopBookCritique', async () => {
     return page.evaluate(async () => {
-      if (typeof applyTopBookCritiques !== 'function') throw new Error('applyTopBookCritiques missing â€” refresh live HTML');
+      if (typeof applyTopBookCritiques !== 'function') throw new Error('applyTopBookCritiques missing - refresh live HTML');
       const pending = (novelData.bookImprovementsWithStatus || []).filter(x => x && x.status === 'To Incorporate' && String(x.text || '').trim());
       if (!pending.length) throw new Error('No To Incorporate critique items to apply');
       const before = scoreProseQuality(novelData.chapters[0] || '');
@@ -1159,9 +1334,16 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
 
   } // end outlineOnly skip of chapter generation
 
-  const finalUsage = await page.evaluate(() => getSessionUsage());
-  const finalQuality = await page.evaluate(() => getSessionQuality());
-  report.ok = report.steps.every(s => s.ok);
+  const pageUsage = await page.evaluate(() => (typeof getSessionUsage === 'function' ? getSessionUsage() : null));
+  const finalUsage = pageUsage || netUsage();
+  const finalQuality = await page.evaluate(() => (typeof getSessionQuality === 'function'
+    ? getSessionQuality()
+    : { source: 'novelData.qualitySamples', samples: (novelData.qualitySamples || []).slice() }));
+  // Unexpected page errors fail the run; only the exact #130 rAF race is exempt (counted in report.knownPageErrors).
+  if (pageErrors.length) {
+    report.steps.push({ name: 'pageErrors', ok: false, status: 'fail', error: pageErrors.length + ' unexpected page error(s): ' + pageErrors.slice(0, 3).join(' | ') });
+  }
+  report.ok = !report.steps.some(stepFailed);
   report.finishedAt = new Date().toISOString();
   report.bookTokenUsage = finalUsage;
   report.sessionUsage = finalUsage;
@@ -1175,9 +1357,19 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
       total_tokens: finalUsage.total_tokens
     },
     contextPackCharsSum: finalUsage.contextPackCharsSum,
-    failedSteps: report.steps.filter(s => !s.ok).map(s => s.name),
+    failedSteps: report.steps.filter(stepFailed).map(s => s.name),
+    skippedSteps: report.steps.filter(s => s.status === 'skip').map(s => s.name),
     leanConfig: report.config
   };
+  report.network = {
+    calls: netCalls.length,
+    blockedRequests: blockedRequests.slice(0, 50),
+    blockedCount: blockedRequests.length
+  };
+  if (offline) {
+    report.offline.rules = offline.log.map((l) => l.rule);
+    report.offline.unmatched = offline.unmatched.slice();
+  }
   delete report.partial;
 
   // Snapshot sanitized novelData for Annex E
@@ -1187,6 +1379,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     // strip secrets / huge binary-ish if any; keep story content
     if (clone.apiKey) delete clone.apiKey;
     if (clone.GROK_API_KEY) delete clone.GROK_API_KEY;
+    if (clone.XAI_API_KEY) delete clone.XAI_API_KEY;
     return clone;
   });
   report.annexNovelDataMeta = {
@@ -1244,12 +1437,14 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     '',
     '- Finished: ' + report.finishedAt,
     '- OK: ' + report.ok,
-    '- Config: 2 chapters / 500 words / 3 chars / 2 subplots / model=' + report.config.model,
+    '- Mode: ' + MODE + (MODE === 'offline' ? ' (fixture responder; no paid calls)' : ''),
+    '- Config: ' + report.config.numChapters + ' chapters / ' + report.config.chapterLength + ' words / ' + report.config.numCharacters + ' chars / ' + report.config.minSubplots + ' subplots / model=' + report.config.model,
     '- Calls: ' + report.summary.callCount,
     '- Book tokens prompt/comp/total: ' + report.summary.totals.prompt_tokens + '/' + report.summary.totals.completion_tokens + '/' + report.summary.totals.total_tokens,
     '- Failed steps: ' + (report.summary.failedSteps.join(', ') || 'none'),
+    '- Skipped steps: ' + (report.summary.skippedSteps.join(', ') || 'none'),
     '',
-    '## Cost / efficiency (tokens) â€” not quality',
+    '## Cost / efficiency (tokens) - not quality',
     '',
     'Token usage is a cost/efficiency product metric. Quality scores are separate (below).',
     '',
@@ -1259,7 +1454,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
     '| --- | --- | --- | ---: | ---: | ---: | ---: |'
   ];
   for (const c of report.tokensByPrompt) {
-    mdLines.push('| ' + c.i + ' | ' + c.originTab + ' | ' + c.operationName + ' | ' + c.prompt_tokens + ' | ' + c.completion_tokens + ' | ' + c.total_tokens + ' | ' + (c.contextPackChars == null ? 'â€”' : c.contextPackChars) + ' |');
+    mdLines.push('| ' + c.i + ' | ' + c.originTab + ' | ' + c.operationName + ' | ' + c.prompt_tokens + ' | ' + c.completion_tokens + ' | ' + c.total_tokens + ' | ' + (c.contextPackChars == null ? '-' : c.contextPackChars) + ' |');
   }
   mdLines.push('');
   mdLines.push('### Per stage rollup');
@@ -1275,7 +1470,7 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   mdLines.push('- prompt/comp/total: **' + report.summary.totals.prompt_tokens + ' / ' + report.summary.totals.completion_tokens + ' / ' + report.summary.totals.total_tokens + '**');
   mdLines.push('- calls: **' + report.summary.callCount + '**');
   mdLines.push('');
-  mdLines.push('## Quality samples (prose â€” separate from tokens)');
+  mdLines.push('## Quality samples (prose - separate from tokens)');
   for (const s of report.qualitySamples) {
     mdLines.push('- ' + s.label + ': interest=' + s.interest + ' readability=' + s.readability + ' aiSlopRisk=' + s.aiSlopRisk + ' humanLikeness=' + s.humanLikeness + ' (' + s.source + ')');
   }
@@ -1284,13 +1479,13 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   mdLines.push('');
   mdLines.push('- Canonical human deliverable after builder: `TRACKED_E2E_REPORT_YYYY-MM-DD_HHMMSS.md` (+ `TRACKED_E2E_REPORT_LATEST.md` copy)');
   mdLines.push('- Optional sidecar: `TRACKED_E2E_ANNEX_NOVELDATA.json`');
-  mdLines.push('- `TRACKED_E2E_TOKENS_BY_STAGE.md` â€” tokens-only view');
-  mdLines.push('- `TRACKED_E2E_REPORT.json` â€” machine-readable (includes tokensByPrompt / tokensByStage)');
+  mdLines.push('- `TRACKED_E2E_TOKENS_BY_STAGE.md` - tokens-only view');
+  mdLines.push('- `TRACKED_E2E_REPORT.json` - machine-readable (includes tokensByPrompt / tokensByStage)');
   fs.writeFileSync(REPORT_MD_LATEST, mdLines.join('\n') + '\n');
 
   // Tokens-only companion
   const tokMd = [
-    '# Tracked E2E â€” tokens by stage / prompt',
+    '# Tracked E2E - tokens by stage / prompt',
     '',
     'Cost/efficiency only. Not quality.',
     '',
@@ -1310,52 +1505,68 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
   }
   fs.writeFileSync(TOKENS_MD, tokMd.join('\n') + '\n');
 
-  // Do not write TRACKED_E2E_ANNEXES.md â€” book annexes live only in TRACKED_E2E_REPORT.md.
+  // Do not write TRACKED_E2E_ANNEXES.md - book annexes live only in the dated TRACKED_E2E_REPORT_<stamp>.md (+ LATEST copy).
   if (fs.existsSync(ANNEX_MD)) {
     fs.unlinkSync(ANNEX_MD);
   }
 
 
   appendProgress(
-    '### Phase â€” lean E2E â€” final\n' +
+    '### Phase - lean E2E - final\n' +
     '- Status: ' + (report.ok ? 'pass' : 'partial/fail') + '\n' +
-    '- Tokens this call / book cumulative: â€” / book ' + report.summary.totals.prompt_tokens + '/' + report.summary.totals.completion_tokens + '/' + report.summary.totals.total_tokens + ' (' + report.summary.callCount + ' calls)\n' +
+    '- Tokens this call / book cumulative: - / book ' + report.summary.totals.prompt_tokens + '/' + report.summary.totals.completion_tokens + '/' + report.summary.totals.total_tokens + ' (' + report.summary.callCount + ' calls)\n' +
     '- Eval: Lean run finished. Failed=[' + (report.summary.failedSteps.join(', ') || 'none') + ']. Dated report via builder (TRACKED_E2E_REPORT_<stamp>.md).\n'
   );
 
-  // Rebuild single multi-section report (exec summary + cost) via plans helper
-  try {
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const builderRepo = path.join(__dirname, 'build_unified_report.py');
-    const builderPlan = path.join(PLAN, 'build_unified_report.py');
-    const builder = fs.existsSync(builderRepo) ? builderRepo : builderPlan;
-    if (fs.existsSync(builder)) {
-      const r = spawnSync('py', ['-3', builder], { encoding: 'utf-8' });
-      if (r.status !== 0) {
-        console.error('unified report builder failed', r.stderr || r.stdout);
-      } else {
-        appendProgress('### Phase â€” unified report\n- Status: pass\n- Eval: Dated TRACKED_E2E_REPORT_<stamp>.md (+ LATEST copy) regenerated as single-file deliverable.\n');
-      }
+  // Build the single-file dated report. A failed build marks the run incomplete (exit 4), never a silent pass.
+  report.reportBuild = buildUnifiedReport();
+  if (!report.reportBuild.ok) {
+    report.incomplete = true;
+    report.ok = false;
+    fs.writeFileSync(REPORT_JSON, JSON.stringify(report, null, 2));
+    markLatestIncomplete(report.reportBuild.error);
+    appendProgress('### Phase - unified report\n- Status: FAIL\n- Eval: ' + report.reportBuild.error + '\n');
+  } else {
+    // The builder rewrote REPORT_JSON (adds cost); merge the build result into that file instead of overwriting it.
+    try {
+      const built = JSON.parse(fs.readFileSync(REPORT_JSON, 'utf8'));
+      built.reportBuild = report.reportBuild;
+      fs.writeFileSync(REPORT_JSON, JSON.stringify(built, null, 2));
+    } catch (e) {
+      report.reportBuild = { ok: false, error: 'report JSON unreadable after build: ' + e.message };
+      report.incomplete = true;
+      report.ok = false;
+      fs.writeFileSync(REPORT_JSON, JSON.stringify(report, null, 2));
+      markLatestIncomplete(report.reportBuild.error);
     }
-  } catch (e) {
-    console.error('unified report hook error', e);
+  }
+  if (report.reportBuild.ok) {
+    appendProgress('### Phase - unified report\n- Status: pass\n- Eval: Dated TRACKED_E2E_REPORT_<stamp>.md (+ LATEST copy) regenerated as single-file deliverable.\n');
   }
 
   writeStatus(7, 'final', report.ok ? 'pass' : 'fail');
 
   await browser.close();
+  browser = null;
   console.log(JSON.stringify({
     ok: report.ok,
+    mode: MODE,
     calls: report.summary.callCount,
     totals: report.summary.totals,
-    failed: report.summary.failedSteps
+    failed: report.summary.failedSteps,
+    reportBuild: report.reportBuild,
+    outDir: OUT_DIR
   }, null, 2));
-  process.exit(report.ok ? 0 : 2);
-})().catch(err => {
-  appendProgress('### Phase â€” lean E2E â€” fatal\n- Status: fail\n- Eval: ' + String(err && err.message || err).slice(0, 300) + '\n');
+  const stepsOk = !report.steps.some(stepFailed);
+  process.exit(!stepsOk ? 2 : (!report.reportBuild.ok ? 4 : 0));
+})().catch(async (err) => {
+  // Close the browser on the fatal path too, so a thrown gate never leaves Chromium running.
+  if (browser) { try { await browser.close(); } catch (_) {} browser = null; }
+  appendProgress('### Phase - tracked E2E - fatal\n- Status: fail\n- Eval: ' + String(err && err.message || err).slice(0, 300) + '\n');
+  try {
+    fs.writeFileSync(REPORT_JSON, JSON.stringify(Object.assign({}, report, { ok: false, fatal: String(err && err.message || err), network: { calls: netCalls.length, blockedRequests: blockedRequests.slice(0, 50) }, offline: offline ? Object.assign({}, report.offline, { unmatched: offline.unmatched.slice() }) : undefined }), null, 2));
+  } catch (_) {}
   writeStatus(0, 'fatal', 'fail');
   console.error(err);
   process.exit(1);
 });
-
-

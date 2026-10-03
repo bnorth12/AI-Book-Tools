@@ -1,6 +1,6 @@
 # NovelWriter — Multi-pass quality editing (QE5)
 
-**Status:** implemented 2026-09-27 on `feat/nw-token-packing`
+**Status:** implemented 2026-09-27 in `NovelWriter/NovelWriter.html`
 
 ## What it does
 
@@ -10,7 +10,8 @@ After the first auto-revise (QE2 gate-fail) or after Tab6 apply-staged (QE3), No
 | --- | --- |
 | Heuristics gate still failing | `gate-fail` |
 | Chapter continuity findings / tracker risks | `continuity` |
-| Residual staged improvement notes (after apply-staged) | `residual-staged` |
+| Residual staged improvement notes (after apply-staged; only notes that differ from the ones this run already applied, so one Update Chapter click makes one call) | `residual-staged` |
+| Slop tells over floor (`scoreSlopTells`; checked after the rows above, revise-only, never fail-closes the gate) | `anti-slop` |
 
 ## Caps & fail-closed
 

@@ -1,11 +1,24 @@
 /**
  * B1/B4 offline smoke: scoreSlopTells detectors (no NovelWriter.html, no LLM).
+ * Usage: node scripts/_smoke_slop_tells.mjs   (see scripts/README.md)
  */
 import fs from 'fs';
 import path from 'path';
-import { scoreSlopTells, SLOP_TELLS, scoreChapterEcho } from './_nw_slop_tells_snippet.js';
+import { scoreSlopTells, SLOP_TELLS, scoreChapterEcho } from './_nw_slop_tells_snippet.mjs';
+import { fileURLToPath } from 'url';
 
-const PLAN = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/novelwriter';
+// Paths resolve from this checkout (no machine-specific defaults). Optional overrides:
+//   NW_FIXTURES_DIR  input fixtures (default scripts/fixtures/nw_slop)
+//   NW_OUT_DIR       report output (default out/nw-smoke, gitignored)
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+const FIXTURES = path.resolve(process.env.NW_FIXTURES_DIR || path.join(SCRIPT_DIR, 'fixtures', 'nw_slop'));
+const OUT_DIR = path.resolve(process.env.NW_OUT_DIR || path.join(REPO_ROOT, 'out', 'nw-smoke'));
+function annexChapters(id) {
+  const fp = path.join(FIXTURES, 'annex_chapters', id + '.json');
+  if (!fs.existsSync(fp)) return null;
+  return (JSON.parse(fs.readFileSync(fp, 'utf8')).chapters || []).map(t => String(t || '').trim());
+}
 const fails = [];
 function assert(c, m) { if (!c) fails.push(m); }
 
@@ -112,23 +125,32 @@ const motifOnly = scoreChapterEcho(
 );
 assert(motifOnly.score < 55 && motifOnly.hits.length === 0, 'motif-only must not foul: ' + JSON.stringify(motifOnly));
 
-const ch2Path = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/novelwriter/_b3r_ch_texts/ch2.txt';
-const ch3Path = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/novelwriter/_b3r_ch_texts/ch3.txt';
-const ch4Path = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/novelwriter/_b3r_ch_texts/ch4.txt';
+// B3R regression anchors from vendored fixtures (scripts/fixtures/nw_slop/annex_chapters/B3R.json)
+const b3r = annexChapters('B3R');
+assert(b3r && b3r.length >= 4, 'missing fixture annex_chapters/B3R.json (need >=4 chapters)');
 let ch2OverExplain = null;
 let ch4ChapterEcho = null;
-if (fs.existsSync(ch2Path)) {
-  const ch2 = fs.readFileSync(ch2Path, 'utf8');
+if (b3r && b3r[1]) {
+  const ch2 = b3r[1];
   const ch2R = scoreSlopTells(ch2);
   ch2OverExplain = { score: ch2R.tells.overExplain.score, ok: ch2R.tells.overExplain.ok, hits: ch2R.tells.overExplain.hits, failsTell: !ch2R.tells.overExplain.ok };
   console.log('B3R Ch2 overExplain:', JSON.stringify(ch2OverExplain));
 }
-if (fs.existsSync(ch3Path) && fs.existsSync(ch4Path)) {
-  const ch3 = fs.readFileSync(ch3Path, 'utf8');
-  const ch4 = fs.readFileSync(ch4Path, 'utf8');
+if (b3r && b3r[2] && b3r[3]) {
+  const ch3 = b3r[2];
+  const ch4 = b3r[3];
   const ch4R = scoreSlopTells(ch4, { priorChapters: [ch3] });
   ch4ChapterEcho = { score: ch4R.tells.chapterEcho.score, ok: ch4R.tells.chapterEcho.ok, hits: ch4R.tells.chapterEcho.hits, failsTell: !ch4R.tells.chapterEcho.ok };
   console.log('B3R Ch4 chapterEcho (prior=Ch3):', JSON.stringify(ch4ChapterEcho));
+}
+
+assert(ch2OverExplain && ch2OverExplain.failsTell, 'B3R Ch2 overExplain must FAIL');
+assert(ch4ChapterEcho && ch4ChapterEcho.failsTell, 'B3R Ch4 chapterEcho (prior=Ch3) must FAIL');
+// B4-0d corpus file: delayed paraphrase at d~39
+const d39Path = path.join(SCRIPT_DIR, 'fixtures', 'slop_corpus', 'a3_ch2_overexplain_d39.txt');
+if (fs.existsSync(d39Path)) {
+  const d39 = scoreSlopTells(fs.readFileSync(d39Path, 'utf8'));
+  console.log('slop_corpus a3_ch2_overexplain_d39 overExplain:', JSON.stringify({ score: d39.tells.overExplain.score, ok: d39.tells.overExplain.ok }));
 }
 
 assert(SLOP_TELLS.length === 7, 'seven tells');
@@ -144,8 +166,8 @@ const report = {
   chapterEchoFixture: { foulOk: !echoFoul.tells.chapterEcho.ok, passOk: echoPass.tells.chapterEcho.ok },
   beyond32: (() => { const r = scoreSlopTells(beyond32Restate); return { ok: !r.tells.overExplain.ok, score: r.tells.overExplain.score }; })()
 };
-fs.mkdirSync(PLAN, { recursive: true });
-fs.writeFileSync(path.join(PLAN, 'B1_SLOP_TELL_SMOKE_REPORT.json'), JSON.stringify(report, null, 2));
+fs.mkdirSync(OUT_DIR, { recursive: true });
+fs.writeFileSync(path.join(OUT_DIR, 'B1_SLOP_TELL_SMOKE_REPORT.json'), JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));
 if (!report.ok) {
   console.error('B1 SLOP TELL SMOKE FAIL');
