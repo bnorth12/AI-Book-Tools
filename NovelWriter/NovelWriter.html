@@ -4801,6 +4801,84 @@ const messages = [
 			return r;
 		}
 
+		// === GATE_HELPERS_BEGIN ===
+		// NW_GATE_FIX_SPEC fixes 1/3/4: pure helpers (no DOM, no network) so the offline smoke can load them in a vm.
+		var NW_ENRICH_BP_BUTTON = 'Enrich Chapter Blueprints (six beats)';
+
+		/** Group beat_* failure codes per chapter: ['ch1: sceneGoal missing, dialogueTurn missing', ...]. */
+		function nwGroupBeatFailures(failures) {
+			var order = [];
+			var byCh = {};
+			var other = [];
+			(failures || []).forEach(function (f) {
+				var s = String(f || '');
+				var m = s.match(/^beat_(missing_blueprint|missing|stub|cast_unnamed):(?:([A-Za-z]+):)?ch(\d+)/);
+				if (!m) { if (s) other.push(s); return; }
+				var ch = m[3];
+				var label = m[1] === 'missing_blueprint' ? 'blueprint missing'
+					: m[1] === 'cast_unnamed' ? 'castArcBeat names no cast member'
+					: (m[2] + ' ' + (m[1] === 'stub' ? 'stub' : 'missing'));
+				if (!byCh[ch]) { byCh[ch] = []; order.push(ch); }
+				if (byCh[ch].indexOf(label) < 0) byCh[ch].push(label);
+			});
+			return order.map(function (ch) { return 'ch' + ch + ': ' + byCh[ch].join(', '); }).concat(other);
+		}
+
+		/** Dedupe, show the first `max`, report the rest as `+N more`. */
+		function nwFormatGateFailures(list, max) {
+			max = max || 10;
+			var failures = Array.from(new Set((list || []).filter(Boolean).map(String)));
+			var shown = failures.slice(0, max);
+			var more = Math.max(0, failures.length - shown.length);
+			return { failures: failures, shown: shown, more: more, text: shown.join(' | ') + (more ? ' | … +' + more + ' more' : '') };
+		}
+
+		/**
+		 * Generate Chapter N pre-prose gate (fail-closed). One beat pass, deduped failures, `+N more`,
+		 * and names the Enrich Chapter Blueprints button when any beat fails.
+		 * Returns { passed, failures (deduped), shown, more, beat, message }.
+		 */
+		function scoreGenerateChapterGate(nd, ch, opts) {
+			nd = nd || (typeof novelData !== 'undefined' ? novelData : {});
+			opts = opts || {};
+			ch = Number(ch) || 1;
+			var spine = [];
+			// cast + subplot + outline obligations (the non-beat parts of Tab 4->5 readiness)
+			if (typeof scoreCastDensity === 'function') spine = spine.concat(scoreCastDensity(nd.characters || [], { novelData: nd }).failures || []);
+			if (typeof scoreSubplotDensity === 'function') spine = spine.concat(scoreSubplotDensity(nd.subplots || [], { novelData: nd }).failures || []);
+			if (typeof scoreOutlineObligations === 'function') spine = spine.concat(scoreOutlineObligations(nd).failures || []);
+			var plot = String(nd.plotOutline || nd.generalPlot || '').trim();
+			var novel = String(nd.novelOutline || '').trim();
+			var chOutline = String((nd.chapterOutlines || [])[ch - 1] || '').trim();
+			var chWords = chOutline ? chOutline.split(/\s+/).length : 0;
+			if (plot.length < 80) spine.push('plot/plotOutline empty/stub');
+			if (chWords < 80) spine.push('chapter outline stub-thin words=' + chWords);
+			var pack = [plot, novel, chOutline].filter(Boolean).join('\n');
+			if (typeof scoreProseQuality === 'function' && pack.length >= 40) {
+				var slop = scoreProseQuality(pack);
+				if (slop && slop.aiSlopRisk != null && slop.aiSlopRisk > 75) {
+					spine.push('early-spine AI-slop risk=' + slop.aiSlopRisk + ' (would multiply into chapter)');
+				}
+			}
+			var cap = Number(nd.numChapters) || Math.max((nd.chapterBlueprints || []).length, ch);
+			var beat = scoreBeatCoverage(nd, { chapterCap: cap });
+			var beatLines = nwGroupBeatFailures(beat.failures || []);
+			var fmt = nwFormatGateFailures(spine.concat(beatLines), opts.maxShown || 10);
+			var tail = beatLines.length
+				? '. Click "' + NW_ENRICH_BP_BUTTON + '" on Tab 4 (Outlines).'
+				: '. Complete enrich loop + outline invent/refine before prose.';
+			return {
+				passed: fmt.failures.length === 0,
+				chapter: ch,
+				failures: fmt.failures,
+				shown: fmt.shown,
+				more: fmt.more,
+				beat: beat,
+				message: fmt.failures.length ? ('STAGE GATE FAIL-CLOSED [generateChapter ' + ch + ']: ' + fmt.text + tail) : ''
+			};
+		}
+		// === GATE_HELPERS_END ===
+
 
 		function scoreObligationCoverage(text, chapterNum) {
 			const bp = getChapterBlueprint(chapterNum);
@@ -9273,51 +9351,13 @@ return c && c.name && c.backstory && c.arc; });
 		    console.log('Post-collectData - novelData.chapters:', novelData.chapters);
 			// Fail-closed workflow gate: enrich readiness + chapter spine (empty/stub multiplies into prose).
 			(function assertPreProseSpineGate(ch) {
-				const fails = [];
-				if (typeof scoreAdvanceToTab5Readiness === 'function') {
-					const ready = scoreAdvanceToTab5Readiness(novelData);
-					if (!ready.passed) {
-						(ready.failures || []).slice(0, 10).forEach(function (f) { fails.push(f); });
-					}
-				} else {
-					const richSubs = (novelData.subplots || []).filter(function (s) {
-						if (!s) return false;
-						if (typeof s === 'string') return s.trim().length >= 120;
-						return nwWordCount(subplotPlainText(s)) >= 120;
-					});
-					if (richSubs.length < 1) fails.push('subplots empty/stub');
-				}
-				const plot = String(novelData.plotOutline || novelData.generalPlot || '').trim();
-				const novel = String(novelData.novelOutline || '').trim();
-				const chOutline = String((novelData.chapterOutlines || [])[ch - 1] || '').trim();
-				const chWords = chOutline ? chOutline.split(/\s+/).length : 0;
-				if (plot.length < 80) fails.push('plot/plotOutline empty/stub');
-				if (chWords < 80) fails.push('chapter outline stub-thin words=' + chWords);
-				if (typeof scoreBeatCoverage === 'function') {
-					const beatCap = Number(novelData.numChapters) || Math.max((novelData.chapterBlueprints || []).length, ch);
-					const beatR = scoreBeatCoverage(novelData, { chapterCap: beatCap });
-					if (!beatR.passed) {
-						(beatR.failures || []).slice(0, 8).forEach(function (f) { fails.push(f); });
-					}
-				} else {
-					const bpGate = (typeof getChapterBlueprint === 'function') ? getChapterBlueprint(ch) : null;
-					const bpDig = (typeof digestChapterBlueprint === 'function') ? digestChapterBlueprint(bpGate) : bpGate;
-					if (!bpDig || !(bpDig.arcStep || (bpDig.characterBeats && bpDig.characterBeats.length) || (bpDig.subplotPressure && bpDig.subplotPressure.length))) {
-						fails.push('chapterBlueprint missing/stub for chapter ' + ch);
-					}
-				}
-				const pack = [plot, novel, chOutline].filter(Boolean).join('\n');
-				if (typeof scoreProseQuality === 'function' && pack.length >= 40) {
-					const slop = scoreProseQuality(pack);
-					if (slop && slop.aiSlopRisk != null && slop.aiSlopRisk > 75) {
-						fails.push('early-spine AI-slop risk=' + slop.aiSlopRisk + ' (would multiply into chapter)');
-					}
-				}
-				if (fails.length) {
-					const msg = 'STAGE GATE FAIL-CLOSED [generateChapter ' + ch + ']: ' + fails.join(' | ') + '. Complete enrich loop + outline invent/refine before prose.';
-					console.error(msg);
-					alert(msg);
-					throw new Error(msg);
+				// Fix 3: one beat pass, deduped failures, `+N more`, names the Enrich Chapter Blueprints button.
+				const gate = scoreGenerateChapterGate(novelData, ch);
+				window.__lastGenerateChapterGate = gate;
+				if (!gate.passed) {
+					console.error(gate.message);
+					alert(gate.message);
+					throw new Error(gate.message);
 				}
 			})(chapterNum);
 			const continuityPacket = buildChapterContinuityPacket(chapterNum);
