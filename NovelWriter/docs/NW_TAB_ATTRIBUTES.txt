@@ -1,0 +1,221 @@
+NovelWriter â€” attributes / fields used per page (tab)
+Source: NovelWriter/NovelWriter.html (UI + novelData)
+Date: 2026-09-27
+
+USER NOTES (2026-09-27)
+- OPEN: exact counts for characters, major conflicts, minor conflicts, and related arcs
+  are NOT decided yet. Treat UI defaults as starting points only, not locked targets.
+- LOCKED: backstories MUST support the characters (and the chapters those characters
+  appear in). Backstory is not decorative filler; it should explain motives, wounds,
+  relationships, and why the character acts as they do in chapter beats.
+
+==============================================================================
+COUNT / STRUCTURE GUIDANCE (working â€” revise when you pick numbers)
+==============================================================================
+Concept                         | UI / data                         | Default     | Status
+--------------------------------|-----------------------------------|-------------|--------
+Number of chapters              | numChapters                       | 10          | OPEN
+Target chapter length (words)   | chapterLength                     | 2000*       | OPEN
+Number of characters            | numCharacters                     | user-set    | OPEN
+Character fields per person     | name, backstory, arc              | â€”           | LOCKED shape
+Minimum subplots                | minSubplots                       | 2           | OPEN
+Major conflicts                 | NOT a separate tab field          | â€”           | OPEN (usually storyArc / generalPlot)
+Minor conflicts                 | NOT a separate tab field          | â€”           | OPEN (usually subplots / secondary friction)
+Related arcs                    | storyArc, characters[].arc,       | â€”           | OPEN counts; fields exist
+                                | chapterArcs, storyArcOutline      |             |
+
+* Some generation prompts also mention ~4000 words; UI/state default is 2000.
+
+Prompt hints already in agents (NOT locked book targets):
+- Character suggest prompt mentions ~3â€“4 conflicts/events tied to plot chapters
+- Refine-with-subplots prompt mentions ~2â€“3 events/conflicts from the subplot
+
+Fill in later when you decide:
+  Target cast size (numCharacters): ________
+  Target major conflicts: ________
+  Target minor conflicts: ________
+  Target related / subplot arcs: ________
+  Target chapters (numChapters): ________
+  Target chapter words (chapterLength): ________
+
+==============================================================================
+TAB 1 â€” API & Story Info
+==============================================================================
+Purpose: Config + high-level story spine.
+
+Controls / attributes:
+  apiKey, model, maxTokens, genre, authorStyle, styleGuide, title,
+  storyArc, generalPlot, setting, numChapters, chapterLength,
+  Import Session / Export Session, authors / author (fetched list + selection)
+
+AI actions: Suggest Story Arc / Plot / Setting, AI Suggest Story Info,
+Fetch authors / style guide.
+
+novelData: apiKey, model, maxTokens, genre, title, storyArc, generalPlot,
+setting, numChapters, chapterLength, authorStyle, styleGuide, authors, author
+
+==============================================================================
+TAB 2 â€” Characters
+==============================================================================
+Purpose: Cast list sized by numCharacters.
+
+Controls:
+  numCharacters
+  Per character: name (.charName), backstory (.charBackstory), arc (.charArc)
+
+AI actions: Scrape Book Info for Characters, Suggest Characters,
+Add Another Character, Refine Characters with Subplots, Enrich Cast (deepen backstory+arc)
+
+Rules: blank slots only on Suggest; fully-defined characters locked as context;
+extra LLM characters beyond numCharacters dropped; name-only rows get
+backstory+arc from book context.
+
+BACKSTORY RULE (LOCKED): backstory must support the character and their
+chapter roles â€” motives, wounds, relationships, why they act in beats.
+
+novelData: characters[] = { name, backstory, arc, ... }
+
+==============================================================================
+TAB 3 â€” Subplots
+==============================================================================
+Purpose: Secondary threads (often minor conflicts / side arcs).
+
+Controls: minSubplots, one textarea per subplot
+AI: AI Suggest Subplots, Add Another Subplot
+Generated subplot target length: ~300â€“400 words (when AI fills)
+novelData: subplots[]
+
+==============================================================================
+TAB 4 â€” Outlines
+==============================================================================
+Controls: novelOutline, plotOutline, storyArcOutline, chapterBlueprints,
+outlineImprovements; per-chapter chapterOutlines[i], chapterArcs[i]
+AI: AI Suggest Novel Outline, Incorporate Suggestions,
+Generate Chapter Outline & Arc, Update
+novelData: novelOutline, plotOutline, storyArcOutline, chapterBlueprints,
+chapterOutlines, chapterArcs, outlineImprovements, chapterImprovements
+
+==============================================================================
+TAB 5 â€” Generate Chapters
+==============================================================================
+Controls: per-chapter Generate; continuityStrictMode; autoContinuityAudit;
+continuityStatusPanel; packets / tracker / findings
+Uses: chapter outline/arc, **chapterBlueprints** (bound into Draft pack —
+arcStep, characterBeats, subplotPressure, worldHooks, allowedPayoffs,
+deferredThreads, role), characters, subplots, authorStyle, styleGuide,
+chapterLength, continuity; plot digest prefers plotOutline||generalPlot;
+setting digest prefers setting||worldBible (digestWorldBible).
+Draft executes blueprint obligations (checklist); may not invent major
+throughlines/cast/factions beyond lists; success = dramatized obligations,
+NOT word quotas. ObligationCoverage scored after gen (fail-closed).
+novelData: chapters, chapterBlueprints, continuityStrictMode, autoContinuityAudit,
+chapterContinuityPackets, continuityTracker, continuityFindings,
+lastObligationCoverage, obligationCoverageLog
+
+==============================================================================
+TAB 6 â€” Edit Chapters
+==============================================================================
+Controls: edited chapter text, Improvements to Implement,
+Update Chapter, Check Spelling & Grammar
+novelData: editedChapters, chapterImprovements
+
+==============================================================================
+TAB 7 â€” Book
+==============================================================================
+Controls: bookContent (full view), Suggest Improvements table + status,
+Breakdown, Export Book (.txt), Export Session
+novelData: bookText, bookImprovements, bookImprovementsWithStatus
+
+==============================================================================
+TAB 8 â€” Consolidated Breakdown Suggestions
+==============================================================================
+Derived view of Tab 7 breakdowns with status "To Incorporate".
+No separate primary authoring fields.
+
+==============================================================================
+TAB 9 â€” Request Log
+==============================================================================
+Display: last prompt, response, tokens, cost estimate, status, originating tab
+
+==============================================================================
+TAB 10 â€” Element Values
+==============================================================================
+Debug dump of key novelData fields. MUST NOT show API key in plain text.
+Control: elementValues
+
+==============================================================================
+TAB 11 â€” Agent Prompts
+==============================================================================
+Editable agent name + systemPrompt overrides; Save; Reset To Defaults;
+Export / Import Prompt Profile (promptImportFile)
+
+==============================================================================
+HOW CONFLICTS / ARCS MAP TODAY (until you pick counts)
+==============================================================================
+Major conflict(s)      -> storyArc + generalPlot (+ storyArcOutline / plotOutline)
+Minor conflict(s)      -> subplots[] + secondary beats in character arcs
+Related character arcs -> characters[].arc + chapterArcs[] + continuity arc progress
+Backstory support      -> characters[].backstory (LOCKED to support chars + chapters)
+
+End of file.
+
+
+AUTHOR SELECTION (2026-09-27)
+Product rule (generic): Fetch Authors ranks voices by interest as style models for the
+SELECTED genre / type of book being drafted — not fame alone. Prefer distinctive writers
+within or thoughtfully against that genre's conventions. Do not hard-wire a subgenre
+(e.g. dystopian mashups) into the prompt; those follow only when the user picks that genre.
+
+User taste note (not a product hard-wire): owner finds genre-bending and dystopian
+hybrids especially interesting when writing in those spaces.
+
+End of file.
+
+
+ENRICH LOOP (2026-09-27) — enforced in code
+Pass0 invent (Tab1 story + Tab2/3 suggest) → Pass1 T2↔T3 enrich (enrichCharacters / enrichSubplots;
+refineCharacters now deepens thin backstory under subplot pressure — does NOT freeze stubs) →
+Pass2 T4 invent (generateNovelOutlines + blueprints) → Pass3 T4 outline refine
+(incorporateOutlineSuggestions / updateChapterOutline) → Pass4 Tab5 only if
+scoreAdvanceToTab5Readiness green (cast density + subplot density + outline obligations:
+world/plot/character_named/conflict_resolution/subplot_named) → Pass5 chapter QE.
+Density floors are fail-closed content floors (no pad-to-N). Helpers: scoreCastDensity,
+scoreSubplotDensity, scoreOutlineObligations, assertAdvanceToTab5ReadinessOrThrow.
+E2E: NW_E2E_ENRICH=1 or NW_E2E_REGEN_BIBLE=1 runs densify path and asserts non-stub fields.
+
+
+AGENT SKILLS (2026-09-27) — full catalog wired
+----------------------------------------------
+Every Tab1–Tab8 LLM agent has an Agent Skill id `tabN.agentKey` in `defaultSkillCatalog`.
+Each skill declares:
+  - inputs[]: named binders (digests, blueprints, density floors, EvidencePack, readiness…)
+  - output: shape + validators (castDensity, subplotDensity, outlineObligations, obligationCoverage, …)
+  - ability: technique text layered onto Tab11 system prompt via getSkillSystemPrompt()
+  - stop: optional readiness predicate (cast/subplot/outline/tab5 green)
+
+Runtime helpers: packSkillInputs, validateSkillOutput, prepareAgentSkillRun, finalizeAgentSkillRun,
+getSkillSystemPrompt, listAgentSkills, skillCatalog export/import.
+
+Tab11 shows Agent Skills table (inputs / output / ability) beneath prompt manager.
+Agents call packSkillInputs before prompts; enrich/suggest cast+subplot validate outputs.
+Density floors and Tab5 readiness remain code-enforced (not prompt-only).
+Series KG / suite merge still out of scope — skills are the on-ramp for book-graph context binders.
+
+
+==============================================================================
+STAGE JSON SCHEMAS (2026-09-27)
+==============================================================================
+Portable stage schemas live in NovelWriter.html (STAGE_SCHEMA_BEGIN/END).
+Escalation: invent (soft/optional) ? refine ? enrich (fail-closed floors) ?
+outline ? Tab5 readiness ? draft.
+
+Bidirectional normalize:
+  normalizeOutbound(stageId, novelData) � LLM/agent facing canonical snapshot
+  normalizeInbound(stageId, raw) � aliases (cast?characters, backStory?backstory,
+  chapter-wrapped JSON) ? canonical keys
+
+Wire points: callAI (NORMALIZE_INBOUND_CALLAI), validateSkillOutput,
+enrichCharacters / enrichSubplots apply, prepareAgentSkillRun schema prompts,
+window.NW_STAGE_SCHEMAS export.
+
+See UNIVERSAL_QUALITY_CONTRACT AgentSkill / StageSchema rows.
