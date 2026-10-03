@@ -254,6 +254,12 @@ Synced: 2026-04-19
 			        </select>
 			        <label for="maxTokens">Max Tokens per Update:</label>
 			        <input type="number" id="maxTokens" min="500" value="6000">
+			        <!-- NW.GEN.TO.1: Setup (Advanced) SHALL offer "AI call timeout (s)" (default 300) used by every callAI request. -->
+			        <details id="setupAdvanced" data-testid="nw-setup-advanced">
+			            <summary>Advanced</summary>
+			            <label for="aiCallTimeoutSec">AI call timeout (s):</label>
+			            <input type="number" id="aiCallTimeoutSec" min="1" value="300" style="width: 7em;" title="Each AI request is aborted after this many seconds (default 300).">
+			        </details>
 			        <button type="button" id="c1SmokeBtn" onclick="runC1Smoke()" title="Cheap C1 digest / no-full-dump smoke (#120)">C1 Smoke (cheap)</button>
                         <label for="kbEnabled" title="C2: local EvidencePack from novelData only (not series KG yet)" style="margin-left:8px;"><input type="checkbox" id="kbEnabled" onchange="setKbEnabled(this.checked)"> KB / EvidencePack</label>
                         <button type="button" id="c2SmokeBtn" onclick="runC2Smoke()" title="#120 C2 EvidencePack smoke">C2 Smoke</button>
@@ -477,6 +483,7 @@ Synced: 2026-04-19
 	                <button id="batchDiscardBtn" onclick="discardInterruptedBatchRun()">Discard</button>
 	            </div>
 	            <div id="batchRunStatus" role="status" aria-live="polite" data-testid="nw-batch-status"></div>
+	            <div id="batchRunSubStep" aria-live="off" data-testid="nw-batch-substep"></div>
 	            <button id="batchGoTab4" data-testid="nw-batch-go-tab4" onclick="showTab(4)" hidden>Go to Tab 4</button>
 	            <button id="batchExportNow" data-testid="nw-batch-export-now" onclick="exportSession()" hidden>Export session now</button>
 	        </fieldset>
@@ -1004,6 +1011,42 @@ let activeAICallCount = 0;
 			if (activeAICallCount === 0) {
 				setExecutionStatus('Idle', 'idle', 'Waiting for next action.');
 			}
+		}
+
+		// NW.GEN.HUD.4: While a callAI request is pending the HUD SHALL show the elapsed time ("Waiting on LLM response... 2m 14s")
+		//               and, when the step makes several calls, "call k of n" (e.g. "Part 2 of 2", "revise 1/2").
+		// NW.GEN.TO.2: callAI SHALL abort a request after the configured timeout (AbortController); a late resolve is ignored.
+		const NW_CALLAI_TIMEOUT_DEFAULT_S = 300;
+		let nwActiveCall = null; // { operation, label, startedAt, ticker }
+		function nwCallAITimeoutMs() {
+			const el = document.getElementById('aiCallTimeoutSec');
+			const s = el ? parseFloat(el.value) : NaN;
+			return Math.round((isFinite(s) && s > 0 ? s : NW_CALLAI_TIMEOUT_DEFAULT_S) * 1000);
+		}
+		function nwFmtElapsed(ms) {
+			const s = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+			return Math.floor(s / 60) + 'm ' + String(s % 60).padStart(2, '0') + 's';
+		}
+		function nwRenderActiveCall() {
+			const c = nwActiveCall;
+			if (!c) return;
+			setExecutionStatus(c.operation, 'waiting', 'Waiting on LLM response... ' + nwFmtElapsed(Date.now() - c.startedAt) + (c.label ? ' (' + c.label + ')' : ''));
+			if (typeof nwBatchRenderSubStep === 'function') nwBatchRenderSubStep();
+		}
+		function nwCallStart(operation, label) {
+			const prev = nwActiveCall;
+			if (prev && prev.ticker) clearInterval(prev.ticker);
+			const c = { operation: operation, label: label || '', startedAt: Date.now(), ticker: null, prev: prev };
+			nwActiveCall = c;
+			c.ticker = setInterval(nwRenderActiveCall, 1000);
+			nwRenderActiveCall();
+			return c;
+		}
+		function nwCallEnd(c) {
+			if (!c) return;
+			if (c.ticker) clearInterval(c.ticker);
+			c.ticker = null;
+			if (nwActiveCall === c) nwActiveCall = null;
 		}
 
 	    // Default author styles with predefined guides
@@ -2405,6 +2448,14 @@ let activeAICallCount = 0;
 			const inferredCallerName = inferCallerName();
 			const fallbackOperationName = tabElement?.id ? `${tabElement.id} AI Operation` : 'AI Operation';
 			const operationName = opts.operationName || inferredCallerName || fallbackOperationName;
+			const callLabel = opts.callLabel || '';
+			const timeoutMs = nwCallAITimeoutMs();
+			const timeoutSec = Math.round(timeoutMs / 1000);
+			const abortCtl = (typeof AbortController === 'function') ? new AbortController() : null;
+			let timedOut = false;
+			let timeoutTimer = null;
+			let callTick = null;
+			const timeoutError = new Error('Timed out after ' + timeoutSec + ' s (' + operationName + ')');
 
 		    if (!apiKey) {
 		        console.error('API Key is missing');
@@ -2428,9 +2479,18 @@ let activeAICallCount = 0;
 		    if (loadingDiv) loadingDiv.style.display = 'block';
 			activeAICallCount += 1;
 			setExecutionStatus(operationName, 'running', 'Preparing request payload.');
+			// Timeout race: whatever the fetch does after this fires (late resolve, ignored abort) is never awaited again.
+			const timeoutRace = new Promise((_, reject) => {
+				timeoutTimer = setTimeout(() => {
+					timedOut = true;
+					try { if (abortCtl) abortCtl.abort(); } catch (_) { /* already settled */ }
+					reject(timeoutError);
+				}, timeoutMs);
+			});
+			timeoutRace.catch(() => {});
 
 		    try {
-				setExecutionStatus(operationName, 'waiting', 'Waiting on LLM response...');
+		        callTick = nwCallStart(operationName, callLabel);
 		        const requestBody = useResponsesAPI
 		            ? {
 		                model: model,
@@ -2445,18 +2505,23 @@ let activeAICallCount = 0;
 		                stream: false,
 		                temperature: 0.65
 		            };
-		        const response = await fetch(endpoint, {
+		        const response = await Promise.race([fetch(endpoint, {
 		            method: 'POST',
 		            headers: {
 		                'Content-Type': 'application/json',
 		                'Authorization': `Bearer ${apiKey}`
 		            },
-		            body: JSON.stringify(requestBody)
-		        });
+		            body: JSON.stringify(requestBody),
+		            signal: abortCtl ? abortCtl.signal : undefined
+		        }), timeoutRace]);
+		        if (timedOut) throw timeoutError;
 		        if (!response.ok) {
-		            throw new Error(`HTTP error! Status: ${response.status}, Text: ${await response.text()}`);
+		            throw new Error(`HTTP error! Status: ${response.status}, Text: ${await Promise.race([response.text(), timeoutRace])}`);
 		        }
-		        		        const text = await response.text();
+		        		        const text = await Promise.race([response.text(), timeoutRace]);
+		        // Late-resolve guard: nothing below (usage row, parsed chapter) may run once the call timed out.
+		        if (timedOut) throw timeoutError;
+		        clearTimeout(timeoutTimer);
 		        console.log('Raw AI response:', text);
 		        let jsonResponse = JSON.parse(text);
 		        // #120 C3 / NW.GEN3b: capture usage from FIRST HTTP-body parse before content rewrite overwrites jsonResponse.
@@ -2536,6 +2601,7 @@ let activeAICallCount = 0;
 		        requestLog.returnedInfo = text; // Store raw response
 		        console.log('callAI - Post-Response requestLog.returnedInfo:', requestLog.returnedInfo.substring(0, 200) + '...');
 		        updateRequestLog();
+				nwCallEnd(callTick);
 				setExecutionStatus(operationName, 'completed', 'Response received and parsed.');
 
 				// NORMALIZE_INBOUND_CALLAI: stage schema unwrap + canonical keys
@@ -2578,14 +2644,18 @@ let activeAICallCount = 0;
 		        }
 
 		        return jsonResponse;
-		    } catch (error) {
+		    } catch (caught) {
+		        const error = timedOut ? timeoutError : caught; // an abort surfaces as the timeout, not as AbortError
 		        console.error('API call failed:', error);
 		        requestLog.status = 'Failed';
 		        requestLog.returnedInfo = error.message;
 		        updateRequestLog();
+				nwCallEnd(callTick);
 				setExecutionStatus(operationName, 'failed', error.message || 'API call failed.');
 		        throw error;
 		    } finally {
+		        clearTimeout(timeoutTimer);
+		        nwCallEnd(callTick);
 		        if (loadingDiv) loadingDiv.style.display = 'none';
 				activeAICallCount = Math.max(0, activeAICallCount - 1);
 				setTimeout(resetExecutionStatusIfIdle, 1200);
@@ -6541,7 +6611,8 @@ return c && c.name && c.backstory && c.arc; });
 						: (kind === 'anti-slop' ? 'quality-multipass-anti-slop' : 'quality-multipass-residual')
 				});
 				const __beforeMp = novelData.chapters[chapterNum - 1] || '';
-				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityMultiPass' });
+				if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'revise', 'pass ' + pass);
+				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityMultiPass', callLabel: 'revise pass ' + pass });
 				guardChapterReviseGrowth(chapterNum, __beforeMp, novelData.chapters[chapterNum - 1] || '', { source: 'qualityMultiPass:' + kind });
 				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', {
 					label: 'chapter' + chapterNum + '-afterMultiPass' + pass
@@ -6649,7 +6720,8 @@ return c && c.name && c.backstory && c.arc; });
 				const brief = buildQualityReviseBrief(gateAfter);
 				stageChapterImprovement(chapterNum, brief, { mode: 'replace', source: 'quality-revise' });
 				const __beforeRev = novelData.chapters[chapterNum - 1] || '';
-				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityRevise' });
+				if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'revise', 'revise ' + attempts + '/' + maxAttempts);
+				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityRevise', callLabel: 'revise ' + attempts + '/' + maxAttempts });
 				guardChapterReviseGrowth(chapterNum, __beforeRev, novelData.chapters[chapterNum - 1] || '', { source: 'qualityRevise' });
 				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-afterRevise' + attempts });
 				pushQualitySample('chapter' + chapterNum + '-afterRevise', Object.assign({}, gateAfter.scores || {}, {
@@ -9619,7 +9691,8 @@ return c && c.name && c.backstory && c.arc; });
 		    console.log('Post-updateRequestLog - chapterContent Length:', chapterContent.length);
 
 		    try {
-		        const part1Response = await callAI(messagesPart1, document.getElementById('tab5'), { max_tokens: maxTokens });
+		        if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'Part 1', 'call 1 of 2');
+		        const part1Response = await callAI(messagesPart1, document.getElementById('tab5'), { max_tokens: maxTokens, callLabel: 'Part 1 of 2' });
 		        console.log('Part 1 Response:', part1Response);
 		        // Generate All (must-fix 1): callAI returns malformed model JSON as { chapter, _jsonParseError } with a valid
 		        // HTTP envelope in requestLog.returnedInfo. In a batch that is a parse failure: stop before Part 2.
@@ -9666,7 +9739,8 @@ return c && c.name && c.backstory && c.arc; });
 		    console.log('Post-updateRequestLog Part 2 - chapterContent Length:', chapterContent.length);
 
 		    try {
-		        const part2Response = await callAI(messagesPart2, document.getElementById('tab5'), { max_tokens: maxTokens });
+		        if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'Part 2', 'call 2 of 2');
+		        const part2Response = await callAI(messagesPart2, document.getElementById('tab5'), { max_tokens: maxTokens, callLabel: 'Part 2 of 2' });
 		        console.log('Part 2 Response:', part2Response);
 		        if (opts.batch && part2Response && part2Response._jsonParseError) throw new Error('model JSON parse error (_jsonParseError): ' + part2Response._jsonParseError);
 		        const chapterPt2 = part2Response.chapter || '';
@@ -9713,6 +9787,7 @@ return c && c.name && c.backstory && c.arc; });
 		    updateRequestLog();
 			refreshContinuityAfterChapter(chapterNum);
 			if (novelData.autoContinuityAudit) {
+				if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'audit', '');
 				await runChapterContinuityAudit(chapterNum, { silent: true });
 			}
 		    console.log('Post-final updateRequestLog - chapterContent Length:', chapterContent.length);
@@ -9764,6 +9839,8 @@ return c && c.name && c.backstory && c.arc; });
         //          final checkpoint + status are done (released only in nwBatchStart's finally, by the run that set it). A failed
         //          final checkpoint after a clean finish is a 'checkpoint' stop. Start/Resume is refused while a manual AI call
         //          is in flight (activeAICallCount > 0).
+        // Slot 8b: a callAI timeout ("Timed out after N s (op)", NW.GEN.TO.2) is retryable: one retry, then reason 'provider',
+        //          detail 'timeout'. Stop lines end with exactly one period (#133).
         // NW.T5.10: The batch SHALL write an IndexedDB checkpoint (db novelwriter, store checkpoints) when a chapter goes in
         //          flight and after it finishes; any write failure stops the run before the next chapter is generated.
         // NW.T5.11: While a batch runs (or an interrupted one awaits restore) per-chapter Generate, Tab 6 editors, Update
@@ -9773,7 +9850,7 @@ return c && c.name && c.backstory && c.arc; });
         //          estimate is used only when that delta is 0 (chapter listed in batchRun.usageEstimated).
         // novelData.batchRun is NovelWriter-only (schema/ allows additional properties; no schema edit).
         var NW_BATCH = { retryDelayMs: 2000, idbName: 'novelwriter', idbStore: 'checkpoints', minOutlineWords: 80, capFactor: 1.25 };
-        var nwBatchState = { running: false, owner: null, chapterInFlight: null, quiet: false, pauseRequested: false, interrupted: null, windows: [], coverageAck: null, log: [], lastStatus: '', lastPromise: null };
+        var nwBatchState = { running: false, owner: null, chapterInFlight: null, subStep: null, quiet: false, pauseRequested: false, interrupted: null, windows: [], coverageAck: null, log: [], lastStatus: '', lastPromise: null };
         window.NW_BATCH = NW_BATCH;
         window.nwBatchState = nwBatchState;
 
@@ -9785,6 +9862,29 @@ return c && c.name && c.backstory && c.arc; });
             s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
             max = max || 300;
             return s.length > max ? s.slice(0, max - 3) + '...' : s;
+        }
+
+        /** Stop-line punctuation (#133): end with one period, never "..". */
+        function nwBatchEndSentence(t) {
+            t = String(t == null ? '' : t).replace(/\s+$/, '');
+            return /[.!?]$/.test(t) ? t : t + '.';
+        }
+        function nwBatchCap1(t) { t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1); }
+
+        // NW.T5.13 (slot 8b): while a batch runs, the sub-step line SHALL show "Chapter n of N: Part 1 / Part 2 / audit / revise"
+        //          with "call k of n" and the elapsed time of the active AI call (ticks every second via the HUD timer).
+        function nwBatchSubStep(chapterNum, step, callInfo) {
+            if (!nwBatchState.running) return;
+            nwBatchState.subStep = { chapter: chapterNum, step: step, callInfo: callInfo || '', startedAt: Date.now() };
+            nwBatchRenderSubStep();
+        }
+        function nwBatchRenderSubStep() {
+            var el = nwBatchEl('batchRunSubStep');
+            var ss = nwBatchState.subStep;
+            if (!el) return;
+            if (!nwBatchState.running || !ss) { el.textContent = ''; return; }
+            var since = (typeof nwActiveCall !== 'undefined' && nwActiveCall) ? nwActiveCall.startedAt : ss.startedAt;
+            el.textContent = 'Chapter ' + ss.chapter + ' of ' + nwBatchNumChapters() + ': ' + ss.step + (ss.callInfo ? ' (' + ss.callInfo + ')' : '') + ', ' + nwFmtElapsed(Date.now() - since);
         }
 
         function nwBatchSetStatus(text, state) {
@@ -9826,6 +9926,7 @@ return c && c.name && c.backstory && c.arc; });
             var m = nwBatchErrText(e);
             if (/HTTP error! Status: (429|5\d\d)\b/.test(m)) return true;
             if (/Failed to fetch|NetworkError|network error|ERR_NETWORK|ERR_CONNECTION|ECONNRESET|ETIMEDOUT|Load failed/i.test(m)) return true;
+            if (/^Timed out after \d+ s\b/.test(m)) return true; // slot 8b: callAI timeout counts as a retryable network failure
             return false;
         }
 
@@ -10136,6 +10237,10 @@ return c && c.name && c.backstory && c.arc; });
                     await nwBatchSleep(NW_BATCH.retryDelayMs);
                     continue;
                 }
+                if (partFailed && f && /^Timed out after \d+ s\b/.test(f.message)) {
+                    // slot 8b: timed out on the first try and on the single retry
+                    return { ok: false, reason: 'provider', timeout: true, detail: 'timeout', timeoutInfo: 'Part ' + f.part + ' ' + f.message.replace(/^Timed out/, 'timed out') + ' twice (1 retry)', attempts: attempts };
+                }
                 if (partFailed) {
                     return { ok: false, reason: 'provider', detail: 'Part ' + (f ? f.part : '?') + ' provider error' + (attempts > 1 ? ' after 1 retry' : '') + ': ' + (f ? f.message : st), attempts: attempts };
                 }
@@ -10271,7 +10376,7 @@ return c && c.name && c.backstory && c.arc; });
                     nwBatchState.owner = null;
                     nwBatchState.pauseRequested = false;
                 }
-                if (!nwBatchState.running) nwBatchState.quiet = false;
+                if (!nwBatchState.running) { nwBatchState.quiet = false; nwBatchState.subStep = null; nwBatchRenderSubStep(); }
                 nwBatchApplyLock();
             }
         }
@@ -10323,7 +10428,7 @@ return c && c.name && c.backstory && c.arc; });
                 } catch (e) {
                     checkpointFailed = nwBatchErrText(e);
                 }
-                if (!outcome.ok) { stop = { reason: outcome.reason, at: n, detail: outcome.detail, noRetry: !!outcome.noRetry }; break; }
+                if (!outcome.ok) { stop = { reason: outcome.reason, at: n, detail: outcome.detail, noRetry: !!outcome.noRetry, timeoutInfo: outcome.timeoutInfo || null }; break; }
                 if (checkpointFailed) { stop = { reason: 'checkpoint', at: n, detail: 'checkpoint write failed after ch' + n + ': ' + checkpointFailed }; break; }
                 if (br.perChapterDownload) {
                     try { nwBatchDownloadText((novelData.title || 'Untitled_Novel') + '_ch' + n + '.txt', novelData.chapters[n - 1]); } catch (e) { console.warn('[batch] chapter download', e); }
@@ -10348,10 +10453,10 @@ return c && c.name && c.backstory && c.arc; });
                 }
             }
             var text = stop
-                ? (stop.reason === 'paused' ? 'Paused before ch' + stop.at + '.' : 'Stopped at ch' + stop.at + ' (' + stop.reason + '): ' + nwBatchShort(stop.detail, 240) + '.')
+                ? (stop.reason === 'paused' ? 'Paused before ch' + stop.at + '.' : 'Stopped at ch' + stop.at + ' (' + stop.reason + '): ' + nwBatchEndSentence(nwBatchShort(stop.detail, 240)))
                 : 'Done: ch' + br.range.from + '-' + br.range.to + '.';
             if (stop && stop.reason === 'parse') text += ' Response could not be parsed (no retry); Resume regenerates ch' + stop.at + '.';
-            else if (stop && stop.reason === 'provider') text += (stop.noRetry ? ' Not retried;' : ' Provider error (retried once where retryable);') + ' Resume regenerates ch' + stop.at + '.';
+            else if (stop && stop.reason === 'provider') text += (stop.noRetry ? '' : (stop.timeoutInfo ? ' ' + nwBatchCap1(stop.timeoutInfo) + ';' : ' Provider error (retried once where retryable);')) + ' Resume regenerates ch' + stop.at + '.';
             else if (stop && stop.reason === 'coverage' && rejectedNow) text += ' Old ch' + stop.at + ' text restored; rejected draft kept aside in session export (batchRun.rejectedDraft).';
             text += ' Completed: ' + (br.completed.length ? br.completed.join(', ') : 'none') + '.' + skippedNote;
             if (br.usageEstimated.length) text += ' Usage estimated (no provider usage) for: ' + br.usageEstimated.join(', ') + '.';
@@ -10511,7 +10616,7 @@ return c && c.name && c.backstory && c.arc; });
 		    requestLog.originTab = 'tab6';
 		    clearReturnedInfo();
 		    updateRequestLog();
-		    await callAI(messages, document.getElementById('tab6')).then(response => {
+		    await callAI(messages, document.getElementById('tab6'), opts.callLabel ? { callLabel: opts.callLabel } : {}).then(response => {
 		        console.log(`Updated Chapter ${chapterNum} response:`, response);
 		        const contentElement = document.getElementById(`chapterEditContent${chapterNum}`);
 		        if (contentElement) {
