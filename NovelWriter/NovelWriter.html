@@ -266,6 +266,8 @@ Synced: 2026-04-19
                         <pre id="c3SmokeResult" style="margin:4px 0 4px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#fff7f0;border:1px solid #edc;white-space:pre-wrap;"></pre>
                         <pre id="qualityGateResult" style="margin:4px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f5f5ff;border:1px solid #ccd;white-space:pre-wrap;">Quality gate: (none yet)</pre>
 			<pre id="qualityJudgeAlignResult" style="white-space:pre-wrap;font-size:12px;"></pre>
+			<button type="button" id="trackedE2EBtn" onclick="runTrackedE2E()" title="Lean start-to-finish tracked E2E with LIVE calls (uses the key above). Offline/no-key: node scripts/run-tracked-e2e.mjs">Tracked E2E (lean, live)</button>
+			<pre id="trackedE2EResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f0f4ff;border:1px solid #b8c7e8;border-radius:4px;white-space:pre-wrap;max-height:360px;overflow:auto;">Tracked E2E idle - click for a lean 2-chapter token + quality run (live API calls).</pre>
 			        <label for="genre">Genre:</label>
 			        <select id="genre" onchange="enableAuthorFetch()">
 			            <option value="scifi">Science Fiction</option>
@@ -3973,6 +3975,322 @@ Synced: 2026-04-19
 
 
 		window.runQe123Smoke = runQe123Smoke;
+
+		// ---- #117 split PR3 / #120 C3: in-page lean Tracked E2E (2 chapters / 500 words / 3 chars / 2 subplots) ----
+		// Dev tool: makes real LLM calls with the key in #apiKey. The offline, no-key path is scripts/run-tracked-e2e.mjs
+		// (fixture responder); see scripts/README.md. Token rollup helpers (getSessionUsage/ensureBookTokenUsage) arrive
+		// with split PR1; until then the report records usage as unavailable instead of throwing.
+		function _trackedLog(lines, msg) {
+			lines.push(msg);
+			const el = document.getElementById('trackedE2EResult');
+			if (el) el.textContent = lines.join('\n');
+		}
+
+		function _trackedUsage() {
+			if (typeof getSessionUsage === 'function') {
+				const u = getSessionUsage() || {};
+				return Object.assign({ available: true }, u, { calls: (u.calls || []).slice() });
+			}
+			return { available: false, source: 'none (token rollup arrives with PR1)', prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, calls: [] };
+		}
+
+		function _trackedQuality() {
+			if (typeof getSessionQuality === 'function') return getSessionQuality();
+			return { source: 'novelData.qualitySamples', samples: (novelData.qualitySamples || []).slice() };
+		}
+
+		function _trackedFinalize(report) {
+			// Copilot #117 high (HTML ~7219): read usage from the session ledger, never from report.* methods.
+			report.finishedAt = report.finishedAt || new Date().toISOString();
+			report.sessionUsage = _trackedUsage();
+			report.bookTokenUsage = report.sessionUsage;
+			report.sessionQuality = _trackedQuality();
+			report.qualitySamples = (novelData.qualitySamples || []).slice();
+			const u = report.sessionUsage;
+			report.summary = {
+				callCount: u.calls.length,
+				usageAvailable: !!u.available,
+				totals: {
+					prompt_tokens: u.prompt_tokens || 0,
+					completion_tokens: u.completion_tokens || 0,
+					total_tokens: u.total_tokens || 0
+				},
+				contextPackCharsSum: u.contextPackCharsSum == null ? null : u.contextPackCharsSum,
+				qualitySamples: (report.sessionQuality.samples || []).length,
+				failedSteps: report.steps.filter(s => s.status === 'fail').map(s => s.name),
+				skippedSteps: report.steps.filter(s => s.status === 'skip').map(s => s.name)
+			};
+			return report;
+		}
+
+		async function runTrackedE2E() {
+			// Engineering gate: resetState() wipes the current novel and this run makes live API calls; ask first.
+			if (!window.confirm('This resets the current novel and makes live API calls. Continue?')) {
+				const cancelEl = document.getElementById('trackedE2EResult');
+				if (cancelEl) cancelEl.textContent = 'Tracked E2E cancelled - novel unchanged, no API calls made.';
+				return null;
+			}
+			const lines = [];
+			const log = (m) => _trackedLog(lines, m);
+			const report = {
+				ok: false,
+				mode: 'in-page',
+				startedAt: new Date().toISOString(),
+				finishedAt: null,
+				config: {
+					genre: 'scifi',
+					title: 'Tracked E2E Lean ' + new Date().toISOString().slice(0, 16),
+					numChapters: 2,
+					chapterLength: 500,
+					numCharacters: 3,
+					minSubplots: 2,
+					// Deliberately below the product default (6000, used by scripts/run-tracked-e2e.mjs): this button makes
+					// live paid calls, and 2000 covers a 500-word chapter. The PR3 split plan does not fix a value.
+					maxTokens: 2000
+				},
+				steps: [],
+				sessionUsage: null,
+				sessionQuality: null,
+				errors: []
+			};
+			const step = async (name, fn) => {
+				const row = { name, ok: false, status: 'fail', error: null, startedAt: new Date().toISOString(), finishedAt: null };
+				log('STEP start: ' + name);
+				try {
+					const result = await fn();
+					row.result = result === undefined ? null : result;
+					if (result && result.skipped) {
+						// A skip is neither a pass nor a failure: ok stays null so it never reads as ok:true.
+						row.ok = null;
+						row.status = 'skip';
+						log('STEP skip: ' + name + (result.reason ? ' - ' + result.reason : ''));
+					} else {
+						row.ok = true;
+						row.status = 'pass';
+						log('STEP pass: ' + name);
+					}
+				} catch (err) {
+					row.ok = false;
+					row.status = 'fail';
+					row.error = (err && err.message) ? err.message : String(err);
+					report.errors.push({ step: name, error: row.error });
+					log('STEP FAIL: ' + name + ' - ' + row.error);
+				}
+				row.finishedAt = new Date().toISOString();
+				report.steps.push(row);
+				return row;
+			};
+			const publish = () => {
+				const el = document.getElementById('trackedE2EResult');
+				if (el) el.textContent = lines.join('\n') + '\n\n--- REPORT JSON ---\n' + JSON.stringify(report, null, 2);
+				try { window.__lastTrackedE2EReport = report; } catch (e) {}
+				return report;
+			};
+
+			log('Tracked E2E (lean) starting...');
+
+			// Keep the API key across resetState (resetState prompts only when the key is empty).
+			const savedKey = (document.getElementById('apiKey') || {}).value || '';
+			if (!savedKey.trim()) {
+				log('FATAL: #apiKey empty - paste a key before running (offline runs: node scripts/run-tracked-e2e.mjs)');
+				report.errors.push({ step: 'init', error: 'apiKey missing' });
+				_trackedFinalize(report);
+				return publish();
+			}
+			// Clear usage/quality only once the run will actually start (not before the key check).
+			if (typeof resetBookTokenUsage === 'function') resetBookTokenUsage();
+			novelData.qualitySamples = [];
+
+			try {
+				if (typeof resetState === 'function') {
+					document.getElementById('apiKey').value = savedKey;
+					try {
+						resetState();
+					} catch (e) {
+						log('resetState warning: ' + (e.message || e));
+					}
+				}
+				document.getElementById('apiKey').value = savedKey;
+				document.getElementById('genre').value = report.config.genre;
+				document.getElementById('title').value = report.config.title;
+				document.getElementById('numChapters').value = String(report.config.numChapters);
+				document.getElementById('chapterLength').value = String(report.config.chapterLength);
+				document.getElementById('numCharacters').value = String(report.config.numCharacters);
+				document.getElementById('minSubplots').value = String(report.config.minSubplots);
+				document.getElementById('maxTokens').value = String(report.config.maxTokens);
+				if (typeof updateChapterSubpages === 'function') updateChapterSubpages();
+				if (typeof syncCharacterEntries === 'function') syncCharacterEntries();
+				if (typeof syncSubplotEntries === 'function') syncSubplotEntries();
+				if (typeof collectData === 'function') collectData();
+				const cfg = report.config;
+				log('Config: ' + cfg.numChapters + ' ch / ' + cfg.chapterLength + ' words / ' + cfg.numCharacters + ' chars / ' + cfg.minSubplots + ' subplots / maxTokens=' + cfg.maxTokens + ' / genre=' + cfg.genre);
+
+				const modelSel = document.getElementById('model');
+				if (modelSel) {
+					if (!modelSel.value && modelSel.options && modelSel.options.length) modelSel.value = modelSel.options[0].value;
+					report.config.model = modelSel.value;
+					log('Model: ' + modelSel.value);
+				}
+
+				await step('c1Smoke', async () => {
+					if (typeof runC1Smoke !== 'function') return { skipped: true, reason: 'runC1Smoke absent (PR1)' };
+					const c1 = await runC1Smoke();
+					if (c1 === false || c1 == null || (typeof c1 === 'object' && c1.passed === false)) {
+						throw new Error('runC1Smoke returned ' + (c1 && typeof c1 === 'object' ? JSON.stringify(c1).slice(0, 200) : String(c1)));
+					}
+					return { passed: true };
+				});
+
+				await step('fetchAuthors', async () => {
+					if (typeof fetchAuthors !== 'function') throw new Error('fetchAuthors missing');
+					await fetchAuthors();
+					const sel = document.getElementById('authorStyle');
+					const options = Array.from(sel.options || []).filter(o => o.value && o.value !== '');
+					if (options.length) {
+						sel.value = options[0].value;
+						if (typeof updateStyleGuide === 'function') updateStyleGuide();
+					}
+					return { author: sel.value || null, optionCount: options.length };
+				});
+
+				await step('fetchStyleGuide', async () => {
+					const author = (document.getElementById('authorStyle') || {}).value || '';
+					if (!author) return { skipped: true, reason: 'no author' };
+					if (typeof fetchStyleGuide !== 'function') throw new Error('fetchStyleGuide missing');
+					await fetchStyleGuide();
+					return { author, styleGuideLen: ((document.getElementById('styleGuide') || {}).value || '').length };
+				});
+
+				await step('suggestStoryInfo', async () => {
+					document.getElementById('title').value = report.config.title;
+					await suggestStoryInfo();
+					return { title: document.getElementById('title').value };
+				});
+
+				await step('suggestCharacters', async () => {
+					await suggestCharacters();
+					return { count: (novelData.characters || []).length };
+				});
+
+				await step('suggestSubplots', async () => {
+					await suggestSubplots();
+					return { count: (novelData.subplots || []).length };
+				});
+
+				await step('generateNovelOutlines', async () => {
+					await generateNovelOutlines();
+					return {
+						novelOutlineLen: (novelData.novelOutline || '').length,
+						plotOutlineLen: (novelData.plotOutline || '').length
+					};
+				});
+
+				await step('generateChapterOutline1', async () => {
+					await generateChapterOutline(1);
+					return { len: (novelData.chapterOutlines[0] || '').length };
+				});
+
+				await step('generateChapterOutline2', async () => {
+					await generateChapterOutline(2);
+					return { len: (novelData.chapterOutlines[1] || '').length };
+				});
+
+				await step('generateChapter1+quality', async () => {
+					const priorAlign = novelData.lastJudgeGateAlignment || null;
+					await generateChapter(1);
+					const text = novelData.chapters[0] || '';
+					// A failed generation (e.g. HTTP 500) leaves the chapter empty; that is a FAIL, never ok with textLen 0.
+					if (!text.trim()) throw new Error('generateChapter(1) produced empty text (textLen ' + text.length + ')');
+					const heur = scoreProseQuality(text);
+					pushQualitySample('chapter1-heuristics', heur, text.length);
+					// generateChapter(1) already runs the advisory judge (sample chapter1-generate-llmJudge); reuse it instead of a second call.
+					const align = novelData.lastJudgeGateAlignment || null;
+					let judged = (align && align !== priorAlign && align.judgeScores) ? align.judgeScores : null;
+					if (!judged) {
+						judged = await judgeProseQualityLLM(text, document.getElementById('tab5') || document.getElementById('tab1'));
+						pushQualitySample('chapter1-llmJudge', judged, text.length);
+					}
+					return { textLen: text.length, heuristics: heur, judged: { interest: judged.interest, readability: judged.readability, aiSlopRisk: judged.aiSlopRisk, humanLikeness: judged.humanLikeness, source: judged.source } };
+				});
+
+				await step('generateChapter2+quality', async () => {
+					await generateChapter(2);
+					const text = novelData.chapters[1] || '';
+					if (!text.trim()) throw new Error('generateChapter(2) produced empty text (textLen ' + text.length + ')');
+					const heur = scoreProseQuality(text);
+					pushQualitySample('chapter2-heuristics', heur, text.length);
+					return { textLen: text.length, heuristics: heur };
+				});
+
+				await step('updateChapter1', async () => {
+					if (typeof showTab === 'function') showTab(6);
+					const editEl = document.getElementById('chapterEditContent1');
+					if (!editEl) throw new Error('chapterEditContent1 missing - ensure chapter subpages exist');
+					if (!editEl.value && novelData.chapters[0]) editEl.value = novelData.chapters[0];
+					const note = 'Tighten opening; add one concrete sensory detail; keep under target length.';
+					// Same path as the Tab 6 "Update Chapter" button (#129): stage notes, then apply them once.
+					if (typeof applyStagedChapterImprovements === 'function' && typeof stageChapterImprovement === 'function') {
+						stageChapterImprovement(1, note, { mode: 'replace', source: 'tracked-e2e' });
+						await applyStagedChapterImprovements(1);
+					} else {
+						const improvEl = document.getElementById('chapterEditImprovement1');
+						if (improvEl) improvEl.value = note;
+						await updateChapter(1);
+					}
+					const text = novelData.chapters[0] || '';
+					const heur = scoreProseQuality(text);
+					pushQualitySample('chapter1-afterUpdate', heur, text.length);
+					return { textLen: text.length, heuristics: heur };
+				});
+
+				await step('suggestBookImprovements', async () => {
+					if (typeof showTab === 'function') showTab(7);
+					const beforeCalls = _trackedUsage().calls.length;
+					const packProbe = typeof buildPromptContextPack === 'function'
+						? buildPromptContextPack({ includePacket: false })
+						: null;
+					const packChars = packProbe ? ((packProbe._approxChars) || JSON.stringify(packProbe).length) : null;
+					await suggestBookImprovements();
+					const after = _trackedUsage();
+					const lastCall = after.calls[after.calls.length - 1] || null;
+					return {
+						packChars,
+						improvementCount: (novelData.bookImprovements || []).length,
+						lastCallTokens: lastCall ? lastCall.total_tokens : null,
+						callsAdded: after.available ? after.calls.length - beforeCalls : null
+					};
+				});
+
+				report.ok = report.steps.every(s => s.status !== 'fail');
+				report.finishedAt = new Date().toISOString();
+				_trackedFinalize(report);
+				log('==== FINAL ' + (report.ok ? 'PASS' : 'PARTIAL/FAIL') + ' ====');
+				log('Calls: ' + (report.summary.usageAvailable ? report.summary.callCount : 'n/a (no token rollup)') +
+					' | tokens prompt/comp/total: ' +
+					report.summary.totals.prompt_tokens + '/' +
+					report.summary.totals.completion_tokens + '/' +
+					report.summary.totals.total_tokens);
+				(report.sessionQuality.samples || []).forEach(s => {
+					log('Quality[' + s.label + ']: interest=' + s.interest +
+						' readability=' + s.readability +
+						' aiSlopRisk=' + s.aiSlopRisk +
+						' humanLikeness=' + s.humanLikeness +
+						' (' + s.source + ')');
+				});
+				if (report.summary.failedSteps.length) {
+					log('Failed steps: ' + report.summary.failedSteps.join(', '));
+				}
+			} catch (fatal) {
+				report.ok = false;
+				report.errors.push({ step: 'fatal', error: fatal && fatal.message ? fatal.message : String(fatal) });
+				report.finishedAt = new Date().toISOString();
+				_trackedFinalize(report);
+				log('FATAL: ' + (fatal && fatal.message ? fatal.message : fatal));
+			}
+			return publish();
+		}
+
+		window.runTrackedE2E = runTrackedE2E;
 
 		function getTrimmedContext(text, maxChars = 1200) {
 			if (!text || typeof text !== 'string') return '';

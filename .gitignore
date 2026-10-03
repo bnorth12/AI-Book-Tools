@@ -42,3 +42,6 @@ secrets/*
 
 # Local smoke / E2E output (NovelWriter dev scripts)
 out/
+
+# Python bytecode (scripts/build_unified_report.py)
+__pycache__/
