@@ -452,6 +452,7 @@ Synced: 2026-04-19
 	    <!-- NW.T5.5: Tab 5 SHALL provide a Strict Continuity Mode toggle that enforces stronger chapter-to-chapter consistency constraints in generation prompts. -->
 	    <!-- NW.T5.6: Tab 5 SHALL provide continuity packet and audit controls (rebuild packets and run continuity audit) plus a read-only continuity status panel. -->
 	    <!-- NW.T5.7: Continuity packet, tracker, and findings data SHALL persist in session state and round-trip through import/export as optional schema-compatible fields. -->
+	    <!-- NW.T5.8: Tab 5 SHALL provide an optional "Generate All Chapters" batch (range, regenerate-existing and per-chapter-download toggles off by default, token cap, Pause/Resume, status line) that drafts prose only for chapters with outlines (NW_GENERATE_ALL_SPEC). -->
 	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	    <div id="tab5" class="tab">
 	        <h2>Generate Chapters</h2>
@@ -461,6 +462,24 @@ Synced: 2026-04-19
 	        <button onclick="runContinuityAuditAll()">Run Continuity Audit (All Chapters)</button>
 	        <label for="continuityStatusPanel">Continuity Tracker:</label>
 	        <textarea id="continuityStatusPanel" readonly placeholder="Continuity packets, arc tracking, and audit findings will appear here."></textarea>
+	        <fieldset id="batchRunFieldset" data-testid="nw-batch-fieldset">
+	            <legend>Generate All Chapters</legend>
+	            <button id="batchGenerateAllBtn" data-testid="nw-batch-generate-all" onclick="generateAllChapters()">Generate All Chapters</button>
+	            <label for="batchFrom">From</label> <input type="number" id="batchFrom" min="1" value="1" style="width: 5em;">
+	            <label for="batchTo">To</label> <input type="number" id="batchTo" min="1" style="width: 5em;">
+	            <label><input type="checkbox" id="batchRegenerate"> Regenerate existing chapters</label>
+	            <label><input type="checkbox" id="batchPerChapterDownload"> Download each chapter as it completes</label>
+	            <label for="batchTokenCap">Token cap</label> <input type="number" id="batchTokenCap" min="1" style="width: 9em;" title="Prefilled with the estimate x 1.25; checked against real recorded usage after every chapter.">
+	            <button id="batchPauseBtn" data-testid="nw-batch-pause" onclick="pauseBatchRun()" disabled>Pause</button>
+	            <button id="batchResumeBtn" data-testid="nw-batch-resume" onclick="resumeBatchRun()" disabled>Resume</button>
+	            <div id="batchRestoreBox" data-testid="nw-batch-restore-box" hidden>
+	                <button id="batchRestoreBtn" data-testid="nw-batch-restore" onclick="restoreInterruptedBatchRun()">Restore interrupted batch run</button>
+	                <button id="batchDiscardBtn" onclick="discardInterruptedBatchRun()">Discard</button>
+	            </div>
+	            <div id="batchRunStatus" role="status" aria-live="polite" data-testid="nw-batch-status"></div>
+	            <button id="batchGoTab4" data-testid="nw-batch-go-tab4" onclick="showTab(4)" hidden>Go to Tab 4</button>
+	            <button id="batchExportNow" data-testid="nw-batch-export-now" onclick="exportSession()" hidden>Export session now</button>
+	        </fieldset>
 	        <div id="chapterGenNav" class="chapter-nav"></div>
 	        <div id="chapterGenContainer"></div>
 	        <button onclick="showTab(4)">Back</button>
@@ -2316,6 +2335,7 @@ let activeAICallCount = 0;
 	        }
 	        if (tabNum === 5) {
 	            renderContinuityStatusPanel();
+	            if (typeof nwBatchRefreshEstimate === 'function') { try { nwBatchRefreshEstimate(); } catch (e) { console.warn('batch estimate', e); } }
 	            try {
 	                if (typeof scoreAdvanceToTab5Readiness === 'function') {
 	                    const ready = scoreAdvanceToTab5Readiness(novelData);
@@ -4177,6 +4197,8 @@ const messages = [
 		    showGenChapterSubpage(1);
 		    showEditChapterSubpage(1);
 			renderContinuityStatusPanel();
+			// Generate All single writer: rebuilt per-chapter controls inherit the batch lock.
+			if (typeof nwBatchApplyLock === 'function') nwBatchApplyLock();
 		}
 
         // Show a specific chapter subpage in Outlines tab
@@ -4827,7 +4849,8 @@ const messages = [
 					(r.failures.length > 12 ? (' …+' + (r.failures.length - 12)) : '') +
 					'. Complete enrich loop (Pass1 cast↔subplot, Pass2–3 outline invent+refine) before Generate.';
 				console.error(msg);
-				if (typeof alert === 'function') alert(msg);
+				// Rev 2: no modal during a batch (Generate All preflight); single-chapter / Tab flow still alerts.
+				if (typeof nwNotify === 'function') nwNotify(msg); else if (typeof alert === 'function') alert(msg);
 				throw new Error(msg);
 			}
 			return r;
@@ -5065,7 +5088,7 @@ const messages = [
 					'). Short+low-coverage is a coverage fail, not token success. Missing: ' +
 					(cov.misses || []).join(', ');
 				console.error(msg);
-				if (typeof alert === 'function') alert(msg);
+				if (typeof nwNotify === 'function') nwNotify(msg); else if (typeof alert === 'function') alert(msg);
 				throw new Error(msg);
 			}
 			return cov;
@@ -6854,6 +6877,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		async function applyBookCritiqueItem(index, opts) {
 			opts = opts || {};
+			if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) throw new Error('applyBookCritiqueItem locked: Generate All Chapters run is active or awaiting restore.');
 			collectData();
 			ensureChapterImprovementsArray();
 			if (!Array.isArray(novelData.bookImprovementsWithStatus) || !novelData.bookImprovementsWithStatus[index]) {
@@ -6900,6 +6924,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		async function applyTopBookCritiques(maxItems, opts) {
 			opts = opts || {};
+			if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) throw new Error('applyTopBookCritiques locked: Generate All Chapters run is active or awaiting restore.');
 			const max = maxItems != null ? maxItems : 1;
 			collectData();
 			const list = novelData.bookImprovementsWithStatus || [];
@@ -8291,6 +8316,10 @@ return c && c.name && c.backstory && c.arc; });
 		    // NW.T8.F4: integrateBreakdownSuggestions() SHALL skip chapters that have no breakdown instructions targeting them.
 		    // NW.T8.F5: integrateBreakdownSuggestions() SHALL update novelData.chapters, sync Tab 5 and Tab 6 textareas, update the Book tab, and refresh Tab 7 status dropdowns after all integrations complete.
 		    async function integrateBreakdownSuggestions() {
+		        if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
+		            console.warn('integrateBreakdownSuggestions locked: Generate All Chapters run is active or awaiting restore.');
+		            return false;
+		        }
 		        collectData();
 		    // Agent Skill I/O pack (tab8.integrateBreakdown)
 		    window.__lastSkillPack = packSkillInputs('tab8.integrateBreakdown', { novelData: novelData });
@@ -8712,8 +8741,102 @@ return c && c.name && c.backstory && c.arc; });
 		    };
 		}
 
+		// Push the current novelData into every tab's controls (shared by importSession and the Generate All restore).
+		function applySessionDataToUI() {
+		    document.getElementById('apiKey').value = novelData.apiKey || '';
+		    document.getElementById('model').value = novelData.model || 'grok-4.7';
+		    ensureModelSelected();
+		    document.getElementById('maxTokens').value = novelData.maxTokens || 6000;
+		    document.getElementById('genre').value = novelData.genre || 'scifi';
+		    const authorSelect = document.getElementById('authorStyle');
+		    authorSelect.innerHTML = '';
+		    Object.values(defaultAuthors).forEach(author => {
+		        const option = document.createElement('option');
+		        option.value = author.name.toLowerCase().replace(/\s+/g, '');
+		        option.textContent = author.name;
+		        authorSelect.appendChild(option);
+		    });
+		    (novelData.authors || []).forEach(author => {
+		        if (!Object.values(defaultAuthors).some(d => d.name === author.name)) {
+		            const option = document.createElement('option');
+		            option.value = author.value;
+		            option.textContent = author.name;
+		            authorSelect.appendChild(option);
+		        }
+		    });
+		    const fetchOption = document.createElement('option');
+		    fetchOption.value = '';
+		    fetchOption.textContent = 'Fetch more authors';
+		    authorSelect.appendChild(fetchOption);
+		    authorSelect.value = novelData.authorStyle || '';
+		    document.getElementById('styleGuide').value = novelData.styleGuide || '';
+		    document.getElementById('title').value = novelData.title || '';
+		    document.getElementById('storyArc').value = novelData.storyArc || '';
+		    document.getElementById('generalPlot').value = novelData.generalPlot || '';
+		    document.getElementById('setting').value = novelData.setting || '';
+		    document.getElementById('numChapters').value = novelData.numChapters || 10;
+		    document.getElementById('chapterLength').value = novelData.chapterLength || 2000;
+			const strictModeEl = document.getElementById('continuityStrictMode');
+			const autoAuditEl = document.getElementById('autoContinuityAudit');
+			if (strictModeEl) strictModeEl.checked = !!novelData.continuityStrictMode;
+			if (autoAuditEl) autoAuditEl.checked = !!novelData.autoContinuityAudit;
+
+		    // CodeQL (DOM text reinterpreted as HTML): session/checkpoint data is never interpolated into innerHTML here.
+		    // renderCharacters()/renderSubplots() build fixed markup and set every user field through .value.
+		    const hasChars = Array.isArray(novelData.characters) && novelData.characters.length > 0;
+		    renderCharacters();
+		    if (!hasChars) {
+		        // keep the previous import behaviour for a session without characters: no cards, numCharacters 3
+		        document.getElementById('characterList').textContent = '';
+		        document.getElementById('numCharacters').value = 3;
+		        updateCharacterCounter();
+		    }
+
+		    const hasSubplots = Array.isArray(novelData.subplots) && novelData.subplots.length > 0;
+		    renderSubplots();
+		    if (!hasSubplots) {
+		        // keep the previous import behaviour for a session without subplots: no sections, minSubplots 1
+		        document.getElementById('subplotList').textContent = '';
+		        document.getElementById('minSubplots').value = 1;
+		        updateSubplotCounter();
+		    }
+
+		    document.getElementById('novelOutline').value = novelData.novelOutline || '';
+		    document.getElementById('plotOutline').value = novelData.plotOutline || '';
+		    document.getElementById('storyArcOutline').value = novelData.storyArcOutline || '';
+		    document.getElementById('outlineImprovements').value = novelData.outlineImprovements || '';
+		    updateChapterSubpages();
+
+		    // Handle improvements for older files and restore breakdowns
+		    if (novelData.bookImprovements && (!novelData.bookImprovementsWithStatus || novelData.bookImprovementsWithStatus.length === 0)) {
+		        novelData.bookImprovementsWithStatus = novelData.bookImprovements.map(text => ({
+		            text,
+		            status: 'To Incorporate',
+		            breakdown: null
+		        }));
+		    }
+		    updateBookImprovementsTable(novelData.bookImprovementsWithStatus.map(item => item.text).join('\n'));
+
+		    // Populate Tab 8 if breakdown data exists
+		    if (novelData.bookImprovementsWithStatus && novelData.bookImprovementsWithStatus.some(item => item.breakdown)) {
+		        populateConsolidatedBreakdowns();
+		    }
+
+		    updateRequestLog();
+		    updateBookTab();
+			renderContinuityStatusPanel();
+			renderBlueprintBeatStatus();
+			if (typeof nwBatchSyncCapFromRun === 'function') nwBatchSyncCapFromRun();
+		}
+
         // Import a session from a JSON file.
 	    function importSession(event) {
+		    // Generate All single writer: no import while a batch runs or an interrupted run awaits restore.
+		    if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
+		        console.warn('importSession locked: Generate All Chapters run is active or awaiting restore.');
+		        if (event && event.target) event.target.value = '';
+		        return;
+		    }
 		    const file = event.target.files[0];
 		    if (!file) return;
 
@@ -8725,99 +8848,7 @@ return c && c.name && c.backstory && c.arc; });
 		            novelData = importedNovelData;
 		            requestLog = importedRequestLog;
 
-		            document.getElementById('apiKey').value = novelData.apiKey || '';
-		            document.getElementById('model').value = novelData.model || 'grok-4.7';
-		            ensureModelSelected();
-		            document.getElementById('maxTokens').value = novelData.maxTokens || 6000;
-		            document.getElementById('genre').value = novelData.genre || 'scifi';
-		            const authorSelect = document.getElementById('authorStyle');
-		            authorSelect.innerHTML = '';
-		            Object.values(defaultAuthors).forEach(author => {
-		                const option = document.createElement('option');
-		                option.value = author.name.toLowerCase().replace(/\s+/g, '');
-		                option.textContent = author.name;
-		                authorSelect.appendChild(option);
-		            });
-		            (novelData.authors || []).forEach(author => {
-		                if (!Object.values(defaultAuthors).some(d => d.name === author.name)) {
-		                    const option = document.createElement('option');
-		                    option.value = author.value;
-		                    option.textContent = author.name;
-		                    authorSelect.appendChild(option);
-		                }
-		            });
-		            const fetchOption = document.createElement('option');
-		            fetchOption.value = '';
-		            fetchOption.textContent = 'Fetch more authors';
-		            authorSelect.appendChild(fetchOption);
-		            authorSelect.value = novelData.authorStyle || '';
-		            document.getElementById('styleGuide').value = novelData.styleGuide || '';
-		            document.getElementById('title').value = novelData.title || '';
-		            document.getElementById('storyArc').value = novelData.storyArc || '';
-		            document.getElementById('generalPlot').value = novelData.generalPlot || '';
-		            document.getElementById('setting').value = novelData.setting || '';
-		            document.getElementById('numChapters').value = novelData.numChapters || 10;
-		            document.getElementById('chapterLength').value = novelData.chapterLength || 2000;
-					const strictModeEl = document.getElementById('continuityStrictMode');
-					const autoAuditEl = document.getElementById('autoContinuityAudit');
-					if (strictModeEl) strictModeEl.checked = !!novelData.continuityStrictMode;
-					if (autoAuditEl) autoAuditEl.checked = !!novelData.autoContinuityAudit;
-
-		            const charList = document.getElementById('characterList');
-		            charList.innerHTML = '';
-		            (novelData.characters || []).forEach(char => {
-		                const div = document.createElement('div');
-		                div.className = 'character';
-		                div.innerHTML = `
-		                    <label>Name:</label><input type="text" class="charName" value="${char.name || ''}">
-		                    <label>Backstory:</label><textarea class="charBackstory">${char.backstory || ''}</textarea>
-		                    <label>Arc:</label><textarea class="charArc">${char.arc || ''}</textarea>
-		                `;
-		                charList.appendChild(div);
-		            });
-		            // Set numCharacters to match imported character count
-		            document.getElementById('numCharacters').value = (novelData.characters || []).length || 3;
-					updateCharacterCounter();
-
-		            const subplotList = document.getElementById('subplotList');
-		            subplotList.innerHTML = '';
-		            (novelData.subplots || []).forEach((subplot, index) => {
-		                const subplotDiv = document.createElement('div');
-		                subplotDiv.className = 'subplot-section';
-		                subplotDiv.innerHTML = `
-		                    <label>Subplot ${index + 1}:</label>
-		                    <textarea class="subplot" style="height: 300px;">${subplot}</textarea>
-		                `;
-		                subplotList.appendChild(subplotDiv);
-		            });
-					document.getElementById('minSubplots').value = (novelData.subplots || []).length || 1;
-					updateSubplotCounter();
-
-		            document.getElementById('novelOutline').value = novelData.novelOutline || '';
-		            document.getElementById('plotOutline').value = novelData.plotOutline || '';
-		            document.getElementById('storyArcOutline').value = novelData.storyArcOutline || '';
-		            document.getElementById('outlineImprovements').value = novelData.outlineImprovements || '';
-		            updateChapterSubpages();
-
-		            // Handle improvements for older files and restore breakdowns
-		            if (novelData.bookImprovements && (!novelData.bookImprovementsWithStatus || novelData.bookImprovementsWithStatus.length === 0)) {
-		                novelData.bookImprovementsWithStatus = novelData.bookImprovements.map(text => ({
-		                    text,
-		                    status: 'To Incorporate',
-		                    breakdown: null
-		                }));
-		            }
-		            updateBookImprovementsTable(novelData.bookImprovementsWithStatus.map(item => item.text).join('\n'));
-
-		            // Populate Tab 8 if breakdown data exists
-		            if (novelData.bookImprovementsWithStatus && novelData.bookImprovementsWithStatus.some(item => item.breakdown)) {
-		                populateConsolidatedBreakdowns();
-		            }
-
-		            updateRequestLog();
-		            updateBookTab();
-					renderContinuityStatusPanel();
-					renderBlueprintBeatStatus();
+		            applySessionDataToUI();
 
 		            if (warnings.length > 0) {
 		                console.warn('Import completed with warnings:', warnings);
@@ -9517,7 +9548,13 @@ return c && c.name && c.backstory && c.arc; });
 		// NW.T5.F5: generateChapter() SHALL include continuity packet context and strict-continuity constraints when Strict Continuity Mode is enabled.
 		// NW.T5.F6: runContinuityAuditAll() SHALL run continuity audits across all generated chapters and refresh the continuity status panel.
 		// Generate a chapter
-		async function generateChapter(chapterNum) {
+		async function generateChapter(chapterNum, opts) {
+		    opts = opts || {};
+		    // NW_GENERATE_ALL_SPEC single writer: per-chapter Generate is locked while a batch runs (batch calls pass { batch: true }).
+		    if (typeof nwBatchState !== 'undefined' && nwBatchState && nwBatchState.running && !opts.batch) {
+		        console.warn('Generate All Chapters is running; per-chapter Generate is locked until it stops.');
+		        return;
+		    }
 		    console.log(`Starting generateChapter for Chapter ${chapterNum}`);
 		    console.log('Pre-collectData - novelData.chapters:', novelData.chapters);
 		    collectData();
@@ -9536,7 +9573,8 @@ return c && c.name && c.backstory && c.arc; });
 				window.__lastGenerateChapterGate = gate;
 				if (!gate.passed) {
 					console.error(gate.message);
-					alert(gate.message);
+					// Rev 2: alert outside a batch only; in a batch the stop reason goes to batchRun + the status line.
+					if (typeof nwNotify === 'function') nwNotify(gate.message); else alert(gate.message);
 					throw new Error(gate.message);
 				}
 			})(chapterNum);
@@ -9583,6 +9621,9 @@ return c && c.name && c.backstory && c.arc; });
 		    try {
 		        const part1Response = await callAI(messagesPart1, document.getElementById('tab5'), { max_tokens: maxTokens });
 		        console.log('Part 1 Response:', part1Response);
+		        // Generate All (must-fix 1): callAI returns malformed model JSON as { chapter, _jsonParseError } with a valid
+		        // HTTP envelope in requestLog.returnedInfo. In a batch that is a parse failure: stop before Part 2.
+		        if (opts.batch && part1Response && part1Response._jsonParseError) throw new Error('model JSON parse error (_jsonParseError): ' + part1Response._jsonParseError);
 		        const chapterPt1 = part1Response.chapter || '';
 		        console.log('Part 1 chapterPt1 Length:', chapterPt1.length, 'Content:', chapterPt1.substring(0, 200) + '...');
 		        chapterContent = chapterPt1;
@@ -9597,6 +9638,9 @@ return c && c.name && c.backstory && c.arc; });
 		        console.log('Part 1 Parsed Tokens:', part1Tokens);
 		    } catch (error) {
 		        console.error('Part 1 generation failed:', error);
+		        // Record the failure so Generate All can tell provider errors (one retry) from parse failures (stop).
+		        window.__nwLastPartFailure = { chapter: chapterNum, part: 1, message: String((error && error.message) || error).slice(0, 300), kind: (typeof nwClassifyError === 'function') ? nwClassifyError(error) : 'parse' };
+		        if (typeof nwNotify === 'function') nwNotify('Chapter ' + chapterNum + ' Part 1 failed: ' + window.__nwLastPartFailure.message, { level: 'warn' });
 		        requestLog.status = 'Failed - Part 1';
 		        updateRequestLog();
 		        return;
@@ -9624,6 +9668,7 @@ return c && c.name && c.backstory && c.arc; });
 		    try {
 		        const part2Response = await callAI(messagesPart2, document.getElementById('tab5'), { max_tokens: maxTokens });
 		        console.log('Part 2 Response:', part2Response);
+		        if (opts.batch && part2Response && part2Response._jsonParseError) throw new Error('model JSON parse error (_jsonParseError): ' + part2Response._jsonParseError);
 		        const chapterPt2 = part2Response.chapter || '';
 		        console.log('Part 2 chapterPt2 Length:', chapterPt2.length, 'Content:', chapterPt2.substring(0, 200) + '...');
 		        console.log('Before Concatenation, chapterContent Length:', chapterContent.length, 'Content:', chapterContent.substring(0, 200) + '...');
@@ -9639,6 +9684,9 @@ return c && c.name && c.backstory && c.arc; });
 		        console.log('Part 2 Parsed Tokens:', part2Tokens);
 		    } catch (error) {
 		        console.error('Part 2 generation failed:', error);
+		        // Record the failure so Generate All can tell provider errors (one retry) from parse failures (stop).
+		        window.__nwLastPartFailure = { chapter: chapterNum, part: 2, message: String((error && error.message) || error).slice(0, 300), kind: (typeof nwClassifyError === 'function') ? nwClassifyError(error) : 'parse' };
+		        if (typeof nwNotify === 'function') nwNotify('Chapter ' + chapterNum + ' Part 2 failed: ' + window.__nwLastPartFailure.message, { level: 'warn' });
 		        requestLog.status = 'Failed - Part 2';
 		        updateRequestLog();
 		        return;
@@ -9670,7 +9718,11 @@ return c && c.name && c.backstory && c.arc; });
 		    console.log('Post-final updateRequestLog - chapterContent Length:', chapterContent.length);
 		    try {
 		        await ensureQualityAfterGenerate(chapterNum);
-		    } catch (qgErr) { console.warn('qualityGate/revise after generateChapter', qgErr); }
+		    } catch (qgErr) {
+		        console.warn('qualityGate/revise after generateChapter', qgErr);
+		        // In a batch this goes to the status line and does not stop the run.
+		        if (opts.batch && typeof nwNotify === 'function') nwNotify('Chapter ' + chapterNum + ' quality gate/revise error (run continues): ' + String((qgErr && qgErr.message) || qgErr), { level: 'warn' });
+		    }
 		    // Line-control: obligation coverage fail-closed (short+low-coverage ≠ token success)
 		    try {
 		        if (typeof assertObligationCoverageOrThrow === 'function') {
@@ -9690,12 +9742,713 @@ return c && c.name && c.backstory && c.arc; });
 
 
 
+        // === NW_BATCH_BEGIN ===
+        // NW_GENERATE_ALL_SPEC (slot 8): optional "Generate All Chapters" batch on Tab 5. Drafts prose for chapters that
+        // already have outlines; it never generates outlines. Per-chapter Generate buttons stay.
+        // NW.T5.8: Generate All SHALL run assertAdvanceToTab5ReadinessOrThrow (all chapters) plus the 80-word chapter outline
+        //          floor for every planned chapter before any API call, and SHALL NOT start when either fails.
+        // NW.T5.9: Each batch chapter SHALL go through generateChapter(n, { batch: true }) and therefore the same per-chapter
+        //          gate as single-chapter Generate (scoreGenerateChapterGate, chapters n and n+1). A gate, coverage, provider
+        //          (after one retry for HTTP 429/5xx/network only) or Part 1/2 parse failure (reason 'parse', no retry) stops
+        //          the batch cleanly and records batchRun.stoppedAt / reason / detail. No alert/confirm/prompt during a batch
+        //          (nwNotify). Resume after a parse (or provider) stop regenerates the stopped chapter; only a coverage stop
+        //          is skipped on Resume. A coverage stop with "Regenerate existing" on restores the old text and keeps the
+        //          rejected draft in novelData.batchRun.rejectedDraft {chapter, text, detail} (latest only; it goes into the
+        //          session export but is stripped from the IndexedDB checkpoint). The session auto-export runs only when the
+        //          run stops (or a checkpoint write fails), not after a clean finish.
+        // Must-fix (#134): failures are classified by type (nwClassifyError): 'retryable' (HTTP 429/5xx, network; one retry),
+        //          'provider' (other HTTP status incl. 400/401/403, "API Key is missing"; no retry, no estimated usage) and
+        //          'parse' (unparseable response, incl. callAI's _jsonParseError marker; no retry). Before each chapter, used >= cap
+        //          stops with "Token cap reached (used/cap). Raise the cap to continue." and no provider call. Resume keeps the
+        //          saved br.cap (restored or imported) unless the cap input is edited afterwards. running stays true until the
+        //          final checkpoint + status are done (released only in nwBatchStart's finally, by the run that set it). A failed
+        //          final checkpoint after a clean finish is a 'checkpoint' stop. Start/Resume is refused while a manual AI call
+        //          is in flight (activeAICallCount > 0).
+        // NW.T5.10: The batch SHALL write an IndexedDB checkpoint (db novelwriter, store checkpoints) when a chapter goes in
+        //          flight and after it finishes; any write failure stops the run before the next chapter is generated.
+        // NW.T5.11: While a batch runs (or an interrupted one awaits restore) per-chapter Generate, Tab 6 editors, Update
+        //          Chapter / Spelling, importSession and resetState are locked. After a reload, an active checkpoint offers
+        //          "Restore interrupted batch run"; the in-flight chapter is not done and Resume continues from it.
+        // NW.T5.12: The token cap SHALL be checked against the real novelData.tokenUsage delta after every chapter; the
+        //          estimate is used only when that delta is 0 (chapter listed in batchRun.usageEstimated).
+        // novelData.batchRun is NovelWriter-only (schema/ allows additional properties; no schema edit).
+        var NW_BATCH = { retryDelayMs: 2000, idbName: 'novelwriter', idbStore: 'checkpoints', minOutlineWords: 80, capFactor: 1.25 };
+        var nwBatchState = { running: false, owner: null, chapterInFlight: null, quiet: false, pauseRequested: false, interrupted: null, windows: [], coverageAck: null, log: [], lastStatus: '', lastPromise: null };
+        window.NW_BATCH = NW_BATCH;
+        window.nwBatchState = nwBatchState;
+
+        function nwBatchEl(id) { return document.getElementById(id); }
+
+        function nwBatchErrText(e) { return String((e && e.message) || e || 'unknown error'); }
+
+        function nwBatchShort(s, max) {
+            s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+            max = max || 300;
+            return s.length > max ? s.slice(0, max - 3) + '...' : s;
+        }
+
+        function nwBatchSetStatus(text, state) {
+            nwBatchState.lastStatus = String(text || '');
+            var el = nwBatchEl('batchRunStatus');
+            if (el) {
+                el.textContent = nwBatchState.lastStatus;
+                el.dataset.state = state || '';
+            }
+        }
+
+        /**
+         * Rev 2: single notification path. Outside a batch it behaves like the old code (error -> alert; warn/info -> console only).
+         * While a batch is active (nwBatchState.quiet) it never opens a modal: the message goes to the batch log and status line.
+         */
+        function nwNotify(msg, opts) {
+            opts = opts || {};
+            var level = opts.level || 'error';
+            msg = String(msg == null ? '' : msg);
+            var quiet = typeof nwBatchState !== 'undefined' && nwBatchState && nwBatchState.quiet;
+            if (quiet) {
+                nwBatchState.log.push({ level: level, msg: nwBatchShort(msg, 600), ts: new Date().toISOString() });
+                if (level === 'error') console.error('[batch] ' + msg); else console.warn('[batch] ' + msg);
+                if (level === 'warn') {
+                    var el = nwBatchEl('batchRunStatus');
+                    if (el) el.textContent = nwBatchState.lastStatus + ' Note: ' + nwBatchShort(msg, 200);
+                }
+                return;
+            }
+            if (level === 'error') {
+                if (typeof alert === 'function') alert(msg);
+            } else {
+                console.warn(msg);
+            }
+        }
+
+        /** Provider errors that get the single batch retry: HTTP 429 / 5xx and network failures. */
+        function nwIsProviderError(e) {
+            var m = nwBatchErrText(e);
+            if (/HTTP error! Status: (429|5\d\d)\b/.test(m)) return true;
+            if (/Failed to fetch|NetworkError|network error|ERR_NETWORK|ERR_CONNECTION|ECONNRESET|ETIMEDOUT|Load failed/i.test(m)) return true;
+            return false;
+        }
+
+        /** Failure type (not retry eligibility): 'retryable' | 'provider' (no response body to use; no retry) | 'parse'. */
+        function nwClassifyError(e) {
+            if (nwIsProviderError(e)) return 'retryable';
+            var m = nwBatchErrText(e);
+            if (/HTTP error! Status: \d{3}\b/.test(m) || /API Key is missing/i.test(m)) return 'provider';
+            return 'parse';
+        }
+
+        /** Provider (non-retryable) failure detail: auth problems point at Setup; 400 shows the provider message (~160 chars). */
+        function nwProviderDetail(part, msg) {
+            var m = String(msg || '');
+            var st = (m.match(/HTTP error! Status: (\d{3})/) || [])[1] || '';
+            if (/API Key is missing/i.test(m)) return 'Part ' + part + ' provider error (API key missing, not retried): Check your API key in Setup.';
+            if (st === '401' || st === '403') return 'Part ' + part + ' provider error (HTTP ' + st + ', not retried): Check your API key in Setup.';
+            var body = m.replace(/^HTTP error! Status: \d{3},?\s*(Text:\s*)?/, '');
+            return 'Part ' + part + ' provider error (' + (st ? 'HTTP ' + st : 'no response') + ', not retried): ' + nwBatchShort(body, 160);
+        }
+
+        /** True while a batch chapter is in flight and the call is one of its own quality passes (not a user action). */
+        function nwBatchOwnsRevise(chapterNum, opts) {
+            var tag = opts && opts.operationTag;
+            return !!(nwBatchState.running && nwBatchState.chapterInFlight === chapterNum && (tag === 'qualityRevise' || tag === 'qualityMultiPass'));
+        }
+
+        function nwBatchNumChapters() {
+            return Number(novelData.numChapters) || (novelData.chapterOutlines || []).length || 1;
+        }
+
+        function nwBatchChapterHasText(n) {
+            return !!String((novelData.chapters || [])[n - 1] || '').trim();
+        }
+
+        function nwBatchSetChapterText(n, text) {
+            if (!Array.isArray(novelData.chapters)) novelData.chapters = [];
+            novelData.chapters[n - 1] = text || '';
+            ['chapterGenContent', 'chapterEditContent'].forEach(function (p) {
+                var el = nwBatchEl(p + n);
+                if (el) el.value = text || '';
+            });
+        }
+
+        function nwBatchUsageMark() { return ensureBookTokenUsage().calls.length; }
+
+        function nwBatchUsageSince(idx) {
+            return ensureBookTokenUsage().calls.slice(idx).reduce(function (s, c) { return s + (Number(c && c.total_tokens) || 0); }, 0);
+        }
+
+        function nwBatchPasses() {
+            var maxAuto = (typeof NW_QUALITY_REVISE !== 'undefined' && NW_QUALITY_REVISE) ? (Number(NW_QUALITY_REVISE.maxAutoPasses) || 0) : 0;
+            return 2 + (novelData.autoContinuityAudit ? 1 : 0) + maxAuto;
+        }
+
+        function nwBatchMaxTokens() {
+            var el = nwBatchEl('maxTokens');
+            return parseInt(el && el.value, 10) || 30000;
+        }
+
+        /** perChapter = mean real tokens of chapters generated by batches in this session, else maxTokens x passes. */
+        function nwBatchEstimate(planned) {
+            var w = nwBatchState.windows.filter(function (x) { return x && x.tokens > 0; });
+            var perChapter;
+            var source;
+            if (w.length) {
+                perChapter = Math.ceil(w.reduce(function (s, x) { return s + x.tokens; }, 0) / w.length);
+                source = 'session';
+            } else {
+                perChapter = nwBatchMaxTokens() * nwBatchPasses();
+                source = 'fallback';
+            }
+            return { perChapter: perChapter, total: perChapter * (Number(planned) || 0), source: source };
+        }
+
+        function nwBatchReadOptions() {
+            var n = nwBatchNumChapters();
+            var fromEl = nwBatchEl('batchFrom');
+            var toEl = nwBatchEl('batchTo');
+            var capEl = nwBatchEl('batchTokenCap');
+            var from = parseInt(fromEl && fromEl.value, 10) || 1;
+            var to = parseInt(toEl && toEl.value, 10) || n;
+            from = Math.max(1, Math.min(from, n));
+            to = Math.max(from, Math.min(to, n));
+            return {
+                from: from,
+                to: to,
+                regenerateExisting: !!(nwBatchEl('batchRegenerate') || {}).checked,
+                perChapterDownload: !!(nwBatchEl('batchPerChapterDownload') || {}).checked,
+                capInput: parseInt(capEl && capEl.value, 10) || 0,
+                capUserEdited: !!(capEl && capEl.dataset.userEdited === '1')
+            };
+        }
+
+        /** Chapters to draft, in order. Existing text is skipped unless regenerate; completed chapters never rerun. */
+        function nwBatchPlan(range, regenerate, completed, skipChapter) {
+            var planned = [];
+            var skipped = [];
+            completed = completed || [];
+            for (var n = range.from; n <= range.to; n++) {
+                if (completed.indexOf(n) >= 0) continue;
+                if (skipChapter != null && n === skipChapter) { skipped.push(n); continue; }
+                if (!regenerate && nwBatchChapterHasText(n)) { skipped.push(n); continue; }
+                planned.push(n);
+            }
+            return { planned: planned, skipped: skipped };
+        }
+
+        /** Preflight (no API calls): Tab 4->5 readiness for all chapters + outline floor for planned chapters. */
+        function nwBatchPreflight(planned) {
+            var failures = [];
+            try {
+                assertAdvanceToTab5ReadinessOrThrow(novelData);
+            } catch (e) {
+                var rep = novelData.lastEnrichReadiness;
+                failures = (rep && Array.isArray(rep.failures) && rep.failures.length) ? rep.failures.slice() : [nwBatchErrText(e)];
+            }
+            (planned || []).forEach(function (n) {
+                var t = String((novelData.chapterOutlines || [])[n - 1] || '').trim();
+                var w = t ? t.split(/\s+/).length : 0;
+                if (w < NW_BATCH.minOutlineWords) failures.push('ch' + n + ': chapter outline stub-thin words=' + w);
+            });
+            var beatFail = failures.some(function (f) { return /^beat_/.test(String(f)); });
+            var fmt = nwFormatGateFailures(nwGroupBeatFailures(failures), 10);
+            var message = fmt.failures.length
+                ? 'Generate All blocked (preflight, no API calls): ' + fmt.text + (beatFail
+                    ? '. Click "' + NW_ENRICH_BP_BUTTON + '" on Tab 4 (Outlines).'
+                    : '. Complete the enrich loop and chapter outlines on Tab 4 first.')
+                : '';
+            return { passed: fmt.failures.length === 0, failures: fmt.failures, beatFail: beatFail, message: message };
+        }
+
+        // ---- IndexedDB checkpoints ----
+        var nwBatchDbPromise = null;
+        function nwBatchOpenDb() {
+            if (nwBatchDbPromise) return nwBatchDbPromise;
+            nwBatchDbPromise = new Promise(function (resolve, reject) {
+                var idb = window.indexedDB;
+                if (!idb) { reject(new Error('IndexedDB unavailable')); return; }
+                var req;
+                try { req = idb.open(NW_BATCH.idbName, 1); } catch (e) { reject(e); return; }
+                req.onupgradeneeded = function () {
+                    var db = req.result;
+                    if (!db.objectStoreNames.contains(NW_BATCH.idbStore)) db.createObjectStore(NW_BATCH.idbStore);
+                };
+                req.onsuccess = function () { resolve(req.result); };
+                req.onerror = function () { reject(req.error || new Error('IndexedDB open failed')); };
+            });
+            nwBatchDbPromise.catch(function () { nwBatchDbPromise = null; });
+            return nwBatchDbPromise;
+        }
+
+        function nwBatchIdbPut(record, key) {
+            return nwBatchOpenDb().then(function (db) {
+                return new Promise(function (resolve, reject) {
+                    var tx;
+                    try {
+                        tx = db.transaction(NW_BATCH.idbStore, 'readwrite');
+                        tx.objectStore(NW_BATCH.idbStore).put(record, key);
+                    } catch (e) {
+                        try { if (tx) tx.abort(); } catch (_) { /* already finished */ }
+                        reject(e);
+                        return;
+                    }
+                    tx.oncomplete = function () { resolve(); };
+                    tx.onerror = function () { reject(tx.error || new Error('checkpoint write failed')); };
+                    tx.onabort = function () { reject(tx.error || new Error('checkpoint transaction aborted')); };
+                });
+            });
+        }
+
+        /** { novelData (no apiKey), batchRun } keyed by batchRun.id (title + startedAt of the first run). */
+        function nwBatchCheckpoint(active) {
+            var br = novelData.batchRun;
+            br.updatedAt = new Date().toISOString();
+            var nd = JSON.parse(JSON.stringify(novelData));
+            delete nd.apiKey;
+            delete nd.batchRun;
+            var brCopy = JSON.parse(JSON.stringify(br));
+            delete brCopy.rejectedDraft; // session export only, never checkpointed
+            var rec = { key: br.id, savedAt: br.updatedAt, active: active !== false, novelData: nd, batchRun: brCopy };
+            return nwBatchIdbPut(rec, br.id);
+        }
+
+        function nwBatchFindInterrupted() {
+            return nwBatchOpenDb().then(function (db) {
+                return new Promise(function (resolve, reject) {
+                    var req = db.transaction(NW_BATCH.idbStore, 'readonly').objectStore(NW_BATCH.idbStore).getAll();
+                    req.onsuccess = function () {
+                        var recs = (req.result || []).filter(function (r) { return r && r.active && r.batchRun && r.novelData; });
+                        recs.sort(function (a, b) { return String(b.savedAt).localeCompare(String(a.savedAt)); });
+                        resolve(recs[0] || null);
+                    };
+                    req.onerror = function () { reject(req.error || new Error('checkpoint read failed')); };
+                });
+            });
+        }
+
+        // ---- single writer lock ----
+        function nwBatchIsLocked() {
+            return !!(nwBatchState.running || nwBatchState.interrupted);
+        }
+
+        function nwBatchIsResumable() {
+            var br = novelData.batchRun;
+            if (!br || !br.range || nwBatchState.running) return false;
+            if (br.reason == null || br.reason === 'done') return false;
+            // Only a coverage stop skips its chapter; a parse/provider/gate stop regenerates the stopped chapter on Resume.
+            var skip = br.reason === 'coverage' ? br.stoppedAt : null;
+            return nwBatchPlan(br.range, br.regenerateExisting, br.completed, skip).planned.length > 0;
+        }
+
+        function nwBatchApplyLock() {
+            var locked = nwBatchIsLocked();
+            document.querySelectorAll('#chapterGenContainer button, #chapterEditContainer button').forEach(function (b) { b.disabled = locked; });
+            document.querySelectorAll('textarea[id^="chapterEditContent"]').forEach(function (t) { t.readOnly = locked; t.disabled = locked; });
+            // Tab 7 Apply (updateChapter) and Tab 8 Integrate Suggestions are writers too.
+            document.querySelectorAll('#tab7 button[onclick*="applyTopBookCritiques"], #improvementsTableBody button[onclick*="applyBookCritiqueItem"], #tab8 button[onclick*="integrateBreakdownSuggestions"]').forEach(function (b) { b.disabled = locked; });
+            ['importFile', 'numChapters', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap'].forEach(function (id) {
+                var el = nwBatchEl(id);
+                if (el) el.disabled = locked;
+            });
+            var pause = nwBatchEl('batchPauseBtn');
+            if (pause) pause.disabled = !nwBatchState.running;
+            var resume = nwBatchEl('batchResumeBtn');
+            if (resume) resume.disabled = locked || !nwBatchIsResumable();
+            var fs = nwBatchEl('batchRunFieldset');
+            if (fs) fs.dataset.locked = locked ? '1' : '0';
+            return locked;
+        }
+
+        function nwBatchShow(id, on) {
+            var el = nwBatchEl(id);
+            if (el) el.hidden = !on;
+        }
+
+        function nwBatchDownloadText(name, text) {
+            var blob = new Blob([String(text || '')], { type: 'text/plain;charset=utf-8' });
+            var url = window.URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        /** After restore/import: show the saved run cap and clear userEdited, so Resume keeps br.cap unless the user edits it. */
+        function nwBatchSyncCapFromRun() {
+            var br = novelData && novelData.batchRun;
+            var capEl = nwBatchEl('batchTokenCap');
+            if (!capEl || !br || !(Number(br.cap) > 0)) return false;
+            capEl.value = String(br.cap);
+            capEl.dataset.userEdited = '';
+            return true;
+        }
+
+        /** Prefill range "to" and the token cap (estimate x 1.25) unless the user typed a cap. */
+        function nwBatchRefreshEstimate() {
+            if (nwBatchState.running) return null;
+            var n = nwBatchNumChapters();
+            var fromEl = nwBatchEl('batchFrom');
+            var toEl = nwBatchEl('batchTo');
+            if (fromEl) { fromEl.max = String(n); if (!fromEl.value) fromEl.value = '1'; }
+            if (toEl) { toEl.max = String(n); if (!toEl.value || parseInt(toEl.value, 10) > n) toEl.value = String(n); }
+            var o = nwBatchReadOptions();
+            var plan = nwBatchPlan({ from: o.from, to: o.to }, o.regenerateExisting, [], null);
+            var est = nwBatchEstimate(plan.planned.length);
+            var capEl = nwBatchEl('batchTokenCap');
+            if (capEl && capEl.dataset.userEdited !== '1') capEl.value = String(Math.ceil(est.total * NW_BATCH.capFactor));
+            nwBatchApplyLock();
+            return est;
+        }
+
+        // ---- run one chapter (with the single provider retry) ----
+        function nwBatchSleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+        async function nwBatchRunChapter(n) {
+            var attempts = 0;
+            for (;;) {
+                attempts += 1;
+                window.__nwLastPartFailure = null;
+                nwBatchState.chapterInFlight = n;
+                try {
+                    await generateChapter(n, { batch: true });
+                } catch (e) {
+                    var m = nwBatchErrText(e);
+                    if (/^STAGE GATE FAIL-CLOSED/.test(m)) return { ok: false, reason: 'gate', detail: m, attempts: attempts };
+                    if (/^OBLIGATION COVERAGE FAIL-CLOSED/.test(m)) return { ok: false, reason: 'coverage', detail: m, attempts: attempts };
+                    return { ok: false, reason: 'provider', detail: 'Unexpected error: ' + m, attempts: attempts };
+                } finally {
+                    nwBatchState.chapterInFlight = null;
+                }
+                var f = window.__nwLastPartFailure;
+                var st = String((typeof requestLog !== 'undefined' && requestLog && requestLog.status) || '');
+                var partFailed = !!f || /^Failed - Part/.test(st);
+                if (!partFailed && nwBatchChapterHasText(n)) return { ok: true, attempts: attempts };
+                if (partFailed && f && f.kind === 'parse') {
+                    return { ok: false, reason: 'parse', parse: true, detail: 'Part ' + f.part + ' parse failure (no retry): ' + f.message, attempts: attempts };
+                }
+                if (partFailed && f && f.kind === 'provider') {
+                    // 400/401/403/missing key: no response came back, so no retry and no estimated usage.
+                    return { ok: false, reason: 'provider', noRetry: true, detail: nwProviderDetail(f.part, f.message), attempts: attempts };
+                }
+                if (partFailed && f && f.kind === 'retryable' && attempts < 2) {
+                    nwBatchSetStatus('ch' + n + ' Part ' + f.part + ' provider error; retrying once in ' + Math.round(NW_BATCH.retryDelayMs / 1000) + ' s: ' + nwBatchShort(f.message, 160), 'running');
+                    await nwBatchSleep(NW_BATCH.retryDelayMs);
+                    continue;
+                }
+                if (partFailed) {
+                    return { ok: false, reason: 'provider', detail: 'Part ' + (f ? f.part : '?') + ' provider error' + (attempts > 1 ? ' after 1 retry' : '') + ': ' + (f ? f.message : st), attempts: attempts };
+                }
+                return { ok: false, reason: 'provider', detail: 'chapter text empty after generation', attempts: attempts };
+            }
+        }
+
+        // ---- batch entry points ----
+        function generateAllChapters() {
+            nwBatchState.lastPromise = nwBatchStart(false);
+            return nwBatchState.lastPromise;
+        }
+
+        function resumeBatchRun() {
+            nwBatchState.lastPromise = nwBatchStart(true);
+            return nwBatchState.lastPromise;
+        }
+
+        function pauseBatchRun() {
+            if (!nwBatchState.running) return false;
+            nwBatchState.pauseRequested = true;
+            nwBatchSetStatus(nwBatchState.lastStatus + ' Pause requested: the run stops after the current chapter.', 'running');
+            return true;
+        }
+
+        async function nwBatchStart(resume) {
+            if (nwBatchState.running) return { started: false, reason: 'already-running' };
+            if (nwBatchState.interrupted) {
+                nwBatchSetStatus('Restore or discard the interrupted batch run first.', 'interrupted');
+                return { started: false, reason: 'interrupted' };
+            }
+            if (typeof activeAICallCount !== 'undefined' && activeAICallCount > 0) {
+                nwBatchSetStatus('Another AI request is still running (' + activeAICallCount + ' in flight). Wait for it to finish, then ' + (resume ? 'Resume' : 'start Generate All') + '.', 'blocked');
+                return { started: false, reason: 'ai-busy' };
+            }
+            var myRun = {};
+            nwBatchState.quiet = true;
+            nwBatchShow('batchGoTab4', false);
+            nwBatchShow('batchExportNow', false);
+            try {
+                try { collectData(); } catch (e) { console.warn('[batch] collectData', e); }
+                var o = nwBatchReadOptions();
+                var br = novelData.batchRun;
+                var range;
+                var regenerate;
+                var perDl;
+                var completed = [];
+                var skipChapter = null;
+                if (resume) {
+                    if (!br || !nwBatchIsResumable()) {
+                        nwBatchSetStatus('Nothing to resume.', 'idle');
+                        nwBatchApplyLock();
+                        return { started: false, reason: 'not-resumable' };
+                    }
+                    if (br.reason === 'coverage') {
+                        var ackKey = br.id + ':' + br.stoppedAt;
+                        if (nwBatchState.coverageAck !== ackKey) {
+                            nwBatchState.coverageAck = ackKey;
+                            nwBatchSetStatus('ch' + br.stoppedAt + ' failed obligation coverage and needs review (Tab 6). Click Resume again to continue from the next empty chapter.', 'confirm');
+                            return { started: false, reason: 'confirm-coverage' };
+                        }
+                        skipChapter = br.stoppedAt;
+                    }
+                    range = { from: br.range.from, to: br.range.to };
+                    regenerate = !!br.regenerateExisting;
+                    perDl = !!br.perChapterDownload;
+                    completed = (br.completed || []).slice();
+                } else {
+                    range = { from: o.from, to: o.to };
+                    regenerate = o.regenerateExisting;
+                    perDl = o.perChapterDownload;
+                }
+                var plan = nwBatchPlan(range, regenerate, completed, skipChapter);
+                var pre = nwBatchPreflight(plan.planned);
+                if (!pre.passed) {
+                    nwBatchSetStatus(pre.message, 'blocked');
+                    nwBatchShow('batchGoTab4', true);
+                    nwBatchApplyLock();
+                    return { started: false, reason: 'preflight', failures: pre.failures, message: pre.message };
+                }
+                if (!plan.planned.length) {
+                    nwBatchSetStatus('Nothing to generate in ch' + range.from + '-' + range.to + (plan.skipped.length ? ' (skipped, existing text: ' + plan.skipped.join(', ') + '; turn on "Regenerate existing chapters" to redo them)' : '') + '.', 'idle');
+                    nwBatchApplyLock();
+                    return { started: false, reason: 'empty-plan', skipped: plan.skipped };
+                }
+                var est = nwBatchEstimate(plan.planned.length);
+                var used = resume ? (Number(br.tokensUsed) || 0) : 0;
+                var defaultCap = Math.ceil(est.total * NW_BATCH.capFactor) + used;
+                // Resume keeps the saved run cap (also after restore/import) unless the user edited the cap input since.
+                var savedCap = resume ? Number(br.cap) : 0;
+                var cap = (o.capUserEdited && o.capInput > 0) ? o.capInput : (savedCap > 0 ? savedCap : defaultCap);
+                var now = new Date().toISOString();
+                if (resume) {
+                    br.stoppedAt = null;
+                    br.reason = null;
+                    br.detail = null;
+                    br.inFlight = null;
+                    br.estimate = { perChapter: est.perChapter, total: est.total, source: est.source };
+                    br.cap = cap;
+                    if (!Array.isArray(br.usageEstimated)) br.usageEstimated = [];
+                } else {
+                    br = novelData.batchRun = {
+                        id: (novelData.title || 'Untitled') + '|' + now,
+                        startedAt: now,
+                        updatedAt: now,
+                        range: range,
+                        regenerateExisting: !!regenerate,
+                        perChapterDownload: !!perDl,
+                        completed: [],
+                        inFlight: null,
+                        stoppedAt: null,
+                        reason: null,
+                        detail: null,
+                        tokensUsed: 0,
+                        estimate: { perChapter: est.perChapter, total: est.total, source: est.source },
+                        cap: cap,
+                        usageEstimated: []
+                    };
+                }
+                var capEl = nwBatchEl('batchTokenCap');
+                if (capEl) capEl.value = String(cap);
+                nwBatchState.running = true;
+                nwBatchState.owner = myRun;
+                nwBatchState.pauseRequested = false;
+                nwBatchState.coverageAck = null;
+                nwBatchState.log = [];
+                nwBatchApplyLock();
+                return await nwBatchLoop(br, plan, est);
+            } finally {
+                // Only the run that took the lock releases it (after its final checkpoint + status).
+                if (nwBatchState.owner === myRun) {
+                    nwBatchState.running = false;
+                    nwBatchState.owner = null;
+                    nwBatchState.pauseRequested = false;
+                }
+                if (!nwBatchState.running) nwBatchState.quiet = false;
+                nwBatchApplyLock();
+            }
+        }
+
+        async function nwBatchLoop(br, plan, est) {
+            var stop = null;
+            var checkpointFailed = null;
+            var rejectedNow = false;
+            var skippedNote = plan.skipped.length ? ' Skipped (existing text): ' + plan.skipped.join(', ') + '.' : '';
+            for (var i = 0; i < plan.planned.length; i++) {
+                var n = plan.planned[i];
+                if (nwBatchState.pauseRequested) { stop = { reason: 'paused', at: n, detail: 'paused before ch' + n }; break; }
+                if (br.tokensUsed >= br.cap) { stop = { reason: 'budget', at: n, capPre: true, detail: 'Token cap reached (' + br.tokensUsed + '/' + br.cap + '). Raise the cap to continue.' }; break; }
+                br.inFlight = n;
+                nwBatchSetStatus('Generating ch' + n + ' (' + (i + 1) + '/' + plan.planned.length + '). Tokens ' + br.tokensUsed + '/' + br.cap + '.' + skippedNote, 'running');
+                try {
+                    await nwBatchCheckpoint(true);
+                } catch (e) {
+                    br.inFlight = null;
+                    checkpointFailed = nwBatchErrText(e);
+                    stop = { reason: 'checkpoint', at: n, detail: 'checkpoint write failed before ch' + n + ': ' + checkpointFailed };
+                    break;
+                }
+                var old = String((novelData.chapters || [])[n - 1] || '');
+                var mark = nwBatchUsageMark();
+                var outcome = await nwBatchRunChapter(n);
+                // Restore the pre-chapter text on any failure when regenerating; a coverage failure keeps the new text
+                // only when there was no old text (regenerate off). Gate failures never cleared the text.
+                // Coverage failure with regenerate on: the rejected new draft is kept aside (latest only) in
+                // batchRun.rejectedDraft so it reaches the session export; nwBatchCheckpoint strips it.
+                if (!outcome.ok && outcome.reason === 'coverage' && br.regenerateExisting) {
+                    br.rejectedDraft = { chapter: n, text: String((novelData.chapters || [])[n - 1] || ''), detail: nwBatchShort(outcome.detail, 300) };
+                    rejectedNow = true;
+                }
+                if (!outcome.ok && !(outcome.reason === 'coverage' && !br.regenerateExisting)) nwBatchSetChapterText(n, old);
+                var rows = ensureBookTokenUsage().calls.length - mark;
+                var delta = nwBatchUsageSince(mark);
+                if (delta > 0) {
+                    br.tokensUsed += delta;
+                    if (outcome.ok) nwBatchState.windows.push({ chapter: n, tokens: delta });
+                } else if (rows > 0 || outcome.ok || outcome.reason === 'coverage' || outcome.parse) {
+                    br.tokensUsed += est.perChapter;
+                    if (br.usageEstimated.indexOf(n) < 0) br.usageEstimated.push(n);
+                }
+                if (outcome.ok) br.completed.push(n);
+                br.inFlight = null;
+                try {
+                    await nwBatchCheckpoint(true);
+                } catch (e) {
+                    checkpointFailed = nwBatchErrText(e);
+                }
+                if (!outcome.ok) { stop = { reason: outcome.reason, at: n, detail: outcome.detail, noRetry: !!outcome.noRetry }; break; }
+                if (checkpointFailed) { stop = { reason: 'checkpoint', at: n, detail: 'checkpoint write failed after ch' + n + ': ' + checkpointFailed }; break; }
+                if (br.perChapterDownload) {
+                    try { nwBatchDownloadText((novelData.title || 'Untitled_Novel') + '_ch' + n + '.txt', novelData.chapters[n - 1]); } catch (e) { console.warn('[batch] chapter download', e); }
+                }
+                if (br.tokensUsed >= br.cap) { stop = { reason: 'budget', at: n, detail: 'real usage ' + br.tokensUsed + ' tokens reached the cap ' + br.cap + ' after ch' + n }; break; }
+            }
+            br.inFlight = null;
+            br.stoppedAt = stop ? stop.at : null;
+            br.reason = stop ? stop.reason : 'done';
+            br.detail = stop ? nwBatchShort(stop.detail, 300) : null;
+            br.updatedAt = new Date().toISOString();
+            // running stays true through the final checkpoint and status (released in nwBatchStart's finally).
+            if (!checkpointFailed) {
+                try { await nwBatchCheckpoint(false); } catch (e) { checkpointFailed = nwBatchErrText(e); }
+                if (checkpointFailed && !stop) {
+                    // generation finished but the final checkpoint failed: this is a checkpoint stop, not 'done'
+                    var lastN = plan.planned[plan.planned.length - 1];
+                    stop = { reason: 'checkpoint', at: lastN, detail: 'final checkpoint write failed after ch' + lastN + ': ' + checkpointFailed };
+                    br.stoppedAt = stop.at;
+                    br.reason = stop.reason;
+                    br.detail = nwBatchShort(stop.detail, 300);
+                }
+            }
+            var text = stop
+                ? (stop.reason === 'paused' ? 'Paused before ch' + stop.at + '.' : 'Stopped at ch' + stop.at + ' (' + stop.reason + '): ' + nwBatchShort(stop.detail, 240) + '.')
+                : 'Done: ch' + br.range.from + '-' + br.range.to + '.';
+            if (stop && stop.reason === 'parse') text += ' Response could not be parsed (no retry); Resume regenerates ch' + stop.at + '.';
+            else if (stop && stop.reason === 'provider') text += (stop.noRetry ? ' Not retried;' : ' Provider error (retried once where retryable);') + ' Resume regenerates ch' + stop.at + '.';
+            else if (stop && stop.reason === 'coverage' && rejectedNow) text += ' Old ch' + stop.at + ' text restored; rejected draft kept aside in session export (batchRun.rejectedDraft).';
+            text += ' Completed: ' + (br.completed.length ? br.completed.join(', ') : 'none') + '.' + skippedNote;
+            if (br.usageEstimated.length) text += ' Usage estimated (no provider usage) for: ' + br.usageEstimated.join(', ') + '.';
+            text += ' Tokens ' + br.tokensUsed + '/' + br.cap + '.';
+            if (stop && stop.capPre) text = stop.detail;
+            if (checkpointFailed) {
+                text = 'Checkpoint failed: run stopped. Export your session now. ' + text;
+                nwBatchShow('batchExportNow', true);
+            }
+            nwBatchSetStatus(text, stop ? (checkpointFailed ? 'checkpoint' : 'stopped') : 'done');
+            // Auto-export only for a stopped run or a checkpoint failure; a clean finish does not download.
+            if (stop || checkpointFailed) {
+                try { exportSession(); } catch (e) { console.warn('[batch] session export', e); }
+            }
+            return { started: true, reason: br.reason, stoppedAt: br.stoppedAt, completed: br.completed.slice(), detail: br.detail };
+        }
+
+        // ---- reload recovery ----
+        async function nwBatchCheckForInterrupted() {
+            var rec = null;
+            try { rec = await nwBatchFindInterrupted(); } catch (e) { console.warn('[batch] checkpoint read', e); return null; }
+            if (!rec || nwBatchState.running) return null;
+            nwBatchState.interrupted = rec;
+            var br = rec.batchRun;
+            nwBatchShow('batchRestoreBox', true);
+            nwBatchSetStatus('Interrupted batch run found' + (br.inFlight != null ? ' (ch' + br.inFlight + ' was in flight)' : '') + '. Completed: ' + ((br.completed || []).join(', ') || 'none') + '. Restore it or discard it; per-chapter controls stay locked until you choose.', 'interrupted');
+            nwBatchApplyLock();
+            return rec;
+        }
+
+        async function restoreInterruptedBatchRun() {
+            var rec = nwBatchState.interrupted;
+            if (!rec) return false;
+            var keyEl = nwBatchEl('apiKey');
+            var apiKey = keyEl ? keyEl.value : '';
+            novelData = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: JSON.parse(JSON.stringify(rec.novelData)) }).novelData;
+            novelData.apiKey = apiKey;
+            var br = novelData.batchRun = JSON.parse(JSON.stringify(rec.batchRun));
+            var was = br.inFlight;
+            br.completed = (br.completed || []).filter(function (c) { return c !== was; });
+            br.inFlight = null;
+            br.reason = 'user';
+            if (was != null) {
+                br.stoppedAt = was;
+                br.detail = 'restored after reload; ch' + was + ' was in flight and is not done';
+                // the checkpoint was written before ch<was> started, so its text is the pre-chapter snapshot (or empty)
+            } else {
+                br.detail = 'restored after reload';
+            }
+            if (!Array.isArray(br.usageEstimated)) br.usageEstimated = [];
+            nwBatchState.interrupted = null;
+            try { applySessionDataToUI(); } catch (e) { console.warn('[batch] restore UI', e); }
+            nwBatchSyncCapFromRun();
+            try { await nwBatchCheckpoint(false); } catch (e) { console.warn('[batch] restore checkpoint', e); }
+            nwBatchShow('batchRestoreBox', false);
+            nwBatchApplyLock();
+            nwBatchSetStatus('Restored interrupted batch run (stopped at ch' + br.stoppedAt + ', user). Completed: ' + (br.completed.join(', ') || 'none') + '. Click Resume to continue.', 'stopped');
+            return true;
+        }
+
+        async function discardInterruptedBatchRun() {
+            var rec = nwBatchState.interrupted;
+            if (!rec) return false;
+            rec.active = false;
+            try { await nwBatchIdbPut(rec, rec.key || rec.batchRun.id); } catch (e) { console.warn('[batch] discard checkpoint', e); }
+            nwBatchState.interrupted = null;
+            nwBatchShow('batchRestoreBox', false);
+            nwBatchApplyLock();
+            nwBatchSetStatus('Interrupted batch run discarded.', 'idle');
+            return true;
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var capEl = nwBatchEl('batchTokenCap');
+            if (capEl) capEl.addEventListener('input', function () { capEl.dataset.userEdited = capEl.value ? '1' : ''; });
+            ['batchFrom', 'batchTo', 'batchRegenerate'].forEach(function (id) {
+                var el = nwBatchEl(id);
+                if (el) el.addEventListener('change', nwBatchRefreshEstimate);
+            });
+            try { nwBatchRefreshEstimate(); } catch (e) { console.warn('[batch] estimate', e); }
+            window.__nwBatchRestoreCheck = nwBatchCheckForInterrupted();
+        });
+        window.generateAllChapters = generateAllChapters;
+        window.resumeBatchRun = resumeBatchRun;
+        window.pauseBatchRun = pauseBatchRun;
+        // === NW_BATCH_END ===
+
 	    // ---- NW.T6: Chapter Editing Functions ----
 	    // NW.T6.F1: updateChapter() SHALL send the current chapter text plus improvement notes to the LLM and replace the chapter textarea content with the revised text.
 	    // NW.T6.F2: checkSpellingAndGrammar() SHALL send the current chapter text to the LLM for proofreading and apply the corrected version back to the chapter textarea.
 	    // Update an existing chapter with improvements
 	    async function updateChapter(chapterNum, opts) {
 		    opts = opts || {};
+		    // Generate All single writer: only the batch's own quality revise passes (chapter in flight) may update a chapter.
+		    if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked() && !(typeof nwBatchOwnsRevise === 'function' && nwBatchOwnsRevise(chapterNum, opts))) {
+		        throw new Error('updateChapter locked: Generate All Chapters run is active or awaiting restore.');
+		    }
 		    collectData();
 		    // Agent Skill I/O pack (tab6.updateChapter)
 		    window.__lastSkillPack = packSkillInputs('tab6.updateChapter', { novelData: novelData, chapterNum: chapterNum, updateBrief: (opts && opts.brief) || '' });
@@ -9716,7 +10469,7 @@ return c && c.name && c.backstory && c.arc; });
 		        if (!(String(improvements || '').trim())) {
 		            if (require) {
 		                const msg = 'Chapter ' + chapterNum + ': improvement notes are empty. Stage a critique or enter notes before updating.';
-		                alert(msg);
+		                if (typeof nwNotify === 'function') nwNotify(msg); else alert(msg);
 		                throw new Error(msg);
 		            }
 		            console.warn('[QE3] updateChapter with empty improvements (soft allow)');
@@ -10164,6 +10917,10 @@ return c && c.name && c.backstory && c.arc; });
 
 		// Reset state for tests with real API setup
 		function resetState() {
+		    // Generate All single writer: never wipe the session under a running (or interrupted) batch.
+		    if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
+		        throw new Error('resetState locked: Generate All Chapters run is active or awaiting restore.');
+		    }
 		    novelData = {
 		        apiKey: '', model: 'grok-4.7', maxTokens: 6000,
 		        genre: 'scifi', title: '', storyArc: '', generalPlot: '', setting: '',
