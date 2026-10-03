@@ -6,15 +6,22 @@ import fs from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
 
-const LIVE = 'file:///C:/NovelWriterSite/NovelWriter/NovelWriter.html';
-const FIXTURE = path.resolve('NovelWriter/fixtures/rich-scifi-v1/novelData.seed.json');
-const PLAN = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/novelwriter';
-const OUT = path.join(PLAN, 'SMOKE_ENRICH_DENSITY_REPORT.json');
+import { fileURLToPath, pathToFileURL } from 'url';
+
+// Repo-relative (NW_GATE_FIX_SPEC section 3): this checkout's HTML unless NW_HTML_PATH is set; report under out/nw-smoke.
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+const LIVE = pathToFileURL(path.resolve(process.env.NW_HTML_PATH || path.join(REPO_ROOT, 'NovelWriter', 'NovelWriter.html'))).href;
+const OUT_DIR = path.resolve(process.env.NW_OUT_DIR || path.join(REPO_ROOT, 'out', 'nw-smoke'));
+fs.mkdirSync(OUT_DIR, { recursive: true });
+const FIXTURE = path.join(REPO_ROOT, 'NovelWriter', 'fixtures', 'rich-scifi-v1', 'novelData.seed.json');
+const OUT = path.join(OUT_DIR, 'SMOKE_ENRICH_DENSITY_REPORT.json');
 
 const seed = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
+await page.route('**/*', (route) => (/^https?:/i.test(route.request().url()) ? route.abort('blockedbyclient') : route.continue())); // offline: no provider calls
 await page.goto(LIVE, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await page.waitForFunction(() => typeof scoreCastDensity === 'function' && typeof scoreAdvanceToTab5Readiness === 'function', null, { timeout: 30000 });
 
@@ -50,10 +57,17 @@ const result = await page.evaluate(async (data) => {
   novelData.chapterBlueprints = [{
     chapter: 1, role: 'opening', arcStep: 'seed pressure at docks',
     characterBeats: richChars.slice(0, 2).map(c => ({ name: c.name, beat: 'establish wound' })),
-    subplotPressure: ['Twelve-Millisecond Freighter latency'],
+    subplotPressure: ['Twelve-Millisecond Freighter latency forces the dock crew to choose sides'],
     worldHooks: ['Philippine Sea', 'Bridge Lock'],
-    allowedPayoffs: [], deferredThreads: ['freighter latency']
+    allowedPayoffs: [], deferredThreads: ['freighter latency'],
+    // Six dense beats (A2 readiness includes beat coverage since PR1; this smoke predated that and false-failed).
+    sceneGoal: 'Force a public choice at the docks about the opacity window before the freighter latency spike becomes evidence.',
+    castArcBeat: richChars[0].name + ' must refuse or authorize the dark window, exposing the wound behind their duty.',
+    dialogueTurn: richChars[1].name + ' argues that the unlogged clause is mercy, not erasure; the exchange flips who leads.',
+    sensoryWorldHook: 'Salt air on Bridge Lock, freighter radar bloom and the badge reader chirp under yellow NOTAM lights.',
+    turnOrPayoff: 'A priced loyalty offer is refused on the record, and the refusal becomes the treaty language later on.'
   }];
+  novelData.numChapters = 1; // the synthetic rich spine has one blueprint
   novelData.chapterOutlines = [Array(100).fill('beat').join(' ') + ' docks confrontation'];
   const obl = scoreOutlineObligations(novelData);
   const ready = scoreAdvanceToTab5Readiness(novelData);

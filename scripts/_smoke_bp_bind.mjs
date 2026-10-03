@@ -5,19 +5,22 @@
 import fs from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
-import dotenv from 'dotenv';
+import { fileURLToPath, pathToFileURL } from 'url';
 
-const PLAN = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/novelwriter';
-const LIVE = 'file:///C:/NovelWriterSite/NovelWriter/NovelWriter.html';
-const ENV = 'C:/NovelWriterSite/.env';
-const ANNEX = path.join(PLAN, 'TRACKED_E2E_ANNEX_NOVELDATA.json');
-
-dotenv.config({ path: ENV });
+// Repo-relative (NW_GATE_FIX_SPEC section 3): this checkout's HTML unless NW_HTML_PATH is set; report under out/nw-smoke.
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+const LIVE = pathToFileURL(path.resolve(process.env.NW_HTML_PATH || path.join(REPO_ROOT, 'NovelWriter', 'NovelWriter.html'))).href;
+const OUT_DIR = path.resolve(process.env.NW_OUT_DIR || path.join(REPO_ROOT, 'out', 'nw-smoke'));
+fs.mkdirSync(OUT_DIR, { recursive: true });
+// Annex novelData (any tracked-E2E TRACKED_E2E_ANNEX_NOVELDATA.json) via NW_BP_BIND_ANNEX; default the committed B3R seed.
+const ANNEX = path.resolve(process.env.NW_BP_BIND_ANNEX || path.join(SCRIPT_DIR, 'fixtures', 'nw_slop', 'b3r_seed.json'));
 
 const annex = JSON.parse(fs.readFileSync(ANNEX, 'utf8'));
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
+await page.route('**/*', (route) => (/^https?:/i.test(route.request().url()) ? route.abort('blockedbyclient') : route.continue())); // offline: no provider calls
 await page.goto(LIVE, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await page.waitForFunction(() => typeof generateChapter === 'function' && typeof buildGenerateChapterUserContent === 'function', null, { timeout: 30000 });
 
@@ -54,7 +57,7 @@ const result = await page.evaluate((data) => {
 
 await browser.close();
 
-const out = path.join(PLAN, 'SMOKE_BP_BIND_REPORT.json');
+const out = path.join(OUT_DIR, 'SMOKE_BP_BIND_REPORT.json');
 fs.writeFileSync(out, JSON.stringify(result, null, 2));
 console.log(JSON.stringify(result, null, 2));
 

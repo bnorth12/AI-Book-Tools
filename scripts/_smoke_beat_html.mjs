@@ -6,9 +6,15 @@ import fs from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
 
-const LIVE = 'file:///C:/NovelWriterSite/NovelWriter/NovelWriter.html';
-const PLAN = 'C:/Users/brian/grok-build-queue/plans/ai-book-tools-2026-09-27/novelwriter';
-const FIXTURE = path.resolve('NovelWriter/fixtures/rich-scifi-v1/novelData.seed.json');
+import { fileURLToPath, pathToFileURL } from 'url';
+
+// Repo-relative (NW_GATE_FIX_SPEC section 3): this checkout's HTML unless NW_HTML_PATH is set; report under out/nw-smoke.
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+const LIVE = pathToFileURL(path.resolve(process.env.NW_HTML_PATH || path.join(REPO_ROOT, 'NovelWriter', 'NovelWriter.html'))).href;
+const OUT_DIR = path.resolve(process.env.NW_OUT_DIR || path.join(REPO_ROOT, 'out', 'nw-smoke'));
+fs.mkdirSync(OUT_DIR, { recursive: true });
+const FIXTURE = path.join(REPO_ROOT, 'NovelWriter', 'fixtures', 'rich-scifi-v1', 'novelData.seed.json');
 const seed = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
 
 function denseBeat(ch, name) {
@@ -25,6 +31,7 @@ function denseBeat(ch, name) {
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
+await page.route('**/*', (route) => (/^https?:/i.test(route.request().url()) ? route.abort('blockedbyclient') : route.continue())); // offline: no provider calls
 await page.goto(LIVE, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await page.waitForFunction(() => typeof scoreBeatCoverage === 'function' && typeof enrichChapterBlueprints === 'function' && typeof scoreAdvanceToTab5Readiness === 'function', null, { timeout: 30000 });
 
@@ -78,8 +85,7 @@ const result = await page.evaluate(({ seed, denseBeatSrc }) => {
 }, { seed, denseBeatSrc: denseBeat.toString() });
 
 await browser.close();
-fs.mkdirSync(PLAN, { recursive: true });
-fs.writeFileSync(path.join(PLAN, 'A2_BEAT_LEAN_SMOKE_REPORT.json'), JSON.stringify(result, null, 2));
+fs.writeFileSync(path.join(OUT_DIR, 'A2_BEAT_LEAN_SMOKE_REPORT.json'), JSON.stringify(result, null, 2));
 console.log(JSON.stringify(result, null, 2));
 if (!result.ok) {
   console.error('A2 LEAN SMOKE FAIL');
