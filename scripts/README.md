@@ -15,6 +15,13 @@ npm run test:e2e:install   # once, installs Chromium for the Playwright-based sm
 node scripts/_smoke_slop_tells.mjs
 node scripts/_smoke_b5_0_name_echo.mjs
 node scripts/_smoke_nw_quality_html.mjs
+node scripts/_smoke_nw_beat_gate.mjs
+node scripts/_smoke_evidence_pack_schema.mjs
+node scripts/_smoke_beat_coverage.mjs
+node scripts/_smoke_stage_schemas.mjs
+node scripts/_smoke_bp_bind.mjs
+node scripts/_smoke_beat_html.mjs
+node scripts/_smoke_enrich_density.mjs
 NW_B4_PRECHECK_ONLY=1 node scripts/_b4_1a_inject_prove.mjs
 ```
 
@@ -25,6 +32,10 @@ On PowerShell, set the variable for the process first (`$env:NW_B4_PRECHECK_ONLY
 | `_smoke_slop_tells.mjs` | B1/B4 anti-slop tell detectors (`_nw_slop_tells_snippet.mjs`) against vendored annex chapters and the slop corpus | No |
 | `_smoke_b5_0_name_echo.mjs` | B5-0 nameEcho stopword fix, before/after scoring of annex prose and B4 inject spans | No |
 | `_smoke_nw_quality_html.mjs` | Loads this checkout's `NovelWriter/NovelWriter.html` and runs the C3 / QE1-6 in-page smokes plus anti-slop helpers; runs the in-page `_scoreNameEchoTell` (B5-0 function-word cases + HTML/snippet parity over `scripts/fixtures`); asserts the smokes leave `novelData` unchanged | Yes |
+| `_smoke_nw_beat_gate.mjs` | NW_GATE_FIX_SPEC S1-S14: beat coverage on the old-shape session fixture (`NovelWriter/fixtures/beat-gate-old-shape-v1`), Generate Chapter N gate (N and N+1 only, deduped, `+N more`, names the button), six-beat outline + auto-enrich only when thin, Tab 4 status line, next-chapter-only continuity packet refresh, in-page `runTrackedE2E` autoEnrich / c1Smoke rows | Yes |
+| `_smoke_evidence_pack_schema.mjs` | `buildEvidencePack` / `retrieveChapterContextEvidence` validate against `schema/evidence-pack-0.1.json` (ajv) | Yes |
+| `_smoke_beat_coverage.mjs`, `_smoke_stage_schemas.mjs` | Beat coverage snippet (vm) and stage schema blocks | No |
+| `_smoke_bp_bind.mjs`, `_smoke_beat_html.mjs`, `_smoke_enrich_density.mjs` | Blueprint bind / digests, beat readiness, cast + subplot density and Tab 5 readiness in this checkout's HTML (`NW_HTML_PATH` overrides) | Yes |
 | `_b4_1a_inject_prove.mjs` with `NW_B4_PRECHECK_ONLY=1` | Loads the HTML, the vendored B3R seed and an inject span, and stops after the in-page detector precheck | Yes |
 
 `_nw_slop_tells_snippet.mjs` is the shared ESM detector module imported by the two pure smokes; it is not run directly.
