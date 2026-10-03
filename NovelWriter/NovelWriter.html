@@ -4023,6 +4023,12 @@ Synced: 2026-04-19
 		}
 
 		async function runTrackedE2E() {
+			// Engineering gate: resetState() wipes the current novel and this run makes live API calls; ask first.
+			if (!window.confirm('This resets the current novel and makes live API calls. Continue?')) {
+				const cancelEl = document.getElementById('trackedE2EResult');
+				if (cancelEl) cancelEl.textContent = 'Tracked E2E cancelled - novel unchanged, no API calls made.';
+				return null;
+			}
 			const lines = [];
 			const log = (m) => _trackedLog(lines, m);
 			const report = {

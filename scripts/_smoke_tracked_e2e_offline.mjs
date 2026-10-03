@@ -10,6 +10,7 @@
  *  4. build_unified_report.py on structured plot values + an unknown NW_REPORT_TZ still builds.
  *  5. In-page runTrackedE2E() with callAI answered by the same responder: completes, no throw on
  *     an HTML without the PR1 token rollup, usage read from the session ledger (Copilot #117 high).
+ *     A cancelled window.confirm() returns before resetState(): novelData unchanged, 0 api.x.ai requests.
  *
  * Usage: node scripts/_smoke_tracked_e2e_offline.mjs   (see scripts/README.md)
  * Env:   NW_HTML_PATH, NW_OUT_DIR (default out/nw-e2e-smoke), NW_PYTHON
@@ -136,6 +137,7 @@ if (rep1) {
   const page = await browser.newPage();
   const blocked = [];
   const pageErrors = [];
+  let xaiRequests = 0;
   // Known pre-existing race on main (not PR3): updateChapterSubpages() queues requestAnimationFrame callbacks that write
   // chapterGenContentN / chapterEditContentN / chapterEditImprovementN after a second rebuild (resetState + reconfigure) has already replaced that node. Ignore only
   // errors whose top frame is that exact rAF line; anything else still fails the check.
@@ -152,6 +154,7 @@ if (rep1) {
     const url = req.url();
     if (!/^https?:/i.test(url)) return route.continue();
     if (/^https:\/\/api\.x\.ai\//i.test(url)) {
+      xaiRequests++;
       let body = {};
       try { body = JSON.parse(req.postData() || '{}'); } catch (_) {}
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(toXaiResponse(body, responder.respond(body), url)) });
@@ -161,7 +164,31 @@ if (rep1) {
   });
   await page.goto(pathToFileURL(HTML_PATH).href, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForFunction(() => typeof runTrackedE2E === 'function');
+  // 5a. Engineering gate: cancelling the confirm must return before resetState(), any fetch, or any state mutation.
+  const xaiBeforeCancel = xaiRequests;
+  const cancel = await page.evaluate(async () => {
+    document.getElementById('apiKey').value = 'offline-fixture-not-a-key';
+    const asked = [];
+    window.confirm = (msg) => { asked.push(String(msg)); return false; };
+    const before = JSON.stringify(novelData);
+    let r, threw = null;
+    try { r = await runTrackedE2E(); } catch (e) { threw = String(e && e.message || e); }
+    return {
+      asked, threw, returned: r === undefined ? 'undefined' : r,
+      same: before === JSON.stringify(novelData),
+      noReport: typeof window.__lastTrackedE2EReport === 'undefined',
+      resultText: ((document.getElementById('trackedE2EResult') || {}).textContent || '')
+    };
+  });
+  const xaiDuringCancel = xaiRequests - xaiBeforeCancel;
+  check('in-page cancel: confirm asked once before reset', cancel.asked.length === 1 && /resets the current novel/.test(cancel.asked[0]), JSON.stringify(cancel.asked));
+  check('in-page cancel: returned without throwing', !cancel.threw && cancel.returned === null, cancel.threw || JSON.stringify(cancel.returned));
+  check('in-page cancel: novelData deep-equal before/after', cancel.same === true, '');
+  check('in-page cancel: zero requests to api.x.ai', xaiDuringCancel === 0, 'requests=' + xaiDuringCancel);
+  check('in-page cancel: no report published, output says cancelled', cancel.noReport && /cancelled/i.test(cancel.resultText), cancel.resultText.slice(0, 120));
+  // 5b. Happy path: confirm accepted.
   const res = await page.evaluate(async () => {
+    window.confirm = () => true;
     document.getElementById('apiKey').value = 'offline-fixture-not-a-key';
     const sel = document.getElementById('model');
     const chat = Array.from(sel.options || []).find((o) => o.value && !/multi-agent/i.test(o.value));
