@@ -7731,6 +7731,12 @@ return c && c.name && c.backstory && c.arc; });
 				messages[1].content = messages[1].content + '\n' + __c2ContEp;
 			}
 			const response = await callAI(messages, document.getElementById('tab5'), { operationName: `runChapterContinuityAudit_${chapterNum}` });
+			// #135 review (Copilot 4173592631): in a batch (nwBatchContinuityAudit passes throwOnParseError) malformed model JSON
+			// must stop the run as 'parse' instead of becoming a "successful" fallback audit. Single-chapter audits keep the
+			// fallback (it records "Unable to parse continuity audit output." as a risk) unchanged.
+			if (options.throwOnParseError && response && response._jsonParseError) {
+				throw new Error('continuity audit model JSON parse error (_jsonParseError): ' + response._jsonParseError);
+			}
 			const parsed = parseContinuityAuditResponse(response);
 			const chapterAudit = {
 				chapter: chapterNum,
@@ -9925,7 +9931,7 @@ return c && c.name && c.backstory && c.arc; });
         async function nwBatchContinuityAudit(n) {
             for (var attempt = 1; ; attempt++) {
                 try {
-                    return await runChapterContinuityAudit(n, { silent: true });
+                    return await runChapterContinuityAudit(n, { silent: true, throwOnParseError: true });
                 } catch (e) {
                     var kind = nwClassifyError(e);
                     var msg = nwBatchShort(nwBatchErrText(e), 300);
@@ -10347,7 +10353,8 @@ return c && c.name && c.backstory && c.arc; });
                     br.reason = null;
                     br.detail = null;
                     br.inFlight = null;
-                    br.keptDraft = null;
+                    // #135 review (Copilot 4173592646): keptDraft is NOT cleared here; it survives retries and checkpoints until
+                    // that chapter completes (cleared on outcome.ok below), so a failed Resume or a reload still regenerates it.
                     br.estimate = { perChapter: est.perChapter, total: est.total, source: est.source };
                     br.cap = cap;
                     if (!Array.isArray(br.usageEstimated)) br.usageEstimated = [];
@@ -10422,7 +10429,8 @@ return c && c.name && c.backstory && c.arc; });
                     rejectedNow = true;
                 }
                 if (!outcome.ok && !outcome.keepDraft && !(outcome.reason === 'coverage' && !br.regenerateExisting)) nwBatchSetChapterText(n, old);
-                br.keptDraft = (!outcome.ok && outcome.keepDraft) ? n : null;
+                if (outcome.ok) { if (br.keptDraft === n) br.keptDraft = null; }
+                else if (outcome.keepDraft) br.keptDraft = n;
                 var rows = ensureBookTokenUsage().calls.length - mark;
                 var delta = nwBatchUsageSince(mark);
                 if (delta > 0) {
