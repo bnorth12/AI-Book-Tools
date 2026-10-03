@@ -2357,9 +2357,23 @@ let activeAICallCount = 0;
 		// NW.GEN.AI.3: callAI() SHALL update the requestLog with prompt, response, status, token count, cost, and originating tab name.
 		// NW.GEN.AI.4: callAI() SHALL invoke the provided callback with the parsed JSON response on success.
 		// This is the main function used to provide prompts and request information from the AI API.
+		// PR1 carry-in 4: an unknown saved model slug leaves the <select> blank (value ''). Fall back to the default
+		// model, else the first option, so callAI never sends model: ''.
+		const NW_DEFAULT_MODEL = 'grok-4.20-0309-reasoning';
+		function ensureModelSelected() {
+			const sel = document.getElementById('model');
+			if (!sel) return '';
+			if (!sel.value) {
+				const opts = Array.from(sel.options || []);
+				const pick = opts.find(function (o) { return o.value === NW_DEFAULT_MODEL; }) || opts.find(function (o) { return o.value; });
+				if (pick) sel.value = pick.value;
+			}
+			return sel.value;
+		}
+
         async function callAI(messages, tabElement, callbackOrOptions = {}, options = {}) {
 		    const apiKey = document.getElementById('apiKey').value;
-		    const model = document.getElementById('model').value;
+		    const model = ensureModelSelected();
 		    const isCallback = typeof callbackOrOptions === 'function';
 		    const callback = isCallback ? callbackOrOptions : null;
 		    const opts = isCallback ? options : callbackOrOptions;
@@ -7236,8 +7250,9 @@ return c && c.name && c.backstory && c.arc; });
 		}
 
 		function _trackedQuality() {
+			// getSessionQuality is the only producer of sessionQuality; the fallback still reads through the ledger helper.
 			if (typeof getSessionQuality === 'function') return getSessionQuality();
-			return { source: 'novelData.qualitySamples', samples: (novelData.qualitySamples || []).slice() };
+			return { source: 'ensureBookQualitySamples', samples: ensureBookQualitySamples().slice() };
 		}
 
 		function _trackedFinalize(report) {
@@ -7246,7 +7261,7 @@ return c && c.name && c.backstory && c.arc; });
 			report.sessionUsage = _trackedUsage();
 			report.bookTokenUsage = report.sessionUsage;
 			report.sessionQuality = _trackedQuality();
-			report.qualitySamples = (novelData.qualitySamples || []).slice();
+			report.qualitySamples = ensureBookQualitySamples().slice();
 			const u = report.sessionUsage;
 			report.summary = {
 				callCount: u.calls.length,
@@ -7368,7 +7383,7 @@ return c && c.name && c.backstory && c.arc; });
 
 				const modelSel = document.getElementById('model');
 				if (modelSel) {
-					if (!modelSel.value && modelSel.options && modelSel.options.length) modelSel.value = modelSel.options[0].value;
+					ensureModelSelected();
 					report.config.model = modelSel.value;
 					log('Model: ' + modelSel.value);
 				}
@@ -7679,6 +7694,11 @@ return c && c.name && c.backstory && c.arc; });
 				}
 			];
 
+			// Copilot r4116996734: the EvidencePack block built above belongs to this audit prompt (it used to be read,
+			// out of scope, by checkSpellingAndGrammar and threw ReferenceError there).
+			if (__c2ContEp && messages[1] && typeof messages[1].content === 'string' && messages[1].content.indexOf('EvidencePack') < 0) {
+				messages[1].content = messages[1].content + '\n' + __c2ContEp;
+			}
 			const response = await callAI(messages, document.getElementById('tab5'), { operationName: `runChapterContinuityAudit_${chapterNum}` });
 			const parsed = parseContinuityAuditResponse(response);
 			const chapterAudit = {
@@ -7751,9 +7771,6 @@ return c && c.name && c.backstory && c.arc; });
 		            ].join('\n')
 		        }
 		    ];
-		    if (__c2ContEp && Array.isArray(messages) && messages[1] && typeof messages[1].content === 'string' && messages[1].content.indexOf('EvidencePack') < 0) {
-				messages[1].content = messages[1].content + '\n' + __c2ContEp;
-			}
 			requestLog.lastPrompt = messages[1].content;
 		    requestLog.status = 'Pending';
 		    requestLog.originTab = 'tab6';
@@ -8015,9 +8032,10 @@ return c && c.name && c.backstory && c.arc; });
 			async function breakdownImprovement(index) {
 			    collectData();
 		    // Agent Skill I/O pack (tab7.breakdownImprovement)
-		    window.__lastSkillPack = packSkillInputs('tab7.breakdownImprovement', { novelData: novelData, improvement: (novelData.improvements || [])[index] });
+			    const improvement = (novelData.bookImprovementsWithStatus || [])[index];
+		    // Copilot r4118108231: pack the same status item the UI stores (bookImprovementsWithStatus), not novelData.improvements.
+		    window.__lastSkillPack = packSkillInputs('tab7.breakdownImprovement', { novelData: novelData, improvement: improvement });
 
-			    const improvement = novelData.bookImprovementsWithStatus[index];
 			    if (!improvement || improvement.status !== 'To Incorporate') {
 			        alert('Select an improvement marked "To Incorporate" to break down.');
 			        return;
@@ -8706,6 +8724,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		            document.getElementById('apiKey').value = novelData.apiKey || '';
 		            document.getElementById('model').value = novelData.model || 'grok-4.7';
+		            ensureModelSelected();
 		            document.getElementById('maxTokens').value = novelData.maxTokens || 6000;
 		            document.getElementById('genre').value = novelData.genre || 'scifi';
 		            const authorSelect = document.getElementById('authorStyle');
@@ -10164,6 +10183,7 @@ return c && c.name && c.backstory && c.arc; });
 		    novelData.qualitySamples = [];
 		    // API key is not persisted to localStorage per NW.GEN8
 		    document.getElementById('model').value = 'grok-4.7';
+		    ensureModelSelected();
 		    document.getElementById('maxTokens').value = '6000';
 		    document.getElementById('genre').value = 'scifi';
 		    document.getElementById('authorStyle').value = '';
