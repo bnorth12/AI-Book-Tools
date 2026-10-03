@@ -14,7 +14,7 @@
  *   S6 six-beat outline response: max_tokens >= 12000, hyphen ids requested, no auto-enrich, status OK, gate beats pass
  *   S7 old-shape outline response: auto-enrich called once and visible ("Running Enrich..."); a throwing enrich keeps outlines
  *   S8 thin ch5 only: Generate ch1/ch2/ch3 beats pass; Tab 4->5 readiness false with beat_*:ch5; Generate ch4 and ch5
- *      hard-block (0 provider calls); Generate All absent in this PR (slot 8)
+ *      hard-block (0 provider calls); Generate All (slot 8) refuses to start (0 provider calls, status names ch5 + button)
  *   S12 Generate ch3 rebuilds only ch4's packet after generation (plus the pre-gen ch3 build), 0 alerts; after regenerating
  *       ch3, Generate ch5's packet carries the new ch3 audit threads, not the old ones
  *   S13 Generate the last chapter: no post-generation packet build, no error
@@ -275,7 +275,12 @@ await page.evaluate(() => {
       g1: gate(1), g2: gate(2), g3: gate(3), g4: gate(4), g5: gate(5), g6: gate(6),
       ready: { passed: ready.passed, failures: ready.failures }, status,
       gen4: await gen(4), gen5: await gen(5),
-      generateAll: ['generateAllChapters', 'generateAll', 'runGenerateAll'].filter((n) => typeof window[n] === 'function')
+      generateAll: await (async () => {
+        h.reset();
+        if (typeof generateAllChapters !== 'function') return { missing: true };
+        const res = await generateAllChapters();
+        return { res, aiCalls: h.ai.length, alerts: h.alerts.slice(), status: document.getElementById('batchRunStatus').textContent, batchRun: novelData.batchRun ? 'present' : 'absent' };
+      })()
     };
   }, nd);
   check('S8', 'thin ch5 only: Generate ch1 / ch2 / ch3 pass on beats (and overall)', r.g1.beatPassed && r.g2.beatPassed && r.g3.beatPassed && r.g1.passed && r.g2.passed && r.g3.passed, JSON.stringify([r.g1, r.g2, r.g3]));
@@ -285,7 +290,7 @@ await page.evaluate(() => {
   for (const [n, g] of [[4, r.gen4], [5, r.gen5]]) {
     check('S8', 'Generate Chapter ' + n + ' hard-blocks: throws, 0 provider calls, one alert naming ch5 + the button, no text', g.threw && /STAGE GATE FAIL-CLOSED \[generateChapter /.test(g.threw) && g.aiCalls === 0 && g.alerts.length === 1 && /ch5: sceneGoal missing, dialogueTurn stub/.test(g.alerts[0]) && g.alerts[0].includes(BUTTON) && !g.text, JSON.stringify(g));
   }
-  check('S8', 'Generate All is not in this PR (slot 8); nothing to refuse', r.generateAll.length === 0, JSON.stringify(r.generateAll));
+  check('S8', 'Generate All (slot 8) refuses to start: preflight, 0 provider calls, 0 alerts, status names ch5 + the button', !r.generateAll.missing && r.generateAll.res && r.generateAll.res.started === false && r.generateAll.res.reason === 'preflight' && r.generateAll.aiCalls === 0 && r.generateAll.alerts.length === 0 && /ch5: sceneGoal missing, dialogueTurn stub/.test(r.generateAll.status) && r.generateAll.status.includes(BUTTON) && r.generateAll.batchRun === 'absent', JSON.stringify(r.generateAll));
 }
 { // S12 / S13 / S14: Fix 7 continuity packets
   const r = await page.evaluate(async (nd) => {
