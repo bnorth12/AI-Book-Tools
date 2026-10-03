@@ -7635,6 +7635,9 @@ return c && c.name && c.backstory && c.arc; });
 
 		// Tab 5 "Rebuild Continuity Packets" button: rebuilds every chapter and confirms with an alert (unchanged).
 		function rebuildContinuityPackets() {
+			// #134 follow-up 4 (NW.T5.16): user entry point refused (toast, no throw) during a Generate All run; the batch's own
+			// packet refresh (refreshContinuityAfterChapter) does not go through here.
+			if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) { nwToast('Rebuild Continuity Packets is locked while a Generate All run is active or awaiting restore.'); return false; }
 			collectData();
 			for (let i = 1; i <= novelData.numChapters; i++) {
 				buildChapterContinuityPacket(i);
@@ -7728,6 +7731,12 @@ return c && c.name && c.backstory && c.arc; });
 				messages[1].content = messages[1].content + '\n' + __c2ContEp;
 			}
 			const response = await callAI(messages, document.getElementById('tab5'), { operationName: `runChapterContinuityAudit_${chapterNum}` });
+			// #135 review (Copilot 4173592631): in a batch (nwBatchContinuityAudit passes throwOnParseError) malformed model JSON
+			// must stop the run as 'parse' instead of becoming a "successful" fallback audit. Single-chapter audits keep the
+			// fallback (it records "Unable to parse continuity audit output." as a risk) unchanged.
+			if (options.throwOnParseError && response && response._jsonParseError) {
+				throw new Error('continuity audit model JSON parse error (_jsonParseError): ' + response._jsonParseError);
+			}
 			const parsed = parseContinuityAuditResponse(response);
 			const chapterAudit = {
 				chapter: chapterNum,
@@ -7754,6 +7763,8 @@ return c && c.name && c.backstory && c.arc; });
 		}
 
 		async function runContinuityAuditAll() {
+			// #134 follow-up 4 (NW.T5.16): user entry point refused (toast, no throw); the batch audits via runChapterContinuityAudit.
+			if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) { nwToast('Run Continuity Audit (All) is locked while a Generate All run is active or awaiting restore.'); return false; }
 			collectData();
 			const chapterNumbers = Array.from({ length: novelData.numChapters }, (_, i) => i + 1)
 				.filter(ch => (novelData.chapters[ch - 1] || '').trim());
@@ -8706,8 +8717,7 @@ return c && c.name && c.backstory && c.arc; });
 		        warnings.push('Imported legacy bare NovelWriter data; migrated to current in-memory schema.');
 		    }
 
-		    return {
-		        novelData: {
+		    const mergedNovelData = {
 		            ...novelData,
 		            ...normalizedNovelData,
 		            authors: Array.isArray(normalizedNovelData.authors) ? normalizedNovelData.authors : [],
@@ -8731,7 +8741,11 @@ return c && c.name && c.backstory && c.arc; });
 		                    storyArcProgress: normalizedNovelData.continuityTracker.storyArcProgress && typeof normalizedNovelData.continuityTracker.storyArcProgress === 'object' ? normalizedNovelData.continuityTracker.storyArcProgress : {}
 		                }
 		                : { chapters: [], characterArcProgress: [], storyArcProgress: {} }
-		        },
+		    };
+		    // #134 follow-up 2: ...novelData above would carry the current book's batchRun into a payload that has none.
+		    if (!normalizedNovelData.batchRun) delete mergedNovelData.batchRun;
+		    return {
+		        novelData: mergedNovelData,
 		        requestLog: {
 		            ...requestLog,
 		            ...normalizedRequestLog
@@ -8841,14 +8855,35 @@ return c && c.name && c.backstory && c.arc; });
 		    if (!file) return;
 
 		    const reader = new FileReader();
-		    reader.onload = function(e) {
+		    reader.onload = async function(e) {
+		        // #134 follow-up 1 (NW.T5.14): a Generate All run may have started while the file was being read.
+		        // Recheck the lock before touching anything; nothing from the file is applied.
+		        if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
+		            if (typeof nwToast === 'function') nwToast(NW_IMPORT_CANCELLED_MSG);
+		            if (event && event.target) event.target.value = '';
+		            return;
+		        }
 		        try {
 		            const rawSessionData = JSON.parse(e.target.result);
 		            const { novelData: importedNovelData, requestLog: importedRequestLog, importMode, warnings } = normalizeImportedSessionData(rawSessionData);
+		            const priorRunId = novelData && novelData.batchRun && novelData.batchRun.id;
 		            novelData = importedNovelData;
 		            requestLog = importedRequestLog;
+		            // #134 follow-up 2 (NW.T5.15): a book imported without a batchRun must not inherit the previous book's run.
+		            // Await checkpoint delete before reporting success; IDB failures are logged inside nwBatchForgetRun.
+		            if (!novelData.batchRun && typeof nwBatchForgetRun === 'function') await nwBatchForgetRun(priorRunId);
 
 		            applySessionDataToUI();
+
+		            // Run-less import: drop the previous book's custom cap so Generate All uses a fresh estimate.
+		            if (!novelData.batchRun) {
+		                var capElRunless = document.getElementById('batchTokenCap');
+		                if (capElRunless) {
+		                    capElRunless.removeAttribute('data-user-edited');
+		                    capElRunless.value = '';
+		                }
+		                if (typeof nwBatchRefreshEstimate === 'function') nwBatchRefreshEstimate();
+		            }
 
 		            if (warnings.length > 0) {
 		                console.warn('Import completed with warnings:', warnings);
@@ -9713,7 +9748,9 @@ return c && c.name && c.backstory && c.arc; });
 		    updateRequestLog();
 			refreshContinuityAfterChapter(chapterNum);
 			if (novelData.autoContinuityAudit) {
-				await runChapterContinuityAudit(chapterNum, { silent: true });
+				// #134 follow-up 5: in a batch only the audit call is retried (Parts 1/2 already spent their tokens).
+				if (opts.batch && typeof nwBatchContinuityAudit === 'function') await nwBatchContinuityAudit(chapterNum);
+				else await runChapterContinuityAudit(chapterNum, { silent: true });
 			}
 		    console.log('Post-final updateRequestLog - chapterContent Length:', chapterContent.length);
 		    try {
@@ -9847,6 +9884,80 @@ return c && c.name && c.backstory && c.arc; });
             return 'Part ' + part + ' provider error (' + (st ? 'HTTP ' + st : 'no response') + ', not retried): ' + nwBatchShort(body, 160);
         }
 
+        // #134 follow-ups (slot 8a):
+        // NW.T5.14: importSession's reader.onload SHALL recheck the batch lock and cancel the import (toast
+        //           NW_IMPORT_CANCELLED_MSG, no dialog, nothing applied) when a run started during the file read.
+        // NW.T5.15: an imported session without batchRun SHALL NOT keep the previous book's batchRun; the interrupted state is
+        //           cleared and the previous run's IndexedDB checkpoint is deleted.
+        // NW.T5.16: Rebuild Continuity Packets and Run Continuity Audit (All) SHALL be locked like the other writers (disabled,
+        //           handlers return with a toast); the batch's internal continuity work is unaffected.
+        // NW.T5.17: in a batch, an error from runChapterContinuityAudit SHALL be classified with nwClassifyError: retryable
+        //           -> retry only the audit once, then stop 'provider'; provider -> stop, no retry; parse -> stop 'parse'.
+        //           The drafted chapter text is kept and Resume regenerates that chapter; usage stays real (no estimate
+        //           when the chapter recorded provider usage).
+        var NW_IMPORT_CANCELLED_MSG = 'Import cancelled: a Generate All run is active. Import again after it stops.';
+        var nwToastTimer = null;
+        function nwToast(msg, ms) {
+            var el = nwBatchEl('nwToast');
+            msg = String(msg == null ? '' : msg);
+            if (!el) { console.warn(msg); return; }
+            el.textContent = msg;
+            el.hidden = false;
+            if (nwToastTimer) clearTimeout(nwToastTimer);
+            nwToastTimer = setTimeout(function () { el.hidden = true; nwToastTimer = null; }, ms || 8000);
+        }
+
+        function nwBatchIdbDelete(key) {
+            return nwBatchOpenDb().then(function (db) {
+                return new Promise(function (resolve, reject) {
+                    var tx;
+                    try {
+                        tx = db.transaction(NW_BATCH.idbStore, 'readwrite');
+                        tx.objectStore(NW_BATCH.idbStore).delete(key);
+                    } catch (e) { reject(e); return; }
+                    tx.oncomplete = function () { resolve(); };
+                    tx.onerror = function () { reject(tx.error || new Error('checkpoint delete failed')); };
+                    tx.onabort = function () { reject(tx.error || new Error('checkpoint delete aborted')); };
+                });
+            });
+        }
+
+        /** Import of a book without a run: forget the previous run (interrupted state, restore box, its checkpoint). Import must await this before reporting success. */
+        function nwBatchForgetRun(priorRunId) {
+            var rec = nwBatchState.interrupted;
+            var keys = [];
+            if (priorRunId) keys.push(priorRunId);
+            if (rec && (rec.key || (rec.batchRun && rec.batchRun.id))) keys.push(rec.key || rec.batchRun.id);
+            nwBatchState.interrupted = null;
+            nwBatchShow('batchRestoreBox', false);
+            nwBatchApplyLock();
+            var p = Promise.all(keys.filter(function (k, i) { return keys.indexOf(k) === i; }).map(function (k) {
+                return nwBatchIdbDelete(k).catch(function (e) { console.warn('[batch] delete old checkpoint', e); });
+            }));
+            nwBatchState.lastForget = p;
+            return p;
+        }
+
+        /** Batch-only continuity audit: retries just the audit call once for retryable errors (never the whole chapter). */
+        async function nwBatchContinuityAudit(n) {
+            for (var attempt = 1; ; attempt++) {
+                try {
+                    return await runChapterContinuityAudit(n, { silent: true, throwOnParseError: true });
+                } catch (e) {
+                    var kind = nwClassifyError(e);
+                    var msg = nwBatchShort(nwBatchErrText(e), 300);
+                    if (kind === 'retryable' && attempt < 2) {
+                        nwBatchSetStatus('ch' + n + ' continuity audit provider error; retrying the audit once in ' + Math.round(NW_BATCH.retryDelayMs / 1000) + ' s: ' + nwBatchShort(msg, 160), 'running');
+                        await nwBatchSleep(NW_BATCH.retryDelayMs);
+                        continue;
+                    }
+                    var err = new Error('continuity audit failed: ' + msg);
+                    err.nwAuditFailure = { chapter: n, kind: kind, message: msg, attempts: attempt };
+                    throw err;
+                }
+            }
+        }
+
         /** True while a batch chapter is in flight and the call is one of its own quality passes (not a user action). */
         function nwBatchOwnsRevise(chapterNum, opts) {
             var tag = opts && opts.operationTag;
@@ -9921,14 +10032,14 @@ return c && c.name && c.backstory && c.arc; });
         }
 
         /** Chapters to draft, in order. Existing text is skipped unless regenerate; completed chapters never rerun. */
-        function nwBatchPlan(range, regenerate, completed, skipChapter) {
+        function nwBatchPlan(range, regenerate, completed, skipChapter, forceChapter) {
             var planned = [];
             var skipped = [];
             completed = completed || [];
             for (var n = range.from; n <= range.to; n++) {
                 if (completed.indexOf(n) >= 0) continue;
                 if (skipChapter != null && n === skipChapter) { skipped.push(n); continue; }
-                if (!regenerate && nwBatchChapterHasText(n)) { skipped.push(n); continue; }
+                if (!regenerate && n !== forceChapter && nwBatchChapterHasText(n)) { skipped.push(n); continue; }
                 planned.push(n);
             }
             return { planned: planned, skipped: skipped };
@@ -10035,7 +10146,12 @@ return c && c.name && c.backstory && c.arc; });
             if (br.reason == null || br.reason === 'done') return false;
             // Only a coverage stop skips its chapter; a parse/provider/gate stop regenerates the stopped chapter on Resume.
             var skip = br.reason === 'coverage' ? br.stoppedAt : null;
-            return nwBatchPlan(br.range, br.regenerateExisting, br.completed, skip).planned.length > 0;
+            return nwBatchPlan(br.range, br.regenerateExisting, br.completed, skip, nwBatchKeptDraftChapter(br)).planned.length > 0;
+        }
+
+        /** NW.T5.17: chapter whose drafted text was kept at a continuity-audit stop; Resume regenerates it even though it has text. */
+        function nwBatchKeptDraftChapter(br) {
+            return (br && br.keptDraft != null && br.keptDraft === br.stoppedAt) ? br.keptDraft : null;
         }
 
         function nwBatchApplyLock() {
@@ -10044,6 +10160,8 @@ return c && c.name && c.backstory && c.arc; });
             document.querySelectorAll('textarea[id^="chapterEditContent"]').forEach(function (t) { t.readOnly = locked; t.disabled = locked; });
             // Tab 7 Apply (updateChapter) and Tab 8 Integrate Suggestions are writers too.
             document.querySelectorAll('#tab7 button[onclick*="applyTopBookCritiques"], #improvementsTableBody button[onclick*="applyBookCritiqueItem"], #tab8 button[onclick*="integrateBreakdownSuggestions"]').forEach(function (b) { b.disabled = locked; });
+            // #134 follow-up 4: the Tab 5 continuity writers are locked the same way.
+            document.querySelectorAll('#tab5 button[onclick*="rebuildContinuityPackets"], #tab5 button[onclick*="runContinuityAuditAll"]').forEach(function (b) { b.disabled = locked; });
             ['importFile', 'numChapters', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap'].forEach(function (id) {
                 var el = nwBatchEl(id);
                 if (el) el.disabled = locked;
@@ -10096,7 +10214,11 @@ return c && c.name && c.backstory && c.arc; });
             var plan = nwBatchPlan({ from: o.from, to: o.to }, o.regenerateExisting, [], null);
             var est = nwBatchEstimate(plan.planned.length);
             var capEl = nwBatchEl('batchTokenCap');
-            if (capEl && capEl.dataset.userEdited !== '1') capEl.value = String(Math.ceil(est.total * NW_BATCH.capFactor));
+            if (capEl && capEl.dataset.userEdited !== '1') {
+                // #134 follow-up 3 (NW.T5.18): a resumable run keeps showing its saved cap (Resume uses br.cap) until the user edits it.
+                var brCap = novelData && novelData.batchRun;
+                capEl.value = (brCap && Number(brCap.cap) > 0 && nwBatchIsResumable()) ? String(brCap.cap) : String(Math.ceil(est.total * NW_BATCH.capFactor));
+            }
             nwBatchApplyLock();
             return est;
         }
@@ -10113,6 +10235,13 @@ return c && c.name && c.backstory && c.arc; });
                 try {
                     await generateChapter(n, { batch: true });
                 } catch (e) {
+                    if (e && e.nwAuditFailure) {
+                        // NW.T5.17: the chapter text is drafted; keep it, stop, and let Resume regenerate this chapter.
+                        var af = e.nwAuditFailure;
+                        if (af.kind === 'parse') return { ok: false, reason: 'parse', parse: true, keepDraft: true, detail: 'continuity audit parse failure (no retry): ' + af.message, attempts: attempts };
+                        if (af.kind === 'provider') return { ok: false, reason: 'provider', noRetry: true, keepDraft: true, detail: nwProviderDetail('?', af.message).replace(/^Part \? /, 'continuity audit '), attempts: attempts };
+                        return { ok: false, reason: 'provider', keepDraft: true, detail: 'continuity audit provider error after 1 retry: ' + af.message, attempts: attempts };
+                    }
                     var m = nwBatchErrText(e);
                     if (/^STAGE GATE FAIL-CLOSED/.test(m)) return { ok: false, reason: 'gate', detail: m, attempts: attempts };
                     if (/^OBLIGATION COVERAGE FAIL-CLOSED/.test(m)) return { ok: false, reason: 'coverage', detail: m, attempts: attempts };
@@ -10184,6 +10313,7 @@ return c && c.name && c.backstory && c.arc; });
                 var perDl;
                 var completed = [];
                 var skipChapter = null;
+                var forceChapter = null;
                 if (resume) {
                     if (!br || !nwBatchIsResumable()) {
                         nwBatchSetStatus('Nothing to resume.', 'idle');
@@ -10203,12 +10333,13 @@ return c && c.name && c.backstory && c.arc; });
                     regenerate = !!br.regenerateExisting;
                     perDl = !!br.perChapterDownload;
                     completed = (br.completed || []).slice();
+                    forceChapter = nwBatchKeptDraftChapter(br);
                 } else {
                     range = { from: o.from, to: o.to };
                     regenerate = o.regenerateExisting;
                     perDl = o.perChapterDownload;
                 }
-                var plan = nwBatchPlan(range, regenerate, completed, skipChapter);
+                var plan = nwBatchPlan(range, regenerate, completed, skipChapter, forceChapter);
                 var pre = nwBatchPreflight(plan.planned);
                 if (!pre.passed) {
                     nwBatchSetStatus(pre.message, 'blocked');
@@ -10233,6 +10364,8 @@ return c && c.name && c.backstory && c.arc; });
                     br.reason = null;
                     br.detail = null;
                     br.inFlight = null;
+                    // #135 review (Copilot 4173592646): keptDraft is NOT cleared here; it survives retries and checkpoints until
+                    // that chapter completes (cleared on outcome.ok below), so a failed Resume or a reload still regenerates it.
                     br.estimate = { perChapter: est.perChapter, total: est.total, source: est.source };
                     br.cap = cap;
                     if (!Array.isArray(br.usageEstimated)) br.usageEstimated = [];
@@ -10306,7 +10439,9 @@ return c && c.name && c.backstory && c.arc; });
                     br.rejectedDraft = { chapter: n, text: String((novelData.chapters || [])[n - 1] || ''), detail: nwBatchShort(outcome.detail, 300) };
                     rejectedNow = true;
                 }
-                if (!outcome.ok && !(outcome.reason === 'coverage' && !br.regenerateExisting)) nwBatchSetChapterText(n, old);
+                if (!outcome.ok && !outcome.keepDraft && !(outcome.reason === 'coverage' && !br.regenerateExisting)) nwBatchSetChapterText(n, old);
+                if (outcome.ok) { if (br.keptDraft === n) br.keptDraft = null; }
+                else if (outcome.keepDraft) br.keptDraft = n;
                 var rows = ensureBookTokenUsage().calls.length - mark;
                 var delta = nwBatchUsageSince(mark);
                 if (delta > 0) {
@@ -10323,7 +10458,7 @@ return c && c.name && c.backstory && c.arc; });
                 } catch (e) {
                     checkpointFailed = nwBatchErrText(e);
                 }
-                if (!outcome.ok) { stop = { reason: outcome.reason, at: n, detail: outcome.detail, noRetry: !!outcome.noRetry }; break; }
+                if (!outcome.ok) { stop = { reason: outcome.reason, at: n, detail: outcome.detail, noRetry: !!outcome.noRetry, keptDraft: !!outcome.keepDraft }; break; }
                 if (checkpointFailed) { stop = { reason: 'checkpoint', at: n, detail: 'checkpoint write failed after ch' + n + ': ' + checkpointFailed }; break; }
                 if (br.perChapterDownload) {
                     try { nwBatchDownloadText((novelData.title || 'Untitled_Novel') + '_ch' + n + '.txt', novelData.chapters[n - 1]); } catch (e) { console.warn('[batch] chapter download', e); }
@@ -10352,7 +10487,8 @@ return c && c.name && c.backstory && c.arc; });
                 : 'Done: ch' + br.range.from + '-' + br.range.to + '.';
             if (stop && stop.reason === 'parse') text += ' Response could not be parsed (no retry); Resume regenerates ch' + stop.at + '.';
             else if (stop && stop.reason === 'provider') text += (stop.noRetry ? ' Not retried;' : ' Provider error (retried once where retryable);') + ' Resume regenerates ch' + stop.at + '.';
-            else if (stop && stop.reason === 'coverage' && rejectedNow) text += ' Old ch' + stop.at + ' text restored; rejected draft kept aside in session export (batchRun.rejectedDraft).';
+            if (stop && stop.keptDraft) text += ' Drafted ch' + stop.at + ' text kept.';
+            if (stop && stop.reason === 'coverage' && rejectedNow) text += ' Old ch' + stop.at + ' text restored; rejected draft kept aside in session export (batchRun.rejectedDraft).';
             text += ' Completed: ' + (br.completed.length ? br.completed.join(', ') : 'none') + '.' + skippedNote;
             if (br.usageEstimated.length) text += ' Usage estimated (no provider usage) for: ' + br.usageEstimated.join(', ') + '.';
             text += ' Tokens ' + br.tokensUsed + '/' + br.cap + '.';
@@ -11590,6 +11726,8 @@ return c && c.name && c.backstory && c.arc; });
 
 </script>
 
+	    <!-- #134 follow-ups (slot 8a): non-modal toast for refused actions (import during a run, locked continuity controls). -->
+	    <div id="nwToast" role="status" aria-live="polite" data-testid="nw-toast" hidden style="position: fixed; right: 1em; bottom: 1em; max-width: 32em; padding: 0.6em 0.9em; background: #333; color: #fff; border-radius: 4px; z-index: 10000;"></div>
 	</body>
 </html>
 
