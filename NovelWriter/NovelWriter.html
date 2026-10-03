@@ -8775,35 +8775,25 @@ return c && c.name && c.backstory && c.arc; });
 			if (strictModeEl) strictModeEl.checked = !!novelData.continuityStrictMode;
 			if (autoAuditEl) autoAuditEl.checked = !!novelData.autoContinuityAudit;
 
-		    const charList = document.getElementById('characterList');
-		    charList.innerHTML = '';
-		    (novelData.characters || []).forEach(char => {
-		        const div = document.createElement('div');
-		        div.className = 'character';
-		        div.innerHTML = `
-		            <label>Name:</label><input type="text" class="charName" value="${char.name || ''}">
-		            <label>Backstory:</label><textarea class="charBackstory">${char.backstory || ''}</textarea>
-		            <label>Arc:</label><textarea class="charArc">${char.arc || ''}</textarea>
-		        `;
-		        charList.appendChild(div);
-		    });
-		    // Set numCharacters to match imported character count
-		    document.getElementById('numCharacters').value = (novelData.characters || []).length || 3;
-			updateCharacterCounter();
+		    // CodeQL (DOM text reinterpreted as HTML): session/checkpoint data is never interpolated into innerHTML here.
+		    // renderCharacters()/renderSubplots() build fixed markup and set every user field through .value.
+		    const hasChars = Array.isArray(novelData.characters) && novelData.characters.length > 0;
+		    renderCharacters();
+		    if (!hasChars) {
+		        // keep the previous import behaviour for a session without characters: no cards, numCharacters 3
+		        document.getElementById('characterList').textContent = '';
+		        document.getElementById('numCharacters').value = 3;
+		        updateCharacterCounter();
+		    }
 
-		    const subplotList = document.getElementById('subplotList');
-		    subplotList.innerHTML = '';
-		    (novelData.subplots || []).forEach((subplot, index) => {
-		        const subplotDiv = document.createElement('div');
-		        subplotDiv.className = 'subplot-section';
-		        subplotDiv.innerHTML = `
-		            <label>Subplot ${index + 1}:</label>
-		            <textarea class="subplot" style="height: 300px;">${subplot}</textarea>
-		        `;
-		        subplotList.appendChild(subplotDiv);
-		    });
-			document.getElementById('minSubplots').value = (novelData.subplots || []).length || 1;
-			updateSubplotCounter();
+		    const hasSubplots = Array.isArray(novelData.subplots) && novelData.subplots.length > 0;
+		    renderSubplots();
+		    if (!hasSubplots) {
+		        // keep the previous import behaviour for a session without subplots: no sections, minSubplots 1
+		        document.getElementById('subplotList').textContent = '';
+		        document.getElementById('minSubplots').value = 1;
+		        updateSubplotCounter();
+		    }
 
 		    document.getElementById('novelOutline').value = novelData.novelOutline || '';
 		    document.getElementById('plotOutline').value = novelData.plotOutline || '';

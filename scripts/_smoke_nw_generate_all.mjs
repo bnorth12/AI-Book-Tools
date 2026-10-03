@@ -28,6 +28,10 @@
  *       reason; Part 1 parse failure on ch3 stops at 3 (reason parse, no retry) and Resume regenerates ch3 (same for a
  *       Part 2 parse stop on ch2); coverage resume needs a second click; coverage stop with regenerate on restores the old
  *       text and keeps batchRun.rejectedDraft {chapter,text,detail} in the session export but never in a checkpoint
+ *   X1  CodeQL DOM-as-HTML: a session whose character name/backstory/arc and subplot are `<img src=x onerror=...>` (plus
+ *       attribute/textarea break-out variants) is imported through the real #importFile input and restored through the
+ *       IndexedDB "Restore interrupted batch run" path: window.__xss stays undefined, no <img> lands in the Tab 2 lists,
+ *       and every field value round-trips exactly (DOM .value and novelData)
  *
  * Usage: node scripts/_smoke_nw_generate_all.mjs
  * Env:   NW_HTML_PATH (default this checkout's NovelWriter/NovelWriter.html), NW_OUT_DIR (default out/nw-smoke)
@@ -488,6 +492,54 @@ const batchDialogTotals = [];
   const p2r = await batch(page, { resume: true, resetCounters: true });
   check('E4', 'Resume after the Part 2 parse stop on ch2 regenerates ch2 (provider called for ch2 Part 1 + Part 2) and completes it', p2r.r.started && p2r.calls[0] && p2r.calls[0].ch === 2 && p2r.calls[0].part === 1 && callsFor(p2r, 2) === 2 && /^Chapter 2 part 1/.test(p2r.chapters[1]) && eq(p2r.br.completed, [1, 2, 3, 4]) && p2r.br.reason === 'done', JSON.stringify({ r: p2r.r, calls: p2r.calls, br: p2r.br }));
   for (const x of [a, c, c1, c2, cr, g, p, pr, p2, p2r]) batchDialogTotals.push(x.dialogs.length);
+  await page.close();
+}
+
+// ---------------- X1: session data never reinterpreted as HTML (import + restore) ----------------
+{
+  const XSS = '<img src=x onerror=window.__xss=1>';
+  const CHARS = [
+    { name: XSS, role: 'protagonist', backstory: XSS, arc: XSS },
+    { name: '"><img src=x onerror=window.__xss=2>', role: 'foil', backstory: '</textarea><img src=x onerror=window.__xss=3>', arc: '</textarea><img src=x onerror=window.__xss=4> &amp; &lt;b&gt;' }
+  ];
+  const SUBS = [XSS, '</textarea><img src=x onerror=window.__xss=5>'];
+  const xssNd = clone(ND); xssNd.characters = clone(CHARS); xssNd.subplots = clone(SUBS);
+  const readBack = () => ({
+    xss: window.__xss,
+    imgs: document.querySelectorAll('#characterList img, #subplotList img').length,
+    dom: Array.from(document.querySelectorAll('#characterList .character')).map((d) => ({ name: d.querySelector('.charName').value, backstory: d.querySelector('.charBackstory').value, arc: d.querySelector('.charArc').value, role: d.dataset.role || null })),
+    domSubs: Array.from(document.querySelectorAll('#subplotList .subplot')).map((t) => t.value),
+    nd: (novelData.characters || []).map((c) => ({ name: c.name, backstory: c.backstory, arc: c.arc, role: c.role })),
+    ndSubs: (novelData.subplots || []).slice(),
+    numCharacters: document.getElementById('numCharacters').value, minSubplots: document.getElementById('minSubplots').value
+  });
+  const expectDom = CHARS.map((c) => ({ name: c.name, backstory: c.backstory, arc: c.arc, role: c.role }));
+  const okRound = (x) => x.xss === undefined && x.imgs === 0 && eq(x.dom, expectDom) && eq(x.domSubs, SUBS) && eq(x.nd, expectDom) && eq(x.ndSubs, SUBS) && x.numCharacters === '2' && x.minSubplots === '2';
+  // (a) real importSession through the #importFile input
+  const page = await openPage();
+  await page.locator('#importFile').setInputFiles({ name: 'xss_session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: xssNd })) });
+  await page.waitForFunction(() => window.__h.dialogs.some((d) => /Session imported/.test(d)), null, { timeout: 15000 });
+  await page.waitForTimeout(600); // give any injected <img onerror> time to fire
+  const imp = await page.evaluate(readBack);
+  check('X1', 'import: XSS payloads in character name/backstory/arc + subplot do not execute (window.__xss undefined, no <img> in Tab 2)', imp.xss === undefined && imp.imgs === 0, JSON.stringify({ xss: imp.xss, imgs: imp.imgs }));
+  check('X1', 'import: character and subplot values round-trip exactly (DOM .value + novelData; role kept as data-role)', okRound(imp), JSON.stringify(imp));
+  // (b) IndexedDB restore path: checkpoint written with the same payloads, page reloaded, restore applied
+  await page.evaluate(async (nd) => {
+    const h = window.__h; h.load(nd);
+    const snap = JSON.parse(JSON.stringify(novelData)); delete snap.apiKey; delete snap.batchRun;
+    const t = new Date().toISOString();
+    const br = { id: 'xss|' + t, startedAt: t, updatedAt: t, range: { from: 1, to: 4 }, regenerateExisting: false, perChapterDownload: false, completed: [], inFlight: 1, stoppedAt: null, reason: null, detail: null, tokensUsed: 0, estimate: { perChapter: 1, total: 4, source: 'fallback' }, cap: 10, usageEstimated: [] };
+    await nwBatchIdbPut({ key: br.id, savedAt: t, active: true, novelData: snap, batchRun: br }, br.id);
+  }, xssNd);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof restoreInterruptedBatchRun === 'function' && window.__nwBatchRestoreCheck, null, { timeout: 30000 });
+  await page.evaluate(() => window.__nwBatchRestoreCheck);
+  await installHarness(page);
+  const restoredOk = await page.evaluate(async () => { window.__xss = undefined; const found = !!nwBatchState.interrupted; const ok = await restoreInterruptedBatchRun(); return found && ok; });
+  await page.waitForTimeout(600);
+  const res = await page.evaluate(readBack);
+  check('X1', 'restore path: interrupted checkpoint found and restored; payloads do not execute (window.__xss undefined, no <img>)', restoredOk && res.xss === undefined && res.imgs === 0, JSON.stringify({ restoredOk, xss: res.xss, imgs: res.imgs }));
+  check('X1', 'restore path: character and subplot values round-trip exactly', okRound(res), JSON.stringify(res));
   await page.close();
 }
 
