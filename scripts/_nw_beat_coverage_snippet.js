@@ -76,7 +76,16 @@ function scoreBeatCoverage(nd, opts) {
 	}).filter(function (n) { return n.length >= 2; });
 	var hasSubplots = (nd.subplots || []).length >= 1;
 
-	for (var i = 0; i < cap; i++) {
+	// Fix 4: opts.chapters (1-based, clipped to [1, cap]) limits the pass to those chapters only.
+			var chList = null;
+			if (Array.isArray(opts.chapters)) {
+		chList = Array.from(new Set(opts.chapters.map(Number).filter(function (n) {
+			return Math.floor(n) === n && n >= 1 && n <= cap;
+		}))).sort(function (a, b) { return a - b; });
+			}
+			var iterChapters = chList || Array.from({ length: cap }, function (_, q) { return q + 1; });
+			for (var ii = 0; ii < iterChapters.length; ii++) {
+		var i = iterChapters[ii] - 1;
 		var ch = i + 1;
 		var raw = list[i];
 		if (raw == null) {
@@ -132,7 +141,8 @@ function scoreBeatCoverage(nd, opts) {
 		perChapter: perChapter,
 		required: NW_BEAT_REQUIRED.slice(),
 		chapterCap: cap,
-		stubCharLimit: stubLimit
+		stubCharLimit: stubLimit,
+		chapters: chList
 	};
 }
 
