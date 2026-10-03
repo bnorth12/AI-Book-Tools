@@ -12,6 +12,7 @@
 const { test, expect } = require('@playwright/test');
 const { pathToFileURL } = require('url');
 const path = require('path');
+const fs = require('fs');
 
 const APP_PATH = path.resolve(__dirname, '..', '..', 'NovelWriter', 'NovelWriter.html');
 const APP_URL = pathToFileURL(APP_PATH).toString();
@@ -90,6 +91,38 @@ function mockXaiEndpoint(page) {
       body: JSON.stringify({ choices: [{ message: { content } }] })
     });
   });
+}
+
+// Rich one-chapter spine for Generate Chapter (passes the PR1 pre-prose gate), via the real importSession path.
+async function importRichOneChapterSpine(page) {
+  const fx = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'NovelWriter', 'fixtures', 'beat-gate-old-shape-v1', 'novelData.json'), 'utf8'));
+  const lead = fx.characters[0].name;
+  const bp = Object.assign({}, fx.chapterBlueprints[0], {
+    sceneGoal: lead + ' must decide which observation to commit before the habitat telemetry window closes.',
+    castArcBeat: lead + ' shifts from guarded procedure toward open doubt, paying a visible personal cost.',
+    // Legacy obligation fields match the mocked chapter prose so post-generation obligation coverage passes too.
+    arcStep: 'Coalition factions argue over anomaly containment before the front reaches Pylon Seven.',
+    characterBeats: [{ name: 'Dr. Yeva Sorin', beat: 'Forced into leadership of a fractured council.' }],
+    worldHooks: ['habitat ring', 'Pylon Seven'],
+    allowedPayoffs: [],
+    subplotPressure: ['Anomaly front closing on Pylon Seven forces the factions to share transponder codes.'],
+    dialogueTurn: 'An argument over the readings flips who holds authority in the control room.',
+    sensoryWorldHook: 'Ozone tang and the hum of the hydroponic bays under failing lights.',
+    turnOrPayoff: 'The delayed consequence of an earlier choice lands and narrows the next options.'
+  });
+  const novelData = {
+    title: 'Frontier Novel', genre: fx.genre, numChapters: 1, chapterLength: 2000, setting: fx.setting,
+    characters: fx.characters, subplots: fx.subplots, novelOutline: fx.novelOutline, plotOutline: fx.plotOutline,
+    storyArcOutline: fx.storyArcOutline, chapterOutlines: [fx.chapterOutlines[0]], chapterArcs: [], chapterBlueprints: [bp],
+    chapters: [], editedChapters: [], bookImprovements: [], bookImprovementsWithStatus: [], chapterImprovements: []
+  };
+  await page.evaluate((snapshot) => {
+    const mockEvent = { target: { files: [{ content: JSON.stringify(snapshot) }] } };
+    const origReadAsText = FileReader.prototype.readAsText;
+    FileReader.prototype.readAsText = function (file) { this.onload({ target: { result: file.content } }); };
+    importSession(mockEvent);
+    FileReader.prototype.readAsText = origReadAsText;
+  }, { schemaVersion: '1.0', sourceTool: 'NovelWriter', sourceVersion: '0.3.4', novelData, requestLog: { status: 'Imported', lastPrompt: '', returnedInfo: '', tokenUsage: '', originTab: '' } });
 }
 
 // --- Navigation and core shell behavior ---
@@ -207,7 +240,12 @@ test('NW-REG-05 Session import populates story fields from schema envelope', asy
 // --- Chapter generation and edit paths ---
 test('NW-REG-06 Generate Chapter populates chapter content via mocked API', async ({ page }) => {
   await mockXaiEndpoint(page);
+  page.on('dialog', dialog => dialog.accept());
   await gotoApp(page);
+  // PR1 made Generate Chapter fail-closed on a thin spine (cast/subplot density, outline obligations, six blueprint
+  // beats for ch N and N+1). Import a rich one-chapter spine (from the beat-gate fixture) instead of loosening the gate.
+  // Import first: importSession clears the API key field.
+  await importRichOneChapterSpine(page);
 
   await page.fill('#apiKey', 'gsk_test_key');
   await page.fill('#title', 'Frontier Novel');
