@@ -202,6 +202,9 @@ async function loadEnvelope(page, envelope) {
   check('0', 'export filename uses workflow stage', /_\d{2}-[a-z0-9-]+_\d{8}-\d{4}\.json$/i.test(round.filename), round.filename);
 
   const legacy = await page.evaluate(() => {
+    // #145: this page already has skipAutoRevision checked (draft-only generate above).
+    // An absent flag must preserve that checkbox; 8d fields still default empty/false.
+    document.getElementById('skipAutoRevision').checked = true;
     const payload = { schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: { title: 'Legacy', genre: 'scifi', chapters: [] } };
     const imported = normalizeImportedSessionData(payload);
     return {
@@ -209,10 +212,11 @@ async function loadEnvelope(page, envelope) {
       cards: imported.novelData.chapterScorecards,
       chFacts: imported.novelData.chapterFactChecks,
       ai: imported.novelData.aiBeatCheck,
-      skip: imported.novelData.skipAutoRevision
+      skip: imported.novelData.skipAutoRevision,
+      checkbox: document.getElementById('skipAutoRevision').checked
     };
   });
-  check('0', 'legacy import has empty factChecks / scorecards and aiBeatCheck false', Array.isArray(legacy.cards) && legacy.cards.length === 0 && legacy.ai === false && legacy.facts && Array.isArray(legacy.facts.entries) && legacy.skip === false, JSON.stringify(legacy));
+  check('0', 'legacy import has empty factChecks / scorecards and aiBeatCheck false; absent skipAutoRevision preserves checkbox', Array.isArray(legacy.cards) && legacy.cards.length === 0 && legacy.ai === false && legacy.facts && Array.isArray(legacy.facts.entries) && legacy.skip === true && legacy.checkbox === true, JSON.stringify(legacy));
   await page.close();
 }
 

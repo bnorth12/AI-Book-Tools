@@ -13,7 +13,7 @@
  *   D6  shrink guard at qualityRevise, qualityMultiPass, applyStaged: 50% stub restored, reason + word
  *       counts logged, pass marked reverted, gate re-run
  *   D7  boundaries: 19% accepted, 21% rejected, before.length <= 400 not guarded
- *   D8  session: flag survives export/import; legacy import without the flag is false
+ *   D8  session: flag survives export/import; legacy imports preserve the checkbox; explicit flags win
  *   D9  Copilot 4174871747/4174871730: draft-only batch fills windows; toggling skip OFF
  *       clears those samples, falls back to the full-pass estimate, refreshes the prefilled
  *       cap, and a follow-up full-pass batch is not stopped early by a stale draft-only cap
@@ -235,6 +235,19 @@ function ops(calls) { return (calls || []).map((c) => c.operationName); }
   const UG_PATH = path.join(REPO_ROOT, 'NovelWriter', 'user_guide.html');
   const ug = fs.existsSync(UG_PATH) ? fs.readFileSync(UG_PATH, 'utf8') : '';
   check('UI', 'Help line present in NovelWriter/user_guide.html', ug.includes(HELP) && ug.includes(LABEL), 'missing help/label in user_guide');
+  const note = page.locator('#draftOnlyNote');
+  check('UI', 'draft-only note hidden by default', await note.count() === 1 && await note.evaluate((el) => el.hidden));
+  await page.evaluate(() => showTab(5));
+  await page.locator('#skipAutoRevision').check();
+  check('UI', 'draft-only note visible when checked', await note.isVisible() && /automatic revision passes are skipped/.test(await note.textContent()));
+  await page.locator('#skipAutoRevision').uncheck();
+  check('UI', 'draft-only note hidden when unchecked', await note.isHidden());
+  await page.locator('#skipAutoRevision').check();
+  await page.evaluate(() => {
+    document.getElementById('apiKey').value = 'smoke-placeholder-not-a-key';
+    resetState();
+  });
+  check('UI', 'reset hides the draft-only note', await note.isHidden());
   await page.close();
 }
 
@@ -544,15 +557,49 @@ function ops(calls) { return (calls || []).map((c) => c.operationName); }
   }, ND);
   check('D8', 'export/import round-trips skipAutoRevision true', round.exportedFlag === true && round.afterImport === true && round.checkbox === true, JSON.stringify(round));
 
-  const legacy = await page.evaluate((nd) => {
-    const payload = { schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: { title: nd.title, genre: nd.genre, chapters: [], skipAutoRevision: undefined } };
-    delete payload.novelData.skipAutoRevision;
-    const imported = normalizeImportedSessionData(payload);
-    novelData = imported.novelData;
-    applySessionDataToUI();
-    return { flag: novelData.skipAutoRevision, checkbox: document.getElementById('skipAutoRevision').checked, hasKey: Object.prototype.hasOwnProperty.call(novelData, 'skipAutoRevision') };
-  }, ND);
-  check('D8', 'legacy import without the flag gives false', legacy.flag === false && legacy.checkbox === false, JSON.stringify(legacy));
+  for (const checked of [true, false]) {
+    const restored = await page.evaluate((checked) => {
+      novelData.skipAutoRevision = checked;
+      document.getElementById('draftOnlyNote').hidden = checked;
+      applySessionDataToUI();
+      return {
+        checkbox: document.getElementById('skipAutoRevision').checked,
+        noteHidden: document.getElementById('draftOnlyNote').hidden
+      };
+    }, checked);
+    check('D8', 'session UI restore synchronizes draft-only note for ' + checked,
+      restored.checkbox === checked && restored.noteHidden === !checked, JSON.stringify(restored));
+  }
+
+  const cases = [
+    ...['schema', 'envelope', 'bare'].flatMap((shape) => [true, false].map((checked) => ({ shape, checked }))),
+    { shape: 'schema', checked: true, flag: false },
+    { shape: 'schema', checked: false, flag: true }
+  ];
+  for (const [i, c] of cases.entries()) {
+    await page.evaluate((checked) => {
+      document.getElementById('skipAutoRevision').checked = checked;
+      novelData.skipAutoRevision = !checked;
+    }, c.checked);
+    const data = { title: 'D8 import ' + i, genre: ND.genre, chapters: [] };
+    if (typeof c.flag === 'boolean') data.skipAutoRevision = c.flag;
+    const payload = c.shape === 'bare' ? data : { novelData: data };
+    if (c.shape === 'schema') payload.schemaVersion = '1.0';
+    await page.locator('#importFile').setInputFiles({
+      name: 'session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(payload))
+    });
+    await page.waitForFunction((title) => document.getElementById('title').value === title, data.title);
+    const imported = await page.evaluate(() => ({
+      flag: novelData.skipAutoRevision,
+      checkbox: document.getElementById('skipAutoRevision').checked,
+      noteHidden: document.getElementById('draftOnlyNote')?.hidden
+    }));
+    const expected = typeof c.flag === 'boolean' ? c.flag : c.checked;
+    const name = typeof c.flag === 'boolean'
+      ? 'explicit ' + c.flag + ' overrides checkbox ' + c.checked
+      : c.shape + ' legacy import preserves checkbox ' + c.checked + ' despite stale novelData';
+    check('D8', name, imported.flag === expected && imported.checkbox === expected && imported.noteHidden === !expected, JSON.stringify(imported));
+  }
   await page.close();
 }
 
