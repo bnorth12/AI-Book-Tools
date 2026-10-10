@@ -506,6 +506,7 @@ Synced: 2026-04-19
 	            <label><input type="checkbox" id="batchRegenerate"> Regenerate existing chapters</label>
 	            <label><input type="checkbox" id="batchPerChapterDownload"> Download each chapter as it completes</label>
 	            <label for="batchTokenCap">Token cap</label> <input type="number" id="batchTokenCap" min="1" style="width: 9em;" title="Prefilled with the estimate x 1.25; checked against real recorded usage after every chapter.">
+	            <small id="batchEstimateHint" aria-live="polite"></small>
 	            <button id="batchPauseBtn" data-testid="nw-batch-pause" onclick="pauseBatchRun()" disabled>Pause</button>
 	            <button id="batchResumeBtn" data-testid="nw-batch-resume" onclick="resumeBatchRun()" disabled>Resume</button>
 	            <div id="batchRestoreBox" data-testid="nw-batch-restore-box" hidden>
@@ -12207,8 +12208,9 @@ return c && c.name && c.backstory && c.arc; });
             var br = novelData && novelData.batchRun;
             var capEl = nwBatchEl('batchTokenCap');
             if (!capEl || !br || !(Number(br.cap) > 0)) return false;
-            capEl.value = String(br.cap);
-            capEl.dataset.userEdited = '';
+            var suggestedCap = br.reason === 'budget' && Number(br.suggestedCap) > 0 ? Number(br.suggestedCap) : Number(br.cap);
+            capEl.value = String(suggestedCap);
+            capEl.dataset.userEdited = suggestedCap !== Number(br.cap) ? '1' : '';
             return true;
         }
 
@@ -12224,6 +12226,11 @@ return c && c.name && c.backstory && c.arc; });
             var plan = nwBatchPlan({ from: o.from, to: o.to }, o.regenerateExisting, [], null);
             var est = nwBatchEstimate(plan.planned.length);
             var capEl = nwBatchEl('batchTokenCap');
+            var hintEl = nwBatchEl('batchEstimateHint');
+            if (hintEl) {
+                hintEl.textContent = (est.source === 'fallback' ? 'Rough estimate' : 'Session estimate') + ': ' + est.perChapter.toLocaleString() +
+                    ' tokens/chapter; ' + est.total.toLocaleString() + ' tokens for ' + plan.planned.length + ' planned chapters.';
+            }
             if (capEl && capEl.dataset.userEdited !== '1') {
                 // #134 follow-up 3 (NW.T5.18): a resumable run keeps showing its saved cap (Resume uses br.cap) until the user edits it.
                 var brCap = novelData && novelData.batchRun;
@@ -12377,6 +12384,7 @@ return c && c.name && c.backstory && c.arc; });
                     br.stoppedAt = null;
                     br.reason = null;
                     br.detail = null;
+                    br.suggestedCap = null;
                     br.inFlight = null;
                     // #135 review (Copilot 4173592646): keptDraft is NOT cleared here; it survives retries and checkpoints until
                     // that chapter completes (cleared on outcome.ok below), so a failed Resume or a reload still regenerates it.
@@ -12399,9 +12407,11 @@ return c && c.name && c.backstory && c.arc; });
                         tokensUsed: 0,
                         estimate: { perChapter: est.perChapter, total: est.total, source: est.source },
                         cap: cap,
+                        chapterUsage: [],
                         usageEstimated: []
                     };
                 }
+                if (!Array.isArray(br.chapterUsage)) br.chapterUsage = [];
                 var capEl = nwBatchEl('batchTokenCap');
                 if (capEl) capEl.value = String(cap);
                 nwBatchState.running = true;
@@ -12466,7 +12476,10 @@ return c && c.name && c.backstory && c.arc; });
                 var delta = nwBatchUsageSince(mark);
                 if (delta > 0) {
                     br.tokensUsed += delta;
-                    if (outcome.ok) nwBatchState.windows.push({ chapter: n, tokens: delta });
+                    if (outcome.ok) {
+                        nwBatchState.windows.push({ chapter: n, tokens: delta });
+                        br.chapterUsage.push({ chapter: n, tokens: delta });
+                    }
                 } else if (rows > 0 || outcome.ok || outcome.reason === 'coverage' || outcome.parse) {
                     br.tokensUsed += est.perChapter;
                     if (br.usageEstimated.indexOf(n) < 0) br.usageEstimated.push(n);
@@ -12512,7 +12525,29 @@ return c && c.name && c.backstory && c.arc; });
             text += ' Completed: ' + (br.completed.length ? br.completed.join(', ') : 'none') + '.' + skippedNote;
             if (br.usageEstimated.length) text += ' Usage estimated (no provider usage) for: ' + br.usageEstimated.join(', ') + '.';
             text += ' Tokens ' + br.tokensUsed + '/' + br.cap + '.';
-            if (stop && stop.capPre) text = stop.detail;
+            if (stop && stop.reason === 'budget') {
+                var remaining = plan.planned.filter(function (n) { return br.completed.indexOf(n) < 0; }).length;
+                var samples = (Array.isArray(br.chapterUsage) ? br.chapterUsage : []).filter(function (x) {
+                    return x && Number(x.tokens) > 0;
+                });
+                var perChapter = samples.length
+                    ? Math.ceil(samples.reduce(function (sum, x) { return sum + Number(x.tokens); }, 0) / samples.length)
+                    : Math.max(1, Number(br.estimate && br.estimate.perChapter) || nwBatchMaxTokens() * nwBatchPasses());
+                var usageText = samples.length
+                    ? 'Real tokens per finished chapter (' + samples.length + ' measured): average ' + perChapter.toLocaleString() +
+                        ', last ' + Number(samples[samples.length - 1].tokens).toLocaleString() + '.'
+                    : 'No real chapter usage recorded; using a rough estimate of ' + perChapter.toLocaleString() + ' tokens/chapter.';
+                var suggestedCap = Number(br.tokensUsed) + Math.ceil(perChapter * remaining * NW_BATCH.capFactor);
+                br.suggestedCap = suggestedCap;
+                var capEl = nwBatchEl('batchTokenCap');
+                if (capEl) {
+                    capEl.value = String(suggestedCap);
+                    capEl.dataset.userEdited = suggestedCap !== Number(br.cap) ? '1' : '';
+                }
+                text += ' ' + usageText + ' Tokens used so far: ' + Number(br.tokensUsed).toLocaleString() + '. Cap for ' +
+                    remaining + ' remaining chapters (1.25× average): ' + suggestedCap.toLocaleString() +
+                    '. Prefilled; click Resume to continue.';
+            }
             if (checkpointFailed) {
                 text = 'Checkpoint failed: run stopped. Export your session now. ' + text;
                 nwBatchShow('batchExportNow', true);
@@ -13773,6 +13808,5 @@ return c && c.name && c.backstory && c.arc; });
 	    <div id="nwToast" role="status" aria-live="polite" data-testid="nw-toast" hidden style="position: fixed; right: 1em; bottom: 1em; max-width: 32em; padding: 0.6em 0.9em; background: #333; color: #fff; border-radius: 4px; z-index: 10000;"></div>
 	</body>
 </html>
-
 
 
