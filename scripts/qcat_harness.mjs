@@ -92,8 +92,28 @@ export async function runQcatHarness(opts) {
     log('error: --live refused (QCAT_LIVE_ACK is not 1)');
     return { exitCode: 2, log: logLines, refusedLive: true };
   }
-  const bookRaw = JSON.parse(fs.readFileSync(opts.book, 'utf8'));
-  const expectRaw = opts.expect && fs.existsSync(opts.expect) ? JSON.parse(fs.readFileSync(opts.expect, 'utf8')) : null;
+  if (opts.expect) {
+    if (!fs.existsSync(opts.expect)) {
+      log('error: --expect file not found: ' + opts.expect);
+      return { exitCode: 2, log: logLines };
+    }
+  }
+  let bookRaw;
+  try {
+    bookRaw = JSON.parse(fs.readFileSync(opts.book, 'utf8'));
+  } catch (e) {
+    log('error: malformed book JSON: ' + String(e && e.message || e));
+    return { exitCode: 2, log: logLines };
+  }
+  let expectRaw = null;
+  if (opts.expect) {
+    try {
+      expectRaw = JSON.parse(fs.readFileSync(opts.expect, 'utf8'));
+    } catch (e) {
+      log('error: malformed expect JSON: ' + String(e && e.message || e));
+      return { exitCode: 2, log: logLines };
+    }
+  }
   const outRoot = opts.out ? path.resolve(opts.out) : defaultOutRoot();
   const runDir = path.join(outRoot, stampLocal() + '_' + (opts.label || 'qcat'));
   fs.mkdirSync(path.join(runDir, 'chapters'), { recursive: true });

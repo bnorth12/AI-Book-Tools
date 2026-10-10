@@ -2367,6 +2367,10 @@ let activeAICallCount = 0;
 	        }
 	        if (tabNum === 5) showGenChapterSubpage(1);
 	        if (tabNum === 6) {
+	            // Persist Plan-fact DOM edits before updateChapterSubpages rebuilds chapterGenContainer.
+	            if (typeof NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD === 'undefined' || NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD) {
+	                if (typeof nwCollectPlanFactsFromUi === 'function') nwCollectPlanFactsFromUi();
+	            }
 	            updateChapterSubpages();
 	            showEditChapterSubpage(1);
 	            if (typeof nwRenderChapterScorecards === 'function') nwRenderChapterScorecards();
@@ -4115,6 +4119,8 @@ const messages = [
 		    novelData.chapters = novelData.chapters.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapters.length)).fill(''));
 		    novelData.chapterImprovements = novelData.chapterImprovements.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapterImprovements.length)).fill(''));
 		    novelData.chapterContinuityPackets = (novelData.chapterContinuityPackets || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterContinuityPackets || []).length)).fill(null));
+		    novelData.chapterScorecards = (novelData.chapterScorecards || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterScorecards || []).length)).fill(null));
+		    novelData.chapterFactChecks = (novelData.chapterFactChecks || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterFactChecks || []).length)).fill(null));
 		    if (!novelData.continuityTracker || typeof novelData.continuityTracker !== 'object') {
 		        novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
 		    }
@@ -4198,7 +4204,8 @@ const messages = [
 		        `;
 		        genContainer.appendChild(subpage);
 		        requestAnimationFrame(() => {
-		            document.getElementById(`chapterGenContent${i}`).value = novelData.chapters[i-1];
+		            const el = document.getElementById(`chapterGenContent${i}`);
+		            if (el) el.value = novelData.chapters[i-1] || '';
 		        });
 				if (typeof nwRenderPlanFactsBox === 'function') nwRenderPlanFactsBox(i, subpage);
 		    }
@@ -4227,8 +4234,10 @@ const messages = [
 		        `;
 		        editContainer.appendChild(subpage);
 		        requestAnimationFrame(() => {
-		            document.getElementById(`chapterEditContent${i}`).value = novelData.chapters[i-1];
-		            document.getElementById(`chapterEditImprovement${i}`).value = novelData.chapterImprovements[i-1];
+		            const editEl = document.getElementById(`chapterEditContent${i}`);
+		            const impEl = document.getElementById(`chapterEditImprovement${i}`);
+		            if (editEl) editEl.value = novelData.chapters[i-1] || '';
+		            if (impEl) impEl.value = novelData.chapterImprovements[i-1] || '';
 		        });
 		    }
 
@@ -9709,6 +9718,10 @@ return c && c.name && c.backstory && c.arc; });
 		var NW_QCAT_ENABLE_WRITE = true;
 		var NW_QCAT_REPLAY_REQUIRE_RESTART = true;
 		var NW_QCAT_FILTER_TITLE_FRAGMENTS = true;
+		var NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD = true;
+		var NW_QCAT_INVALID_REGEX_FAILS_FACTS = true;
+		var NW_QCAT_SCORE_AFTER_COVERAGE = true;
+		var NW_QCAT_CLEAR_EMPTY_PLAN_FACTS = true;
 		var NW_QCAT_RESTART_MIN_WORDS = 40;
 		var NW_QCAT_RESTART_DENSITY = 0.4;
 		var NW_QCAT_NAME_TITLES = ['dr', 'doctor', 'captain', 'capt', 'mr', 'mrs', 'ms', 'prof', 'professor', 'commander', 'lt', 'sgt', 'admiral', 'general', 'colonel', 'major'];
@@ -9764,8 +9777,7 @@ return c && c.name && c.backstory && c.arc; });
 			var same = a === b;
 			var n = 5;
 			var gramMap = {};
-			var i;
-			for (i = 0; i <= a.length - n; i++) {
+			for (let i = 0; i <= a.length - n; i++) {
 				var k = a.slice(i, i + n).join(' ');
 				if (gramMap[k] == null) gramMap[k] = i;
 			}
@@ -9982,6 +9994,7 @@ return c && c.name && c.backstory && c.arc; });
 			beats.items = (beats.items || []).map(function (it) {
 				var a = byField[it.field];
 				if (!a) return it;
+				if (it.via === 'probe') return it;
 				var copy = Object.assign({}, it);
 				copy.via = 'ai';
 				copy.result = (a.result === 'present' || a.result === 'partial' || a.result === 'missing') ? a.result : it.result;
@@ -10088,8 +10101,7 @@ return c && c.name && c.backstory && c.arc; });
 			var bestLen = 0;
 			var bestStart = null;
 			var runStart = null;
-			var i;
-			for (i = mid; i <= nTok - win; i++) {
+			for (let i = mid; i <= nTok - win; i++) {
 				var hit = 0, tot = 0, k;
 				for (k = i; k <= i + win - 5; k++) {
 					if (k >= grams.length) break;
@@ -10120,7 +10132,7 @@ return c && c.name && c.backstory && c.arc; });
 			} else {
 				spanWords = bestLen;
 				var firstHit = null;
-				for (i = mid; i < grams.length; i++) {
+				for (let i = mid; i < grams.length; i++) {
 					if (firstSet[grams[i]] != null) { firstHit = i; break; }
 				}
 				if (firstHit != null && firstHit <= bestStart && (bestStart - firstHit) <= 400) restartAt = firstHit;
@@ -10313,6 +10325,7 @@ return c && c.name && c.backstory && c.arc; });
 			var status = 'PASS';
 			include.forEach(function (r) { if (!r.hit) status = 'FAIL'; });
 			exclude.forEach(function (r) { if (r.hit) status = 'FAIL'; });
+			if (invalid.length && NW_QCAT_INVALID_REGEX_FAILS_FACTS) status = 'FAIL';
 			return { status: status, include: include.concat(invalid), exclude: exclude, quirks: quirks };
 		}
 		function nwDerivePlanItems(text, bp, chapterNum, beats, cast, setting, facts) {
@@ -10533,6 +10546,13 @@ return c && c.name && c.backstory && c.arc; });
 				return null;
 			}
 		}
+		async function nwScoreGeneratedChapter(chapterNum, opts) {
+			try {
+				if (typeof nwScoreAndStoreChapter === 'function' && String((novelData.chapters || [])[chapterNum - 1] || '').trim()) {
+					await nwScoreAndStoreChapter(chapterNum, { trigger: 'generate', notify: !!opts.batch, costFrom: window.__nwChapterScoreCostFrom, elapsedMs: Date.now() - (window.__nwChapterScoreStarted || Date.now()) });
+				}
+			} catch (scErr) { console.warn('[QCAT] post-generate score', scErr); }
+		}
 		async function nwScoreBook(opts) {
 			opts = opts || {};
 			nwEnsureScorecardArrays();
@@ -10718,6 +10738,7 @@ return c && c.name && c.backstory && c.arc; });
 			});
 		}
 		async function nwScoreAllChapters() {
+			if (typeof collectData === 'function') collectData();
 			return nwScoreBook({ trigger: 'scoreAll' });
 		}
 		function nwCopyScorecardMarkdown() {
@@ -10748,6 +10769,13 @@ return c && c.name && c.backstory && c.arc; });
 				(arr || []).forEach(function (v, i) { if (pred(v, i)) last = i + 1; });
 				return last;
 			}
+			function everyInRange(arr, pred) {
+				if (!(n > 0)) return false;
+				for (let i = 0; i < n; i++) {
+					if (!pred((arr || [])[i], i)) return false;
+				}
+				return true;
+			}
 			var drafted = filled(chapters, function (t) { return String(t || '').trim().length > 0; });
 			var scored = filled(cards, function (c) { return c && c.overall; });
 			var hasOutlines = (outlines || []).some(function (t) { return String(t || '').trim().length >= 20; });
@@ -10759,7 +10787,8 @@ return c && c.name && c.backstory && c.arc; });
 			var enriched = (bps || []).some(function (b) {
 				return b && typeof b === 'object' && b.sceneGoal && b.dialogueTurn && b.turnOrPayoff;
 			});
-			if (n > 0 && drafted >= n && scored >= n) return '07-book-complete';
+			if (everyInRange(chapters, function (t) { return String(t || '').trim().length > 0; })
+				&& everyInRange(cards, function (c) { return c && c.overall; })) return '07-book-complete';
 			if (scored) return '06-ch' + String(scored).padStart(2, '0') + '-scored';
 			if (drafted) return '05-ch' + String(drafted).padStart(2, '0') + '-drafted';
 			if (enriched) return '04-enriched';
@@ -10806,7 +10835,7 @@ return c && c.name && c.backstory && c.arc; });
 					};
 					if (rec.label || rec.pattern) rows.push(rec);
 				});
-				if (rows.length || !(novelData.chapterFactChecks[i - 1] && novelData.chapterFactChecks[i - 1].length)) {
+				if (NW_QCAT_CLEAR_EMPTY_PLAN_FACTS || rows.length || !(novelData.chapterFactChecks[i - 1] && novelData.chapterFactChecks[i - 1].length)) {
 					novelData.chapterFactChecks[i - 1] = rows;
 				}
 			}
@@ -10880,9 +10909,20 @@ return c && c.name && c.backstory && c.arc; });
 			var del = document.createElement('button');
 			del.type = 'button';
 			del.textContent = 'Delete';
-			del.addEventListener('click', function (ev) { ev.preventDefault(); tr.parentNode && tr.parentNode.removeChild(tr); });
+			function persistFacts() {
+				if (typeof nwCollectPlanFactsFromUi === 'function') nwCollectPlanFactsFromUi();
+			}
+			del.addEventListener('click', function (ev) {
+				ev.preventDefault();
+				tr.parentNode && tr.parentNode.removeChild(tr);
+				persistFacts();
+			});
 			delTd.appendChild(del);
 			tr.appendChild(delTd);
+			Array.from(tr.querySelectorAll('input, select')).forEach(function (el) {
+				el.addEventListener('input', persistFacts);
+				el.addEventListener('change', persistFacts);
+			});
 			if (entry.beat) {
 				var beat = document.createElement('input');
 				beat.type = 'hidden';
@@ -11081,11 +11121,9 @@ return c && c.name && c.backstory && c.arc; });
 		        // In a batch this goes to the status line and does not stop the run.
 		        if (opts.batch && typeof nwNotify === 'function') nwNotify('Chapter ' + chapterNum + ' quality gate/revise error (run continues): ' + String((qgErr && qgErr.message) || qgErr), { level: 'warn' });
 		    }
-			try {
-				if (typeof nwScoreAndStoreChapter === 'function' && String((novelData.chapters || [])[chapterNum - 1] || '').trim()) {
-					await nwScoreAndStoreChapter(chapterNum, { trigger: 'generate', notify: !!opts.batch, costFrom: window.__nwChapterScoreCostFrom, elapsedMs: Date.now() - (window.__nwChapterScoreStarted || Date.now()) });
-				}
-			} catch (scErr) { console.warn('[QCAT] post-generate score', scErr); }
+			if (!NW_QCAT_SCORE_AFTER_COVERAGE) {
+				await nwScoreGeneratedChapter(chapterNum, opts);
+			}
 		    // Line-control: obligation coverage fail-closed (short+low-coverage ≠ token success)
 		    try {
 		        if (typeof assertObligationCoverageOrThrow === 'function') {
@@ -11095,6 +11133,9 @@ return c && c.name && c.backstory && c.arc; });
 		        console.error('obligation coverage after generateChapter', covErr);
 		        throw covErr;
 		    }
+			if (NW_QCAT_SCORE_AFTER_COVERAGE) {
+				await nwScoreGeneratedChapter(chapterNum, opts);
+			}
 		    console.log(`Completed generateChapter for Chapter ${chapterNum}, Total Tokens: ${totalTokens}`);
 }
 
