@@ -39,6 +39,14 @@
  *       qualityRevise updateChapter still works; activeAICallCount > 0 refuses start and resume with 0 calls, no dialog
  *   M6  must-fix 6: slow final checkpoint: running stays true, controls locked, second start/resume refused, then released
  *   M7  must-fix 7: all chapters complete, final checkpoint throws QuotaExceededError: result/status/export say checkpoint
+ *   T1  slot 8b timeout (REAL callAI, stubbed window.fetch that ignores the abort and resolves late, timeout 1 s): ch2
+ *       Part 1 aborted, late resolve ignored (no chapter text, no usage row), one retry, then reason provider / detail
+ *       timeout; activeAICallCount back to 0; HUD shows "Timed out after 1 s"; 0 dialogs. Part 2 timeout: Part 1 real usage
+ *       still counted, nothing estimated (same accounting as before). HUD elapsed + "Part k of 2", sub-step line text
+ *   T2  fake timers (page.clock): default 300 s timeout; HUD + sub-step elapsed tick to ~1m 05s; timeout after 300 s,
+ *       one retry, stop provider/timeout; activeAICallCount 0; 0 dialogs
+ *   T3  sub-step line shows audit and revise ("revise 1/1") steps; cleared after the run
+ *   T4  #133 401 stop line exact: one period, "not retried" once
  *   F1  #134 follow-up 1: a batch starts while importSession's FileReader is reading; onload rechecks the lock: toast
  *       "Import cancelled: a Generate All run is active. Import again after it stops.", novelData/requestLog unchanged, 0 dialogs
  *   F2  #134 follow-up 2: import without batchRun over a stopped run: no batchRun, interrupted cleared, old IndexedDB
@@ -117,9 +125,35 @@ const networkSeen = [];
 /** In-page harness (re-installed after a reload). */
 async function installHarness(page) {
   await page.evaluate(() => {
-    const h = window.__h = { calls: [], dialogs: [], downloads: [], puts: 0, putsWithRejected: 0, cfg: {}, hanging: false, statusSeen: [], lastExport: null, toasts: [], auditCalls: [], realAuditCalls: [] };
+    const h = window.__h = { calls: [], dialogs: [], downloads: [], puts: 0, putsWithRejected: 0, cfg: {}, hanging: false, statusSeen: [], lastExport: null, hudSeen: [], subSeen: [], fetchCalls: [], late: [], toasts: [], auditCalls: [], realAuditCalls: [] };
+    h.realCallAI = window.callAI;
+    h.realFetch = window.fetch;
+    const hudEl = document.getElementById('executionDetail');
+    if (hudEl) new MutationObserver(() => h.hudSeen.push(hudEl.textContent)).observe(hudEl, { childList: true, characterData: true, subtree: true });
+    const subEl = document.getElementById('batchRunSubStep');
+    if (subEl) new MutationObserver(() => h.subSeen.push(subEl.textContent)).observe(subEl, { childList: true, characterData: true, subtree: true });
     const toastEl = document.getElementById('nwToast');
     if (toastEl) new MutationObserver(() => { if (toastEl.textContent) h.toasts.push(toastEl.textContent); }).observe(toastEl, { childList: true, characterData: true, subtree: true });
+    /** slot 8b: REAL callAI over a stubbed fetch. cfg.hangFetch 'ch:part' never answers in time (ignores the abort signal and
+     *  resolves late with a valid body that WOULD write a chapter + usage row if the late resolve were not ignored). */
+    h.useRealCallAI = function () {
+      window.callAI = h.realCallAI;
+      document.getElementById('apiKey').value = 'smoke-placeholder-not-a-key';
+      const mk = (ch, part, tag) => ({ ok: true, status: 200, text: async () => JSON.stringify({ id: 'smoke', choices: [{ message: { role: 'assistant', content: JSON.stringify({ chapter: 'Chapter ' + ch + ' part ' + part + ' ' + tag + 'prose (smoke real callAI). The relay hums.' }) } }], usage: { prompt_tokens: 600, completion_tokens: 400, total_tokens: 1000 } }) });
+      window.fetch = function (url, init) {
+        if (!/api\.x\.ai/.test(String(url))) return h.realFetch.apply(window, arguments);
+        const g = window.__lastGenerateChapterGate; const ch = g ? g.chapter : 0;
+        const part = /Part 2/.test(String(requestLog.status)) ? 2 : 1;
+        const attempt = h.fetchCalls.filter((c) => c.ch === ch && c.part === part).length + 1;
+        const signal = init && init.signal;
+        h.fetchCalls.push({ ch, part, attempt, hasSignal: !!signal });
+        if (h.cfg.hangFetch === ch + ':' + part) {
+          if (h.cfg.lateMs == null) return new Promise(() => {});
+          return new Promise((res) => setTimeout(() => { h.late.push({ ch, part, attempt, aborted: !!(signal && signal.aborted) }); res(mk(ch, part, 'LATE ')); }, h.cfg.lateMs));
+        }
+        return Promise.resolve(mk(ch, part, ''));
+      };
+    };
     // slot 8a: continuity audit stub (cfg.auditStub). cfg.auditErrs[n] = messages thrown on attempt 1, 2, ...; an OK attempt
     // records 100 tokens of real usage.
     const realAudit = window.runChapterContinuityAudit;
@@ -147,6 +181,9 @@ async function installHarness(page) {
     HTMLAnchorElement.prototype.click = function () { if (this.download) h.downloads.push(this.download); };
     window.ensureQualityAfterGenerate = async function (n) {
       if (h.cfg.qualityThrow === n) throw new Error('smoke quality judge unavailable ch' + n);
+      if (h.cfg.reviseReal === n) {
+        try { await reviseChapterForQuality(n, { passed: false, failures: ['smoke_quality_fail'], scores: {} }, { maxAttempts: 1 }); h.reviseReal = 'ok'; } catch (e) { h.reviseReal = 'threw:' + String(e.message || e); }
+      }
       if (h.cfg.reviseAt === n) {
         // batch-owned quality revise: the real updateChapter with operationTag qualityRevise must still run in a batch
         novelData.chapterImprovements[n - 1] = 'smoke revise brief: tighten the relay scene';
@@ -255,7 +292,7 @@ async function installHarness(page) {
         statusRole: el('batchRunStatus').getAttribute('role'), statusTestId: el('batchRunStatus').getAttribute('data-testid'),
         pauseDisabled: el('batchPauseBtn').disabled, resumeDisabled: el('batchResumeBtn').disabled,
         goTab4: !el('batchGoTab4').hidden, exportNow: !el('batchExportNow').hidden, restoreBox: !el('batchRestoreBox').hidden,
-        quiet: nwBatchState.quiet, running: nwBatchState.running, log: nwBatchState.log.slice(), statusSeen: h.statusSeen.slice(),
+        quiet: nwBatchState.quiet, running: nwBatchState.running, log: nwBatchState.log.slice(), statusSeen: h.statusSeen.slice(), subSeen: h.subSeen.slice(),
         estimate: nwBatchEstimate(1)
       };
     };
@@ -301,7 +338,7 @@ async function batch(page, opts) {
   }, opts);
 }
 const callsFor = (s, ch) => s.calls.filter((c) => c.ch === ch).length;
-const sessionDl = (s) => s.downloads.filter((d) => /_session\.json$/.test(d)).length;
+const sessionDl = (s) => s.downloads.filter((d) => /\.json$/i.test(d)).length;
 const chapterDl = (s) => s.downloads.filter((d) => /_ch\d+\.txt$/.test(d)).length;
 const batchDialogTotals = [];
 
@@ -472,7 +509,7 @@ const batchDialogTotals = [];
   await page.waitForFunction(() => window.__h.hanging === true, null, { timeout: 20000 });
   const lock = await page.evaluate(async () => {
     const all = (sel) => Array.from(document.querySelectorAll(sel));
-    const gen = all('#chapterGenContainer button');
+    const gen = all('#chapterGenContainer button').filter((b) => /Generate Chapter/.test(b.textContent || ''));
     const edits = all('textarea[id^="chapterEditContent"]');
     const editBtns = all('#chapterEditContainer button');
     const before = window.__h.calls.length;
@@ -613,7 +650,7 @@ const batchDialogTotals = [];
     const s = await batch(page, { nd: ND, cfg: { throwAt: { key: '2:1', msg: c.msg } }, resetCounters: true });
     batchDialogTotals.push(s.dialogs.length);
     check('M2', c.label + ': reason provider at ch2, 0 retries (1 call for ch2), no usageEstimated entry, tokens = ch1 real usage only', s.br.reason === 'provider' && s.br.stoppedAt === 2 && callsFor(s, 2) === 1 && eq(s.br.usageEstimated, []) && s.br.tokensUsed === 2000 && eq(s.br.completed, [1]) && s.dialogs.length === 0, JSON.stringify({ br: s.br, calls: s.calls }));
-    check('M2', c.label + ': status line wording (' + (c.label === 'HTTP 400' ? 'provider message, truncated' : 'Check your API key in Setup') + '), "Not retried", not the parse wording', /^Stopped at ch2 \(provider\): /.test(s.status) && c.want(s.status) && /Not retried; Resume regenerates ch2\./.test(s.status) && !/could not be parsed/.test(s.status), s.status);
+    check('M2', c.label + ': status line wording (' + (c.label === 'HTTP 400' ? 'provider message, truncated' : 'Check your API key in Setup') + '), "not retried" exactly once, no "..", not the parse wording', /^Stopped at ch2 \(provider\): /.test(s.status) && c.want(s.status) && / Resume regenerates ch2\./.test(s.status) && (s.status.match(/not retried/gi) || []).length === 1 && !/\.\./.test(s.status.replace(/\.\.\./g, '')) && !/could not be parsed/.test(s.status), s.status);
   }
   await page.close();
 }
@@ -727,6 +764,103 @@ const batchDialogTotals = [];
   check('M7', 'all 4 chapters complete, the final checkpoint throws QuotaExceededError: result + batchRun reason checkpoint (not done)', eq(s.br.completed, [1, 2, 3, 4]) && s.r.reason === 'checkpoint' && s.br.reason === 'checkpoint' && s.br.stoppedAt === 4 && /final checkpoint write failed after ch4: .*quota exceeded/i.test(s.br.detail || '') && s.puts === 9, JSON.stringify({ r: s.r, br: s.br, puts: s.puts }));
   check('M7', 'status state checkpoint, "Checkpoint failed: run stopped. Export your session now." + Export button', s.state === 'checkpoint' && /^Checkpoint failed: run stopped\. Export your session now\. Stopped at ch4 \(checkpoint\): final checkpoint write failed/.test(s.status) && s.exportNow, s.status);
   check('M7', 'auto-export fired once and the exported batchRun.reason is checkpoint', sessionDl(s) === 1 && exp && exp.reason === 'checkpoint' && exp.stoppedAt === 4, JSON.stringify({ dl: s.downloads, exp: exp && { reason: exp.reason, stoppedAt: exp.stoppedAt } }));
+  await page.close();
+}
+
+// ---------------- T1: callAI timeout (real callAI, stubbed fetch, 1 s timeout) ----------------
+{
+  const page = await openPage();
+  const t = await page.evaluate(async (nd) => {
+    const h = window.__h; h.load(nd); h.useRealCallAI();
+    const defaults = { input: document.getElementById('aiCallTimeoutSec').value, ms: nwCallAITimeoutMs() };
+    document.getElementById('aiCallTimeoutSec').value = '1';
+    h.cfg = { hangFetch: '2:1', lateMs: 1500 };
+    const t0 = Date.now();
+    const r = await generateAllChapters();
+    const ms = Date.now() - t0;
+    const busyAfter = activeAICallCount;
+    await new Promise((res) => setTimeout(res, 2200)); // let the second late resolve land
+    const s = h.snap(r);
+    return { s, ms, defaults, busyAfter, busyLater: activeAICallCount, fetchCalls: h.fetchCalls.slice(), late: h.late.slice(), usageRows: ensureBookTokenUsage().calls.length, hud: h.hudSeen.slice(), sub: h.subSeen.slice(), anyLate: JSON.stringify(novelData).includes('LATE prose') || Array.from(document.querySelectorAll('textarea')).some((x) => /LATE prose/.test(x.value)), reqStatus: requestLog.status };
+  }, ND);
+  const ch2p1 = t.fetchCalls.filter((c) => c.ch === 2 && c.part === 1);
+  check('T1', 'default AI call timeout is 300 s (Setup Advanced input 300, nwCallAITimeoutMs 300000)', t.defaults.input === '300' && t.defaults.ms === 300000, JSON.stringify(t.defaults));
+  check('T1', 'hung ch2 Part 1 is aborted (fetch got an AbortSignal, aborted when the late resolve came) after 1 s; exactly 2 attempts (1 retry), no Part 2', ch2p1.length === 2 && ch2p1.every((c) => c.hasSignal) && t.late.length === 2 && t.late.every((x) => x.aborted) && !t.fetchCalls.some((c) => c.ch === 2 && c.part === 2) && t.ms >= 3800 && t.ms < 15000, JSON.stringify({ fetchCalls: t.fetchCalls, late: t.late, ms: t.ms }));
+  check('T1', 'late resolves ignored: no chapter text, no "LATE" prose anywhere, no usage row (only ch1 2 rows), ch2 empty', t.usageRows === 2 && !t.anyLate && !t.s.chapters[1] && !t.s.genDom[1] && /^Chapter 1 part 1 prose/.test(t.s.chapters[0]), JSON.stringify({ usageRows: t.usageRows, anyLate: t.anyLate, ch: t.s.chapters.slice(0, 2) }));
+  check('T1', 'stop: reason provider, detail "timeout", stoppedAt 2, completed [1], tokens = real ch1 usage only (nothing estimated)', t.s.br.reason === 'provider' && t.s.br.detail === 'timeout' && t.s.br.stoppedAt === 2 && eq(t.s.br.completed, [1]) && t.s.br.tokensUsed === 2000 && eq(t.s.br.usageEstimated, []), JSON.stringify(t.s.br));
+  check('T1', 'status line: "Stopped at ch2 (provider): timeout. Part 1 timed out after 1 s (...) twice (1 retry); Resume regenerates ch2."', /^Stopped at ch2 \(provider\): timeout\. Part 1 timed out after 1 s \([^)]+\) twice \(1 retry\); Resume regenerates ch2\. Completed: 1\./.test(t.s.status), t.s.status);
+  check('T1', 'activeAICallCount back to 0; HUD showed "Timed out after 1 s (...)"; request log Failed; 0 dialogs', t.busyAfter === 0 && t.busyLater === 0 && /^Failed/.test(t.reqStatus) && t.hud.some((x) => /^Timed out after 1 s \(/.test(x)) && t.s.dialogs.length === 0, JSON.stringify({ busy: [t.busyAfter, t.busyLater], reqStatus: t.reqStatus, hud: t.hud.filter((x) => /Timed out/.test(x)).slice(0, 2), dialogs: t.s.dialogs }));
+  check('T1', 'HUD shows elapsed + call k of n ("Waiting on LLM response... 0m 00s (Part 1 of 2)" / "(Part 2 of 2)")', t.hud.some((x) => /^Waiting on LLM response\.\.\. 0m 0\ds \(Part 1 of 2\)$/.test(x)) && t.hud.some((x) => /^Waiting on LLM response\.\.\. 0m 0\ds \(Part 2 of 2\)$/.test(x)), JSON.stringify(t.hud.slice(0, 8)));
+  check('T1', 'sub-step line: "Chapter 1 of N: Part 1 (call 1 of 2), 0m 00s" and "Part 2 (call 2 of 2)"; cleared after the run', t.sub.some((x) => /^Chapter 1 of \d+: Part 1 \(call 1 of 2\), 0m 0\ds$/.test(x)) && t.sub.some((x) => /^Chapter 1 of \d+: Part 2 \(call 2 of 2\), 0m 0\ds$/.test(x)) && t.sub.some((x) => /^Chapter 2 of \d+: Part 1 \(call 1 of 2\)/.test(x)) && t.sub[t.sub.length - 1] === '', JSON.stringify(t.sub.slice(0, 6)) + ' ... ' + JSON.stringify(t.sub.slice(-2)));
+  batchDialogTotals.push(t.s.dialogs.length);
+  // Part 2 timeout: Part 1 real usage is counted (partial usage, same rule as before), nothing estimated
+  const t2 = await page.evaluate(async (nd) => {
+    const h = window.__h; h.load(nd); h.useRealCallAI(); h.fetchCalls.length = 0; h.late.length = 0; h.dialogs.length = 0;
+    document.getElementById('aiCallTimeoutSec').value = '1';
+    h.cfg = { hangFetch: '2:2', lateMs: 1300 };
+    const r = await generateAllChapters();
+    await new Promise((res) => setTimeout(res, 1600));
+    return { s: h.snap(r), fetchCalls: h.fetchCalls.slice(), busy: activeAICallCount, anyLate: JSON.stringify(novelData).includes('LATE prose') };
+  }, ND);
+  check('T1', 'Part 2 timeout on ch2: Part 1 + Part 2 retried once (2+2 fetches), reason provider/timeout, Part 1 real usage counted (2000 + 2 x 1000), nothing estimated, no late text, 0 dialogs', t2.s.br.reason === 'provider' && t2.s.br.detail === 'timeout' && t2.fetchCalls.filter((c) => c.ch === 2 && c.part === 1).length === 2 && t2.fetchCalls.filter((c) => c.ch === 2 && c.part === 2).length === 2 && t2.s.br.tokensUsed === 4000 && eq(t2.s.br.usageEstimated, []) && !t2.anyLate && !t2.s.chapters[1] && t2.busy === 0 && t2.s.dialogs.length === 0 && /Part 2 timed out after 1 s/.test(t2.s.status), JSON.stringify({ br: t2.s.br, fetchCalls: t2.fetchCalls, status: t2.s.status }));
+  batchDialogTotals.push(t2.s.dialogs.length);
+  await page.close();
+}
+
+// ---------------- T2: fake timers, default 300 s timeout, elapsed ticks ----------------
+{
+  const page = await browser.newPage();
+  page.on('pageerror', (e) => { if (!knownRace(e)) pageErrors.push(String(e && e.message || e)); });
+  page.on('dialog', (d) => d.dismiss().catch(() => {}));
+  await page.route('**/*', async (route) => { const url = route.request().url(); if (!/^https?:/i.test(url)) return route.continue(); networkSeen.push(url); return route.abort('blockedbyclient'); });
+  await page.clock.install();
+  await page.goto(pathToFileURL(HTML_PATH).href, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForFunction(() => typeof generateAllChapters === 'function' && window.__nwBatchRestoreCheck, null, { timeout: 30000 });
+  await page.evaluate(() => window.__nwBatchRestoreCheck);
+  await installHarness(page);
+  await page.evaluate((nd) => { const h = window.__h; h.load(nd); h.useRealCallAI(); h.cfg = { hangFetch: '1:1' }; window.__p = generateAllChapters(); }, ND);
+  await page.waitForFunction(() => window.__h.fetchCalls.length === 1, null, { timeout: 20000 });
+  await page.clock.runFor(65000);
+  const at65 = await page.evaluate(() => ({ hud: document.getElementById('executionDetail').textContent, sub: document.getElementById('batchRunSubStep').textContent, busy: activeAICallCount, running: nwBatchState.running }));
+  check('T2', 'fake timers +65 s: HUD elapsed ticks ("Waiting on LLM response... 1m 05s (Part 1 of 2)"), sub-step "Chapter 1 of N: Part 1 (call 1 of 2), 1m 05s", call still pending', /^Waiting on LLM response\.\.\. 1m 0[5-7]s \(Part 1 of 2\)$/.test(at65.hud) && /^Chapter 1 of \d+: Part 1 \(call 1 of 2\), 1m 0[5-7]s$/.test(at65.sub) && at65.busy === 1 && at65.running, JSON.stringify(at65));
+  await page.clock.runFor(236000); // past 300 s -> first timeout
+  await page.waitForFunction(() => window.__h.fetchCalls.length === 2 || !nwBatchState.running, null, { timeout: 20000 }).catch(() => {});
+  await page.clock.runFor(3000); // the 2 s retry backoff
+  await page.waitForFunction(() => window.__h.fetchCalls.length === 2, null, { timeout: 20000 }).catch(() => {});
+  const mid = await page.evaluate(() => ({ calls: window.__h.fetchCalls.slice(), hud: window.__h.hudSeen.filter((x) => /Timed out/.test(x)) }));
+  await page.clock.runFor(301000); // second timeout
+  const fin = await page.evaluate(async () => { const r = await window.__p; return { s: window.__h.snap(r), busy: activeAICallCount }; });
+  check('T2', 'default 300 s: first attempt times out after 300 s ("Timed out after 300 s"), retried once', mid.calls.length === 2 && mid.calls.every((c) => c.ch === 1 && c.part === 1) && mid.hud.some((x) => /^Timed out after 300 s \(/.test(x)), JSON.stringify(mid));
+  check('T2', 'after the retry also times out: reason provider, detail timeout, stoppedAt 1, activeAICallCount 0, 0 dialogs, no usage', fin.s.br.reason === 'provider' && fin.s.br.detail === 'timeout' && fin.s.br.stoppedAt === 1 && fin.busy === 0 && fin.s.dialogs.length === 0 && fin.s.br.tokensUsed === 0 && /Part 1 timed out after 300 s/.test(fin.s.status), JSON.stringify({ br: fin.s.br, busy: fin.busy, status: fin.s.status }));
+  batchDialogTotals.push(fin.s.dialogs.length);
+  await page.close();
+}
+
+// ---------------- T3: sub-step audit / revise ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (nd) => {
+    const h = window.__h; h.load(nd);
+    document.getElementById('batchTo').value = '2';
+    novelData.autoContinuityAudit = true; document.getElementById('autoContinuityAudit').checked = true;
+    window.runChapterContinuityAudit = async function (n) { h.audited = (h.audited || []).concat(n); };
+    h.cfg = { reviseReal: 2 };
+    const res = await generateAllChapters();
+    return { s: h.snap(res), audited: h.audited, revise: h.reviseReal };
+  }, ND);
+  check('T3', 'sub-step line shows the audit step for each chapter ("Chapter n of N: audit, 0m 0xs")', r.audited && r.audited.length === 2 && r.s.statusSeen && [1, 2].every((n) => (r.s.subSeen || []).some((x) => new RegExp('^Chapter ' + n + ' of \\d+: audit, 0m 0\\ds$').test(x))), JSON.stringify({ audited: r.audited, sub: (r.s.subSeen || []).slice(0, 10) }));
+  check('T3', 'sub-step line shows the revise step with its counter ("Chapter 2 of N: revise (revise 1/1)"); run done; line cleared', /^ok/.test(r.revise || '') && (r.s.subSeen || []).some((x) => /^Chapter 2 of \d+: revise \(revise 1\/1\), 0m 0\ds$/.test(x)) && r.s.br.reason === 'done' && (r.s.subSeen || []).slice(-1)[0] === '', JSON.stringify({ revise: r.revise, sub: (r.s.subSeen || []).slice(-6), br: r.s.br.reason }));
+  batchDialogTotals.push(r.s.dialogs.length);
+  await page.close();
+}
+
+// ---------------- T4: #133 401 stop line exact ----------------
+{
+  const page = await openPage();
+  const s = await batch(page, { nd: ND, cfg: { throwAt: { key: '2:1', msg: 'HTTP error! Status: 401, Text: {"error":"Incorrect API key provided"}' } } });
+  const want = 'Stopped at ch2 (provider): Part 1 provider error (HTTP 401, not retried): Check your API key in Setup. Resume regenerates ch2. Completed: 1. Tokens 2000/' + s.br.cap + '.';
+  check('T4', '401 stop line is exact: "' + want.replace(/\d+\.$/, '<cap>.') + '" (one period, "not retried" once)', s.status === want && !/\.\./.test(s.status) && (s.status.match(/not retried/gi) || []).length === 1, s.status);
+  batchDialogTotals.push(s.dialogs.length);
   await page.close();
 }
 

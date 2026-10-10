@@ -14,6 +14,8 @@
     "test:e2e": "playwright test",
     "test:e2e:novelwriter": "playwright test tests/e2e/novelwriter.regression.spec.js",
     "test:smoke:nw-draft-only": "node scripts/_smoke_nw_draft_only.mjs",
+    "test:smoke:nw-qcat-harness": "node scripts/_smoke_qcat_harness.mjs",
+    "test:smoke:nw-callai-timeout": "node scripts/_smoke_nw_callai_timeout.mjs",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:install": "playwright install chromium",
     "test:regression": "npm run test:governance && npm run test:e2e",

@@ -1,0 +1,29 @@
+{
+  "chapters": {
+    "1": {
+      "probes": [
+        { "beat": "turnOrPayoff", "label": "planted probe miss", "regex": "this probe should not match any fixture prose xyzzy" }
+      ],
+      "mustInclude": [
+        { "label": "Elena present", "regex": "Elena" }
+      ]
+    },
+    "3": {
+      "probes": [
+        { "beat": "turnOrPayoff", "label": "watch is closed", "regex": "close[sd] the (lunar hub )?watch" }
+      ],
+      "mustInclude": [
+        { "label": "Bastian present", "regex": "Bastian" }
+      ],
+      "mustNotInclude": [
+        { "label": "sabotage reversed", "regex": "did not ease it" }
+      ]
+    }
+  },
+  "book": {
+    "mustNotInclude": [
+      { "label": "three counts", "regex": "three counts" }
+    ],
+    "quirks": ["wrist tattoo", "pebble", "whistl", "alloy disc", "gallery rail"]
+  }
+}

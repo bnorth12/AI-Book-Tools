@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0",
+  "sourceTool": "NovelWriter",
+  "sourceVersion": "0.3.4-8d",
+  "novelData": {
+    "title": "QCAT Fixture Cast Titles",
+    "genre": "scifi",
+    "numChapters": 1,
+    "chapterLength": 120,
+    "storyArc": "Titled names must parse as one person.",
+    "generalPlot": "Dr. Mara Quill and Captain Nico Vellum appear in titled and untitled forms.",
+    "setting": "A lunar hub and gallery rail.",
+    "characters": [
+      {
+        "name": "Dr. Mara Quill",
+        "backstory": "Observer.",
+        "arc": "Holds the watch."
+      },
+      {
+        "name": "Captain Nico Vellum",
+        "backstory": "Pilot.",
+        "arc": "Keeps the rail."
+      }
+    ],
+    "subplots": [
+      "The ice haul vector must stay red until the habitat vote."
+    ],
+    "novelOutline": "One chapter with titled and untitled forms of two people.",
+    "plotOutline": "Dr. X Y next to X Y, Captain X Y next to X Y.",
+    "storyArcOutline": "Fixture-only arc.",
+    "chapterOutlines": [
+      "Dr. Mara Quill and Captain Nico Vellum share the lunar hub watch under both titled and plain names."
+    ],
+    "chapterArcs": [
+      "Title normalization."
+    ],
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "cast titles",
+        "arcStep": "Titled and untitled forms of two people must count as the same names.",
+        "sceneGoal": "Dr. Mara Quill and Captain Nico Vellum must close the lunar hub watch together.",
+        "castArcBeat": "Dr. Mara Quill and Captain Nico Vellum both log the watch under two name forms.",
+        "subplotPressure": "The ice haul vector subplot is logged once by both name forms.",
+        "dialogueTurn": "Dr. Mara Quill tells Captain Nico Vellum that Mara Quill and Nico Vellum will hold the watch.",
+        "sensoryWorldHook": "Cold lunar hub air and the gallery rail ticking under gloves.",
+        "turnOrPayoff": "They close the watch using both titled and untitled names.",
+        "characterBeats": [
+          {
+            "name": "Dr. Mara Quill",
+            "beat": "Logs the lunar hub watch."
+          },
+          {
+            "name": "Mara Quill",
+            "beat": "Appears untitled next to the doctor form."
+          },
+          {
+            "name": "Captain Nico Vellum",
+            "beat": "Keeps the gallery rail."
+          },
+          {
+            "name": "Nico Vellum",
+            "beat": "Appears untitled next to the captain form."
+          }
+        ],
+        "worldHooks": [
+          "lunar hub",
+          "gallery rail"
+        ]
+      }
+    ],
+    "chapters": [
+      "Dr. Mara Quill stood on the lunar hub gallery rail and checked the log twice. Captain Nico Vellum named the ice haul vector and kept the cryogenic bus seated. Mara Quill asked for the count. Nico Vellum answered from the observation window. Dr. Mara Quill told Captain Nico Vellum that Mara Quill would hold the watch. Captain Nico Vellum told Dr. Mara Quill that Nico Vellum would keep the rail. Elena Voss is not in this fixture. Bastian Kane is not in this fixture. The gallery rail stayed cold. The lunar hub hummed. The pumps ticked. The deck held. Dr. Mara Quill logged the bus. Captain Nico Vellum logged the habitat vote. Mara Quill and Nico Vellum left the lunar hub together after one pump tick. Extra padding keeps length above the floor: bolt plank ozone dock clock relay cable tray hydroponic bay failing lights ceramic post rain quay lamp desk room door glove leather observation window cryogenic bus."
+    ],
+    "editedChapters": [],
+    "chapterImprovements": [
+      ""
+    ],
+    "skipAutoRevision": false,
+    "aiBeatCheck": false
+  }
+}

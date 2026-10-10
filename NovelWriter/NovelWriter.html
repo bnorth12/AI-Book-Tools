@@ -165,6 +165,12 @@ Synced: 2026-04-19
 			opacity: 0;
 		}
 		#executionStatusHud.waiting #llmWaitSpinner { opacity: 1; }
+		#nwTimingPanel { margin: 12px 0 18px; padding: 10px 12px; border: 1px solid #ccd; border-radius: 6px; background: #fafcff; }
+		#nwTimingPanel table { width: 100%; border-collapse: collapse; font-size: 13px; }
+		#nwTimingPanel th, #nwTimingPanel td { border: 1px solid #ddd; padding: 4px 6px; text-align: left; }
+		#nwTimingPanel th { background: #f2f2f2; }
+		#nwSlowStepBanner { margin: 8px 0; padding: 8px 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; }
+		#batchTimeEstimate { font-size: 13px; color: #444; margin: 4px 0; }
 		#llmWaitBar {
 			height: 6px;
 			background: rgba(255, 255, 255, 0.2);
@@ -195,6 +201,23 @@ Synced: 2026-04-19
 			50% { transform: translateX(120%); }
 			100% { transform: translateX(-60%); }
 		}
+		#chapterScorecardPanel { margin: 0 0 16px; padding: 10px 12px; border: 1px solid #ccd; border-radius: 6px; background: #f7f7ff; }
+		#chapterScorecardPanel table { width: 100%; border-collapse: collapse; font-size: 13px; }
+		#chapterScorecardPanel th, #chapterScorecardPanel td { border: 1px solid #ddd; padding: 4px 6px; text-align: left; vertical-align: top; }
+		#chapterScorecardPanel th { background: #eef; }
+		#chapterScorecardPanel tr.nw-score-row { cursor: pointer; }
+		#chapterScorecardPanel tr.nw-score-row:hover { background: #f3f8ff; }
+		#chapterScorecardDetail { margin-top: 8px; font-size: 13px; white-space: pre-wrap; }
+		.nw-chip { display: inline-block; padding: 1px 7px; border-radius: 999px; font-weight: 700; font-size: 11px; margin-right: 4px; }
+		.nw-chip-PASS { background: #198754; color: #fff; }
+		.nw-chip-WARN { background: #fd7e14; color: #fff; }
+		.nw-chip-FAIL { background: #dc3545; color: #fff; }
+		.nw-chip-NA { background: #6c757d; color: #fff; }
+		.nw-plan-facts { margin: 8px 0; padding: 6px 8px; border: 1px solid #ccd; border-radius: 4px; background: #fafafa; }
+		.nw-plan-facts table { width: 100%; border-collapse: collapse; font-size: 13px; }
+		.nw-plan-facts th, .nw-plan-facts td { border: 1px solid #ddd; padding: 3px 5px; }
+		.chapter-nav button.nw-score-fail { box-shadow: inset 0 -3px 0 #dc3545; }
+		.chapter-nav button.nw-score-warn { box-shadow: inset 0 -3px 0 #fd7e14; }
     </style>
 </head>
 
@@ -254,6 +277,16 @@ Synced: 2026-04-19
 			        </select>
 			        <label for="maxTokens">Max Tokens per Update:</label>
 			        <input type="number" id="maxTokens" min="500" value="6000">
+			        <!-- NW.GEN.TO.1: Setup (Advanced) SHALL offer "AI call timeout (s)" (default 300) used by every callAI request. -->
+			        <details id="setupAdvanced" data-testid="nw-setup-advanced">
+			            <summary>Advanced</summary>
+			            <label for="aiCallTimeoutSec">AI call timeout (s):</label>
+			            <input type="number" id="aiCallTimeoutSec" min="1" value="300" style="width: 7em;" title="Each AI request is aborted after this many seconds (default 300).">
+			            <label for="nwSlowStepMultiplier">Slow-step flag (× average):</label>
+			            <input type="number" id="nwSlowStepMultiplier" min="1" step="0.1" value="2" style="width: 7em;" title="Show Keep waiting / Cancel when a call exceeds this multiple of its average (default 2).">
+			            <label for="nwRunLabel">Run label:</label>
+			            <input type="text" id="nwRunLabel" placeholder="optional, e.g. timing-T0" style="width: 16em;" title="Tag timing records for this session (not saved in the book).">
+			        </details>
 			        <button type="button" id="c1SmokeBtn" onclick="runC1Smoke()" title="Cheap C1 digest / no-full-dump smoke (#120)">C1 Smoke (cheap)</button>
                         <label for="kbEnabled" title="C2: local EvidencePack from novelData only (not series KG yet)" style="margin-left:8px;"><input type="checkbox" id="kbEnabled" onchange="setKbEnabled(this.checked)"> KB / EvidencePack</label>
                         <button type="button" id="c2SmokeBtn" onclick="runC2Smoke()" title="#120 C2 EvidencePack smoke">C2 Smoke</button>
@@ -453,6 +486,7 @@ Synced: 2026-04-19
 	    <!-- NW.T5.6: Tab 5 SHALL provide continuity packet and audit controls (rebuild packets and run continuity audit) plus a read-only continuity status panel. -->
 	    <!-- NW.T5.7: Continuity packet, tracker, and findings data SHALL persist in session state and round-trip through import/export as optional schema-compatible fields. -->
 	    <!-- NW.T5.8: Tab 5 SHALL provide an optional "Generate All Chapters" batch (range, regenerate-existing and per-chapter-download toggles off by default, token cap, Pause/Resume, status line) that drafts prose only for chapters with outlines (NW_GENERATE_ALL_SPEC). -->
+	    <!-- NW.T5.19: Tab 5 SHALL provide an optional AI beat check (off by default) and per-chapter Plan facts rows stored on novelData.chapterFactChecks, not inside chapterBlueprints. -->
 	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	    <div id="tab5" class="tab">
 	        <h2>Generate Chapters</h2>
@@ -460,6 +494,7 @@ Synced: 2026-04-19
 	        <label><input type="checkbox" id="autoContinuityAudit" checked> Auto Continuity Audit After Chapter Generation</label>
 	        <label title="Writes each chapter from your outline and blueprint with no automatic rewrite passes. Use it when you want to revise by hand; quality scores are still shown."><input type="checkbox" id="skipAutoRevision"> Skip automatic revision passes (draft only)</label>
 	        <p id="draftOnlyNote" role="status" hidden>Draft-only mode is on: automatic revision passes are skipped.</p>
+	        <label title="One extra callAI per scored chapter to judge each blueprint beat as present, partial, or missing. Off by default. Does not rewrite text. Counted in the Generate All estimate and token ledger. Skipped when draft-only is on unless this box is also ticked."><input type="checkbox" id="aiBeatCheck" data-testid="nw-ai-beat-check"> AI beat check (1 extra call per chapter)</label>
 	        <button onclick="rebuildContinuityPackets()">Rebuild Continuity Packets</button>
 	        <button onclick="runContinuityAuditAll()">Run Continuity Audit (All Chapters)</button>
 	        <label for="continuityStatusPanel">Continuity Tracker:</label>
@@ -479,6 +514,13 @@ Synced: 2026-04-19
 	                <button id="batchDiscardBtn" onclick="discardInterruptedBatchRun()">Discard</button>
 	            </div>
 	            <div id="batchRunStatus" role="status" aria-live="polite" data-testid="nw-batch-status"></div>
+	            <div id="batchTimeEstimate" data-testid="nw-batch-time-est"></div>
+	            <div id="batchRunSubStep" aria-live="off" data-testid="nw-batch-substep"></div>
+	            <div id="nwSlowStepBanner" data-testid="nw-slow-step" role="alert" aria-live="assertive" hidden>
+	                <span id="nwSlowStepText">This step is taking more than 2× its average.</span>
+	                <button type="button" id="nwSlowKeepWaiting" data-testid="nw-slow-keep">Keep waiting</button>
+	                <button type="button" id="nwSlowCancel" data-testid="nw-slow-cancel">Cancel</button>
+	            </div>
 	            <button id="batchGoTab4" data-testid="nw-batch-go-tab4" onclick="showTab(4)" hidden>Go to Tab 4</button>
 	            <button id="batchExportNow" data-testid="nw-batch-export-now" onclick="exportSession()" hidden>Export session now</button>
 	        </fieldset>
@@ -495,9 +537,31 @@ Synced: 2026-04-19
 	    <!-- NW.T6.3: Each chapter subpage SHALL provide a "Check Spelling & Grammar" button that runs LLM-based proofreading and applies corrections. -->
 	    <!-- NW.T6.4: Chapter edits SHALL be stored in novelData.editedChapters and SHALL propagate to the Book tab on next view. -->
 	    <!-- NW.T6.5: The Update Chapter function SHALL sync edits bidirectionally between Tab 5 and Tab 6 so the latest version is always current. -->
+	    <!-- NW.T6.6: Tab 6 SHALL display per-chapter scorecards (length, beats, cast, setting, replay, repetition, voice, leak, facts, advisory planCoverage) with Score all chapters and Copy scorecard (Markdown). -->
+	    <!-- NW.T6.7: Tab 6 SHALL display a Timing panel (task type, model, size, count, min, avg, max, avg tokens) next to the scorecard, with a version filter and Reset timing stats. -->
 	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	    <div id="tab6" class="tab">
 	        <h2>Edit Chapters</h2>
+	        <div id="chapterScorecardPanel" data-testid="nw-scorecard-panel">
+	            <h3>Chapter scorecards</h3>
+	            <div>
+	                <button type="button" id="scoreAllChaptersBtn" data-testid="nw-score-all" onclick="nwScoreAllChapters().catch(function(e){console.warn(e);})">Score all chapters</button>
+	                <button type="button" id="copyScorecardMdBtn" data-testid="nw-copy-scorecard" onclick="nwCopyScorecardMarkdown()">Copy scorecard (Markdown)</button>
+	            </div>
+	            <div id="chapterScorecardTable" data-testid="nw-scorecard-table"></div>
+	            <div id="chapterScorecardDetail" data-testid="nw-scorecard-detail"></div>
+	        </div>
+	        <div id="nwTimingPanel" data-testid="nw-timing-panel">
+	            <h3>Timing</h3>
+	            <div>
+	                <label for="nwTimingVersionFilter">Version</label>
+	                <select id="nwTimingVersionFilter" data-testid="nw-timing-version"></select>
+	                <button type="button" id="nwTimingResetBtn" data-testid="nw-timing-reset" onclick="nwTimingResetStats()">Reset timing stats</button>
+	            </div>
+	            <div id="nwTimingTable" data-testid="nw-timing-table"></div>
+	            <div id="nwTimingChain" data-testid="nw-timing-chain"></div>
+	            <div id="nwTimingImported" data-testid="nw-timing-imported" hidden></div>
+	        </div>
 	        <div id="chapterEditNav" class="chapter-nav"></div>
 	        <div id="chapterEditContainer"></div>
 	        <button onclick="showTab(5)">Back</button>
@@ -697,6 +761,12 @@ Synced: 2026-04-19
 	        continuityStrictMode: true,
 	        autoContinuityAudit: true,
 	        skipAutoRevision: false,
+	        aiBeatCheck: false,
+	        chapterScorecards: [],
+	        chapterFactChecks: [],
+	        factChecks: { entries: [], quirks: [] },
+	        workflowStage: '',
+	        workflowLog: [],
 	        chapterContinuityPackets: [],
 	        continuityTracker: { chapters: [], characterArcProgress: [], storyArcProgress: {} },
 	        continuityFindings: [],
@@ -1008,6 +1078,427 @@ let activeAICallCount = 0;
 				setExecutionStatus('Idle', 'idle', 'Waiting for next action.');
 			}
 		}
+
+		// NW.GEN.HUD.4: While a callAI request is pending the HUD SHALL show the elapsed time ("Waiting on LLM response... 2m 14s")
+		//               and, when the step makes several calls, "call k of n" (e.g. "Part 2 of 2", "revise 1/2").
+		// NW.GEN.TO.2: callAI SHALL abort a request after the configured timeout (AbortController); a late resolve is ignored.
+		const NW_CALLAI_TIMEOUT_DEFAULT_S = 300;
+		var nwActiveCalls = new Map(); // id -> per-call state
+		var nwActiveCallSeq = 0;
+		let nwActiveCall = null; // HUD/current call; remaining live calls stay in nwActiveCalls
+		function nwCallAIPerCallState() {
+			return (typeof NW_CALLAI_ENABLE_PER_CALL_STATE === 'undefined' || NW_CALLAI_ENABLE_PER_CALL_STATE);
+		}
+		function nwCallAITimeoutMs() {
+			const el = document.getElementById('aiCallTimeoutSec');
+			const s = el ? parseFloat(el.value) : NaN;
+			return Math.round((isFinite(s) && s > 0 ? s : NW_CALLAI_TIMEOUT_DEFAULT_S) * 1000);
+		}
+		function nwFmtElapsed(ms) {
+			const s = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+			return Math.floor(s / 60) + 'm ' + String(s % 60).padStart(2, '0') + 's';
+		}
+		function nwActiveCallCount() {
+			if (nwCallAIPerCallState()) return nwActiveCalls.size;
+			return nwActiveCall ? 1 : 0;
+		}
+		function nwRenderActiveCall() {
+			const c = nwActiveCall;
+			if (!c) return;
+			var n = nwActiveCallCount();
+			var elapsed = Date.now() - c.startedAt;
+			var detail = 'Waiting on LLM response... ' + nwFmtElapsed(elapsed) + (c.label ? ' (' + c.label + ')' : '');
+			if (n > 1) detail += ' — ' + n + ' active calls';
+			if (c.expectedMs > 0) detail += ' — expected ' + nwFmtElapsed(c.expectedMs);
+			if (nwTimingState && nwTimingState.chain && nwTimingState.chain.expectedMs > 0) {
+				var chainElapsed = Date.now() - (nwTimingState.chain.startedAt || c.startedAt);
+				detail += '; chain ' + nwFmtElapsed(chainElapsed) + ' / ' + (nwTimingState.chain.partial ? '~' : '') + nwFmtElapsed(nwTimingState.chain.expectedMs);
+			}
+			setExecutionStatus(c.operation, 'waiting', detail);
+			if (typeof nwBatchRenderSubStep === 'function') nwBatchRenderSubStep();
+			if (typeof nwTimingCheckSlowStep === 'function') nwTimingCheckSlowStep(c, elapsed);
+		}
+		function nwCallStart(operation, label, extra) {
+			extra = extra || {};
+			const perCall = nwCallAIPerCallState();
+			if (!perCall) {
+				const prev = nwActiveCall;
+				if (prev && prev.ticker) clearInterval(prev.ticker);
+			}
+			const c = { id: ++nwActiveCallSeq, operation: operation, label: label || '', startedAt: Date.now(), ticker: null, abortCtl: extra.abortCtl || null, taskType: extra.taskType || '', expectedMs: extra.expectedMs || 0, keepWaiting: false, userAbort: false, rejectAbort: perCall ? (extra.rejectAbort || null) : null };
+			if (perCall) nwActiveCalls.set(c.id, c);
+			nwActiveCall = c;
+			c.ticker = setInterval(nwRenderActiveCall, 1000);
+			nwRenderActiveCall();
+			return c;
+		}
+		function nwCallEnd(c) {
+			if (!c) return;
+			if (c.ticker) clearInterval(c.ticker);
+			c.ticker = null;
+			const perCall = nwCallAIPerCallState();
+			if (perCall) {
+				nwActiveCalls.delete(c.id);
+				if (nwActiveCall === c) {
+					nwActiveCall = null;
+					nwActiveCalls.forEach(function (x) { nwActiveCall = x; });
+				}
+				if (nwActiveCall) nwRenderActiveCall();
+				else if (typeof nwTimingHideSlowStep === 'function') nwTimingHideSlowStep();
+			} else {
+				if (nwActiveCall === c) nwActiveCall = null;
+				if (typeof nwTimingHideSlowStep === 'function') nwTimingHideSlowStep();
+			}
+		}
+
+		// ---- NW.T8b: per-call timing (IndexedDB nwTimingStats + session log; not a schema change) ----
+		var NW_CALLAI_ENABLE_TIMEOUT = true;
+		var NW_CALLAI_ENABLE_ABORT_CLEANUP = true;
+		var NW_CALLAI_ENABLE_PER_CALL_STATE = true;
+		var NW_TIMING_ENABLE_RECORD = true;
+		var NW_TIMING_ENABLE_AWAIT_LOAD = true;
+		var NW_TIMING_ENABLE_SCOREALL_LOCK = true;
+		var NW_TIMING_TASK_TYPES = ['chapterOutline', 'draft', 'revise', 'antiSlop', 'audit', 'apply', 'enrich', 'continuity', 'scorecardBeat', 'other'];
+		var NW_TIMING_MIN_SAMPLES = 3;
+		var NW_TIMING_DB = 'novelwriter-timing';
+		var NW_TIMING_STORE = 'nwTimingStats';
+		var nwTimingState = { stats: {}, sessionLog: [], imported: null, chain: null, lastChain: null, loaded: false, dbPromise: null };
+		function nwTimingRunLabel() {
+			if (typeof window !== 'undefined' && window.__nwRunLabel) return String(window.__nwRunLabel);
+			var el = document.getElementById('nwRunLabel');
+			return el ? String(el.value || '').trim() : '';
+		}
+		function nwSlowStepMultiplier() {
+			var el = document.getElementById('nwSlowStepMultiplier');
+			var n = el ? parseFloat(el.value) : NaN;
+			return (isFinite(n) && n >= 1) ? n : 2;
+		}
+		function nwPromptHash(text) {
+			var s = String(text || '');
+			var h = 2166136261;
+			for (var i = 0; i < s.length; i++) {
+				h ^= s.charCodeAt(i);
+				h = Math.imul(h, 16777619);
+			}
+			return ('00000000' + (h >>> 0).toString(16)).slice(-8);
+		}
+		function nwTimingInferTaskType(operationName, opts) {
+			if (opts && opts.taskType && NW_TIMING_TASK_TYPES.indexOf(opts.taskType) >= 0) return opts.taskType;
+			var op = String(operationName || '');
+			var skill = String((opts && opts.skillId) || (typeof window !== 'undefined' && window.__activeSkillId) || '');
+			var label = String((opts && opts.callLabel) || '');
+			var blob = (op + ' ' + skill + ' ' + label).toLowerCase();
+			if (/beatcheck|scorecardbeat/.test(blob)) return 'scorecardBeat';
+			if (/antislop|anti-slop/.test(blob)) return 'antiSlop';
+			if (/generatechapter|tab5\.generatechapter/.test(blob)) return 'draft';
+			if (/qualityrevise|qualitymultipass|revisechapter|tab5\.revise/.test(blob) || /^revise\b/.test(label.toLowerCase())) return 'revise';
+			if (/runchaptercontinuityaudit|continuityaudit/.test(blob)) return 'audit';
+			if (/tab6\.updatechapter|applycritique|applychapter/.test(blob)) return 'apply';
+			if (/enrich/.test(blob)) return 'enrich';
+			if (/continuity/.test(blob)) return 'continuity';
+			if (/outline/.test(blob)) return 'chapterOutline';
+			return 'other';
+		}
+		function nwTimingSkillMeta(taskType, opts) {
+			var map = { chapterOutline: 'tab4.generateNovelOutlines', draft: 'tab5.generateChapter', revise: 'tab5.reviseChapterForQuality', antiSlop: 'tab5.reviseChapterForQuality', audit: 'tab5.runChapterContinuityAudit', apply: 'tab6.updateChapter', enrich: 'tab4.enrichChapterBlueprints', continuity: 'tab5.runChapterContinuityAudit', scorecardBeat: 'tab5.generateChapter', other: '' };
+			var skillId = (opts && opts.skillId) || (typeof window !== 'undefined' && window.__activeSkillId) || map[taskType] || '';
+			var skill = (typeof getAgentSkill === 'function' && skillId) ? getAgentSkill(skillId) : null;
+			var skillVersion = (skill && (skill.version || skill.skillVersion)) || (typeof AGENT_SKILL_SCHEMA_VERSION !== 'undefined' ? AGENT_SKILL_SCHEMA_VERSION : '1');
+			return { skillId: skillId, skillVersion: String(skillVersion) };
+		}
+		function nwTimingBucket(opts, promptTokens) {
+			var words = Number(opts && opts.targetWords);
+			if (!(words > 0) && typeof novelData !== 'undefined') {
+				var tt = (opts && opts.taskType) || '';
+				if (tt === 'draft' || tt === 'revise' || tt === 'antiSlop' || tt === 'apply') words = Number(novelData.chapterLength) || 0;
+			}
+			if (words > 0) return { kind: 'words', bucket: Math.max(500, Math.ceil(words / 500) * 500) };
+			var tok = Number(promptTokens) || 0;
+			return { kind: 'tokens', bucket: Math.max(4000, Math.ceil(Math.max(tok, 1) / 4000) * 4000) };
+		}
+		function nwTimingStatKey(rec) {
+			return [rec.taskType, rec.model, rec.bucket, rec.skillId, rec.skillVersion, rec.promptHash].join('|');
+		}
+		function nwTimingOpenDb() {
+			if (nwTimingState.dbPromise) return nwTimingState.dbPromise;
+			nwTimingState.dbPromise = new Promise(function (resolve, reject) {
+				if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+				var req;
+				try { req = window.indexedDB.open(NW_TIMING_DB, 1); } catch (e) { reject(e); return; }
+				req.onupgradeneeded = function () {
+					var db = req.result;
+					if (!db.objectStoreNames.contains(NW_TIMING_STORE)) db.createObjectStore(NW_TIMING_STORE);
+				};
+				req.onsuccess = function () { resolve(req.result); };
+				req.onerror = function () { reject(req.error || new Error('timing db open failed')); };
+			});
+			nwTimingState.dbPromise.catch(function () { nwTimingState.dbPromise = null; });
+			return nwTimingState.dbPromise;
+		}
+		function nwTimingIdbPut(row) {
+			return nwTimingOpenDb().then(function (db) {
+				return new Promise(function (resolve, reject) {
+					var tx = db.transaction(NW_TIMING_STORE, 'readwrite');
+					tx.objectStore(NW_TIMING_STORE).put(row, row.key);
+					tx.oncomplete = function () { resolve(); };
+					tx.onerror = function () { reject(tx.error); };
+				});
+			}).catch(function (e) { console.warn('[timing] idb put', e); });
+		}
+		function nwTimingIdbClear() {
+			return nwTimingOpenDb().then(function (db) {
+				return new Promise(function (resolve, reject) {
+					var tx = db.transaction(NW_TIMING_STORE, 'readwrite');
+					tx.objectStore(NW_TIMING_STORE).clear();
+					tx.oncomplete = function () { resolve(); };
+					tx.onerror = function () { reject(tx.error); };
+				});
+			}).catch(function (e) { console.warn('[timing] idb clear', e); });
+		}
+		function nwTimingLoadStats() {
+			return nwTimingOpenDb().then(function (db) {
+				return new Promise(function (resolve, reject) {
+					var tx = db.transaction(NW_TIMING_STORE, 'readonly');
+					var q = tx.objectStore(NW_TIMING_STORE).getAll();
+					q.onsuccess = function () {
+						var map = {};
+						(q.result || []).forEach(function (row) { if (row && row.key) map[row.key] = row; });
+						if (!nwTimingState.loaded) {
+							nwTimingState.stats = map;
+							nwTimingState.loaded = true;
+						} else {
+							Object.keys(map).forEach(function (k) {
+								if (!nwTimingState.stats[k]) nwTimingState.stats[k] = map[k];
+							});
+						}
+						resolve(nwTimingState.stats);
+					};
+					q.onerror = function () { reject(q.error); };
+				});
+			}).catch(function (e) {
+				console.warn('[timing] idb load', e);
+				nwTimingState.stats = nwTimingState.stats || {};
+				return nwTimingState.stats;
+			});
+		}
+		function nwTimingEmptyStat(rec) {
+			return { key: nwTimingStatKey(rec), taskType: rec.taskType, model: rec.model, bucket: rec.bucket, bucketKind: rec.bucketKind, skillId: rec.skillId, skillVersion: rec.skillVersion, promptHash: rec.promptHash, count: 0, min: 0, max: 0, avg: 0, lastMs: 0, timeouts: 0, aborts: 0, errors: 0, promptTokensAvg: 0, completionTokensAvg: 0, totalTokensAvg: 0, lastTokens: 0 };
+		}
+		function nwTimingRecordSettle(rec) {
+			if (!NW_TIMING_ENABLE_RECORD) return rec;
+			rec = rec || {};
+			nwTimingState.sessionLog.push(rec);
+			window.__nwLastTimingRecord = rec;
+			var apply = function () {
+				var key = nwTimingStatKey(rec);
+				var row = nwTimingState.stats[key] || nwTimingEmptyStat(rec);
+				if (rec.outcome === 'ok') {
+					row.count += 1;
+					row.lastMs = rec.ms;
+					row.min = row.count === 1 ? rec.ms : Math.min(row.min, rec.ms);
+					row.max = row.count === 1 ? rec.ms : Math.max(row.max, rec.ms);
+					row.avg = row.avg + (rec.ms - row.avg) / row.count;
+					var tok = Number(rec.totalTokens) || 0;
+					row.lastTokens = tok;
+					row.promptTokensAvg = row.promptTokensAvg + ((Number(rec.promptTokens) || 0) - row.promptTokensAvg) / row.count;
+					row.completionTokensAvg = row.completionTokensAvg + ((Number(rec.completionTokens) || 0) - row.completionTokensAvg) / row.count;
+					row.totalTokensAvg = row.totalTokensAvg + (tok - row.totalTokensAvg) / row.count;
+				} else if (rec.outcome === 'timeout') row.timeouts += 1;
+				else if (rec.outcome === 'abort') row.aborts += 1;
+				else row.errors += 1;
+				nwTimingState.stats[key] = row;
+				nwTimingIdbPut(row);
+				if (typeof nwRenderTimingPanel === 'function') nwRenderTimingPanel();
+				return rec;
+			};
+			var awaitLoad = (typeof NW_TIMING_ENABLE_AWAIT_LOAD === 'undefined' || NW_TIMING_ENABLE_AWAIT_LOAD);
+			if (!awaitLoad || nwTimingState.loaded) return apply();
+			return nwTimingLoadStats().then(function () { return apply(); });
+		}
+		function nwTimingStatsList() {
+			return Object.keys(nwTimingState.stats).map(function (k) { return nwTimingState.stats[k]; });
+		}
+		function nwTimingAvgFor(taskType, preferCurrent) {
+			var meta = nwTimingSkillMeta(taskType, {});
+			var rows = nwTimingStatsList().filter(function (r) { return r.taskType === taskType && r.count >= NW_TIMING_MIN_SAMPLES; });
+			var cur = rows.filter(function (r) { return r.skillId === meta.skillId && r.skillVersion === meta.skillVersion; });
+			var use = (preferCurrent !== false && cur.length) ? cur : rows;
+			var source = (!rows.length) ? 'none' : (cur.length && use === cur ? 'current-version' : 'all-versions');
+			if (!use.length) return { avg: null, tokens: null, samples: 0, source: source };
+			var n = 0, sum = 0, tok = 0;
+			use.forEach(function (r) { n += r.count; sum += r.avg * r.count; tok += (r.totalTokensAvg || 0) * r.count; });
+			return { avg: n ? sum / n : null, tokens: n ? tok / n : null, samples: n, source: source };
+		}
+		function nwTimingEstimateSteps(steps) {
+			var expectedMs = 0, known = 0, missing = [], fallback = false;
+			(steps || []).forEach(function (s) {
+				var a = nwTimingAvgFor(s.taskType);
+				var n = Number(s.n) || 1;
+				if (a.avg == null) missing.push(s.label || s.taskType);
+				else {
+					expectedMs += a.avg * n;
+					known += n;
+					if (a.source === 'all-versions') fallback = true;
+				}
+			});
+			return { expectedMs: expectedMs, known: known, missing: missing, partial: missing.length > 0 && known > 0, none: known === 0, fallback: fallback, steps: steps };
+		}
+		function nwTimingExportSnapshot() {
+			return {
+				version: '8b.1',
+				exportedAt: new Date().toISOString(),
+				runLabel: nwTimingRunLabel(),
+				stats: nwTimingStatsList().map(function (r) { return JSON.parse(JSON.stringify(r)); }),
+				sessionLog: nwTimingState.sessionLog.map(function (r) { return JSON.parse(JSON.stringify(r)); }),
+				lastChain: nwTimingState.lastChain ? JSON.parse(JSON.stringify(nwTimingState.lastChain)) : null
+			};
+		}
+		function nwTimingResetStats() {
+			nwTimingState.stats = {};
+			if (typeof nwRenderTimingPanel === 'function') nwRenderTimingPanel();
+			return nwTimingIdbClear();
+		}
+		function nwTimingHideSlowStep() {
+			var el = document.getElementById('nwSlowStepBanner');
+			if (el) el.hidden = true;
+		}
+		function nwTimingCheckSlowStep(call, elapsed) {
+			var banner = document.getElementById('nwSlowStepBanner');
+			if (!banner || !call || call.keepWaiting) { if (banner && (!call || call.keepWaiting)) banner.hidden = true; return; }
+			var avg = call.expectedMs || (call.taskType ? (nwTimingAvgFor(call.taskType).avg || 0) : 0);
+			var mult = nwSlowStepMultiplier();
+			if (!(avg > 0) || elapsed < avg * mult) { banner.hidden = true; return; }
+			var text = document.getElementById('nwSlowStepText');
+			if (text) text.textContent = 'This step is taking more than ' + mult + '× its average (' + nwFmtElapsed(elapsed) + ' vs ' + nwFmtElapsed(avg) + ').';
+			banner.hidden = false;
+		}
+		function nwCallAIAbort() {
+			var c = nwActiveCall;
+			if (!c) return false;
+			c.userAbort = true;
+			try { if (c.abortCtl) c.abortCtl.abort(); } catch (_) { /* already settled */ }
+			if (typeof c.rejectAbort === 'function') {
+				try { c.rejectAbort(); } catch (_) { /* already settled */ }
+			}
+			return true;
+		}
+		function nwRenderTimingPanel() {
+			var table = document.getElementById('nwTimingTable');
+			var chainEl = document.getElementById('nwTimingChain');
+			var impEl = document.getElementById('nwTimingImported');
+			var filter = document.getElementById('nwTimingVersionFilter');
+			if (!table) return;
+			var rows = nwTimingStatsList();
+			var versions = [];
+			rows.forEach(function (r) {
+				var v = (r.skillId || '') + '@' + (r.skillVersion || '');
+				if (versions.indexOf(v) < 0) versions.push(v);
+			});
+			if (filter) {
+				var keep = filter.value;
+				while (filter.firstChild) filter.removeChild(filter.firstChild);
+				var allOpt = document.createElement('option'); allOpt.value = ''; allOpt.textContent = 'All versions'; filter.appendChild(allOpt);
+				versions.forEach(function (v) {
+					var o = document.createElement('option'); o.value = v; o.textContent = v; filter.appendChild(o);
+				});
+				if (keep && versions.indexOf(keep) >= 0) filter.value = keep;
+				if (filter.value) rows = rows.filter(function (r) { return ((r.skillId || '') + '@' + (r.skillVersion || '')) === filter.value; });
+			}
+			table.textContent = '';
+			var tbl = document.createElement('table');
+			var thead = document.createElement('thead');
+			var hr = document.createElement('tr');
+			['Task', 'Model', 'Size', 'Count', 'Min', 'Avg', 'Max', 'Avg tokens', 'Timeouts', 'Aborts'].forEach(function (h) {
+				var th = document.createElement('th'); th.textContent = h; hr.appendChild(th);
+			});
+			thead.appendChild(hr); tbl.appendChild(thead);
+			var tb = document.createElement('tbody');
+			rows.sort(function (a, b) { return String(a.taskType).localeCompare(b.taskType); }).forEach(function (r) {
+				var tr = document.createElement('tr');
+				[r.taskType, r.model, String(r.bucketKind || '') + ' ' + r.bucket, r.count, Math.round(r.min), Math.round(r.avg), Math.round(r.max), Math.round(r.totalTokensAvg || 0), r.timeouts, r.aborts].forEach(function (v) {
+					var td = document.createElement('td'); td.textContent = String(v); tr.appendChild(td);
+				});
+				tb.appendChild(tr);
+			});
+			tbl.appendChild(tb);
+			table.appendChild(tbl);
+			if (chainEl) {
+				var ch = nwTimingState.chain || nwTimingState.lastChain;
+				if (!ch) chainEl.textContent = '';
+				else if (ch.none) chainEl.textContent = 'Last chain: no estimate yet (fewer than ' + NW_TIMING_MIN_SAMPLES + ' samples).';
+				else {
+					var line = (ch.partial ? 'Partial estimate: ' : 'Chain estimate: ') + nwFmtElapsed(ch.expectedMs);
+					if (ch.fallback) line += ' (all versions)';
+					if (ch.missing && ch.missing.length) line += '; no estimate yet for ' + ch.missing.join(', ');
+					if (ch.actualMs != null) line += '. Actual: ' + nwFmtElapsed(ch.actualMs);
+					chainEl.textContent = line;
+				}
+			}
+			if (impEl) {
+				if (nwTimingState.imported) {
+					impEl.hidden = false;
+					var n = (nwTimingState.imported.sessionLog || []).length;
+					impEl.textContent = 'Imported timing snapshot (' + n + ' session calls) — display only, not merged into stats.';
+				} else { impEl.hidden = true; impEl.textContent = ''; }
+			}
+		}
+		function nwTimingChainSteps(nCh) {
+			nCh = Number(nCh) || 0;
+			var steps = [{ taskType: 'draft', n: nCh * 2, label: 'draft' }];
+			if (novelData && novelData.autoContinuityAudit) steps.push({ taskType: 'audit', n: nCh, label: 'audit' });
+			var skip = (typeof nwBatchSkipAutoRevision === 'function') ? nwBatchSkipAutoRevision() : !!(novelData && novelData.skipAutoRevision);
+			var maxAuto = skip ? 0 : ((typeof NW_QUALITY_REVISE !== 'undefined' && NW_QUALITY_REVISE) ? (Number(NW_QUALITY_REVISE.maxAutoPasses) || 0) : 0);
+			if (maxAuto > 0) steps.push({ taskType: 'revise', n: nCh * maxAuto, label: 'revise' });
+			if (novelData && novelData.aiBeatCheck) steps.push({ taskType: 'scorecardBeat', n: nCh, label: 'beat check' });
+			return steps;
+		}
+		function nwTimingStartChain(steps, label) {
+			var est = nwTimingEstimateSteps(steps);
+			est.startedAt = Date.now();
+			est.label = label || 'chain';
+			est.actualMs = null;
+			nwTimingState.chain = est;
+			var el = document.getElementById('batchTimeEstimate');
+			if (el) {
+				if (est.none) el.textContent = 'Time estimate: no estimate yet';
+				else {
+					var t = (est.partial ? 'Time estimate (partial): ' : 'Time estimate: ') + nwFmtElapsed(est.expectedMs);
+					if (est.fallback) t += ' (all versions)';
+					if (est.missing.length) t += '. No estimate yet for ' + est.missing.join(', ');
+					el.textContent = t;
+				}
+			}
+			if (typeof nwRenderTimingPanel === 'function') nwRenderTimingPanel();
+			return est;
+		}
+		function nwTimingFinishChain() {
+			var ch = nwTimingState.chain;
+			if (!ch) return null;
+			ch.actualMs = Date.now() - ch.startedAt;
+			nwTimingState.lastChain = ch;
+			nwTimingState.chain = null;
+			if (typeof nwRenderTimingPanel === 'function') nwRenderTimingPanel();
+			return ch;
+		}
+		window.nwTimingRecordSettle = nwTimingRecordSettle;
+		window.nwTimingExportSnapshot = nwTimingExportSnapshot;
+		window.nwTimingResetStats = nwTimingResetStats;
+		window.nwTimingAvgFor = nwTimingAvgFor;
+		window.nwTimingStatsList = nwTimingStatsList;
+		window.nwTimingLoadStats = nwTimingLoadStats;
+		window.nwTimingChainSteps = nwTimingChainSteps;
+		window.nwCallAIAbort = nwCallAIAbort;
+		window.nwTimingInferTaskType = nwTimingInferTaskType;
+		window.nwPromptHash = nwPromptHash;
+		document.addEventListener('DOMContentLoaded', function () {
+			nwTimingLoadStats().then(function () { nwRenderTimingPanel(); });
+			var keep = document.getElementById('nwSlowKeepWaiting');
+			var cancel = document.getElementById('nwSlowCancel');
+			var filter = document.getElementById('nwTimingVersionFilter');
+			if (keep) keep.addEventListener('click', function () { if (nwActiveCall) nwActiveCall.keepWaiting = true; nwTimingHideSlowStep(); });
+			if (cancel) cancel.addEventListener('click', function () { nwCallAIAbort(); });
+			if (filter) filter.addEventListener('change', nwRenderTimingPanel);
+		});
 
 	    // Default author styles with predefined guides
 	    const defaultAuthors = {
@@ -2333,8 +2824,13 @@ let activeAICallCount = 0;
 	        }
 	        if (tabNum === 5) showGenChapterSubpage(1);
 	        if (tabNum === 6) {
+	            // Persist Plan-fact DOM edits before updateChapterSubpages rebuilds chapterGenContainer.
+	            if (typeof NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD === 'undefined' || NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD) {
+	                if (typeof nwCollectPlanFactsFromUi === 'function') nwCollectPlanFactsFromUi();
+	            }
 	            updateChapterSubpages();
 	            showEditChapterSubpage(1);
+	            if (typeof nwRenderChapterScorecards === 'function') nwRenderChapterScorecards();
 	        }
 	        if (tabNum === 5) {
 	            renderContinuityStatusPanel();
@@ -2408,12 +2904,45 @@ let activeAICallCount = 0;
 			const inferredCallerName = inferCallerName();
 			const fallbackOperationName = tabElement?.id ? `${tabElement.id} AI Operation` : 'AI Operation';
 			const operationName = opts.operationName || inferredCallerName || fallbackOperationName;
+			const callLabel = opts.callLabel || '';
+			const taskType = (typeof nwTimingInferTaskType === 'function') ? nwTimingInferTaskType(operationName, opts) : (opts.taskType || 'other');
+			opts.taskType = taskType;
+			const timeoutMs = nwCallAITimeoutMs();
+			const timeoutSec = Math.round(timeoutMs / 1000);
+			const abortCtl = (typeof AbortController === 'function') ? new AbortController() : null;
+			let timedOut = false;
+			let userAborted = false;
+			let timeoutTimer = null;
+			let callTick = null;
+			const t0 = Date.now();
+			const callIndexAtStart = (novelData && novelData.tokenUsage && novelData.tokenUsage.calls) ? novelData.tokenUsage.calls.length : 0;
+			let timingUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, reasoning_tokens: 0 };
+			const timeoutError = new Error('Timed out after ' + timeoutSec + ' s (' + operationName + ')');
+			const abortError = new Error('Aborted (' + operationName + ')');
+			function callAbandoned() {
+				if (callTick && callTick.userAbort) userAborted = true;
+				if (!nwCallAIPerCallState() && nwActiveCall && nwActiveCall.userAbort) userAborted = true;
+				return timedOut || userAborted;
+			}
 
 		    if (!apiKey) {
 		        console.error('API Key is missing');
 		        requestLog.status = 'Failed';
 		        updateRequestLog();
 				setExecutionStatus(operationName, 'failed', 'API key missing.');
+				if (typeof nwTimingRecordSettle === 'function') {
+					var _sk = (typeof nwTimingSkillMeta === 'function') ? nwTimingSkillMeta(taskType, opts) : { skillId: '', skillVersion: '1' };
+					var _sys0 = (Array.isArray(messages) && messages[0] && messages[0].content) || '';
+					nwTimingRecordSettle({
+						taskType: taskType, chapter: opts.chapter != null ? opts.chapter : ((typeof nwBatchState !== 'undefined' && nwBatchState.chapterInFlight) || null),
+						ms: Date.now() - t0, outcome: 'error', model: model, bucket: 4000, bucketKind: 'tokens',
+						skillId: _sk.skillId, skillVersion: _sk.skillVersion, promptHash: (typeof nwPromptHash === 'function') ? nwPromptHash(_sys0) : '',
+						promptTokens: 0, completionTokens: 0, totalTokens: 0, reasoningTokens: 0,
+						runLabel: (typeof nwTimingRunLabel === 'function') ? nwTimingRunLabel() : '',
+						complexity: { chapters: (typeof novelData !== 'undefined' && novelData.numChapters) || 0, targetWords: (typeof novelData !== 'undefined' && novelData.chapterLength) || 0, characterCount: ((typeof novelData !== 'undefined' && novelData.characters) || []).length, subplotCount: ((typeof novelData !== 'undefined' && novelData.subplots) || []).length, promptTokens: 0 },
+						callIndex: callIndexAtStart
+					});
+				}
 		        throw new Error('API Key is missing');
 		    }
 
@@ -2431,9 +2960,32 @@ let activeAICallCount = 0;
 		    if (loadingDiv) loadingDiv.style.display = 'block';
 			activeAICallCount += 1;
 			setExecutionStatus(operationName, 'running', 'Preparing request payload.');
+			// Timeout race: whatever the fetch does after this fires (late resolve, ignored abort) is never awaited again.
+			const timeoutRace = new Promise((_, reject) => {
+				if (typeof NW_CALLAI_ENABLE_TIMEOUT !== 'undefined' && !NW_CALLAI_ENABLE_TIMEOUT) return;
+				timeoutTimer = setTimeout(() => {
+					timedOut = true;
+					try { if (abortCtl) abortCtl.abort(); } catch (_) { /* already settled */ }
+					reject(timeoutError);
+				}, timeoutMs);
+			});
+			timeoutRace.catch(() => {});
+			let abortReject = null;
+			const abortRace = new Promise((_, reject) => { abortReject = reject; });
+			abortRace.catch(() => {});
 
 		    try {
-				setExecutionStatus(operationName, 'waiting', 'Waiting on LLM response...');
+		        var _est = (typeof nwTimingAvgFor === 'function') ? nwTimingAvgFor(taskType) : { avg: 0 };
+		        callTick = nwCallStart(operationName, callLabel, {
+		            abortCtl: abortCtl,
+		            taskType: taskType,
+		            expectedMs: (_est && _est.avg) || 0,
+		            rejectAbort: function () {
+		                userAborted = true;
+		                try { if (abortCtl) abortCtl.abort(); } catch (_) { /* already settled */ }
+		                if (abortReject) abortReject(abortError);
+		            }
+		        });
 		        const requestBody = useResponsesAPI
 		            ? {
 		                model: model,
@@ -2448,18 +3000,27 @@ let activeAICallCount = 0;
 		                stream: false,
 		                temperature: 0.65
 		            };
-		        const response = await fetch(endpoint, {
+		        const fetchP = fetch(endpoint, {
 		            method: 'POST',
 		            headers: {
 		                'Content-Type': 'application/json',
 		                'Authorization': `Bearer ${apiKey}`
 		            },
-		            body: JSON.stringify(requestBody)
+		            body: JSON.stringify(requestBody),
+		            signal: abortCtl ? abortCtl.signal : undefined
 		        });
+		        const racers = [fetchP];
+		        if (typeof NW_CALLAI_ENABLE_TIMEOUT === 'undefined' || NW_CALLAI_ENABLE_TIMEOUT) racers.push(timeoutRace);
+		        if (typeof NW_CALLAI_ENABLE_ABORT_CLEANUP === 'undefined' || NW_CALLAI_ENABLE_ABORT_CLEANUP) racers.push(abortRace);
+		        const response = await Promise.race(racers);
+		        if ((typeof NW_CALLAI_ENABLE_ABORT_CLEANUP === 'undefined' || NW_CALLAI_ENABLE_ABORT_CLEANUP) && callAbandoned()) throw timedOut ? timeoutError : abortError;
 		        if (!response.ok) {
-		            throw new Error(`HTTP error! Status: ${response.status}, Text: ${await response.text()}`);
+		            throw new Error(`HTTP error! Status: ${response.status}, Text: ${await Promise.race([response.text()].concat(racers.slice(1)))}`);
 		        }
-		        		        const text = await response.text();
+		        		        const text = await Promise.race([response.text()].concat(racers.slice(1)));
+		        // Late-resolve guard: nothing below (usage row, parsed chapter) may run once the call timed out or was cancelled.
+		        if ((typeof NW_CALLAI_ENABLE_ABORT_CLEANUP === 'undefined' || NW_CALLAI_ENABLE_ABORT_CLEANUP) && callAbandoned()) throw timedOut ? timeoutError : abortError;
+		        clearTimeout(timeoutTimer);
 		        console.log('Raw AI response:', text);
 		        let jsonResponse = JSON.parse(text);
 		        // #120 C3 / NW.GEN3b: capture usage from FIRST HTTP-body parse before content rewrite overwrites jsonResponse.
@@ -2468,6 +3029,8 @@ let activeAICallCount = 0;
 		        const usagePrompt = httpUsage ? (httpUsage.prompt_tokens || httpUsage.input_tokens || 0) : 0;
 		        const usageCompletion = httpUsage ? (httpUsage.completion_tokens || httpUsage.output_tokens || 0) : 0;
 		        const usageTotal = httpUsage ? (httpUsage.total_tokens || (usagePrompt + usageCompletion)) : 0;
+		        const usageReasoning = httpUsage ? ((httpUsage.completion_tokens_details && httpUsage.completion_tokens_details.reasoning_tokens) || httpUsage.reasoning_tokens || 0) : 0;
+		        timingUsage = { prompt_tokens: usagePrompt, completion_tokens: usageCompletion, total_tokens: usageTotal, reasoning_tokens: usageReasoning };
 		        if (typeof recordBookTokenUsage === 'function') {
 		            recordBookTokenUsage({
 		                operationName,
@@ -2539,6 +3102,7 @@ let activeAICallCount = 0;
 		        requestLog.returnedInfo = text; // Store raw response
 		        console.log('callAI - Post-Response requestLog.returnedInfo:', requestLog.returnedInfo.substring(0, 200) + '...');
 		        updateRequestLog();
+				nwCallEnd(callTick);
 				setExecutionStatus(operationName, 'completed', 'Response received and parsed.');
 
 				// NORMALIZE_INBOUND_CALLAI: stage schema unwrap + canonical keys
@@ -2581,17 +3145,62 @@ let activeAICallCount = 0;
 		        }
 
 		        return jsonResponse;
-		    } catch (error) {
+		    } catch (caught) {
+		        callAbandoned();
+		        const error = timedOut ? timeoutError : (userAborted ? abortError : caught); // timeout wins over AbortError; user cancel is abort
 		        console.error('API call failed:', error);
 		        requestLog.status = 'Failed';
 		        requestLog.returnedInfo = error.message;
 		        updateRequestLog();
+				nwCallEnd(callTick);
 				setExecutionStatus(operationName, 'failed', error.message || 'API call failed.');
 		        throw error;
 		    } finally {
+		        clearTimeout(timeoutTimer);
+		        nwCallEnd(callTick);
 		        if (loadingDiv) loadingDiv.style.display = 'none';
 				activeAICallCount = Math.max(0, activeAICallCount - 1);
 				setTimeout(resetExecutionStatusIfIdle, 1200);
+				if (typeof nwTimingRecordSettle === 'function') {
+					var outcome = timedOut ? 'timeout' : (userAborted ? 'abort' : (requestLog.status === 'Failed' ? 'error' : 'ok'));
+					if (requestLog.status === 'Completed') outcome = 'ok';
+					var sysMsg = '';
+					try {
+						var first = Array.isArray(adjustedMessages) ? adjustedMessages.find(function (m) { return m && m.role === 'system'; }) : null;
+						sysMsg = first && first.content || '';
+					} catch (_) { sysMsg = ''; }
+					var skillMeta = (typeof nwTimingSkillMeta === 'function') ? nwTimingSkillMeta(taskType, opts) : { skillId: '', skillVersion: '1' };
+					var buck = (typeof nwTimingBucket === 'function') ? nwTimingBucket(opts, timingUsage.prompt_tokens) : { kind: 'tokens', bucket: 4000 };
+					var ch = opts.chapter != null ? opts.chapter : ((typeof nwBatchState !== 'undefined' && nwBatchState && nwBatchState.chapterInFlight) || (window.__lastGenerateChapterGate && window.__lastGenerateChapterGate.chapter) || null);
+					var settled = nwTimingRecordSettle({
+						taskType: taskType,
+						chapter: ch,
+						ms: Date.now() - t0,
+						outcome: outcome,
+						model: model,
+						bucket: buck.bucket,
+						bucketKind: buck.kind,
+						skillId: skillMeta.skillId,
+						skillVersion: skillMeta.skillVersion,
+						promptHash: (typeof nwPromptHash === 'function') ? nwPromptHash(sysMsg) : '',
+						promptTokens: timingUsage.prompt_tokens || 0,
+						completionTokens: timingUsage.completion_tokens || 0,
+						totalTokens: timingUsage.total_tokens || 0,
+						reasoningTokens: timingUsage.reasoning_tokens || 0,
+						runLabel: (typeof nwTimingRunLabel === 'function') ? nwTimingRunLabel() : '',
+						complexity: {
+							chapters: (typeof novelData !== 'undefined' && Number(novelData.numChapters)) || 0,
+							targetWords: (typeof novelData !== 'undefined' && Number(novelData.chapterLength)) || 0,
+							characterCount: ((typeof novelData !== 'undefined' && novelData.characters) || []).length,
+							subplotCount: ((typeof novelData !== 'undefined' && novelData.subplots) || []).length,
+							promptTokens: timingUsage.prompt_tokens || 0
+						},
+						callIndex: callIndexAtStart
+					});
+					if (settled && typeof settled.then === 'function') {
+						try { await settled; } catch (_) { /* timing persist must not fail the call */ }
+					}
+				}
 		    }
 }
 
@@ -4080,6 +4689,8 @@ const messages = [
 		    novelData.chapters = novelData.chapters.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapters.length)).fill(''));
 		    novelData.chapterImprovements = novelData.chapterImprovements.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapterImprovements.length)).fill(''));
 		    novelData.chapterContinuityPackets = (novelData.chapterContinuityPackets || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterContinuityPackets || []).length)).fill(null));
+		    novelData.chapterScorecards = (novelData.chapterScorecards || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterScorecards || []).length)).fill(null));
+		    novelData.chapterFactChecks = (novelData.chapterFactChecks || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterFactChecks || []).length)).fill(null));
 		    if (!novelData.continuityTracker || typeof novelData.continuityTracker !== 'object') {
 		        novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
 		    }
@@ -4163,8 +4774,10 @@ const messages = [
 		        `;
 		        genContainer.appendChild(subpage);
 		        requestAnimationFrame(() => {
-		            document.getElementById(`chapterGenContent${i}`).value = novelData.chapters[i-1];
+		            const el = document.getElementById(`chapterGenContent${i}`);
+		            if (el) el.value = novelData.chapters[i-1] || '';
 		        });
+				if (typeof nwRenderPlanFactsBox === 'function') nwRenderPlanFactsBox(i, subpage);
 		    }
 
 
@@ -4191,8 +4804,10 @@ const messages = [
 		        `;
 		        editContainer.appendChild(subpage);
 		        requestAnimationFrame(() => {
-		            document.getElementById(`chapterEditContent${i}`).value = novelData.chapters[i-1];
-		            document.getElementById(`chapterEditImprovement${i}`).value = novelData.chapterImprovements[i-1];
+		            const editEl = document.getElementById(`chapterEditContent${i}`);
+		            const impEl = document.getElementById(`chapterEditImprovement${i}`);
+		            if (editEl) editEl.value = novelData.chapters[i-1] || '';
+		            if (impEl) impEl.value = novelData.chapterImprovements[i-1] || '';
 		        });
 		    }
 
@@ -5371,6 +5986,8 @@ return c && c.name && c.backstory && c.arc; });
 
 		// Offline smoke isolation (Copilot highs on #117 QE1-3/QE5/QE6): snapshot novelData keys + DOM values, restore in finally.
 		function _nwSmokeSnapshot(keys, domIds) {
+			const extra8d = ['chapterScorecards', 'chapterFactChecks', 'factChecks', 'workflowStage', 'workflowLog', 'aiBeatCheck', 'lastBookScore'];
+			keys = (keys || []).concat(extra8d.filter(function (k) { return (keys || []).indexOf(k) < 0; }));
 			const snap = {};
 			(keys || []).forEach(function (k) { snap[k] = { had: Object.prototype.hasOwnProperty.call(novelData, k), v: novelData[k] === undefined ? undefined : JSON.parse(JSON.stringify(novelData[k])) }; });
 			const dom = {};
@@ -6544,7 +7161,8 @@ return c && c.name && c.backstory && c.arc; });
 						: (kind === 'anti-slop' ? 'quality-multipass-anti-slop' : 'quality-multipass-residual')
 				});
 				const __beforeMp = novelData.chapters[chapterNum - 1] || '';
-				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityMultiPass' });
+				if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'revise', 'pass ' + pass);
+				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityMultiPass', callLabel: 'revise pass ' + pass });
 				const __guardMp = guardChapterReviseGrowth(chapterNum, __beforeMp, novelData.chapters[chapterNum - 1] || '', { source: 'qualityMultiPass:' + kind });
 				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', {
 					label: 'chapter' + chapterNum + '-afterMultiPass' + pass
@@ -6684,7 +7302,8 @@ return c && c.name && c.backstory && c.arc; });
 				const brief = buildQualityReviseBrief(gateAfter);
 				stageChapterImprovement(chapterNum, brief, { mode: 'replace', source: 'quality-revise' });
 				const __beforeRev = novelData.chapters[chapterNum - 1] || '';
-				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityRevise' });
+				if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'revise', 'revise ' + attempts + '/' + maxAttempts);
+				await updateChapter(chapterNum, { requireImprovements: true, operationTag: 'qualityRevise', callLabel: 'revise ' + attempts + '/' + maxAttempts });
 				lastGuard = guardChapterReviseGrowth(chapterNum, __beforeRev, novelData.chapters[chapterNum - 1] || '', { source: 'qualityRevise' });
 				gateAfter = runQualityGate(novelData.chapters[chapterNum - 1] || '', { label: 'chapter' + chapterNum + '-afterRevise' + attempts });
 				pushQualitySample('chapter' + chapterNum + '-afterRevise', Object.assign({}, gateAfter.scores || {}, {
@@ -7079,6 +7698,9 @@ return c && c.name && c.backstory && c.arc; });
 				if (kind === 'residual-staged') consumedStagedNotes = notesForPass;
 			}
 			}
+			try {
+				if (typeof nwScoreAndStoreChapter === 'function') await nwScoreAndStoreChapter(chapterNum, { trigger: 'apply', notify: false });
+			} catch (scErr) { console.warn('[QCAT] post-apply score', scErr); }
 			return { beforeScores: beforeScores, afterScores: afterScores, multi: multi, gate: gate, reverted: !!(__guardStaged && __guardStaged.reverted), reasons: (__guardStaged && __guardStaged.reasons) || [] };
 		}
 
@@ -7797,7 +8419,7 @@ return c && c.name && c.backstory && c.arc; });
 			if (__c2ContEp && messages[1] && typeof messages[1].content === 'string' && messages[1].content.indexOf('EvidencePack') < 0) {
 				messages[1].content = messages[1].content + '\n' + __c2ContEp;
 			}
-			const response = await callAI(messages, document.getElementById('tab5'), { operationName: `runChapterContinuityAudit_${chapterNum}` });
+			const response = await callAI(messages, document.getElementById('tab5'), { operationName: `runChapterContinuityAudit_${chapterNum}`, taskType: 'audit', chapter: chapterNum });
 			// #135 review (Copilot 4173592631): in a batch (nwBatchContinuityAudit passes throwOnParseError) malformed model JSON
 			// must stop the run as 'parse' instead of becoming a "successful" fallback audit. Single-chapter audits keep the
 			// fallback (it records "Unable to parse continuity audit output." as a risk) unchanged.
@@ -8737,11 +9359,12 @@ return c && c.name && c.backstory && c.arc; });
 			            requestLog: { ...requestLog }
 			        }
 			    };
+			    if (typeof nwTimingExportSnapshot === 'function') sessionData.nwTiming = nwTimingExportSnapshot();
 			    const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json;charset=utf-8' });
 			    const url = window.URL.createObjectURL(blob);
 			    const a = document.createElement('a');
 			    a.href = url;
-			    a.download = `${novelData.title || 'Untitled_Novel'}_session.json`;
+			    a.download = (typeof nwExportSessionFilename === 'function') ? nwExportSessionFilename() : `${novelData.title || 'Untitled_Novel'}_session.json`;
 			    document.body.appendChild(a);
 			    a.click();
 			    document.body.removeChild(a);
@@ -8802,6 +9425,17 @@ return c && c.name && c.backstory && c.arc; });
 		            skipAutoRevision: typeof normalizedNovelData.skipAutoRevision === 'boolean'
 		                ? normalizedNovelData.skipAutoRevision
 		                : !!document.getElementById('skipAutoRevision')?.checked,
+		            aiBeatCheck: typeof normalizedNovelData.aiBeatCheck === 'boolean' ? normalizedNovelData.aiBeatCheck : false,
+		            chapterScorecards: Array.isArray(normalizedNovelData.chapterScorecards) ? normalizedNovelData.chapterScorecards : [],
+		            chapterFactChecks: Array.isArray(normalizedNovelData.chapterFactChecks) ? normalizedNovelData.chapterFactChecks : [],
+		            factChecks: (normalizedNovelData.factChecks && typeof normalizedNovelData.factChecks === 'object')
+		                ? {
+		                    entries: Array.isArray(normalizedNovelData.factChecks.entries) ? normalizedNovelData.factChecks.entries : [],
+		                    quirks: Array.isArray(normalizedNovelData.factChecks.quirks) ? normalizedNovelData.factChecks.quirks : (Array.isArray(normalizedNovelData.factChecks) ? [] : [])
+		                }
+		                : { entries: [], quirks: [] },
+		            workflowStage: typeof normalizedNovelData.workflowStage === 'string' ? normalizedNovelData.workflowStage : '',
+		            workflowLog: Array.isArray(normalizedNovelData.workflowLog) ? normalizedNovelData.workflowLog : [],
 		            chapterContinuityPackets: Array.isArray(normalizedNovelData.chapterContinuityPackets) ? normalizedNovelData.chapterContinuityPackets : [],
 		            continuityFindings: Array.isArray(normalizedNovelData.continuityFindings) ? normalizedNovelData.continuityFindings : [],
 		            continuityTracker: normalizedNovelData.continuityTracker && typeof normalizedNovelData.continuityTracker === 'object'
@@ -8863,10 +9497,12 @@ return c && c.name && c.backstory && c.arc; });
 			const strictModeEl = document.getElementById('continuityStrictMode');
 			const autoAuditEl = document.getElementById('autoContinuityAudit');
 			const skipRevEl = document.getElementById('skipAutoRevision');
+			const aiBeatEl = document.getElementById('aiBeatCheck');
 			if (strictModeEl) strictModeEl.checked = !!novelData.continuityStrictMode;
 			if (autoAuditEl) autoAuditEl.checked = !!novelData.autoContinuityAudit;
 			if (skipRevEl) skipRevEl.checked = !!novelData.skipAutoRevision;
 			document.getElementById('draftOnlyNote').hidden = !novelData.skipAutoRevision;
+			if (aiBeatEl) aiBeatEl.checked = !!novelData.aiBeatCheck;
 
 		    // CodeQL (DOM text reinterpreted as HTML): session/checkpoint data is never interpolated into innerHTML here.
 		    // renderCharacters()/renderSubplots() build fixed markup and set every user field through .value.
@@ -8914,6 +9550,8 @@ return c && c.name && c.backstory && c.arc; });
 			renderContinuityStatusPanel();
 			renderBlueprintBeatStatus();
 			if (typeof nwBatchSyncCapFromRun === 'function') nwBatchSyncCapFromRun();
+			if (typeof nwRenderChapterScorecards === 'function') nwRenderChapterScorecards();
+			if (typeof nwRenderTimingPanel === 'function') nwRenderTimingPanel();
 		}
 
         // Import a session from a JSON file.
@@ -8939,6 +9577,10 @@ return c && c.name && c.backstory && c.arc; });
 		        try {
 		            const rawSessionData = JSON.parse(e.target.result);
 		            const { novelData: importedNovelData, requestLog: importedRequestLog, importMode, warnings } = normalizeImportedSessionData(rawSessionData);
+		            // Slot 8b: nwTiming is envelope-level, display-only. Never merge into IndexedDB stats.
+		            if (typeof nwTimingState !== 'undefined') {
+		                nwTimingState.imported = rawSessionData && rawSessionData.nwTiming ? rawSessionData.nwTiming : null;
+		            }
 		            const priorRunId = novelData && novelData.batchRun && novelData.batchRun.id;
 		            novelData = importedNovelData;
 		            requestLog = importedRequestLog;
@@ -9648,6 +10290,1258 @@ return c && c.name && c.backstory && c.arc; });
 
 
 
+		// ---- NW.T8d: Chapter scorecard vs blueprint (in-app; harness is a driver only) ----
+		// NW.T6.6 / NW.T5.19: nwScoreChapterVsBlueprint SHALL measure a chapter against its blueprint and optional plan facts with no scoring copy outside this file.
+		// Implemented: v0.3.4-8d | Date: 2026-10-09
+		var NW_SCORER_VERSION = '8d.1';
+		var NW_QCAT_ENABLE_REPLAY = true;
+		var NW_QCAT_ENABLE_PROBES = true;
+		var NW_QCAT_ENABLE_WRITE = true;
+		var NW_QCAT_REPLAY_REQUIRE_RESTART = true;
+		var NW_QCAT_FILTER_TITLE_FRAGMENTS = true;
+		var NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD = true;
+		var NW_QCAT_INVALID_REGEX_FAILS_FACTS = true;
+		var NW_QCAT_SCORE_AFTER_COVERAGE = true;
+		var NW_QCAT_CLEAR_EMPTY_PLAN_FACTS = true;
+		var NW_QCAT_RESTART_MIN_WORDS = 40;
+		var NW_QCAT_RESTART_DENSITY = 0.4;
+		var NW_QCAT_NAME_TITLES = ['dr', 'doctor', 'captain', 'capt', 'mr', 'mrs', 'ms', 'prof', 'professor', 'commander', 'lt', 'sgt', 'admiral', 'general', 'colonel', 'major'];
+		var NW_NOTE_LEAK_TERMS = ['fail closed', 'followable', 'this row', 'fenced header', 'blueprint', 'obligation', 'beat checklist', 'sceneGoal', 'turnOrPayoff', 'deferred thread'];
+		var NW_QCAT_CAMEL_FIELDS = ['sceneGoal', 'castArcBeat', 'subplotPressure', 'dialogueTurn', 'sensoryWorldHook', 'turnOrPayoff', 'characterBeats', 'worldHooks', 'allowedPayoffs', 'deferredThreads', 'arcStep'];
+		var NW_QCAT_STOP = new Set(('a an the and or but if in on at to for of as by with from into over after before about against between through during without within along among upon than then so nor not no yes it its it\'s i me my we our you your he she they them his her their this that these those be is am are was were been being do did does doing have has had having will would can could should may might must shall').split(/\s+/));
+		var NW_QCAT_BEAT_FIELDS = ['sceneGoal', 'dialogueTurn', 'turnOrPayoff', 'subplotPressure', 'sensoryWorldHook'];
+
+		function nwQcatWorst(statuses) {
+			var s = statuses || [];
+			if (s.indexOf('FAIL') >= 0) return 'FAIL';
+			if (s.indexOf('WARN') >= 0) return 'WARN';
+			return 'PASS';
+		}
+		function nwQcatWords(text) {
+			return (typeof nwWordCount === 'function') ? nwWordCount(text) : String(text || '').trim().split(/\s+/).filter(Boolean).length;
+		}
+		function nwQcatTokens(text) {
+			return String(text || '').toLowerCase().replace(/[^\w\s']/g, ' ').split(/\s+/).filter(Boolean);
+		}
+		function nwQcatRawWords(text) {
+			return String(text || '').trim().split(/\s+/).filter(Boolean);
+		}
+		function nwQcatShingles(tokens, n) {
+			n = n || 5;
+			var out = [];
+			for (var i = 0; i <= tokens.length - n; i++) out.push(tokens.slice(i, i + n).join(' '));
+			return out;
+		}
+		function nwQcatNormWord(w) {
+			return String(w || '').toLowerCase().replace(/[^\w']/g, '');
+		}
+		function nwQcatAlignedTokens(text) {
+			return nwQcatRawWords(text).map(nwQcatNormWord);
+		}
+		function nwQcatEmptyRepeatedRun() {
+			return { words: 0, firstAt: null, repeatAt: null };
+		}
+		function nwQcatEmptyPrevLongest() {
+			return { words: 0, offsetInChapter: null, offsetInPrev: null };
+		}
+		function nwQcatSentenceWalk(raw, at) {
+			var walk = Math.max(0, Math.min(at == null ? 0 : at, Math.max(0, raw.length - 1)));
+			var floor = Math.max(0, walk - 160);
+			while (walk > floor) {
+				var prev = raw[walk - 1] || '';
+				if (/[.!?]['"]*$/.test(prev) && /^[A-Z]/.test(raw[walk] || '')) break;
+				walk--;
+			}
+			return walk;
+		}
+		function nwQcatLongestSubstring(a, b) {
+			var same = a === b;
+			var n = 5;
+			var gramMap = {};
+			for (let i = 0; i <= a.length - n; i++) {
+				var k = a.slice(i, i + n).join(' ');
+				if (gramMap[k] == null) gramMap[k] = i;
+			}
+			var best = { words: 0, aAt: null, bAt: null };
+			var j;
+			for (j = 0; j <= b.length - n; j++) {
+				var k2 = b.slice(j, j + n).join(' ');
+				var first = gramMap[k2];
+				if (first == null) continue;
+				if (same && first >= j - n + 1) continue;
+				var klen = 0;
+				while (first + klen < a.length && j + klen < b.length && a[first + klen] === b[j + klen]) {
+					if (same && first + klen >= j) break;
+					klen++;
+				}
+				if (klen > best.words) best = { words: klen, aAt: first, bAt: j };
+			}
+			return best;
+		}
+		function nwQcatTitleBare(tok) {
+			return String(tok || '').replace(/[.]/g, '').toLowerCase();
+		}
+		function nwQcatIsTitleToken(tok) {
+			return NW_QCAT_NAME_TITLES.indexOf(nwQcatTitleBare(tok)) >= 0;
+		}
+		function nwQcatStripTitles(name) {
+			var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+			while (parts.length && nwQcatIsTitleToken(parts[0])) parts.shift();
+			return parts.join(' ');
+		}
+		function nwQcatNameKey(name) {
+			return nwQcatStripTitles(name).toLowerCase().replace(/[^a-z0-9\s'-]/g, ' ').replace(/\s+/g, ' ').trim();
+		}
+		function nwChapterText(chapterNum) {
+			var i = chapterNum - 1;
+			var a = (novelData.chapters || [])[i];
+			if (a != null && String(a).trim()) return String(a);
+			var b = (novelData.editedChapters || [])[i];
+			return b != null ? String(b) : '';
+		}
+		function nwEnsureScorecardArrays() {
+			if (!Array.isArray(novelData.chapterScorecards)) novelData.chapterScorecards = [];
+			if (!Array.isArray(novelData.chapterFactChecks)) novelData.chapterFactChecks = [];
+			if (!novelData.factChecks || typeof novelData.factChecks !== 'object') novelData.factChecks = { entries: [], quirks: [] };
+			if (!Array.isArray(novelData.factChecks.entries)) novelData.factChecks.entries = [];
+			if (!Array.isArray(novelData.factChecks.quirks)) novelData.factChecks.quirks = [];
+			if (!Array.isArray(novelData.workflowLog)) novelData.workflowLog = [];
+		}
+		function nwCompileFactPattern(entry) {
+			if (!entry) return { ok: false, invalid: true, label: '' };
+			var label = String(entry.label || entry.id || '');
+			var match = String(entry.match || (entry.regex ? 'regex' : 'phrase'));
+			var pattern = String(entry.pattern != null ? entry.pattern : (entry.regex != null ? entry.regex : (entry.phrase || '')));
+			if (!pattern) return { ok: false, invalid: true, label: label, kind: entry.kind };
+			if (match === 'regex') {
+				try { return { ok: true, re: new RegExp(pattern, 'i'), label: label, kind: entry.kind, beat: entry.beat, match: match, pattern: pattern }; }
+				catch (e) { return { ok: false, invalid: true, label: label, kind: entry.kind, error: String(e && e.message || e) }; }
+			}
+			var lit = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			return { ok: true, re: new RegExp(lit, 'i'), label: label, kind: entry.kind, beat: entry.beat, match: 'phrase', pattern: pattern };
+		}
+		function nwFactQuote(text, re) {
+			var m = String(text || '').match(re);
+			if (!m) return '';
+			var idx = m.index || 0;
+			return String(text || '').slice(Math.max(0, idx - 12), Math.min(String(text || '').length, idx + String(m[0]).length + 28)).replace(/\s+/g, ' ').trim();
+		}
+		function nwDistinctiveTerms(fieldText) {
+			var raw = String(fieldText || '');
+			var toks = raw.split(/\s+/).filter(Boolean);
+			var terms = [];
+			var seen = {};
+			toks.forEach(function (tok, i) {
+				var clean = tok.replace(/[^A-Za-z0-9'-]/g, '');
+				if (!clean) return;
+				var isProper = /^[A-Z][A-Za-z'-]*$/.test(clean) && i !== 0;
+				var lower = clean.toLowerCase();
+				if (NW_QCAT_STOP.has(lower)) return;
+				if (isProper || lower.length >= 5) {
+					if (!seen[lower]) { seen[lower] = 1; terms.push(lower); }
+				}
+			});
+			return terms;
+		}
+		function nwTermCoverage(terms, haystack) {
+			if (!terms.length) return 1;
+			var h = ' ' + String(haystack || '').toLowerCase().replace(/[^\w\s']/g, ' ') + ' ';
+			var hit = 0;
+			terms.forEach(function (t) {
+				if (h.indexOf(' ' + t + ' ') >= 0) hit += 1;
+			});
+			return hit / terms.length;
+		}
+		function nwExtractCapNames(text) {
+			var names = [];
+			var seen = {};
+			function push(n) {
+				n = String(n || '').replace(/\s+/g, ' ').trim();
+				if (!n || seen[n]) return;
+				seen[n] = 1;
+				names.push(n);
+			}
+			var raw = String(text || '');
+			var title = '(?:Dr|Doctor|Captain|Capt|Mr|Mrs|Ms|Prof|Professor|Commander|Lt|Sgt|Admiral|General|Colonel|Major)\\.?';
+			var word = '[A-Z][a-z]+';
+			var titledRe = new RegExp('\\b((?:' + title + '\\s+)+' + word + '(?:\\s+' + word + ')*)\\b', 'g');
+			var m;
+			while ((m = titledRe.exec(raw))) push(m[1]);
+			var re = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
+			var skip = { The: 1, A: 1, An: 1, I: 1, We: 1, You: 1, He: 1, She: 1, They: 1, It: 1, In: 1, On: 1, At: 1, To: 1, For: 1, Of: 1, And: 1, But: 1, If: 1, When: 1, Then: 1, After: 1, Before: 1, Chapter: 1 };
+			while ((m = re.exec(raw))) {
+				if (skip[m[1]]) continue;
+				if (NW_QCAT_FILTER_TITLE_FRAGMENTS && nwQcatIsTitleToken(m[1])) continue;
+				push(m[1]);
+			}
+			return names;
+		}
+		function nwCountName(text, name) {
+			if (!name) return 0;
+			var stripped = nwQcatStripTitles(name) || String(name);
+			var parts = String(stripped).trim().split(/\s+/).filter(Boolean);
+			if (!parts.length) return 0;
+			var last = parts[parts.length - 1].replace(/[^A-Za-z'-]/g, '');
+			if (last.length < 2) return 0;
+			var re = new RegExp('\\b' + last.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
+			var m = String(text || '').match(re);
+			return m ? m.length : 0;
+		}
+		function nwScoreLength(text, target) {
+			var words = nwQcatWords(text);
+			var tgt = Math.max(1, Number(target) || 2000);
+			var ratio = words / tgt;
+			var status = 'PASS';
+			if (ratio < 0.5) status = 'FAIL';
+			else if (ratio < 0.75 || ratio > 1.4) status = 'WARN';
+			return { status: status, words: words, target: tgt, ratio: Math.round(ratio * 100) / 100 };
+		}
+		function nwChapterFactEntries(chapterNum, expect) {
+			var i = chapterNum - 1;
+			var out = [];
+			function pushAll(list) {
+				(list || []).forEach(function (e) { if (e) out.push(e); });
+			}
+			pushAll((novelData.chapterFactChecks || [])[i]);
+			var book = novelData.factChecks || {};
+			(book.entries || []).forEach(function (e) {
+				if (!e) return;
+				var chs = e.chapters;
+				if (!chs || !chs.length || chs.indexOf(chapterNum) >= 0 || chs.indexOf(String(chapterNum)) >= 0) out.push(e);
+			});
+			if (expect) {
+				(expect.probes || []).forEach(function (p) { out.push({ kind: 'probe', label: p.label, match: p.regex ? 'regex' : 'phrase', pattern: p.regex || p.phrase || p.pattern, beat: p.beat }); });
+				(expect.mustInclude || []).forEach(function (p) { out.push({ kind: 'include', label: p.label, match: p.regex ? 'regex' : 'phrase', pattern: p.regex || p.phrase || p.pattern }); });
+				(expect.mustNotInclude || []).forEach(function (p) { out.push({ kind: 'exclude', label: p.label, match: p.regex ? 'regex' : 'phrase', pattern: p.regex || p.phrase || p.pattern }); });
+			}
+			return out;
+		}
+		function nwScoreBeatsHeuristic(text, bp, chapterNum, expect) {
+			var items = [];
+			var facts = nwChapterFactEntries(chapterNum, expect);
+			function probeFor(field) {
+				if (!NW_QCAT_ENABLE_PROBES) return null;
+				for (var i = 0; i < facts.length; i++) {
+					var e = facts[i];
+					if (String(e.kind || '') !== 'probe') continue;
+					if (e.beat && String(e.beat) !== field) continue;
+					if (!e.beat && field !== 'turnOrPayoff') continue;
+					return nwCompileFactPattern(e);
+				}
+				return null;
+			}
+			function addField(field, value) {
+				var raw = (typeof nwBeatFieldText === 'function') ? nwBeatFieldText(value) : String(value || '');
+				if (!raw || !String(raw).trim()) return;
+				var probe = probeFor(field);
+				var item = { field: field, via: 'heuristic', result: 'present', coverage: 1, label: String(raw).slice(0, 80) };
+				if (probe && probe.ok) {
+					item.via = 'probe';
+					item.label = probe.label || item.label;
+					var hit = probe.re.test(text);
+					item.result = hit ? 'present' : 'missing';
+					item.coverage = hit ? 1 : 0;
+				} else if (probe && probe.invalid) {
+					item.via = 'probe';
+					item.result = 'missing';
+					item.coverage = 0;
+					item.label = (probe.label || field) + ' (invalid regex)';
+				} else {
+					var terms = nwDistinctiveTerms(raw);
+					var cov = nwTermCoverage(terms, text);
+					item.coverage = Math.round(cov * 100) / 100;
+					item.result = cov >= 0.4 ? (cov >= 0.7 ? 'present' : 'partial') : 'missing';
+				}
+				items.push(item);
+			}
+			if (bp) {
+				NW_QCAT_BEAT_FIELDS.forEach(function (k) { addField(k, bp[k]); });
+				(Array.isArray(bp.characterBeats) ? bp.characterBeats : []).forEach(function (b, idx) {
+					var beat = (b && typeof b === 'object') ? (b.beat || '') : b;
+					addField('characterBeats[' + idx + '].beat', beat);
+				});
+			}
+			var status = 'PASS';
+			items.forEach(function (it) {
+				if (it.via === 'probe' && it.result === 'missing') status = 'FAIL';
+				else if (status !== 'FAIL' && it.via === 'heuristic' && it.coverage < 0.4) status = 'WARN';
+			});
+			return { status: status, mode: 'heuristic', items: items };
+		}
+		function nwApplyAiBeatResults(beats, aiItems) {
+			if (!Array.isArray(aiItems) || !aiItems.length) return beats;
+			var byField = {};
+			aiItems.forEach(function (it) { if (it && it.field) byField[it.field] = it; });
+			beats.items = (beats.items || []).map(function (it) {
+				var a = byField[it.field];
+				if (!a) return it;
+				if (it.via === 'probe') return it;
+				var copy = Object.assign({}, it);
+				copy.via = 'ai';
+				copy.result = (a.result === 'present' || a.result === 'partial' || a.result === 'missing') ? a.result : it.result;
+				if (copy.result === 'present') copy.coverage = 1;
+				else if (copy.result === 'partial') copy.coverage = 0.5;
+				else copy.coverage = 0;
+				if (a.evidence) copy.label = String(a.evidence).slice(0, 80);
+				return copy;
+			});
+			beats.mode = 'ai';
+			var status = 'PASS';
+			beats.items.forEach(function (it) {
+				if (it.result === 'missing' && it.via === 'probe') status = 'FAIL';
+				else if (status !== 'FAIL' && it.result === 'missing') status = 'WARN';
+				else if (status === 'PASS' && it.result === 'partial') status = 'WARN';
+			});
+			beats.status = status;
+			return beats;
+		}
+		function nwScoreCast(text, bp) {
+			var required = [];
+			var byKey = {};
+			var dialogueNames = nwExtractCapNames((bp && bp.dialogueTurn) || '');
+			var dialogueKeys = {};
+			function add(n) {
+				var s = String(n || '').trim();
+				if (!s) return;
+				var untitled = nwQcatStripTitles(s);
+				if (!untitled) {
+					if (!NW_QCAT_FILTER_TITLE_FRAGMENTS) {
+						if (required.indexOf(s) < 0) required.push(s);
+					}
+					return;
+				}
+				var key = nwQcatNameKey(s);
+				if (!key) return;
+				if (byKey[key]) {
+					var cur = byKey[key];
+					var prefer = (s.length > cur.length) || (untitled !== s && nwQcatStripTitles(cur) === cur);
+					if (prefer) {
+						required[required.indexOf(cur)] = s;
+						byKey[key] = s;
+					}
+					return;
+				}
+				byKey[key] = s;
+				required.push(s);
+			}
+			(Array.isArray(bp && bp.characterBeats) ? bp.characterBeats : []).forEach(function (b) {
+				if (b && b.name) add(b.name);
+			});
+			dialogueNames.forEach(function (n) {
+				add(n);
+				var key = nwQcatNameKey(n);
+				if (key) dialogueKeys[key] = 1;
+				else if (!NW_QCAT_FILTER_TITLE_FRAGMENTS && n) dialogueKeys[n] = 1;
+			});
+			var counts = {};
+			var missing = [];
+			var missingDialogue = [];
+			required.forEach(function (n) {
+				var c = nwCountName(text, n);
+				counts[n] = c;
+				if (c < 2) missing.push(n);
+				var key = nwQcatNameKey(n) || n;
+				if (c < 1 && dialogueKeys[key]) missingDialogue.push(n);
+			});
+			var status = 'PASS';
+			if (missingDialogue.length) status = 'FAIL';
+			else if (missing.length) status = 'WARN';
+			return { status: status, required: required, missing: missing, counts: counts };
+		}
+		function nwScoreSetting(text, bp) {
+			var hooks = [];
+			var missingHooks = [];
+			var list = (bp && Array.isArray(bp.worldHooks)) ? bp.worldHooks : [];
+			list.forEach(function (h) {
+				var term = String(h || '').trim();
+				if (!term) return;
+				var re;
+				try { re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); }
+				catch (e) { re = null; }
+				var m = re ? String(text || '').match(new RegExp(re.source, 'gi')) : null;
+				var count = m ? m.length : 0;
+				hooks.push({ term: term, count: count });
+				if (count === 0) missingHooks.push(term);
+			});
+			return { status: missingHooks.length ? 'WARN' : 'PASS', hooks: hooks, missingHooks: missingHooks };
+		}
+		function nwQcatFindRestartSpan(tokens, raw) {
+			var nTok = tokens.length;
+			var empty = { restartAt: null, restartSpanWords: null };
+			if (nTok < 50) return empty;
+			var mid = Math.floor(nTok / 2);
+			var grams = nwQcatShingles(tokens, 5);
+			var firstSet = {};
+			var gi;
+			for (gi = 0; gi < mid && gi < grams.length; gi++) {
+				if (firstSet[grams[gi]] == null) firstSet[grams[gi]] = gi;
+			}
+			var lv = nwQcatLongestSubstring(tokens, tokens);
+			var verbatimRestart = lv.words >= NW_QCAT_RESTART_MIN_WORDS && lv.aAt != null && lv.aAt < mid && lv.bAt != null && lv.bAt >= lv.aAt + lv.words;
+			var win = NW_QCAT_RESTART_MIN_WORDS;
+			var bestLen = 0;
+			var bestStart = null;
+			var runStart = null;
+			for (let i = mid; i <= nTok - win; i++) {
+				var hit = 0, tot = 0, k;
+				for (k = i; k <= i + win - 5; k++) {
+					if (k >= grams.length) break;
+					tot++;
+					if (firstSet[grams[k]] != null) hit++;
+				}
+				var ratio = tot ? hit / tot : 0;
+				if (ratio >= NW_QCAT_RESTART_DENSITY) {
+					if (runStart == null) runStart = i;
+				} else if (runStart != null) {
+					var len = (i - 1) - runStart + win;
+					if (len > bestLen) { bestLen = len; bestStart = runStart; }
+					runStart = null;
+				}
+			}
+			if (runStart != null) {
+				var len2 = (nTok - win) - runStart + win;
+				if (len2 > bestLen) { bestLen = len2; bestStart = runStart; }
+			}
+			var earlyLimit = mid + 0.45 * (nTok - mid);
+			var densityRestart = bestLen >= NW_QCAT_RESTART_MIN_WORDS && bestStart != null && bestStart <= earlyLimit;
+			if (!verbatimRestart && !densityRestart) return empty;
+			var restartAt;
+			var spanWords;
+			if (verbatimRestart) {
+				restartAt = lv.bAt;
+				spanWords = lv.words;
+			} else {
+				spanWords = bestLen;
+				var firstHit = null;
+				for (let i = mid; i < grams.length; i++) {
+					if (firstSet[grams[i]] != null) { firstHit = i; break; }
+				}
+				if (firstHit != null && firstHit <= bestStart && (bestStart - firstHit) <= 400) restartAt = firstHit;
+				else restartAt = bestStart;
+			}
+			if (raw && raw.length) restartAt = nwQcatSentenceWalk(raw, restartAt);
+			return { restartAt: restartAt, restartSpanWords: spanWords };
+		}
+		function nwScoreReplayInternal(text) {
+			var raw = nwQcatRawWords(text);
+			var tokens = raw.map(nwQcatNormWord);
+			var longest = nwQcatEmptyRepeatedRun();
+			if (tokens.length >= 10) {
+				var lv = nwQcatLongestSubstring(tokens, tokens);
+				if (lv.words) longest = { words: lv.words, firstAt: lv.aAt, repeatAt: lv.bAt };
+			}
+			if (!NW_QCAT_ENABLE_REPLAY) {
+				return { status: 'PASS', internal: { shared: 0, restartAt: null, restartSpanWords: null, longestRepeatedRun: longest } };
+			}
+			if (tokens.length < 10) {
+				return { status: 'PASS', internal: { shared: 0, restartAt: null, restartSpanWords: null, longestRepeatedRun: longest } };
+			}
+			var mid = Math.floor(tokens.length / 2);
+			var first = {};
+			var firstSh = nwQcatShingles(tokens.slice(0, mid), 5);
+			firstSh.forEach(function (s) { first[s] = 1; });
+			var second = nwQcatShingles(tokens.slice(mid), 5);
+			var sharedSet = {};
+			var shared = 0;
+			second.forEach(function (s) {
+				if (first[s] && !sharedSet[s]) { sharedSet[s] = 1; shared += 1; }
+			});
+			var restart = nwQcatFindRestartSpan(tokens, raw);
+			var status = 'PASS';
+			if (restart.restartAt != null) status = 'FAIL';
+			else if (shared >= 25) status = 'WARN';
+			if (!NW_QCAT_REPLAY_REQUIRE_RESTART && shared >= 25) status = 'FAIL';
+			return {
+				status: status,
+				internal: {
+					shared: shared,
+					restartAt: restart.restartAt,
+					restartSpanWords: restart.restartSpanWords,
+					longestRepeatedRun: longest
+				}
+			};
+		}
+		function nwScoreReplayPrev(text, prevText) {
+			var emptyRun = nwQcatEmptyPrevLongest();
+			if (!NW_QCAT_ENABLE_REPLAY || !prevText || !String(prevText).trim()) {
+				return { shared: 0, openingCopyWords: 0, longestRun: emptyRun, status: 'PASS' };
+			}
+			var a = nwQcatAlignedTokens(prevText);
+			var b = nwQcatAlignedTokens(text);
+			var ua = {};
+			nwQcatShingles(a, 5).forEach(function (s) { ua[s] = 1; });
+			var shared = 0;
+			var seen = {};
+			nwQcatShingles(b, 5).forEach(function (s) {
+				if (ua[s] && !seen[s]) { seen[s] = 1; shared += 1; }
+			});
+			var opening = 0;
+			while (opening < a.length && opening < b.length && a[opening] === b[opening]) opening++;
+			var lv = nwQcatLongestSubstring(a, b);
+			var longestRun = lv.words ? { words: lv.words, offsetInChapter: lv.bAt, offsetInPrev: lv.aAt } : emptyRun;
+			var status = (shared >= 25 || opening >= 12) ? 'FAIL' : 'PASS';
+			return { shared: shared, openingCopyWords: opening, longestRun: longestRun, status: status };
+		}
+		function nwScoreRepetition(text) {
+			var tokens = nwQcatTokens(text);
+			var sh = nwQcatShingles(tokens, 5);
+			var counts = {};
+			sh.forEach(function (s) { counts[s] = (counts[s] || 0) + 1; });
+			var extra = 0;
+			var top = [];
+			Object.keys(counts).forEach(function (k) {
+				var n = counts[k];
+				if (n >= 2) extra += (n - 1);
+				if (n >= 3) top.push({ phrase: k, n: n });
+			});
+			top.sort(function (a, b) { return b.n - a.n; });
+			var status = 'PASS';
+			if (extra >= 150) status = 'FAIL';
+			else if (extra >= 60) status = 'WARN';
+			return { status: status, repeated5grams: extra, top: top.slice(0, 8) };
+		}
+		function nwScoreVoice(text) {
+			var words = Math.max(1, nwQcatWords(text));
+			var did = String(text || '').match(/\bdid not\b/gi);
+			var didCount = did ? did.length : 0;
+			var didNotPer1k = Math.round((didCount * 1000 / words) * 10) / 10;
+			var iam = String(text || '').match(/\bi am not\b|\bi will not\b/gi);
+			var iAmNot = iam ? iam.length : 0;
+			var sn = String(text || '').match(/(?:^|[.!?]\s+)Not\b/g);
+			var sentenceNot = sn ? sn.length : 0;
+			var toks = nwQcatTokens(text);
+			var wc = {};
+			toks.forEach(function (w) {
+				if (w.length < 5 || NW_QCAT_STOP.has(w)) return;
+				wc[w] = (wc[w] || 0) + 1;
+			});
+			var topWords = Object.keys(wc).map(function (k) { return { word: k, n: wc[k] }; }).sort(function (a, b) { return b.n - a.n; }).slice(0, 8);
+			var dupLines = nwDupDialogueLines(text);
+			var status = 'PASS';
+			if (didNotPer1k > 12) status = 'FAIL';
+			else if (didNotPer1k > 6 || dupLines.length) status = 'WARN';
+			return { status: status, didNotPer1k: didNotPer1k, didNotCount: didCount, iAmNot: iAmNot, sentenceNot: sentenceNot, dupLines: dupLines, topWords: topWords };
+		}
+		function nwDupDialogueLines(text) {
+			var raw = String(text || '');
+			var re = /"([^"\n]{8,})"|\u201c([^\u201d\n]{8,})\u201d/g;
+			var found = [];
+			var m;
+			while ((m = re.exec(raw))) {
+				var line = String(m[1] || m[2] || '').replace(/\s+/g, ' ').trim();
+				if (!line) continue;
+				var after = raw.slice(m.index + m[0].length, Math.min(raw.length, m.index + m[0].length + 80));
+				var before = raw.slice(Math.max(0, m.index - 80), m.index);
+				var speaker = null;
+				function speakerFrom(chunk) {
+					var a = chunk.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:said|asked|replied|answered|muttered|whispered|called|told)\b/);
+					if (a) return a[1];
+					var b = chunk.match(/\b(?:said|asked|replied|answered|muttered|whispered)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/);
+					return b ? b[1] : null;
+				}
+				speaker = speakerFrom(after) || speakerFrom(before);
+				found.push({ line: line, speaker: speaker || 'unattributed', index: m.index });
+			}
+			var byLine = {};
+			found.forEach(function (f) {
+				var k = f.line.toLowerCase();
+				if (!byLine[k]) byLine[k] = { line: f.line, speakers: [] };
+				if (byLine[k].speakers.indexOf(f.speaker) < 0) byLine[k].speakers.push(f.speaker);
+			});
+			return Object.keys(byLine).map(function (k) { return byLine[k]; }).filter(function (x) { return x.speakers.length >= 2; });
+		}
+		function nwScoreNoteLeak(text) {
+			var hits = [];
+			var raw = String(text || '');
+			NW_NOTE_LEAK_TERMS.forEach(function (term) {
+				var re;
+				try { re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'); }
+				catch (e) { return; }
+				var m;
+				while ((m = re.exec(raw))) {
+					hits.push({ term: term, quote: raw.slice(Math.max(0, m.index - 8), Math.min(raw.length, m.index + term.length + 24)).replace(/\s+/g, ' ').trim() });
+					if (hits.length > 20) break;
+				}
+			});
+			var camelHit = 0;
+			NW_QCAT_CAMEL_FIELDS.forEach(function (f) {
+				var re = new RegExp('\\b' + f + '\\b');
+				if (re.test(raw)) {
+					camelHit += 1;
+					hits.push({ term: f, quote: f });
+				}
+			});
+			var status = 'PASS';
+			if (camelHit > 0 || hits.length >= 2) status = 'FAIL';
+			else if (hits.length === 1) status = 'WARN';
+			return { status: status, hits: hits };
+		}
+		function nwScoreFacts(text, chapterNum, expect) {
+			var include = [];
+			var exclude = [];
+			var quirks = {};
+			var invalid = [];
+			nwChapterFactEntries(chapterNum, expect).forEach(function (e) {
+				var kind = String(e.kind || '');
+				if (kind === 'probe' || kind === 'quirk') return;
+				var c = nwCompileFactPattern(e);
+				if (!c.ok) { invalid.push({ label: c.label, invalid: true }); return; }
+				var hit = c.re.test(text);
+				var row = { label: c.label, hit: hit, quote: hit ? nwFactQuote(text, c.re) : '' };
+				if (kind === 'exclude') exclude.push(row);
+				else include.push(row);
+			});
+			var quirkList = [];
+			if (expect && Array.isArray(expect.quirks)) quirkList = expect.quirks.slice();
+			if (novelData.factChecks && Array.isArray(novelData.factChecks.quirks)) {
+				novelData.factChecks.quirks.forEach(function (q) { if (quirkList.indexOf(q) < 0) quirkList.push(q); });
+			}
+			quirkList.forEach(function (q) {
+				var re;
+				try { re = new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'); }
+				catch (e) { quirks[q] = 0; return; }
+				var m = String(text || '').match(re);
+				quirks[q] = m ? m.length : 0;
+			});
+			var status = 'PASS';
+			include.forEach(function (r) { if (!r.hit) status = 'FAIL'; });
+			exclude.forEach(function (r) { if (r.hit) status = 'FAIL'; });
+			if (invalid.length && NW_QCAT_INVALID_REGEX_FAILS_FACTS) status = 'FAIL';
+			return { status: status, include: include.concat(invalid), exclude: exclude, quirks: quirks };
+		}
+		function nwDerivePlanItems(text, bp, chapterNum, beats, cast, setting, facts) {
+			var items = [];
+			(beats && beats.items || []).forEach(function (it) {
+				items.push({ kind: 'beat', label: it.field + (it.label ? ': ' + it.label : ''), hit: it.result === 'present' ? true : (it.result === 'partial' ? 'partial' : false), via: it.via || 'heuristic' });
+			});
+			(cast && cast.required || []).forEach(function (n) {
+				var c = (cast.counts || {})[n] || 0;
+				items.push({ kind: 'cast', label: n, hit: c >= 2 ? true : (c >= 1 ? 'partial' : false), via: 'heuristic' });
+			});
+			(setting && setting.hooks || []).forEach(function (h) {
+				items.push({ kind: 'setting', label: h.term, hit: h.count > 0, via: 'heuristic' });
+			});
+			(facts && facts.include || []).forEach(function (r) {
+				if (r.invalid) return;
+				items.push({ kind: 'fact', label: r.label, hit: !!r.hit, via: 'probe' });
+			});
+			return items;
+		}
+		function nwScorePlanCoverage(text, bp, chapterNum, beats, cast, setting, facts) {
+			// planCoverage is ADVISORY ONLY until slot 4p ships writing plans.
+			// It is shown on the Tab 6 scorecard and in harness Markdown, but it is
+			// left out of `overall` and must never gate, flag a FAIL, or trigger nwNotify.
+			var source = 'derived';
+			var items = [];
+			var plans = novelData.chapterWritingPlans;
+			var plan = plans && plans[chapterNum - 1];
+			if (plan) {
+				source = 'writingPlan';
+				var rawItems = Array.isArray(plan) ? plan : (Array.isArray(plan.items) ? plan.items : []);
+				rawItems.forEach(function (it) {
+					var label = String((it && (it.label || it.text || it.beat)) || '');
+					var kind = String((it && it.kind) || 'keyPoint');
+					var via = 'heuristic';
+					var hit = false;
+					if (it && it.regex) {
+						try { hit = new RegExp(it.regex, 'i').test(text); via = 'probe'; }
+						catch (e) { hit = false; }
+					} else if (label) {
+						var cov = nwTermCoverage(nwDistinctiveTerms(label), text);
+						hit = cov >= 0.4 ? (cov >= 0.7 ? true : 'partial') : false;
+					}
+					items.push({ kind: kind, label: label, hit: hit, via: via });
+				});
+			}
+			if (!items.length) items = nwDerivePlanItems(text, bp, chapterNum, beats, cast, setting, facts);
+			var hit = 0;
+			items.forEach(function (it) { if (it.hit === true || it.hit === 'partial') hit += (it.hit === true ? 1 : 0.5); });
+			var total = items.length;
+			var ratio = total ? Math.round((hit / total) * 100) / 100 : 1;
+			var status = 'PASS';
+			if (ratio < 0.6) status = 'FAIL';
+			else if (ratio < 0.8) status = 'WARN';
+			return { status: status, source: source, items: items, hit: Math.round(hit * 10) / 10, total: total, ratio: ratio };
+		}
+		function nwScoreCost(fromIdx, elapsedMs, chapterNum) {
+			var recs = [];
+			try {
+				if (typeof nwTimingState !== 'undefined' && nwTimingState && Array.isArray(nwTimingState.sessionLog) && chapterNum != null) {
+					recs = nwTimingState.sessionLog.filter(function (r) {
+						if (r.chapter !== chapterNum) return false;
+						// callIndex is the ledger length at call start; fromIdx is exclusive of earlier runs.
+						if (fromIdx != null && r.callIndex != null && r.callIndex < fromIdx) return false;
+						return true;
+					});
+				}
+			} catch (e0) { recs = []; }
+			if (recs.length) {
+				var p2 = 0, c2 = 0, t2 = 0, ms2 = 0;
+				recs.forEach(function (r) {
+					p2 += Number(r.promptTokens) || 0;
+					c2 += Number(r.completionTokens) || 0;
+					t2 += Number(r.totalTokens) || 0;
+					ms2 += Number(r.ms) || 0;
+				});
+				return { calls: recs.length, promptTokens: p2, completionTokens: c2, totalTokens: t2, elapsedMs: ms2, source: 'per-call' };
+			}
+			var calls = [];
+			try { calls = ensureBookTokenUsage().calls.slice(fromIdx || 0); } catch (e) { calls = []; }
+			var prompt = 0, comp = 0, total = 0;
+			calls.forEach(function (c) {
+				prompt += Number(c && c.prompt_tokens) || 0;
+				comp += Number(c && c.completion_tokens) || 0;
+				total += Number(c && c.total_tokens) || 0;
+			});
+			return { calls: calls.length, promptTokens: prompt, completionTokens: comp, totalTokens: total, elapsedMs: elapsedMs || 0, source: 'ledger-window' };
+		}
+		function nwMergeQcatExpect(expect) {
+			if (!expect || typeof expect !== 'object') return;
+			nwEnsureScorecardArrays();
+			var chs = expect.chapters || {};
+			Object.keys(chs).forEach(function (k) {
+				var n = parseInt(k, 10);
+				if (!(n > 0)) return;
+				var block = chs[k] || {};
+				var list = [];
+				(block.probes || []).forEach(function (p, i) {
+					list.push({ id: 'c' + n + '-p' + i, label: p.label, kind: 'probe', match: p.regex ? 'regex' : 'phrase', pattern: p.regex || p.phrase || '', beat: p.beat });
+				});
+				(block.mustInclude || []).forEach(function (p, i) {
+					list.push({ id: 'c' + n + '-i' + i, label: p.label, kind: 'include', match: p.regex ? 'regex' : 'phrase', pattern: p.regex || p.phrase || '' });
+				});
+				(block.mustNotInclude || []).forEach(function (p, i) {
+					list.push({ id: 'c' + n + '-x' + i, label: p.label, kind: 'exclude', match: p.regex ? 'regex' : 'phrase', pattern: p.regex || p.phrase || '' });
+				});
+				novelData.chapterFactChecks[n - 1] = (novelData.chapterFactChecks[n - 1] || []).concat(list);
+			});
+			var book = expect.book || {};
+			(book.mustInclude || []).forEach(function (p, i) {
+				novelData.factChecks.entries.push({ id: 'b-i' + i, label: p.label, kind: 'include', match: p.regex ? 'regex' : 'phrase', pattern: p.regex || p.phrase || '' });
+			});
+			(book.mustNotInclude || []).forEach(function (p, i) {
+				novelData.factChecks.entries.push({ id: 'b-x' + i, label: p.label, kind: 'exclude', match: p.regex ? 'regex' : 'phrase', pattern: p.regex || p.phrase || '' });
+			});
+			(book.quirks || []).forEach(function (q) {
+				if (novelData.factChecks.quirks.indexOf(q) < 0) novelData.factChecks.quirks.push(q);
+			});
+		}
+		async function nwMaybeAiBeatCheck(text, bp, chapterNum) {
+			if (!novelData.aiBeatCheck) return null;
+			if (typeof callAI !== 'function') return { parse_failed: true };
+			var fields = [];
+			if (bp) {
+				NW_QCAT_BEAT_FIELDS.forEach(function (k) {
+					var v = (typeof nwBeatFieldText === 'function') ? nwBeatFieldText(bp[k]) : bp[k];
+					if (v) fields.push({ field: k, text: String(v).slice(0, 400) });
+				});
+				(Array.isArray(bp.characterBeats) ? bp.characterBeats : []).forEach(function (b, idx) {
+					var beat = (b && typeof b === 'object') ? (b.beat || '') : b;
+					if (beat) fields.push({ field: 'characterBeats[' + idx + '].beat', text: String(beat).slice(0, 400) });
+				});
+			}
+			var messages = [
+				{ role: 'system', content: 'You judge whether blueprint beats appear in a chapter. Reply with JSON only.' },
+				{ role: 'user', content: 'Return JSON only as {"beats":[{"field":"...","result":"present|partial|missing","evidence":"<=20 words"}]}.\nBeats: ' + JSON.stringify(fields) + '\nChapter:\n' + String(text || '').slice(0, 12000) }
+			];
+			try {
+				var tab = document.getElementById('tab5') || document.getElementById('tab6') || document.body;
+				var resp = await callAI(messages, tab, { operationName: 'beatCheck', max_tokens: 800, taskType: 'scorecardBeat', chapter: chapterNum });
+				var beats = resp && resp.beats;
+				if (typeof resp === 'string') { try { resp = JSON.parse(resp); beats = resp.beats; } catch (e1) { beats = null; } }
+				if (!beats && resp && resp.chapter) { try { var p = JSON.parse(resp.chapter); beats = p.beats; } catch (e2) { beats = null; } }
+				if (!Array.isArray(beats)) {
+					console.warn('beatCheck: parse_failed');
+					return { parse_failed: true };
+				}
+				return { beats: beats };
+			} catch (e) {
+				console.warn('beatCheck: parse_failed', e);
+				return { parse_failed: true };
+			}
+		}
+		async function nwScoreChapterVsBlueprint(text, chapterNum, expect, opts) {
+			opts = opts || {};
+			var started = Date.now();
+			var costFrom = (opts.costFrom != null) ? opts.costFrom : (function () { try { return ensureBookTokenUsage().calls.length; } catch (e) { return 0; } })();
+			var bp = (typeof getChapterBlueprint === 'function') ? getChapterBlueprint(chapterNum) : null;
+			var t = text != null ? String(text) : nwChapterText(chapterNum);
+			var length = nwScoreLength(t, novelData.chapterLength);
+			var beats = nwScoreBeatsHeuristic(t, bp, chapterNum, expect);
+			if (novelData.aiBeatCheck && !opts.skipAi) {
+				var ai = await nwMaybeAiBeatCheck(t, bp, chapterNum);
+				if (ai && ai.beats) beats = nwApplyAiBeatResults(beats, ai.beats);
+				else if (ai && ai.parse_failed) console.warn('beatCheck: parse_failed');
+			}
+			var cast = nwScoreCast(t, bp);
+			var setting = nwScoreSetting(t, bp);
+			var replayInt = nwScoreReplayInternal(t);
+			var prevText = opts.prevText != null ? opts.prevText : ((chapterNum > 1) ? nwChapterText(chapterNum - 1) : '');
+			var replayPrev = nwScoreReplayPrev(t, prevText);
+			var replay = {
+				status: nwQcatWorst([replayInt.status, replayPrev.status]),
+				internal: replayInt.internal || { shared: 0, restartAt: null, restartSpanWords: null, longestRepeatedRun: nwQcatEmptyRepeatedRun() },
+				prevChapter: {
+					shared: replayPrev.shared,
+					openingCopyWords: replayPrev.openingCopyWords,
+					longestRun: replayPrev.longestRun || nwQcatEmptyPrevLongest()
+				}
+			};
+			var repetition = nwScoreRepetition(t);
+			var voice = nwScoreVoice(t);
+			var noteLeak = nwScoreNoteLeak(t);
+			var facts = nwScoreFacts(t, chapterNum, expect);
+			var planCoverage = nwScorePlanCoverage(t, bp, chapterNum, beats, cast, setting, facts);
+			var cost = nwScoreCost(costFrom, Date.now() - started, chapterNum);
+			if (opts.elapsedMs != null) cost.elapsedMs = opts.elapsedMs;
+			var overall = nwQcatWorst([length.status, beats.status, cast.status, setting.status, replay.status, repetition.status, voice.status, noteLeak.status, facts.status]);
+			var rec = {
+				chapter: chapterNum,
+				scoredAt: new Date().toISOString(),
+				trigger: opts.trigger || 'scoreAll',
+				scorerVersion: NW_SCORER_VERSION,
+				overall: overall,
+				length: length,
+				beats: beats,
+				cast: cast,
+				setting: setting,
+				replay: replay,
+				repetition: repetition,
+				voice: voice,
+				noteLeak: noteLeak,
+				facts: facts,
+				planCoverage: planCoverage,
+				worldImmersion: null,
+				cost: cost
+			};
+			return rec;
+		}
+		function nwWriteChapterScorecard(chapterNum, rec, opts) {
+			opts = opts || {};
+			nwEnsureScorecardArrays();
+			if (!NW_QCAT_ENABLE_WRITE) return rec;
+			novelData.chapterScorecards[chapterNum - 1] = rec;
+			try {
+				if (!Array.isArray(novelData.qualityFindings)) novelData.qualityFindings = [];
+				novelData.qualityFindings.push({ ts: rec.scoredAt, kind: 'scorecard', chapter: chapterNum, overall: rec.overall, trigger: rec.trigger });
+			} catch (e) { /* keep scoring non-throwing */ }
+			if (rec.overall === 'FAIL' && opts.notify !== false) {
+				var msg = 'Chapter ' + chapterNum + ' scorecard FAIL (advisory; run continues).';
+				if (typeof nwNotify === 'function') nwNotify(msg, { level: 'warn' });
+			}
+			if (typeof nwRenderChapterScorecards === 'function') {
+				try { nwRenderChapterScorecards(); } catch (e2) { /* ignore */ }
+			}
+			if (typeof nwMarkChapterScoreFlags === 'function') {
+				try { nwMarkChapterScoreFlags(); } catch (e3) { /* ignore */ }
+			}
+			if (typeof nwTouchWorkflowStage === 'function') nwTouchWorkflowStage();
+			return rec;
+		}
+		async function nwScoreAndStoreChapter(chapterNum, opts) {
+			opts = opts || {};
+			try {
+				var rec = await nwScoreChapterVsBlueprint(nwChapterText(chapterNum), chapterNum, opts.expect || null, opts);
+				return nwWriteChapterScorecard(chapterNum, rec, opts);
+			} catch (e) {
+				console.warn('[QCAT] score chapter ' + chapterNum, e);
+				return null;
+			}
+		}
+		async function nwScoreGeneratedChapter(chapterNum, opts) {
+			try {
+				if (typeof nwScoreAndStoreChapter === 'function' && String((novelData.chapters || [])[chapterNum - 1] || '').trim()) {
+					await nwScoreAndStoreChapter(chapterNum, { trigger: 'generate', notify: !!opts.batch, costFrom: window.__nwChapterScoreCostFrom, elapsedMs: Date.now() - (window.__nwChapterScoreStarted || Date.now()) });
+				}
+			} catch (scErr) { console.warn('[QCAT] post-generate score', scErr); }
+		}
+		async function nwScoreBook(opts) {
+			opts = opts || {};
+			nwEnsureScorecardArrays();
+			var n = Number(novelData.numChapters) || Math.max((novelData.chapters || []).length, (novelData.chapterBlueprints || []).length, 0);
+			var chapters = opts.chapters || [];
+			if (!chapters.length) {
+				for (var i = 1; i <= n; i++) {
+					if (String(nwChapterText(i) || '').trim()) chapters.push(i);
+				}
+			}
+			var rows = [];
+			for (var c = 0; c < chapters.length; c++) {
+				var rec = await nwScoreAndStoreChapter(chapters[c], { trigger: opts.trigger || 'scoreAll', expect: opts.expect, skipAi: opts.skipAi });
+				if (rec) rows.push(rec);
+			}
+			var totalWords = 0;
+			var failCh = [];
+			var didNot = 0;
+			var tokens = 0;
+			var time = 0;
+			rows.forEach(function (r) {
+				totalWords += (r.length && r.length.words) || 0;
+				if (r.overall === 'FAIL') failCh.push(r.chapter);
+				didNot += (r.voice && r.voice.didNotCount) || 0;
+				tokens += (r.cost && r.cost.totalTokens) || 0;
+				time += (r.cost && r.cost.elapsedMs) || 0;
+			});
+			var summary = {
+				totalWords: totalWords,
+				failChapters: failCh,
+				didNotRate: totalWords ? Math.round((didNot * 1000 / totalWords) * 10) / 10 : 0,
+				didNotCount: didNot,
+				totalTokens: tokens,
+				totalTimeMs: time,
+				scorerVersion: NW_SCORER_VERSION
+			};
+			novelData.lastBookScore = summary;
+			if (typeof nwRenderChapterScorecards === 'function') nwRenderChapterScorecards();
+			if (typeof nwTouchWorkflowStage === 'function') nwTouchWorkflowStage();
+			return { book: summary, chapters: rows };
+		}
+		function nwScorecardMarkdown(bookResult) {
+			var rows = (bookResult && bookResult.chapters) || (novelData.chapterScorecards || []).filter(Boolean);
+			var lines = [];
+			lines.push('| Ch | Overall | Length | Beats | Cast | Setting | Replay | Repetition | Voice | Leak | Facts | Plan* | Tokens | Time |');
+			lines.push('|---:|:-------:|--------|-------|------|---------|--------|------------|-------|------|-------|-------|--------|------|');
+			function chip(m, extra) { return (m && m.status ? m.status : 'NA') + (extra ? ' ' + extra : ''); }
+			rows.forEach(function (r) {
+				if (!r) return;
+				var replayN = '';
+				if (r.replay && r.replay.internal && r.replay.internal.shared >= 25) replayN = String(r.replay.internal.shared);
+				else if (r.replay && r.replay.prevChapter && r.replay.prevChapter.shared) replayN = r.replay.prevChapter.shared + ' vs ch' + (r.chapter - 1);
+				else if (r.replay && r.replay.internal) replayN = String(r.replay.internal.shared);
+				lines.push('| ' + [
+					r.chapter,
+					r.overall,
+					chip(r.length, (r.length && r.length.words) + '/' + (r.length && r.length.target)),
+					chip(r.beats),
+					chip(r.cast, r.cast && r.cast.missing && r.cast.missing.length ? 'miss ' + r.cast.missing.join(', ') : ''),
+					chip(r.setting),
+					chip(r.replay, replayN),
+					chip(r.repetition, r.repetition && r.repetition.repeated5grams),
+					chip(r.voice, r.voice && r.voice.didNotPer1k),
+					chip(r.noteLeak, r.noteLeak && r.noteLeak.hits ? r.noteLeak.hits.length : 0),
+					chip(r.facts),
+					chip(r.planCoverage, r.planCoverage && r.planCoverage.ratio),
+					(r.cost && r.cost.totalTokens) || 0,
+					(((r.cost && r.cost.elapsedMs) || 0) / 1000).toFixed(1) + 's'
+				].join(' | ') + ' |');
+			});
+			var sum = (bookResult && bookResult.book) || novelData.lastBookScore || {};
+			lines.push('');
+			lines.push('Book: words ' + (sum.totalWords || 0) + '; FAIL chapters ' + ((sum.failChapters || []).join(', ') || 'none') + '; did-not/1k ' + (sum.didNotRate || 0) + '; tokens ' + (sum.totalTokens || 0) + '; time ' + (((sum.totalTimeMs || 0) / 1000).toFixed(1)) + 's.');
+			lines.push('*planCoverage is advisory only until slot 4p and is not included in Overall.');
+			return lines.join('\n');
+		}
+		function nwRenderChapterScorecards() {
+			var host = document.getElementById('chapterScorecardTable');
+			if (!host) return;
+			while (host.firstChild) host.removeChild(host.firstChild);
+			var rows = novelData.chapterScorecards || [];
+			var table = document.createElement('table');
+			var thead = document.createElement('thead');
+			var hr = document.createElement('tr');
+			['Ch', 'Overall', 'Length', 'Beats', 'Cast', 'Setting', 'Replay', 'Repetition', 'Voice', 'Leak', 'Facts', 'Plan*', 'Tokens', 'Time'].forEach(function (h) {
+				var th = document.createElement('th');
+				th.textContent = h;
+				hr.appendChild(th);
+			});
+			thead.appendChild(hr);
+			table.appendChild(thead);
+			var tbody = document.createElement('tbody');
+			function addChip(td, metric, extra) {
+				var span = document.createElement('span');
+				var st = (metric && metric.status) || 'NA';
+				span.className = 'nw-chip nw-chip-' + st;
+				span.textContent = st;
+				td.appendChild(span);
+				if (extra) {
+					var e = document.createElement('span');
+					e.textContent = ' ' + extra;
+					td.appendChild(e);
+				}
+			}
+			rows.forEach(function (r, idx) {
+				if (!r) return;
+				var tr = document.createElement('tr');
+				tr.className = 'nw-score-row';
+				tr.setAttribute('data-chapter', String(r.chapter || (idx + 1)));
+				function cell() { var td = document.createElement('td'); tr.appendChild(td); return td; }
+				cell().textContent = String(r.chapter || (idx + 1));
+				addChip(cell(), { status: r.overall });
+				addChip(cell(), r.length, r.length ? (r.length.words + '/' + r.length.target) : '');
+				addChip(cell(), r.beats);
+				addChip(cell(), r.cast, r.cast && r.cast.missing && r.cast.missing.length ? r.cast.missing[0] : '');
+				addChip(cell(), r.setting);
+				var replayExtra = '';
+				if (r.replay && r.replay.internal && r.replay.internal.shared >= 25) replayExtra = String(r.replay.internal.shared);
+				else if (r.replay && r.replay.prevChapter && r.replay.prevChapter.shared) replayExtra = r.replay.prevChapter.shared + ' vs ch' + (r.chapter - 1);
+				else if (r.replay && r.replay.internal) replayExtra = String(r.replay.internal.shared);
+				addChip(cell(), r.replay, replayExtra);
+				addChip(cell(), r.repetition, r.repetition ? String(r.repetition.repeated5grams) : '');
+				addChip(cell(), r.voice, r.voice ? String(r.voice.didNotPer1k) : '');
+				addChip(cell(), r.noteLeak, r.noteLeak && r.noteLeak.hits ? String(r.noteLeak.hits.length) : '0');
+				addChip(cell(), r.facts);
+				addChip(cell(), r.planCoverage, r.planCoverage ? String(r.planCoverage.ratio) : '');
+				cell().textContent = String((r.cost && r.cost.totalTokens) || 0);
+				cell().textContent = ((((r.cost && r.cost.elapsedMs) || 0) / 1000).toFixed(1)) + 's';
+				tr.addEventListener('click', function () { nwShowScorecardDetail(r); });
+				tbody.appendChild(tr);
+			});
+			table.appendChild(tbody);
+			host.appendChild(table);
+			var note = document.createElement('div');
+			note.style.fontSize = '12px';
+			note.style.marginTop = '4px';
+			note.textContent = '*Plan coverage is advisory until slot 4p (writing plans) and does not affect Overall.';
+			host.appendChild(note);
+			nwMarkChapterScoreFlags();
+		}
+		function nwShowScorecardDetail(r) {
+			var el = document.getElementById('chapterScorecardDetail');
+			if (!el || !r) return;
+			var bits = [];
+			bits.push('Chapter ' + r.chapter + ' overall ' + r.overall + ' (' + r.scorerVersion + ')');
+			if (r.beats && r.beats.items) {
+				r.beats.items.forEach(function (it) {
+					if (it.result !== 'present') bits.push('beat ' + it.field + ': ' + it.result + ' via ' + it.via + (it.label ? ' (' + it.label + ')' : ''));
+				});
+			}
+			if (r.cast && r.cast.missing && r.cast.missing.length) bits.push('missing names: ' + r.cast.missing.join(', '));
+			if (r.setting && r.setting.missingHooks && r.setting.missingHooks.length) bits.push('missing hooks: ' + r.setting.missingHooks.join(', '));
+			if (r.replay && r.replay.internal) {
+				var lr = r.replay.internal.longestRepeatedRun || {};
+				bits.push('replay internal shared=' + r.replay.internal.shared + ' restartAt=' + r.replay.internal.restartAt + ' span=' + r.replay.internal.restartSpanWords + ' longestRepeatedRun=' + (lr.words || 0) + '@' + lr.firstAt + '/' + lr.repeatAt);
+			}
+			if (r.replay && r.replay.prevChapter) {
+				var pr = r.replay.prevChapter.longestRun || {};
+				bits.push('replay vs prev shared=' + r.replay.prevChapter.shared + ' openingCopy=' + r.replay.prevChapter.openingCopyWords + ' longestRun=' + (pr.words || 0) + '@ch' + pr.offsetInChapter + '/prev' + pr.offsetInPrev);
+			}
+			if (r.repetition && r.repetition.top) r.repetition.top.slice(0, 5).forEach(function (t) { bits.push('repeat: "' + t.phrase + '" x' + t.n); });
+			if (r.voice && r.voice.dupLines) r.voice.dupLines.forEach(function (d) { bits.push('dup line: "' + d.line + '" speakers=' + (d.speakers || []).join('/')); });
+			if (r.noteLeak && r.noteLeak.hits) r.noteLeak.hits.forEach(function (h) { bits.push('leak: ' + h.term + ' — ' + h.quote); });
+			if (r.facts && r.facts.include) r.facts.include.forEach(function (f) { bits.push('include ' + f.label + ': ' + (f.hit ? 'hit' : 'miss') + (f.quote ? ' "' + f.quote + '"' : '')); });
+			if (r.facts && r.facts.exclude) r.facts.exclude.forEach(function (f) { bits.push('exclude ' + f.label + ': ' + (f.hit ? 'HIT' : 'clear')); });
+			if (r.planCoverage) bits.push('planCoverage ' + r.planCoverage.status + ' ' + r.planCoverage.hit + '/' + r.planCoverage.total + ' (' + r.planCoverage.source + ') advisory');
+			el.textContent = bits.join('\n');
+		}
+		function nwMarkChapterScoreFlags() {
+			var rows = novelData.chapterScorecards || [];
+			rows.forEach(function (r, i) {
+				if (!r) return;
+				var n = r.chapter || (i + 1);
+				['chapterGenNav', 'chapterEditNav'].forEach(function (navId) {
+					var nav = document.getElementById(navId);
+					if (!nav) return;
+					var btn = nav.querySelectorAll('button')[n - 1];
+					if (!btn) return;
+					btn.classList.remove('nw-score-fail', 'nw-score-warn');
+					if (r.overall === 'FAIL') btn.classList.add('nw-score-fail');
+					else if (r.overall === 'WARN') btn.classList.add('nw-score-warn');
+				});
+			});
+		}
+		async function nwScoreAllChapters() {
+			if (typeof NW_TIMING_ENABLE_SCOREALL_LOCK === 'undefined' || NW_TIMING_ENABLE_SCOREALL_LOCK) {
+				if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
+					if (typeof nwToast === 'function') nwToast('Score all chapters is locked while a Generate All run is active or awaiting restore.');
+					else if (typeof nwNotify === 'function') nwNotify('Score all chapters is locked while a Generate All run is active or awaiting restore.');
+					return { started: false, reason: 'locked' };
+				}
+			}
+			if (typeof collectData === 'function') collectData();
+			return nwScoreBook({ trigger: 'scoreAll' });
+		}
+		function nwCopyScorecardMarkdown() {
+			var md = nwScorecardMarkdown();
+			try {
+				if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(md);
+			} catch (e) { /* ignore */ }
+			try {
+				var ta = document.createElement('textarea');
+				ta.value = md;
+				document.body.appendChild(ta);
+				ta.select();
+				document.execCommand('copy');
+				document.body.removeChild(ta);
+			} catch (e2) { console.warn('copy scorecard', e2); }
+			if (typeof nwNotify === 'function') nwNotify('Scorecard Markdown copied.', { level: 'info' });
+			return md;
+		}
+		function nwWorkflowStage(nd) {
+			nd = nd || novelData || {};
+			var n = Number(nd.numChapters) || 0;
+			var chapters = nd.chapters || [];
+			var outlines = nd.chapterOutlines || [];
+			var bps = nd.chapterBlueprints || [];
+			var cards = nd.chapterScorecards || [];
+			function filled(arr, pred) {
+				var last = 0;
+				(arr || []).forEach(function (v, i) { if (pred(v, i)) last = i + 1; });
+				return last;
+			}
+			function everyInRange(arr, pred) {
+				if (!(n > 0)) return false;
+				for (let i = 0; i < n; i++) {
+					if (!pred((arr || [])[i], i)) return false;
+				}
+				return true;
+			}
+			var drafted = filled(chapters, function (t) { return String(t || '').trim().length > 0; });
+			var scored = filled(cards, function (c) { return c && c.overall; });
+			var hasOutlines = (outlines || []).some(function (t) { return String(t || '').trim().length >= 20; });
+			var hasBp = (bps || []).some(function (b) {
+				if (!b) return false;
+				if (typeof b === 'string') return String(b).trim().length > 0;
+				return !!(b.sceneGoal || b.role || b.arcStep || b.dialogueTurn);
+			});
+			var enriched = (bps || []).some(function (b) {
+				return b && typeof b === 'object' && b.sceneGoal && b.dialogueTurn && b.turnOrPayoff;
+			});
+			if (everyInRange(chapters, function (t) { return String(t || '').trim().length > 0; })
+				&& everyInRange(cards, function (c) { return c && c.overall; })) return '07-book-complete';
+			if (scored) return '06-ch' + String(scored).padStart(2, '0') + '-scored';
+			if (drafted) return '05-ch' + String(drafted).padStart(2, '0') + '-drafted';
+			if (enriched) return '04-enriched';
+			if (hasBp) return '03-blueprints';
+			if (hasOutlines) return '02-outlines';
+			return '01-plan';
+		}
+		function nwTouchWorkflowStage() {
+			var st = nwWorkflowStage(novelData);
+			novelData.workflowStage = st;
+			if (!Array.isArray(novelData.workflowLog)) novelData.workflowLog = [];
+			if (novelData.workflowLog[novelData.workflowLog.length - 1] !== st) novelData.workflowLog.push(st);
+			return st;
+		}
+		function nwExportSessionFilename() {
+			var title = String(novelData.title || 'Untitled_Novel').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() || 'Untitled_Novel';
+			var st = nwTouchWorkflowStage();
+			var d = new Date();
+			var pad = function (n) { return String(n).padStart(2, '0'); };
+			var stamp = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '-' + pad(d.getHours()) + pad(d.getMinutes());
+			return title + '_' + st + '_' + stamp + '.json';
+		}
+		function nwCollectPlanFactsFromUi() {
+			nwEnsureScorecardArrays();
+			var n = Number(novelData.numChapters) || 0;
+			for (var i = 1; i <= n; i++) {
+				var tbody = document.getElementById('planFactsBody' + i);
+				if (!tbody) continue;
+				var rows = [];
+				Array.from(tbody.querySelectorAll('tr')).forEach(function (tr, idx) {
+					var label = tr.querySelector('.pf-label');
+					var kind = tr.querySelector('.pf-kind');
+					var match = tr.querySelector('.pf-match');
+					var pattern = tr.querySelector('.pf-pattern');
+					var beat = tr.querySelector('.pf-beat');
+					if (!label && !pattern) return;
+					var rec = {
+						id: 'c' + i + '-ui' + idx,
+						label: label ? String(label.value || '') : '',
+						kind: kind ? String(kind.value || 'include') : 'include',
+						match: match ? String(match.value || 'phrase') : 'phrase',
+						pattern: pattern ? String(pattern.value || '') : '',
+						beat: beat ? String(beat.value || '') : ''
+					};
+					if (rec.label || rec.pattern) rows.push(rec);
+				});
+				if (NW_QCAT_CLEAR_EMPTY_PLAN_FACTS || rows.length || !(novelData.chapterFactChecks[i - 1] && novelData.chapterFactChecks[i - 1].length)) {
+					novelData.chapterFactChecks[i - 1] = rows;
+				}
+			}
+		}
+		function nwRenderPlanFactsBox(chapterNum, parent) {
+			var details = document.createElement('details');
+			details.className = 'nw-plan-facts';
+			details.setAttribute('data-chapter', String(chapterNum));
+			var sum = document.createElement('summary');
+			sum.textContent = 'Plan facts';
+			details.appendChild(sum);
+			var table = document.createElement('table');
+			var thead = document.createElement('thead');
+			var hr = document.createElement('tr');
+			['Label', 'Kind', 'Match', 'Pattern', ''].forEach(function (h) {
+				var th = document.createElement('th');
+				th.textContent = h;
+				hr.appendChild(th);
+			});
+			thead.appendChild(hr);
+			table.appendChild(thead);
+			var tbody = document.createElement('tbody');
+			tbody.id = 'planFactsBody' + chapterNum;
+			table.appendChild(tbody);
+			details.appendChild(table);
+			var addBtn = document.createElement('button');
+			addBtn.type = 'button';
+			addBtn.textContent = 'Add row';
+			addBtn.addEventListener('click', function (ev) {
+				ev.preventDefault();
+				nwAddPlanFactRow(chapterNum, { label: '', kind: 'include', match: 'phrase', pattern: '' });
+			});
+			details.appendChild(addBtn);
+			parent.appendChild(details);
+			var existing = (novelData.chapterFactChecks || [])[chapterNum - 1] || [];
+			existing.forEach(function (e) { nwAddPlanFactRow(chapterNum, e); });
+		}
+		function nwAddPlanFactRow(chapterNum, entry) {
+			var tbody = document.getElementById('planFactsBody' + chapterNum);
+			if (!tbody) return;
+			entry = entry || {};
+			var tr = document.createElement('tr');
+			function inp(cls, val, type) {
+				var td = document.createElement('td');
+				var el = document.createElement(type === 'select' ? 'select' : 'input');
+				if (type !== 'select') { el.type = 'text'; el.value = val || ''; }
+				el.className = cls;
+				td.appendChild(el);
+				tr.appendChild(td);
+				return el;
+			}
+			inp('pf-label', entry.label);
+			var kind = inp('pf-kind', '', 'select');
+			['include', 'exclude', 'probe', 'quirk'].forEach(function (k) {
+				var o = document.createElement('option');
+				o.value = k;
+				o.textContent = k;
+				kind.appendChild(o);
+			});
+			kind.value = entry.kind || 'include';
+			var match = inp('pf-match', '', 'select');
+			['phrase', 'regex'].forEach(function (k) {
+				var o = document.createElement('option');
+				o.value = k;
+				o.textContent = k;
+				match.appendChild(o);
+			});
+			match.value = entry.match || (entry.regex ? 'regex' : 'phrase');
+			inp('pf-pattern', entry.pattern || entry.regex || entry.phrase || '');
+			var delTd = document.createElement('td');
+			var del = document.createElement('button');
+			del.type = 'button';
+			del.textContent = 'Delete';
+			function persistFacts() {
+				if (typeof nwCollectPlanFactsFromUi === 'function') nwCollectPlanFactsFromUi();
+			}
+			del.addEventListener('click', function (ev) {
+				ev.preventDefault();
+				tr.parentNode && tr.parentNode.removeChild(tr);
+				persistFacts();
+			});
+			delTd.appendChild(del);
+			tr.appendChild(delTd);
+			Array.from(tr.querySelectorAll('input, select')).forEach(function (el) {
+				el.addEventListener('input', persistFacts);
+				el.addEventListener('change', persistFacts);
+			});
+			if (entry.beat) {
+				var beat = document.createElement('input');
+				beat.type = 'hidden';
+				beat.className = 'pf-beat';
+				beat.value = entry.beat;
+				tr.appendChild(beat);
+			}
+			tbody.appendChild(tr);
+		}
+
 		// ---- NW.T5: Chapter Generation Functions ----
 		// NW.T5.F1: generateChapter() SHALL draft the full chapter text in two LLM passes (part 1 and part 2) using chapter outline, arc, characters, subplots, author style, and style guide as context.
 		// NW.T5.F2: generateChapter() SHALL store the result in novelData.chapters[chapterNum-1] and sync it to the corresponding Tab 6 edit textarea.
@@ -9664,6 +11558,8 @@ return c && c.name && c.backstory && c.arc; });
 		        return;
 		    }
 		    console.log(`Starting generateChapter for Chapter ${chapterNum}`);
+			window.__nwChapterScoreStarted = Date.now();
+			window.__nwChapterScoreCostFrom = (typeof ensureBookTokenUsage === 'function') ? ensureBookTokenUsage().calls.length : 0;
 		    console.log('Pre-collectData - novelData.chapters:', novelData.chapters);
 		    collectData();
 		    // Agent Skill I/O pack (tab5.generateChapter)
@@ -9727,7 +11623,8 @@ return c && c.name && c.backstory && c.arc; });
 		    console.log('Post-updateRequestLog - chapterContent Length:', chapterContent.length);
 
 		    try {
-		        const part1Response = await callAI(messagesPart1, document.getElementById('tab5'), { max_tokens: maxTokens });
+		        if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'Part 1', 'call 1 of 2');
+		        const part1Response = await callAI(messagesPart1, document.getElementById('tab5'), { max_tokens: maxTokens, callLabel: 'Part 1 of 2', taskType: 'draft', chapter: chapterNum, targetWords: novelData.chapterLength });
 		        console.log('Part 1 Response:', part1Response);
 		        // Generate All (must-fix 1): callAI returns malformed model JSON as { chapter, _jsonParseError } with a valid
 		        // HTTP envelope in requestLog.returnedInfo. In a batch that is a parse failure: stop before Part 2.
@@ -9774,7 +11671,8 @@ return c && c.name && c.backstory && c.arc; });
 		    console.log('Post-updateRequestLog Part 2 - chapterContent Length:', chapterContent.length);
 
 		    try {
-		        const part2Response = await callAI(messagesPart2, document.getElementById('tab5'), { max_tokens: maxTokens });
+		        if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'Part 2', 'call 2 of 2');
+		        const part2Response = await callAI(messagesPart2, document.getElementById('tab5'), { max_tokens: maxTokens, callLabel: 'Part 2 of 2', taskType: 'draft', chapter: chapterNum, targetWords: novelData.chapterLength });
 		        console.log('Part 2 Response:', part2Response);
 		        if (opts.batch && part2Response && part2Response._jsonParseError) throw new Error('model JSON parse error (_jsonParseError): ' + part2Response._jsonParseError);
 		        const chapterPt2 = part2Response.chapter || '';
@@ -9821,6 +11719,7 @@ return c && c.name && c.backstory && c.arc; });
 		    updateRequestLog();
 			refreshContinuityAfterChapter(chapterNum);
 			if (novelData.autoContinuityAudit) {
+				if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'audit', '');
 				// #134 follow-up 5: in a batch only the audit call is retried (Parts 1/2 already spent their tokens).
 				if (opts.batch && typeof nwBatchContinuityAudit === 'function') await nwBatchContinuityAudit(chapterNum);
 				else await runChapterContinuityAudit(chapterNum, { silent: true });
@@ -9834,6 +11733,9 @@ return c && c.name && c.backstory && c.arc; });
 		        // In a batch this goes to the status line and does not stop the run.
 		        if (opts.batch && typeof nwNotify === 'function') nwNotify('Chapter ' + chapterNum + ' quality gate/revise error (run continues): ' + String((qgErr && qgErr.message) || qgErr), { level: 'warn' });
 		    }
+			if (!NW_QCAT_SCORE_AFTER_COVERAGE) {
+				await nwScoreGeneratedChapter(chapterNum, opts);
+			}
 		    // Line-control: obligation coverage fail-closed (short+low-coverage ≠ token success)
 		    try {
 		        if (typeof assertObligationCoverageOrThrow === 'function') {
@@ -9843,6 +11745,9 @@ return c && c.name && c.backstory && c.arc; });
 		        console.error('obligation coverage after generateChapter', covErr);
 		        throw covErr;
 		    }
+			if (NW_QCAT_SCORE_AFTER_COVERAGE) {
+				await nwScoreGeneratedChapter(chapterNum, opts);
+			}
 		    console.log(`Completed generateChapter for Chapter ${chapterNum}, Total Tokens: ${totalTokens}`);
 }
 
@@ -9875,6 +11780,8 @@ return c && c.name && c.backstory && c.arc; });
         //          final checkpoint + status are done (released only in nwBatchStart's finally, by the run that set it). A failed
         //          final checkpoint after a clean finish is a 'checkpoint' stop. Start/Resume is refused while a manual AI call
         //          is in flight (activeAICallCount > 0).
+        // Slot 8b: a callAI timeout ("Timed out after N s (op)", NW.GEN.TO.2) is retryable: one retry, then reason 'provider',
+        //          detail 'timeout'. Stop lines end with exactly one period (#133).
         // NW.T5.10: The batch SHALL write an IndexedDB checkpoint (db novelwriter, store checkpoints) when a chapter goes in
         //          flight and after it finishes; any write failure stops the run before the next chapter is generated.
         // NW.T5.11: While a batch runs (or an interrupted one awaits restore) per-chapter Generate, Tab 6 editors, Update
@@ -9884,7 +11791,7 @@ return c && c.name && c.backstory && c.arc; });
         //          estimate is used only when that delta is 0 (chapter listed in batchRun.usageEstimated).
         // novelData.batchRun is NovelWriter-only (schema/ allows additional properties; no schema edit).
         var NW_BATCH = { retryDelayMs: 2000, idbName: 'novelwriter', idbStore: 'checkpoints', minOutlineWords: 80, capFactor: 1.25 };
-        var nwBatchState = { running: false, owner: null, chapterInFlight: null, quiet: false, pauseRequested: false, interrupted: null, windows: [], coverageAck: null, log: [], lastStatus: '', lastPromise: null };
+        var nwBatchState = { running: false, owner: null, chapterInFlight: null, subStep: null, quiet: false, pauseRequested: false, interrupted: null, windows: [], coverageAck: null, log: [], lastStatus: '', lastPromise: null };
         window.NW_BATCH = NW_BATCH;
         window.nwBatchState = nwBatchState;
 
@@ -9896,6 +11803,29 @@ return c && c.name && c.backstory && c.arc; });
             s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
             max = max || 300;
             return s.length > max ? s.slice(0, max - 3) + '...' : s;
+        }
+
+        /** Stop-line punctuation (#133): end with one period, never "..". */
+        function nwBatchEndSentence(t) {
+            t = String(t == null ? '' : t).replace(/\s+$/, '');
+            return /[.!?]$/.test(t) ? t : t + '.';
+        }
+        function nwBatchCap1(t) { t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1); }
+
+        // NW.T5.13 (slot 8b): while a batch runs, the sub-step line SHALL show "Chapter n of N: Part 1 / Part 2 / audit / revise"
+        //          with "call k of n" and the elapsed time of the active AI call (ticks every second via the HUD timer).
+        function nwBatchSubStep(chapterNum, step, callInfo) {
+            if (!nwBatchState.running) return;
+            nwBatchState.subStep = { chapter: chapterNum, step: step, callInfo: callInfo || '', startedAt: Date.now() };
+            nwBatchRenderSubStep();
+        }
+        function nwBatchRenderSubStep() {
+            var el = nwBatchEl('batchRunSubStep');
+            var ss = nwBatchState.subStep;
+            if (!el) return;
+            if (!nwBatchState.running || !ss) { el.textContent = ''; return; }
+            var since = (typeof nwActiveCall !== 'undefined' && nwActiveCall) ? nwActiveCall.startedAt : ss.startedAt;
+            el.textContent = 'Chapter ' + ss.chapter + ' of ' + nwBatchNumChapters() + ': ' + ss.step + (ss.callInfo ? ' (' + ss.callInfo + ')' : '') + ', ' + nwFmtElapsed(Date.now() - since);
         }
 
         function nwBatchSetStatus(text, state) {
@@ -9937,6 +11867,7 @@ return c && c.name && c.backstory && c.arc; });
             var m = nwBatchErrText(e);
             if (/HTTP error! Status: (429|5\d\d)\b/.test(m)) return true;
             if (/Failed to fetch|NetworkError|network error|ERR_NETWORK|ERR_CONNECTION|ECONNRESET|ETIMEDOUT|Load failed/i.test(m)) return true;
+            if (/^Timed out after \d+ s\b/.test(m)) return true; // slot 8b: callAI timeout counts as a retryable network failure
             return false;
         }
 
@@ -9944,6 +11875,7 @@ return c && c.name && c.backstory && c.arc; });
         function nwClassifyError(e) {
             if (nwIsProviderError(e)) return 'retryable';
             var m = nwBatchErrText(e);
+            if (/^Aborted \(/.test(m)) return 'provider';
             if (/HTTP error! Status: \d{3}\b/.test(m) || /API Key is missing/i.test(m)) return 'provider';
             return 'parse';
         }
@@ -10069,7 +12001,9 @@ return c && c.name && c.backstory && c.arc; });
 
         function nwBatchPasses() {
             var maxAuto = nwBatchSkipAutoRevision() ? 0 : ((typeof NW_QUALITY_REVISE !== 'undefined' && NW_QUALITY_REVISE) ? (Number(NW_QUALITY_REVISE.maxAutoPasses) || 0) : 0);
-            return 2 + (novelData.autoContinuityAudit ? 1 : 0) + maxAuto;
+            var beatEl = nwBatchEl('aiBeatCheck');
+            var beat = (beatEl ? !!beatEl.checked : !!(novelData && novelData.aiBeatCheck)) ? 1 : 0;
+            return 2 + (novelData.autoContinuityAudit ? 1 : 0) + maxAuto + beat;
         }
 
         function nwBatchMaxTokens() {
@@ -10242,7 +12176,7 @@ return c && c.name && c.backstory && c.arc; });
             document.querySelectorAll('#tab7 button[onclick*="applyTopBookCritiques"], #improvementsTableBody button[onclick*="applyBookCritiqueItem"], #tab8 button[onclick*="integrateBreakdownSuggestions"]').forEach(function (b) { b.disabled = locked; });
             // #134 follow-up 4: the Tab 5 continuity writers are locked the same way.
             document.querySelectorAll('#tab5 button[onclick*="rebuildContinuityPackets"], #tab5 button[onclick*="runContinuityAuditAll"]').forEach(function (b) { b.disabled = locked; });
-            ['importFile', 'numChapters', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap', 'skipAutoRevision'].forEach(function (id) {
+            ['importFile', 'numChapters', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap', 'skipAutoRevision', 'aiBeatCheck', 'scoreAllChaptersBtn'].forEach(function (id) {
                 var el = nwBatchEl(id);
                 if (el) el.disabled = locked;
             });
@@ -10346,6 +12280,10 @@ return c && c.name && c.backstory && c.arc; });
                     nwBatchSetStatus('ch' + n + ' Part ' + f.part + ' provider error; retrying once in ' + Math.round(NW_BATCH.retryDelayMs / 1000) + ' s: ' + nwBatchShort(f.message, 160), 'running');
                     await nwBatchSleep(NW_BATCH.retryDelayMs);
                     continue;
+                }
+                if (partFailed && f && /^Timed out after \d+ s\b/.test(f.message)) {
+                    // slot 8b: timed out on the first try and on the single retry
+                    return { ok: false, reason: 'provider', timeout: true, detail: 'timeout', timeoutInfo: 'Part ' + f.part + ' ' + f.message.replace(/^Timed out/, 'timed out') + ' twice (1 retry)', attempts: attempts };
                 }
                 if (partFailed) {
                     return { ok: false, reason: 'provider', detail: 'Part ' + (f ? f.part : '?') + ' provider error' + (attempts > 1 ? ' after 1 retry' : '') + ': ' + (f ? f.message : st), attempts: attempts };
@@ -10477,6 +12415,11 @@ return c && c.name && c.backstory && c.arc; });
                 nwBatchState.pauseRequested = false;
                 nwBatchState.coverageAck = null;
                 nwBatchState.log = [];
+                if (typeof nwTimingStartChain === 'function') {
+                    var nCh = plan.planned.length;
+                    var chainSteps = (typeof nwTimingChainSteps === 'function') ? nwTimingChainSteps(nCh) : [{ taskType: 'draft', n: nCh * 2, label: 'draft' }];
+                    nwTimingStartChain(chainSteps, 'generateAll');
+                }
                 nwBatchApplyLock();
                 return await nwBatchLoop(br, plan, est);
             } finally {
@@ -10486,7 +12429,8 @@ return c && c.name && c.backstory && c.arc; });
                     nwBatchState.owner = null;
                     nwBatchState.pauseRequested = false;
                 }
-                if (!nwBatchState.running) nwBatchState.quiet = false;
+                if (!nwBatchState.running) { nwBatchState.quiet = false; nwBatchState.subStep = null; nwBatchRenderSubStep(); }
+                if (typeof nwTimingFinishChain === 'function' && nwTimingState && nwTimingState.chain) nwTimingFinishChain();
                 nwBatchApplyLock();
             }
         }
@@ -10540,7 +12484,7 @@ return c && c.name && c.backstory && c.arc; });
                 } catch (e) {
                     checkpointFailed = nwBatchErrText(e);
                 }
-                if (!outcome.ok) { stop = { reason: outcome.reason, at: n, detail: outcome.detail, noRetry: !!outcome.noRetry, keptDraft: !!outcome.keepDraft }; break; }
+                if (!outcome.ok) { stop = { reason: outcome.reason, at: n, detail: outcome.detail, noRetry: !!outcome.noRetry, timeoutInfo: outcome.timeoutInfo || null, keptDraft: !!outcome.keepDraft }; break; }
                 if (checkpointFailed) { stop = { reason: 'checkpoint', at: n, detail: 'checkpoint write failed after ch' + n + ': ' + checkpointFailed }; break; }
                 if (br.perChapterDownload) {
                     try { nwBatchDownloadText((novelData.title || 'Untitled_Novel') + '_ch' + n + '.txt', novelData.chapters[n - 1]); } catch (e) { console.warn('[batch] chapter download', e); }
@@ -10565,10 +12509,10 @@ return c && c.name && c.backstory && c.arc; });
                 }
             }
             var text = stop
-                ? (stop.reason === 'paused' ? 'Paused before ch' + stop.at + '.' : 'Stopped at ch' + stop.at + ' (' + stop.reason + '): ' + nwBatchShort(stop.detail, 240) + '.')
+                ? (stop.reason === 'paused' ? 'Paused before ch' + stop.at + '.' : 'Stopped at ch' + stop.at + ' (' + stop.reason + '): ' + nwBatchEndSentence(nwBatchShort(stop.detail, 240)))
                 : 'Done: ch' + br.range.from + '-' + br.range.to + '.';
             if (stop && stop.reason === 'parse') text += ' Response could not be parsed (no retry); Resume regenerates ch' + stop.at + '.';
-            else if (stop && stop.reason === 'provider') text += (stop.noRetry ? ' Not retried;' : ' Provider error (retried once where retryable);') + ' Resume regenerates ch' + stop.at + '.';
+            else if (stop && stop.reason === 'provider') text += (stop.noRetry ? '' : (stop.timeoutInfo ? ' ' + nwBatchCap1(stop.timeoutInfo) + ';' : ' Provider error (retried once where retryable);')) + ' Resume regenerates ch' + stop.at + '.';
             if (stop && stop.keptDraft) text += ' Drafted ch' + stop.at + ' text kept.';
             if (stop && stop.reason === 'coverage' && rejectedNow) text += ' Old ch' + stop.at + ' text restored; rejected draft kept aside in session export (batchRun.rejectedDraft).';
             text += ' Completed: ' + (br.completed.length ? br.completed.join(', ') : 'none') + '.' + skippedNote;
@@ -10655,6 +12599,10 @@ return c && c.name && c.backstory && c.arc; });
                 if (typeof nwBatchState !== 'undefined' && nwBatchState) nwBatchState.windows = [];
                 if (typeof nwBatchRefreshEstimate === 'function') nwBatchRefreshEstimate();
             });
+            var beatEl = nwBatchEl('aiBeatCheck');
+            if (beatEl) beatEl.addEventListener('change', function () {
+                if (typeof nwBatchRefreshEstimate === 'function') nwBatchRefreshEstimate();
+            });
             try { nwBatchRefreshEstimate(); } catch (e) { console.warn('[batch] estimate', e); }
             window.__nwBatchRestoreCheck = nwBatchCheckForInterrupted();
         });
@@ -10735,7 +12683,7 @@ return c && c.name && c.backstory && c.arc; });
 		    requestLog.originTab = 'tab6';
 		    clearReturnedInfo();
 		    updateRequestLog();
-		    await callAI(messages, document.getElementById('tab6'), opts.operationTag ? { operationName: opts.operationTag } : {}).then(response => {
+		    await callAI(messages, document.getElementById('tab6'), Object.assign({}, opts.callLabel ? { callLabel: opts.callLabel } : {}, opts.operationTag ? { operationName: opts.operationTag } : {}, { chapter: chapterNum, targetWords: novelData.chapterLength, taskType: (opts.operationTag === 'qualityRevise' || opts.operationTag === 'qualityMultiPass') ? 'revise' : 'apply' })).then(response => {
 		        console.log(`Updated Chapter ${chapterNum} response:`, response);
 		        const contentElement = document.getElementById(`chapterEditContent${chapterNum}`);
 		        if (contentElement) {
@@ -11114,6 +13062,8 @@ return c && c.name && c.backstory && c.arc; });
 		   novelData.continuityStrictMode = !!document.getElementById('continuityStrictMode')?.checked;
 		   novelData.autoContinuityAudit = !!document.getElementById('autoContinuityAudit')?.checked;
 		   novelData.skipAutoRevision = !!document.getElementById('skipAutoRevision')?.checked;
+		   novelData.aiBeatCheck = !!document.getElementById('aiBeatCheck')?.checked;
+		   if (typeof nwCollectPlanFactsFromUi === 'function') nwCollectPlanFactsFromUi();
 		   novelData.chapterContinuityPackets = Array.isArray(novelData.chapterContinuityPackets) ? novelData.chapterContinuityPackets : [];
 		   novelData.continuityFindings = Array.isArray(novelData.continuityFindings) ? novelData.continuityFindings : [];
 		   if (!novelData.continuityTracker || typeof novelData.continuityTracker !== 'object') {
@@ -11157,6 +13107,12 @@ return c && c.name && c.backstory && c.arc; });
 				continuityStrictMode: true,
 				autoContinuityAudit: true,
 				skipAutoRevision: false,
+				aiBeatCheck: false,
+				chapterScorecards: [],
+				chapterFactChecks: [],
+				factChecks: { entries: [], quirks: [] },
+				workflowStage: '',
+				workflowLog: [],
 				chapterContinuityPackets: [],
 				continuityTracker: { chapters: [], characterArcProgress: [], storyArcProgress: {} },
 				continuityFindings: [],
@@ -11184,6 +13140,8 @@ return c && c.name && c.backstory && c.arc; });
 			document.getElementById('autoContinuityAudit').checked = true;
 			document.getElementById('skipAutoRevision').checked = false;
 			document.getElementById('draftOnlyNote').hidden = true;
+			var aiBeatReset = document.getElementById('aiBeatCheck');
+			if (aiBeatReset) aiBeatReset.checked = false;
 			if (typeof renderBlueprintBeatStatus === 'function') renderBlueprintBeatStatus();
 		    document.getElementById('characterList').innerHTML = '<div class="character"><label>Name:</label><input type="text" class="charName"><label>Backstory:</label><textarea class="charBackstory"></textarea><label>Arc:</label><textarea class="charArc"></textarea></div>';
 		    document.getElementById('subplotList').innerHTML = '<div class="subplot-section"><label>Subplot 1:</label><textarea class="subplot" style="height: 300px;"></textarea></div>';
