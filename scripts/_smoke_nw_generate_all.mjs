@@ -301,7 +301,7 @@ async function batch(page, opts) {
   }, opts);
 }
 const callsFor = (s, ch) => s.calls.filter((c) => c.ch === ch).length;
-const sessionDl = (s) => s.downloads.filter((d) => /_session\.json$/.test(d)).length;
+const sessionDl = (s) => s.downloads.filter((d) => /\.json$/i.test(d)).length;
 const chapterDl = (s) => s.downloads.filter((d) => /_ch\d+\.txt$/.test(d)).length;
 const batchDialogTotals = [];
 
@@ -472,7 +472,7 @@ const batchDialogTotals = [];
   await page.waitForFunction(() => window.__h.hanging === true, null, { timeout: 20000 });
   const lock = await page.evaluate(async () => {
     const all = (sel) => Array.from(document.querySelectorAll(sel));
-    const gen = all('#chapterGenContainer button');
+    const gen = all('#chapterGenContainer button').filter((b) => /Generate Chapter/.test(b.textContent || ''));
     const edits = all('textarea[id^="chapterEditContent"]');
     const editBtns = all('#chapterEditContainer button');
     const before = window.__h.calls.length;
