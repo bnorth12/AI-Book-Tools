@@ -31,6 +31,8 @@ const HTML = fs.readFileSync(HTML_PATH, 'utf8');
 const BOOK3 = JSON.parse(fs.readFileSync(path.join(FIX, 'book-3ch.json'), 'utf8'));
 const TICS = JSON.parse(fs.readFileSync(path.join(FIX, 'book-tics.json'), 'utf8'));
 const EXPECT = JSON.parse(fs.readFileSync(path.join(FIX, 'expect.json'), 'utf8'));
+const PHRASES = JSON.parse(fs.readFileSync(path.join(FIX, 'book-replay-phrases.json'), 'utf8'));
+const CASTTITLES = JSON.parse(fs.readFileSync(path.join(FIX, 'book-cast-titles.json'), 'utf8'));
 const FX = JSON.parse(fs.readFileSync(BEAT_FIX, 'utf8'));
 delete FX._fixture;
 
@@ -251,12 +253,50 @@ async function loadEnvelope(page, envelope) {
     };
   }, BOOK3);
   check('1', 'ch1 length FAIL (short)', r.c1 && r.c1.length && r.c1.length.status === 'FAIL', JSON.stringify(r.c1 && r.c1.length));
-  check('1', 'ch2 replay FAIL with restart offset', r.c2 && r.c2.replay && r.c2.replay.status === 'FAIL' && r.c2.replay.internal.shared >= 25 && r.c2.replay.internal.restartAt != null, JSON.stringify(r.c2 && r.c2.replay));
+  const c2int = r.c2 && r.c2.replay && r.c2.replay.internal;
+  check('1', 'ch2 replay FAIL with restart span', r.c2 && r.c2.replay && r.c2.replay.status === 'FAIL' && c2int && c2int.restartAt != null && c2int.restartSpanWords >= 40, JSON.stringify(r.c2 && r.c2.replay));
   const words = (BOOK3.novelData.chapters[1] || '').trim().split(/\s+/).length;
-  const restart = r.c2 && r.c2.replay && r.c2.replay.internal.restartAt;
-  check('1', 'ch2 restart offset within ±50 of the planted copy', restart != null && Math.abs(restart - 80) <= 80, JSON.stringify({ restart, words }));
+  const restart = c2int && c2int.restartAt;
+  check('1', 'ch2 restart offset within ±50 of the planted copy', restart != null && Math.abs(restart - 80) <= 80, JSON.stringify({ restart, words, span: c2int && c2int.restartSpanWords }));
+  check('1', 'ch2 longestRepeatedRun is 40+ words', c2int && c2int.longestRepeatedRun && c2int.longestRepeatedRun.words >= 40, JSON.stringify(c2int && c2int.longestRepeatedRun));
   check('1', 'ch3 clean is not FAIL overall', r.c3 && r.c3.overall !== 'FAIL', JSON.stringify(r.c3 && { overall: r.c3.overall, length: r.c3.length, beats: r.c3.beats && r.c3.beats.status, cast: r.c3.cast, setting: r.c3.setting, replay: r.c3.replay && r.c3.replay.status, rep: r.c3.repetition && r.c3.repetition.status, voice: r.c3.voice, leak: r.c3.noteLeak, facts: r.c3.facts }));
   check('1', 'overall ignores planCoverage', (r.planInOverall || []).every((x) => x.recomputed === x.overall), JSON.stringify(r.planInOverall));
+  await page.close();
+}
+
+// ---------------- 1b. Recurring phrases: WARN, not FAIL (no restart span) ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (book) => {
+    const n = normalizeImportedSessionData(book);
+    novelData = n.novelData;
+    applySessionDataToUI();
+    const scored = await nwScoreBook({ trigger: 'scoreAll' });
+    return scored.chapters[0];
+  }, PHRASES);
+  const intern = r && r.replay && r.replay.internal;
+  check('1b', 'recurring 13-15 word phrases WARN internal replay (no restart)', intern && r.replay.status === 'WARN' && intern.shared >= 25 && intern.restartAt == null, JSON.stringify(r && r.replay));
+  check('1b', 'phrases fixture reports longestRepeatedRun under 40', intern && intern.longestRepeatedRun && intern.longestRepeatedRun.words < 40, JSON.stringify(intern && intern.longestRepeatedRun));
+  await page.close();
+}
+
+// ---------------- 1c. Cast titled names ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (book) => {
+    const n = normalizeImportedSessionData(book);
+    novelData = n.novelData;
+    applySessionDataToUI();
+    const scored = await nwScoreBook({ trigger: 'scoreAll' });
+    return scored.chapters[0] && scored.chapters[0].cast;
+  }, CASTTITLES);
+  const required = (r && r.required) || [];
+  const missing = (r && r.missing) || [];
+  const reqJoin = required.join('|');
+  const bareTitle = (arr) => arr.some((n) => /^(Dr\.?|Doctor|Captain|Capt|Mr|Mrs|Ms|Prof|Professor|Commander|Lt|Sgt|Admiral|General|Colonel|Major)$/i.test(String(n).trim()));
+  check('1c', 'titled and untitled forms merge to one person each', required.length === 2 && /Mara Quill/i.test(reqJoin) && /Nico Vellum/i.test(reqJoin) && required.filter((n) => /Mara Quill/i.test(n)).length === 1 && required.filter((n) => /Nico Vellum/i.test(n)).length === 1, JSON.stringify(r));
+  check('1c', 'Dr never appears in required or missing', !bareTitle(required) && !bareTitle(missing) && !required.some((n) => n === 'Dr' || n === 'Dr.') && !missing.some((n) => n === 'Dr' || n === 'Dr.'), JSON.stringify(r));
+  check('1c', 'Captain never appears as a bare required/missing name', !required.some((n) => /^Captain\.?$/i.test(n)) && !missing.some((n) => /^Captain\.?$/i.test(n)), JSON.stringify(r));
   await page.close();
 }
 
@@ -420,6 +460,51 @@ async function loadEnvelope(page, envelope) {
   check('5', 'disabling probe check fails the self-test', m2.ok, m2.detail);
   const m3 = await mutatedFails('NW_QCAT_ENABLE_WRITE', 'write');
   check('5', 'disabling per-chapter scorecard write fails the self-test', m3.ok, m3.detail);
+
+  {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qcat-mut-m4-'));
+    const copy = path.join(dir, 'NovelWriter.html');
+    let html = fs.readFileSync(HTML_PATH, 'utf8');
+    const from = 'var NW_QCAT_REPLAY_REQUIRE_RESTART = true;';
+    const to = 'var NW_QCAT_REPLAY_REQUIRE_RESTART = false;';
+    check('5', 'M4 flag present in source', html.indexOf(from) >= 0, 'NW_QCAT_REPLAY_REQUIRE_RESTART not found');
+    html = html.replace(from, to);
+    fs.writeFileSync(copy, html);
+    const page = await openPage(copy);
+    const r = await page.evaluate(async (book) => {
+      const n = normalizeImportedSessionData(book);
+      novelData = n.novelData;
+      applySessionDataToUI();
+      const scored = await nwScoreBook({ trigger: 'scoreAll' });
+      return scored.chapters[0] && scored.chapters[0].replay;
+    }, PHRASES);
+    await page.close();
+    const failedSelf = r && r.status === 'FAIL' && r.internal && r.internal.shared >= 25 && r.internal.restartAt == null;
+    check('5', 'M4 FAIL on shared count alone: no-restart fixture fails the self-test', failedSelf, JSON.stringify(r));
+  }
+  {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qcat-mut-m5-'));
+    const copy = path.join(dir, 'NovelWriter.html');
+    let html = fs.readFileSync(HTML_PATH, 'utf8');
+    const from = 'var NW_QCAT_FILTER_TITLE_FRAGMENTS = true;';
+    const to = 'var NW_QCAT_FILTER_TITLE_FRAGMENTS = false;';
+    check('5', 'M5 flag present in source', html.indexOf(from) >= 0, 'NW_QCAT_FILTER_TITLE_FRAGMENTS not found');
+    html = html.replace(from, to);
+    fs.writeFileSync(copy, html);
+    const page = await openPage(copy);
+    const r = await page.evaluate(async (book) => {
+      const n = normalizeImportedSessionData(book);
+      novelData = n.novelData;
+      applySessionDataToUI();
+      const scored = await nwScoreBook({ trigger: 'scoreAll' });
+      return scored.chapters[0] && scored.chapters[0].cast;
+    }, CASTTITLES);
+    await page.close();
+    const req = (r && r.required) || [];
+    const miss = (r && r.missing) || [];
+    const hasDr = req.concat(miss).some((n) => /^(Dr\.?|Doctor)$/i.test(String(n).trim()));
+    check('5', 'M5 remove title-fragment filter: cast fixture fails the self-test', hasDr, JSON.stringify(r));
+  }
   const after = sha256(HTML_PATH);
   check('5', 'SHA-256 after mutations matches before (source restored / never edited)', after === before, before + ' vs ' + after);
 }

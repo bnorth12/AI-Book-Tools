@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "1.0",
+  "sourceTool": "NovelWriter",
+  "sourceVersion": "0.3.4-8d",
+  "novelData": {
+    "title": "QCAT Fixture Replay Phrases",
+    "genre": "scifi",
+    "numChapters": 1,
+    "chapterLength": 400,
+    "storyArc": "Recurring 13-15 word phrases without a restart span.",
+    "generalPlot": "Shared shingles from short repeated phrases must WARN, not FAIL.",
+    "setting": "A lunar hub and gallery rail.",
+    "characters": [
+      {
+        "name": "Elena Voss",
+        "backstory": "Lead observer on the lunar hub.",
+        "arc": "Learns to share the watch."
+      },
+      {
+        "name": "Bastian Kane",
+        "backstory": "Cryogenic tech.",
+        "arc": "Names the cost aloud."
+      }
+    ],
+    "subplots": [
+      "The ice haul vector must stay red until the habitat vote."
+    ],
+    "novelOutline": "One chapter with four recurring fourteen-word phrases and no forty-word restart.",
+    "plotOutline": "Phrases repeat across the half-split without copying a forty-word run.",
+    "storyArcOutline": "Fixture-only arc.",
+    "chapterOutlines": [
+      "Elena Voss and Bastian Kane keep the lunar hub watch while four short phrases recur in each half."
+    ],
+    "chapterArcs": [
+      "Phrase recurrence without restart."
+    ],
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "phrase recurrence",
+        "arcStep": "Four fourteen-word phrases recur across the half-split with no forty-word restart span.",
+        "sceneGoal": "Elena Voss and Bastian Kane must log the lunar hub watch while short phrases recur.",
+        "castArcBeat": "Elena Voss accepts Bastian Kane's count and they leave the gallery rail together.",
+        "subplotPressure": "The ice haul vector subplot is logged once and left red.",
+        "dialogueTurn": "Elena Voss tells Bastian Kane the lunar hub watch is closed.",
+        "sensoryWorldHook": "Warm glove leather on the gallery rail and a single pump tick.",
+        "turnOrPayoff": "The chapter ends without copying a forty-word opening span.",
+        "characterBeats": [
+          {
+            "name": "Elena Voss",
+            "beat": "Closes the lunar hub watch."
+          },
+          {
+            "name": "Bastian Kane",
+            "beat": "Confirms the ice haul vector stays red."
+          }
+        ],
+        "worldHooks": [
+          "lunar hub",
+          "gallery rail"
+        ]
+      }
+    ],
+    "chapters": [
+      "Elena Voss logged the lunar hub. Bastian Kane named the watch. amberA0 birchA1 cedarA2 deltaA3 emberA4 flintA5 groveA6 hazelA7 ivoryA8 jasperA9 kelpA10 linenA11 mapleA12 notchA13 onyxA14 pearlA15 quailA16 ridgeA17 slateA18 topazA19 umberA20 vistaA21 willowA22 xenonA23 yachtA24 zinniaA25 amberA26 birchA27 cedarA28 deltaA29 emberA30 flintA31 groveA32 hazelA33 ivoryA34 jasperA35 kelpA36 linenA37 mapleA38 notchA39 the ice haul vector stayed red across the lunar hub gallery rail tonight until dawn. amberB0 birchB1 cedarB2 deltaB3 emberB4 flintB5 groveB6 hazelB7 ivoryB8 jasperB9 kelpB10 linenB11 mapleB12 notchB13 onyxB14 pearlB15 quailB16 ridgeB17 slateB18 topazB19 umberB20 vistaB21 willowB22 xenonB23 cold glove leather creaked on the observation window near the cryogenic bus pump house. amberC0 birchC1 cedarC2 deltaC3 emberC4 flintC5 groveC6 hazelC7 ivoryC8 jasperC9 kelpC10 linenC11 mapleC12 notchC13 onyxC14 pearlC15 quailC16 ridgeC17 slateC18 topazC19 umberC20 vistaC21 willowC22 xenonC23 ozone drifted off the cable tray while the habitat vote remained open all night. amberD0 birchD1 cedarD2 deltaD3 emberD4 flintD5 groveD6 hazelD7 ivoryD8 jasperD9 kelpD10 linenD11 mapleD12 notchD13 onyxD14 pearlD15 quailD16 ridgeD17 slateD18 topazD19 umberD20 vistaD21 willowD22 xenonD23 wet dock plank rattled under the failing lights by the ceramic post rain grate. amberE0 birchE1 cedarE2 deltaE3 emberE4 flintE5 groveE6 hazelE7 ivoryE8 jasperE9 kelpE10 linenE11 mapleE12 notchE13 onyxE14 pearlE15 quailE16 ridgeE17 slateE18 topazE19 umberE20 vistaE21 willowE22 xenonE23 yachtE24 zinniaE25 amberE26 birchE27 cedarE28 deltaE29 emberE30 flintE31 groveE32 hazelE33 ivoryE34 jasperE35 kelpE36 linenE37 mapleE38 notchE39 Elena Voss closed the count. Bastian Kane kept the rail. amberF0 birchF1 cedarF2 deltaF3 emberF4 flintF5 groveF6 hazelF7 ivoryF8 jasperF9 kelpF10 linenF11 mapleF12 notchF13 onyxF14 pearlF15 quailF16 ridgeF17 slateF18 topazF19 umberF20 vistaF21 willowF22 xenonF23 yachtF24 zinniaF25 amberF26 birchF27 cedarF28 deltaF29 emberF30 flintF31 groveF32 hazelF33 ivoryF34 jasperF35 kelpF36 linenF37 mapleF38 notchF39 the ice haul vector stayed red across the lunar hub gallery rail tonight until dawn. amberG0 birchG1 cedarG2 deltaG3 emberG4 flintG5 groveG6 hazelG7 ivoryG8 jasperG9 kelpG10 linenG11 mapleG12 notchG13 onyxG14 pearlG15 quailG16 ridgeG17 slateG18 topazG19 umberG20 vistaG21 willowG22 xenonG23 cold glove leather creaked on the observation window near the cryogenic bus pump house. amberH0 birchH1 cedarH2 deltaH3 emberH4 flintH5 groveH6 hazelH7 ivoryH8 jasperH9 kelpH10 linenH11 mapleH12 notchH13 onyxH14 pearlH15 quailH16 ridgeH17 slateH18 topazH19 umberH20 vistaH21 willowH22 xenonH23 ozone drifted off the cable tray while the habitat vote remained open all night. amberI0 birchI1 cedarI2 deltaI3 emberI4 flintI5 groveI6 hazelI7 ivoryI8 jasperI9 kelpI10 linenI11 mapleI12 notchI13 onyxI14 pearlI15 quailI16 ridgeI17 slateI18 topazI19 umberI20 vistaI21 willowI22 xenonI23 wet dock plank rattled under the failing lights by the ceramic post rain grate. amberJ0 birchJ1 cedarJ2 deltaJ3 emberJ4 flintJ5 groveJ6 hazelJ7 ivoryJ8 jasperJ9 kelpJ10 linenJ11 mapleJ12 notchJ13 onyxJ14 pearlJ15 quailJ16 ridgeJ17 slateJ18 topazJ19 umberJ20 vistaJ21 willowJ22 xenonJ23 yachtJ24 zinniaJ25 amberJ26 birchJ27 cedarJ28 deltaJ29 emberJ30 flintJ31 groveJ32 hazelJ33 ivoryJ34 jasperJ35 kelpJ36 linenJ37 mapleJ38 notchJ39"
+    ],
+    "editedChapters": [],
+    "chapterImprovements": [
+      ""
+    ],
+    "skipAutoRevision": false,
+    "aiBeatCheck": false
+  }
+}
