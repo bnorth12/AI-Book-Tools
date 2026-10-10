@@ -127,6 +127,8 @@ for (const ciVal of ['true', 'false', 'on']) {
   const rCi = runRunner({ NW_OUT_DIR: ciDir, NW_E2E_LIVE: '1', CI: ciVal, GITHUB_ACTIONS: '' }, 60000);
   check('NW_E2E_LIVE=1 with CI=' + ciVal + ' refused (exit 3, before browser/network)', rCi.status === 3 && /refused under CI/.test(rCi.stderr) && !fs.existsSync(path.join(ciDir, 'TRACKED_E2E_PROGRESS.md')), 'status=' + rCi.status + ' ' + rCi.stderr.slice(-200));
 }
+const rSelfTest = spawnSync(process.execPath, [RUNNER, '--self-test'], { cwd: REPO_ROOT, env: childEnv({ NW_OUT_DIR: path.join(OUT_DIR, 'self-test') }), encoding: 'utf-8' });
+check('runner self-test: whitespace CI is set and failed chapter textLen is numeric', rSelfTest.status === 0 && /isSet\(' '\) === true/.test(rSelfTest.stdout || '') && /textLen is numeric and zero when empty/.test(rSelfTest.stdout || ''), 'status=' + rSelfTest.status + ' ' + String(rSelfTest.stderr || '').slice(-300));
 const rGha = runRunner({ NW_OUT_DIR: path.join(OUT_DIR, 'live-gha'), NW_E2E_LIVE: '1', CI: '', GITHUB_ACTIONS: 'false' }, 60000);
 check('NW_E2E_LIVE=1 with GITHUB_ACTIONS=false refused (exit 3)', rGha.status === 3 && /refused under CI/.test(rGha.stderr), 'status=' + rGha.status);
 const rNoKey = runRunner({ NW_OUT_DIR: path.join(OUT_DIR, 'live-nokey'), NW_E2E_LIVE: '1', CI: '', GITHUB_ACTIONS: '' }, 60000);
