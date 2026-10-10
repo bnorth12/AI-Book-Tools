@@ -557,6 +557,20 @@ function ops(calls) { return (calls || []).map((c) => c.operationName); }
   }, ND);
   check('D8', 'export/import round-trips skipAutoRevision true', round.exportedFlag === true && round.afterImport === true && round.checkbox === true, JSON.stringify(round));
 
+  for (const checked of [true, false]) {
+    const restored = await page.evaluate((checked) => {
+      novelData.skipAutoRevision = checked;
+      document.getElementById('draftOnlyNote').hidden = checked;
+      applySessionDataToUI();
+      return {
+        checkbox: document.getElementById('skipAutoRevision').checked,
+        noteHidden: document.getElementById('draftOnlyNote').hidden
+      };
+    }, checked);
+    check('D8', 'session UI restore synchronizes draft-only note for ' + checked,
+      restored.checkbox === checked && restored.noteHidden === !checked, JSON.stringify(restored));
+  }
+
   const cases = [
     ...['schema', 'envelope', 'bare'].flatMap((shape) => [true, false].map((checked) => ({ shape, checked }))),
     { shape: 'schema', checked: true, flag: false },

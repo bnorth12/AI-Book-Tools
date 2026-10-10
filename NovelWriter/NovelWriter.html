@@ -8866,6 +8866,7 @@ return c && c.name && c.backstory && c.arc; });
 			if (strictModeEl) strictModeEl.checked = !!novelData.continuityStrictMode;
 			if (autoAuditEl) autoAuditEl.checked = !!novelData.autoContinuityAudit;
 			if (skipRevEl) skipRevEl.checked = !!novelData.skipAutoRevision;
+			document.getElementById('draftOnlyNote').hidden = !novelData.skipAutoRevision;
 
 		    // CodeQL (DOM text reinterpreted as HTML): session/checkpoint data is never interpolated into innerHTML here.
 		    // renderCharacters()/renderSubplots() build fixed markup and set every user field through .value.
