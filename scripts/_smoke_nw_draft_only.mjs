@@ -281,14 +281,20 @@ function ops(calls) { return (calls || []).map((c) => c.operationName); }
     h.setSkip(true);
     h.setAudit(false);
     const on = nwBatchEstimate(2);
+    nwBatchRefreshEstimate();
+    const hintOn = document.getElementById('batchEstimateHint').textContent;
     h.setSkip(false);
     const off = nwBatchEstimate(2);
+    h.setAudit(true);
+    const offAudit = nwBatchEstimate(2);
     h.setSkip(true);
-    return { on: on, off: off, passesOn: nwBatchPasses(), passesOff: (h.setSkip(false), nwBatchPasses()) };
+    h.setAudit(false);
+    return { on: on, off: off, offAudit: offAudit, hintOn: hintOn, passesOn: nwBatchPasses(), passesOff: (h.setSkip(false), nwBatchPasses()) };
   }, ND);
   // re-set skip for the actual run
   await page.evaluate(() => { window.__h.setSkip(true); window.__h.setAudit(false); });
-  check('D2', 'estimate excludes auto passes when draft-only on (2 parts, 0 audit, 0 auto → 2; off → 4)', est.on.perChapter === 2000 && est.off.perChapter === 4000 && est.passesOn === 2, JSON.stringify(est));
+  check('D2', 'fallback estimate counts draft parts, continuity audit, and max auto passes (2 parts: draft-only 2, full 4, with audit 5)', est.on.perChapter === 2000 && est.off.perChapter === 4000 && est.offAudit.perChapter === 5000 && est.passesOn === 2, JSON.stringify(est));
+  check('D2', 'fallback estimate is labeled rough in the UI', est.hintOn.startsWith('Rough estimate:'), est.hintOn);
 
   await page.evaluate((nd) => {
     const h = window.__h;

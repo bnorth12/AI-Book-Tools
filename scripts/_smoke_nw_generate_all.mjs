@@ -252,6 +252,7 @@ async function installHarness(page) {
         genDom: [1, 2, 3, 4].map((n) => (el('chapterGenContent' + n) || {}).value || ''),
         calls: h.calls.slice(), dialogs: h.dialogs.slice(), downloads: h.downloads.slice(), puts: h.puts,
         status: el('batchRunStatus').textContent, state: el('batchRunStatus').dataset.state,
+        capInput: el('batchTokenCap').value, estimateHint: el('batchEstimateHint').textContent,
         statusRole: el('batchRunStatus').getAttribute('role'), statusTestId: el('batchRunStatus').getAttribute('data-testid'),
         pauseDisabled: el('batchPauseBtn').disabled, resumeDisabled: el('batchResumeBtn').disabled,
         goTab4: !el('batchGoTab4').hidden, exportNow: !el('batchExportNow').hidden, restoreBox: !el('batchRestoreBox').hidden,
@@ -393,12 +394,10 @@ const batchDialogTotals = [];
   batchDialogTotals.push(s.dialogs.length);
   check('G4', 'cap 3000 < 2 chapters of usage (4000): stops after ch2 (the chapter that crossed it), reason budget', s.br.reason === 'budget' && s.br.stoppedAt === 2 && s.br.cap === 3000 && s.br.tokensUsed === 4000, JSON.stringify(s.br));
   check('G4', 'ch2 text saved and completed; ch3 never attempted', eq(s.br.completed, [1, 2]) && s.chapters[1].startsWith('Chapter 2') && callsFor(s, 3) === 0, JSON.stringify(s.calls));
-  check('G4', 'status names budget and real usage; Resume enabled', /Stopped at ch2 \(budget\): real usage 4000 tokens reached the cap 3000/.test(s.status) && !s.resumeDisabled, s.status);
+  check('G4', 'budget status reports measured average/last usage and cap for remaining chapters, then prefills that cap', /Stopped at ch2 \(budget\): real usage 4000 tokens reached the cap 3000/.test(s.status) && /Real tokens per finished chapter \(2 measured\): average 2,000, last 2,000\./.test(s.status) && /Tokens used so far: 4,000\./.test(s.status) && /Cap for 2 remaining chapters \(1\.25× average\): 9,000\./.test(s.status) && s.capInput === '9000' && !s.resumeDisabled, s.status + ' / cap=' + s.capInput);
+  check('G4', 'budget stop does not auto-resume; no ch3 calls occur until Resume is clicked', s.calls.length === 4 && callsFor(s, 3) === 0 && !s.running && !s.resumeDisabled, JSON.stringify({ calls: s.calls, running: s.running, resumeDisabled: s.resumeDisabled }));
   const r0 = await batch(page, { resume: true, resetCounters: true });
-  check('M3', 'cap pre-check: Resume with the cap unchanged makes 0 provider calls, reason budget at ch3, 0 dialogs', r0.calls.length === 0 && r0.br.reason === 'budget' && r0.br.stoppedAt === 3 && r0.br.cap === 3000 && eq(r0.br.completed, [1, 2]) && r0.dialogs.length === 0 && r0.r.started === true, JSON.stringify({ calls: r0.calls, br: r0.br }));
-  check('M3', 'cap pre-check status is exactly "Token cap reached (4000/3000). Raise the cap to continue."', r0.status === 'Token cap reached (4000/3000). Raise the cap to continue.', r0.status);
-  const r1 = await batch(page, { resume: true, cap: 20000, resetCounters: true });
-  check('M3', 'raise the cap and Resume: proceeds from ch3 and finishes [1,2,3,4]', r1.calls[0] && r1.calls[0].ch === 3 && r1.br.cap === 20000 && eq(r1.br.completed, [1, 2, 3, 4]) && r1.br.reason === 'done', JSON.stringify({ calls: r1.calls, br: r1.br }));
+  check('M3', 'Resume uses the prefetched cap with one explicit click, proceeds from ch3 and finishes', r0.calls[0] && r0.calls[0].ch === 3 && r0.br.cap === 9000 && eq(r0.br.completed, [1, 2, 3, 4]) && r0.br.reason === 'done', JSON.stringify({ calls: r0.calls, br: r0.br }));
   await page.close();
 }
 
