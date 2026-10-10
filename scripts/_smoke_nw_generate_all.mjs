@@ -47,6 +47,20 @@
  *       one retry, stop provider/timeout; activeAICallCount 0; 0 dialogs
  *   T3  sub-step line shows audit and revise ("revise 1/1") steps; cleared after the run
  *   T4  #133 401 stop line exact: one period, "not retried" once
+ *   F1  #134 follow-up 1: a batch starts while importSession's FileReader is reading; onload rechecks the lock: toast
+ *       "Import cancelled: a Generate All run is active. Import again after it stops.", novelData/requestLog unchanged, 0 dialogs
+ *   F2  #134 follow-up 2: import without batchRun over a stopped run: no batchRun, interrupted cleared, old IndexedDB
+ *       checkpoint deleted (gone at the success dialog; no race); after reload no restore prompt and Resume unavailable.
+ *       An import WITH a batchRun keeps it. A stale custom cap / data-user-edited from the previous run is cleared and
+ *       the field shows the fresh estimate; a new Generate All uses that estimate, not the old cap.
+ *   F3  #134 follow-up 3: after restore, nwBatchRefreshEstimate (and a range change) keeps showing br.cap
+ *   F4  #134 follow-up 4: Rebuild Continuity Packets / Run Continuity Audit (All) disabled mid-run; direct calls return
+ *       with a toast (no throw, no console error, no dialog, no work); the batch's own audit still runs
+ *   F5  #134 follow-up 5: batch continuity audit errors: 503 then OK -> only the audit is retried (Part 1/2 calls unchanged),
+ *       run continues; 503 twice -> provider stop, drafted text kept, real usage (no usageEstimated), Resume regenerates
+ *       the chapter; 401 -> no retry; real malformed audit JSON (callAI {chapter, _jsonParseError}) -> reason parse, draft
+ *       kept, no retry (single-chapter audit keeps its fallback). keptDraft survives a failed Resume (Part 1 provider error)
+ *       and a reload after the pre-chapter checkpoint: Resume still regenerates the chapter (#135 review)
  *   X1  CodeQL DOM-as-HTML: a session whose character name/backstory/arc and subplot are `<img src=x onerror=...>` (plus
  *       attribute/textarea break-out variants) is imported through the real #importFile input and restored through the
  *       IndexedDB "Restore interrupted batch run" path: window.__xss stays undefined, no <img> lands in the Tab 2 lists,
@@ -111,13 +125,15 @@ const networkSeen = [];
 /** In-page harness (re-installed after a reload). */
 async function installHarness(page) {
   await page.evaluate(() => {
-    const h = window.__h = { calls: [], dialogs: [], downloads: [], puts: 0, putsWithRejected: 0, cfg: {}, hanging: false, statusSeen: [], lastExport: null, hudSeen: [], subSeen: [], fetchCalls: [], late: [] };
+    const h = window.__h = { calls: [], dialogs: [], downloads: [], puts: 0, putsWithRejected: 0, cfg: {}, hanging: false, statusSeen: [], lastExport: null, hudSeen: [], subSeen: [], fetchCalls: [], late: [], toasts: [], auditCalls: [], realAuditCalls: [] };
     h.realCallAI = window.callAI;
     h.realFetch = window.fetch;
     const hudEl = document.getElementById('executionDetail');
     if (hudEl) new MutationObserver(() => h.hudSeen.push(hudEl.textContent)).observe(hudEl, { childList: true, characterData: true, subtree: true });
     const subEl = document.getElementById('batchRunSubStep');
     if (subEl) new MutationObserver(() => h.subSeen.push(subEl.textContent)).observe(subEl, { childList: true, characterData: true, subtree: true });
+    const toastEl = document.getElementById('nwToast');
+    if (toastEl) new MutationObserver(() => { if (toastEl.textContent) h.toasts.push(toastEl.textContent); }).observe(toastEl, { childList: true, characterData: true, subtree: true });
     /** slot 8b: REAL callAI over a stubbed fetch. cfg.hangFetch 'ch:part' never answers in time (ignores the abort signal and
      *  resolves late with a valid body that WOULD write a chapter + usage row if the late resolve were not ignored). */
     h.useRealCallAI = function () {
@@ -137,6 +153,24 @@ async function installHarness(page) {
         }
         return Promise.resolve(mk(ch, part, ''));
       };
+    };
+    // slot 8a: continuity audit stub (cfg.auditStub). cfg.auditErrs[n] = messages thrown on attempt 1, 2, ...; an OK attempt
+    // records 100 tokens of real usage.
+    const realAudit = window.runChapterContinuityAudit;
+    window.runChapterContinuityAudit = async function (n, o) {
+      if (!h.cfg.auditStub) return realAudit.apply(this, arguments);
+      h.auditCalls.push(n);
+      const k = h.auditCalls.filter((x) => x === n).length;
+      const plan = (h.cfg.auditErrs || {})[n];
+      if (plan && plan[k - 1]) throw new Error(plan[k - 1]);
+      recordBookTokenUsage({ operationName: 'runChapterContinuityAudit_' + n, originTab: 'tab5', model: 'smoke-stub', prompt_tokens: 60, completion_tokens: 40, total_tokens: 100 });
+      return { chapter: n };
+    };
+    h.idbKeys = function () {
+      return nwBatchOpenDb().then((db) => new Promise((res, rej) => { const q = db.transaction('checkpoints', 'readonly').objectStore('checkpoints').getAllKeys(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }));
+    };
+    h.idbGet = function (key) {
+      return nwBatchOpenDb().then((db) => new Promise((res, rej) => { const q = db.transaction('checkpoints', 'readonly').objectStore('checkpoints').get(key); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }));
     };
     const realCOU = URL.createObjectURL;
     URL.createObjectURL = function (b) { if (b && /json/.test(String(b.type))) h.lastExport = b; return realCOU.call(URL, b); };
@@ -181,6 +215,21 @@ async function installHarness(page) {
     if (st) new MutationObserver(() => h.statusSeen.push(st.textContent)).observe(st, { childList: true, characterData: true, subtree: true });
     window.callAI = async function () {
       const cfg = h.cfg;
+      const opName = (arguments[2] && typeof arguments[2] === 'object' && arguments[2].operationName) || '';
+      const am = /^runChapterContinuityAudit_(\d+)$/.exec(opName);
+      if (am) {
+        // real runChapterContinuityAudit -> stubbed provider: the response carries real usage; cfg.auditJsonErrAt returns the
+        // real callAI shape for malformed model JSON ({ chapter, _jsonParseError }).
+        const an = Number(am[1]);
+        h.realAuditCalls.push(an);
+        recordBookTokenUsage({ operationName: opName, originTab: 'tab5', model: 'smoke-stub', prompt_tokens: 60, completion_tokens: 40, total_tokens: 100 });
+        if (cfg.auditJsonErrAt === an) {
+          const content = '{"chapterSummary": "Chapter ' + an + ' audit truncated mid-str';
+          requestLog.returnedInfo = JSON.stringify({ id: 'smoke', choices: [{ message: { role: 'assistant', content } }] });
+          return { chapter: content, _jsonParseError: 'SyntaxError: Unterminated string in JSON at position 42' };
+        }
+        return { chapterSummary: 'smoke audit ok', unresolvedThreads: [], storyArcProgress: { currentBeat: 'b', nextBeat: 'n', riskLevel: 'low' }, characterArcProgress: [], continuityRisks: [], recommendedFixes: [] };
+      }
       const g = window.__lastGenerateChapterGate;
       const ch = g ? g.chapter : 0;
       const part = /Part 2/.test(String(requestLog.status)) ? 2 : 1;
@@ -271,7 +320,8 @@ async function openPage() {
 async function batch(page, opts) {
   return page.evaluate(async (o) => {
     const h = window.__h;
-    if (o.nd) h.load(o.nd);
+    if (o.nd) { h.load(o.nd); h.auditCalls.length = 0; h.realAuditCalls.length = 0; }
+    if (o.audit) { novelData.autoContinuityAudit = true; document.getElementById('autoContinuityAudit').checked = true; }
     if (o.prefill) Object.keys(o.prefill).forEach((n) => h.setText(Number(n), o.prefill[n]));
     if (o.from) document.getElementById('batchFrom').value = String(o.from);
     if (o.to) document.getElementById('batchTo').value = String(o.to);
@@ -279,7 +329,7 @@ async function batch(page, opts) {
     if (o.perChapterDownload != null) document.getElementById('batchPerChapterDownload').checked = !!o.perChapterDownload;
     if (o.cap) { const c = document.getElementById('batchTokenCap'); c.value = String(o.cap); c.dispatchEvent(new Event('input')); }
     h.cfg = o.cfg || {};
-    if (o.resetCounters) { h.calls.length = 0; h.dialogs.length = 0; h.downloads.length = 0; h.statusSeen.length = 0; h.lastExport = null; }
+    if (o.resetCounters) { h.calls.length = 0; h.dialogs.length = 0; h.downloads.length = 0; h.statusSeen.length = 0; h.lastExport = null; h.auditCalls.length = 0; }
     const t0 = Date.now();
     const r = o.resume ? await resumeBatchRun() : await generateAllChapters();
     const s = h.snap(r);
@@ -288,7 +338,7 @@ async function batch(page, opts) {
   }, opts);
 }
 const callsFor = (s, ch) => s.calls.filter((c) => c.ch === ch).length;
-const sessionDl = (s) => s.downloads.filter((d) => /_session\.json$/.test(d)).length;
+const sessionDl = (s) => s.downloads.filter((d) => /\.json$/i.test(d)).length;
 const chapterDl = (s) => s.downloads.filter((d) => /_ch\d+\.txt$/.test(d)).length;
 const batchDialogTotals = [];
 
@@ -459,7 +509,7 @@ const batchDialogTotals = [];
   await page.waitForFunction(() => window.__h.hanging === true, null, { timeout: 20000 });
   const lock = await page.evaluate(async () => {
     const all = (sel) => Array.from(document.querySelectorAll(sel));
-    const gen = all('#chapterGenContainer button');
+    const gen = all('#chapterGenContainer button').filter((b) => /Generate Chapter/.test(b.textContent || ''));
     const edits = all('textarea[id^="chapterEditContent"]');
     const editBtns = all('#chapterEditContainer button');
     const before = window.__h.calls.length;
@@ -811,6 +861,227 @@ const batchDialogTotals = [];
   const want = 'Stopped at ch2 (provider): Part 1 provider error (HTTP 401, not retried): Check your API key in Setup. Resume regenerates ch2. Completed: 1. Tokens 2000/' + s.br.cap + '.';
   check('T4', '401 stop line is exact: "' + want.replace(/\d+\.$/, '<cap>.') + '" (one period, "not retried" once)', s.status === want && !/\.\./.test(s.status) && (s.status.match(/not retried/gi) || []).length === 1, s.status);
   batchDialogTotals.push(s.dialogs.length);
+  await page.close();
+}
+
+// ---------------- F1: import race (batch starts during the file read) ----------------
+const IMPORT_CANCELLED = 'Import cancelled: a Generate All run is active. Import again after it stops.';
+{
+  const page = await openPage();
+  const f1 = await page.evaluate(async (nd) => {
+    const h = window.__h; h.load(nd);
+    let reader = null;
+    const realRead = FileReader.prototype.readAsText;
+    FileReader.prototype.readAsText = function () { reader = this; }; // the read "takes a while"
+    const payload = JSON.stringify({ schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: Object.assign({}, nd, { title: 'IMPORTED BOOK', chapters: ['IMPORTED TEXT'] }) });
+    const target = { files: [new File([payload], 'race.json', { type: 'application/json' })], value: 'race.json' };
+    importSession({ target });
+    const readStarted = !!reader;
+    h.cfg = { hangAt: '1:1' }; window.__p = generateAllChapters();
+    for (let i = 0; i < 400 && !h.hanging; i++) await new Promise((r) => setTimeout(r, 25));
+    const before = JSON.stringify(novelData); const reqBefore = JSON.stringify(requestLog);
+    let threw = null;
+    try { reader.onload({ target: { result: payload } }); } catch (e) { threw = String(e.message || e); }
+    FileReader.prototype.readAsText = realRead;
+    const toast = document.getElementById('nwToast');
+    return { readStarted, running: nwBatchState.running, same: before === JSON.stringify(novelData), reqSame: reqBefore === JSON.stringify(requestLog), title: novelData.title, ch1: (novelData.chapters || [])[0] || '', toast: toast.textContent, toastShown: !toast.hidden, toastRole: toast.getAttribute('role'), dialogs: h.dialogs.slice(), inputCleared: target.value === '', threw };
+  }, ND);
+  check('F1', 'batch started during the read: onload cancels the import; novelData + requestLog unchanged (title, chapters), input cleared, no throw', f1.readStarted && f1.running && f1.same && f1.reqSame && f1.title !== 'IMPORTED BOOK' && f1.ch1 !== 'IMPORTED TEXT' && f1.inputCleared && f1.threw === null, JSON.stringify(f1));
+  check('F1', 'toast (role=status) says exactly "' + IMPORT_CANCELLED + '"; 0 dialogs', f1.toastShown && f1.toastRole === 'status' && f1.toast === IMPORT_CANCELLED && f1.dialogs.length === 0, JSON.stringify({ toast: f1.toast, shown: f1.toastShown, dialogs: f1.dialogs }));
+  await page.close();
+}
+
+// ---------------- F2: imported book does not inherit the previous run ----------------
+{
+  const page = await openPage();
+  const st = await batch(page, { nd: ND, cfg: { throwAt: { key: '2:1', msg: 'HTTP error! Status: 401, Text: {"error":"Incorrect API key provided"}' } } });
+  const f2 = await page.evaluate(async () => {
+    const h = window.__h; const oldId = novelData.batchRun.id;
+    // the old run's checkpoint is still active (e.g. the tab died during the final write): without cleanup a reload would offer it
+    const rec = await h.idbGet(oldId); rec.active = true; await nwBatchIdbPut(rec, oldId);
+    const resumableBefore = nwBatchIsResumable();
+    const cap = document.getElementById('batchTokenCap');
+    cap.value = '50000'; cap.dataset.userEdited = '1';
+    const nd2 = JSON.parse(JSON.stringify(novelData)); delete nd2.batchRun; delete nd2.apiKey; nd2.title = 'Other Book';
+    const realRead = FileReader.prototype.readAsText;
+    FileReader.prototype.readAsText = function (f) { const r = this; f.text().then((t) => r.onload({ target: { result: t } })); };
+    // Delay the actual IDB delete so a success-before-await race is visible at the success dialog.
+    const origDel = nwBatchIdbDelete;
+    nwBatchIdbDelete = function (key) {
+      return new Promise(function (resolve, reject) {
+        setTimeout(function () { origDel(key).then(resolve, reject); }, 250);
+      });
+    };
+    h.dialogs.length = 0;
+    importSession({ target: { files: [new File([JSON.stringify({ schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: nd2 })], 'other.json')], value: 'other.json' } });
+    for (let i = 0; i < 200 && !h.dialogs.some((d) => /Session imported/.test(d)); i++) await new Promise((r) => setTimeout(r, 25));
+    const keysAtSuccess = await h.idbKeys();
+    const capEl = document.getElementById('batchTokenCap');
+    const o = nwBatchReadOptions();
+    const plan = nwBatchPlan({ from: o.from, to: o.to }, o.regenerateExisting, [], null);
+    const estCap = String(Math.ceil(nwBatchEstimate(plan.planned.length).total * NW_BATCH.capFactor));
+    const out = {
+      oldId, resumableBefore, title: novelData.title, hasRun: 'batchRun' in novelData, interrupted: nwBatchState.interrupted,
+      resumeDisabled: document.getElementById('batchResumeBtn').disabled, resumable: nwBatchIsResumable(),
+      oldRecLeft: keysAtSuccess.includes(oldId), imported: h.dialogs.some((d) => /Session imported/.test(d)),
+      capValue: capEl.value, capHasAttr: capEl.hasAttribute('data-user-edited'), capEdited: capEl.dataset.userEdited || '', estCap
+    };
+    nwBatchIdbDelete = origDel;
+    h.cfg = {};
+    h.calls.length = 0;
+    const ga = await generateAllChapters();
+    out.newRunCap = novelData.batchRun && novelData.batchRun.cap;
+    out.newRunReason = ga && ga.reason;
+    // an import that carries a batchRun keeps it
+    const nd3 = JSON.parse(JSON.stringify(nd2)); nd3.title = 'Third Book';
+    nd3.batchRun = { id: 'third|2026-10-03T00:00:00.000Z', startedAt: '2026-10-03T00:00:00.000Z', updatedAt: '2026-10-03T00:00:00.000Z', range: { from: 1, to: 4 }, regenerateExisting: false, perChapterDownload: false, completed: [1], inFlight: null, stoppedAt: 2, reason: 'provider', detail: 'smoke', tokensUsed: 2000, estimate: { perChapter: 2000, total: 8000, source: 'fallback' }, cap: 43210, usageEstimated: [] };
+    h.dialogs.length = 0;
+    importSession({ target: { files: [new File([JSON.stringify({ schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: nd3 })], 'third.json')], value: 'third.json' } });
+    for (let i = 0; i < 200 && !h.dialogs.some((d) => /Session imported/.test(d)); i++) await new Promise((r) => setTimeout(r, 25));
+    const keepCap = document.getElementById('batchTokenCap');
+    out.keep = { id: novelData.batchRun && novelData.batchRun.id, cap: novelData.batchRun && novelData.batchRun.cap, input: keepCap.value, edited: keepCap.dataset.userEdited || '' };
+    // back to the run-less book for the reload check
+    h.dialogs.length = 0;
+    importSession({ target: { files: [new File([JSON.stringify({ schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: nd2 })], 'other.json')], value: 'other.json' } });
+    for (let i = 0; i < 200 && !h.dialogs.some((d) => /Session imported/.test(d)); i++) await new Promise((r) => setTimeout(r, 25));
+    await nwBatchState.lastForget;
+    out.hasRunAgain = 'batchRun' in novelData;
+    FileReader.prototype.readAsText = realRead;
+    return out;
+  });
+  check('F2', 'import without batchRun over a stopped run: no batchRun, interrupted null, Resume disabled/not resumable, old IndexedDB checkpoint deleted', st.br && st.br.reason === 'provider' && f2.resumableBefore && f2.imported && f2.title === 'Other Book' && !f2.hasRun && f2.interrupted === null && f2.resumeDisabled && !f2.resumable && !f2.oldRecLeft, JSON.stringify(f2));
+  check('F2', 'run-less import: stale cap 50000/user-edited cleared; field shows the fresh estimate', !f2.capHasAttr && f2.capEdited !== '1' && f2.capValue !== '50000' && f2.capValue === f2.estCap && f2.estCap !== '50000', JSON.stringify({ capValue: f2.capValue, capHasAttr: f2.capHasAttr, capEdited: f2.capEdited, estCap: f2.estCap }));
+  check('F2', 'run-less import: old checkpoint is gone at the moment the import reports success (no race)', f2.imported && !f2.oldRecLeft, JSON.stringify({ imported: f2.imported, oldRecLeft: f2.oldRecLeft, oldId: f2.oldId }));
+  check('F2', 'run-less import: a new Generate All uses the estimate-based cap, not 50000', f2.newRunCap === Number(f2.estCap) && f2.newRunCap !== 50000, JSON.stringify({ newRunCap: f2.newRunCap, estCap: f2.estCap, reason: f2.newRunReason }));
+  check('F2', 'an import that carries a batchRun keeps it (id + cap shown); a later run-less import drops it again', f2.keep.id === 'third|2026-10-03T00:00:00.000Z' && f2.keep.cap === 43210 && f2.keep.input === '43210' && !f2.hasRunAgain, JSON.stringify({ keep: f2.keep, hasRunAgain: f2.hasRunAgain }));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof restoreInterruptedBatchRun === 'function' && window.__nwBatchRestoreCheck, null, { timeout: 30000 });
+  await page.evaluate(() => window.__nwBatchRestoreCheck);
+  const rl = await page.evaluate(() => ({ interrupted: !!nwBatchState.interrupted, restoreBoxHidden: document.getElementById('batchRestoreBox').hidden, resumeDisabled: document.getElementById('batchResumeBtn').disabled, resumable: nwBatchIsResumable(), status: document.getElementById('batchRunStatus').textContent }));
+  check('F2', 'after reload: no restore prompt (no interrupted run, restore box hidden), Resume unavailable', !rl.interrupted && rl.restoreBoxHidden && rl.resumeDisabled && !rl.resumable && !/Interrupted batch run found/.test(rl.status), JSON.stringify(rl));
+  batchDialogTotals.push(st.dialogs.length);
+  await page.close();
+}
+
+// ---------------- F3: cap display after restore ----------------
+{
+  const page = await openPage();
+  const st = await batch(page, { nd: ND, cap: 50000, cfg: { throwAt: { key: '2:1', msg: 'HTTP error! Status: 503, Text: down' }, failProvider: { 2: 2 } } });
+  await page.evaluate(async () => { const id = novelData.batchRun.id; const rec = await window.__h.idbGet(id); rec.active = true; await nwBatchIdbPut(rec, id); });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof restoreInterruptedBatchRun === 'function' && window.__nwBatchRestoreCheck, null, { timeout: 30000 });
+  await page.evaluate(() => window.__nwBatchRestoreCheck);
+  await installHarness(page);
+  const f3 = await page.evaluate(async () => {
+    const ok = await restoreInterruptedBatchRun();
+    const c = document.getElementById('batchTokenCap');
+    const afterRestore = c.value;
+    nwBatchRefreshEstimate();
+    const afterRefresh = c.value;
+    const reg = document.getElementById('batchRegenerate'); reg.dispatchEvent(new Event('change'));
+    const afterChange = c.value;
+    const estCap = String(Math.ceil(nwBatchEstimate(4).total * NW_BATCH.capFactor));
+    // the user's own edit still wins
+    c.value = '777'; c.dispatchEvent(new Event('input')); nwBatchRefreshEstimate();
+    const userEdit = c.value;
+    return { ok, brCap: novelData.batchRun.cap, resumable: nwBatchIsResumable(), afterRestore, afterRefresh, afterChange, estCap, userEdit };
+  });
+  check('F3', 'after restore: nwBatchRefreshEstimate and a range change keep showing br.cap (not the fresh estimate); a user edit still wins', st.br.cap === 50000 && f3.ok && f3.resumable && f3.brCap === 50000 && f3.afterRestore === '50000' && f3.afterRefresh === '50000' && f3.afterChange === '50000' && f3.estCap !== '50000' && f3.userEdit === '777', JSON.stringify(f3));
+  batchDialogTotals.push(st.dialogs.length);
+  await page.close();
+}
+
+// ---------------- F4: continuity controls locked mid-run ----------------
+{
+  const page = await openPage();
+  const consoleErrors = [];
+  page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
+  await page.evaluate((nd) => {
+    const h = window.__h; h.load(nd); h.auditCalls.length = 0;
+    novelData.autoContinuityAudit = true; document.getElementById('autoContinuityAudit').checked = true;
+    h.cfg = { auditStub: true, hangAt: '2:1' }; window.__p = generateAllChapters();
+  }, ND);
+  await page.waitForFunction(() => window.__h.hanging === true, null, { timeout: 20000 });
+  const errBefore = consoleErrors.length;
+  const errPageBefore = pageErrors.length;
+  const f4 = await page.evaluate(async () => {
+    const h = window.__h;
+    const q = (sel) => Array.from(document.querySelectorAll(sel));
+    const rb = q('#tab5 button[onclick*="rebuildContinuityPackets"]'), ra = q('#tab5 button[onclick*="runContinuityAuditAll"]');
+    const packets = JSON.stringify(novelData.chapterContinuityPackets);
+    const audits = h.auditCalls.length;
+    const toasts = [];
+    let r1, r2, threw = null;
+    try { r1 = rebuildContinuityPackets(); toasts.push(document.getElementById('nwToast').textContent); r2 = await runContinuityAuditAll(); toasts.push(document.getElementById('nwToast').textContent); } catch (e) { threw = String(e.message || e); }
+    return { rb: rb.length, rbDisabled: rb.every((b) => b.disabled), ra: ra.length, raDisabled: ra.every((b) => b.disabled), r1, r2, threw, toasts, packetsSame: packets === JSON.stringify(novelData.chapterContinuityPackets), auditDelta: h.auditCalls.length - audits, batchAudited: h.auditCalls.slice(), dialogs: h.dialogs.slice() };
+  });
+  await page.waitForTimeout(200);
+  const newErrs = consoleErrors.slice(errBefore);
+  check('F4', 'mid-run: Rebuild Continuity Packets and Run Continuity Audit (All) buttons disabled', f4.rb === 1 && f4.rbDisabled && f4.ra === 1 && f4.raDisabled, JSON.stringify(f4));
+  check('F4', 'mid-run: direct handler calls return false with a toast (no throw, no console error, no page error, no dialog, no packets rebuilt, no audit run)', f4.r1 === false && f4.r2 === false && f4.threw === null && /^Rebuild Continuity Packets is locked while a Generate All run is active/.test(f4.toasts[0] || '') && /^Run Continuity Audit \(All\) is locked while a Generate All run is active/.test(f4.toasts[1] || '') && newErrs.length === 0 && pageErrors.length === errPageBefore && f4.dialogs.length === 0 && f4.packetsSame && f4.auditDelta === 0, JSON.stringify({ f4, newErrs }));
+  check('F4', "the batch's own continuity audit still ran for ch1 while the user entry points were locked", f4.batchAudited.length === 1 && f4.batchAudited[0] === 1, JSON.stringify(f4.batchAudited));
+  await page.close();
+}
+
+// ---------------- F5: batch continuity audit retry (audit call only) ----------------
+{
+  const page = await openPage();
+  const E503 = 'HTTP error! Status: 503, Text: smoke audit upstream unavailable';
+  const partCalls = (s, ch) => [1, 2].map((p) => s.calls.filter((c) => c.ch === ch && c.part === p).length);
+  const auditCalls = () => page.evaluate(() => window.__h.auditCalls.slice());
+  // (a) 503 then OK
+  const a = await batch(page, { nd: ND, audit: true, resetCounters: true, cfg: { auditStub: true, auditErrs: { 2: [E503] } } });
+  const aAud = await auditCalls();
+  check('F5', '503 then OK: only the audit is retried (ch2 Part 1/2 calls stay 1/1, ch2 audit 2 calls), run done, all 4 complete', a.br.reason === 'done' && eq(partCalls(a, 2), [1, 1]) && aAud.filter((n) => n === 2).length === 2 && eq(a.br.completed, [1, 2, 3, 4]) && a.statusSeen.some((x) => /^ch2 continuity audit provider error; retrying the audit once in 2 s: HTTP error! Status: 503/.test(x)), JSON.stringify({ br: a.br, parts: partCalls(a, 2), aAud }));
+  check('F5', '503 then OK: usage is real (4 x 2000 parts + 4 x 100 audit = 8400), nothing estimated', a.br.tokensUsed === 8400 && eq(a.br.usageEstimated, []), JSON.stringify(a.br));
+  // (b) 503 twice -> provider stop, draft kept, Resume regenerates ch2
+  const b = await batch(page, { nd: ND, audit: true, resetCounters: true, cfg: { auditStub: true, auditErrs: { 2: [E503, E503] } } });
+  const bAud = await auditCalls();
+  check('F5', '503 twice: stop reason provider at ch2 after 1 audit retry (2 audit calls, Part 1/2 calls 1/1), detail names the audit', b.br.reason === 'provider' && b.br.stoppedAt === 2 && /^continuity audit provider error after 1 retry: HTTP error! Status: 503/.test(b.br.detail) && bAud.filter((n) => n === 2).length === 2 && eq(partCalls(b, 2), [1, 1]) && eq(b.br.completed, [1]), JSON.stringify({ br: b.br, bAud, parts: partCalls(b, 2) }));
+  check('F5', '503 twice: drafted ch2 text kept (novelData + Tab 5 field), status says it, Resume regenerates ch2; usage real (2100 + 2000), no usageEstimated entry', /^Chapter 2 part 1 prose/.test(b.chapters[1]) && /Chapter 2 part 2 prose/.test(b.chapters[1]) && b.genDom[1] === b.chapters[1] && /Drafted ch2 text kept\./.test(b.status) && /Resume regenerates ch2\./.test(b.status) && b.br.keptDraft === 2 && !b.resumeDisabled && b.br.tokensUsed === 4100 && eq(b.br.usageEstimated, []), JSON.stringify({ status: b.status, br: b.br, ch2: b.chapters[1].slice(0, 60) }));
+  // #135 review: Resume whose forced ch2 fails in Part 1 (provider) keeps the keptDraft marker and the draft text
+  const r1 = await batch(page, { resume: true, resetCounters: true, cfg: { auditStub: true, throwAt: { key: '2:1', msg: 'HTTP error! Status: 401, Text: {"error":"Incorrect API key provided"}' } } });
+  check('F5', 'Resume -> ch2 Part 1 provider failure: stop provider at ch2, keptDraft still 2, drafted ch2 text still there, still resumable', r1.br.reason === 'provider' && r1.br.stoppedAt === 2 && eq(partCalls(r1, 2), [1, 0]) && r1.br.keptDraft === 2 && /^Chapter 2 part 1 prose/.test(r1.chapters[1]) && !r1.resumeDisabled, JSON.stringify({ br: r1.br, parts: partCalls(r1, 2), ch2: String(r1.chapters[1]).slice(0, 40) }));
+  const br2 = await batch(page, { resume: true, resetCounters: true, cfg: { auditStub: true } });
+  const rAud = await auditCalls();
+  check('F5', 'Resume again (after the failed Resume) still regenerates ch2 (Part 1 + Part 2 called again though ch2 has text), then ch3-4; done; keptDraft cleared only now', br2.br.reason === 'done' && eq(partCalls(br2, 2), [1, 1]) && eq(partCalls(br2, 1), [0, 0]) && eq(br2.br.completed, [1, 2, 3, 4]) && rAud.filter((n) => n === 2).length === 1 && br2.br.keptDraft == null, JSON.stringify({ br: br2.br, parts: partCalls(br2, 2), rAud }));
+  // (c) 401 -> no retry
+  const c = await batch(page, { nd: ND, audit: true, resetCounters: true, cfg: { auditStub: true, auditErrs: { 2: ['HTTP error! Status: 401, Text: {"error":"Incorrect API key provided"}'] } } });
+  const cAud = await auditCalls();
+  check('F5', '401 from the audit: no retry (1 audit call), stop provider, detail "continuity audit provider error (HTTP 401, not retried): Check your API key in Setup.", draft kept', c.br.reason === 'provider' && c.br.stoppedAt === 2 && c.br.detail === 'continuity audit provider error (HTTP 401, not retried): Check your API key in Setup.' && cAud.filter((n) => n === 2).length === 1 && /^Chapter 2 part 1 prose/.test(c.chapters[1]) && eq(c.br.usageEstimated, []), JSON.stringify({ br: c.br, cAud }));
+  // (d) parse stays parse
+  // (#135 review) real runChapterContinuityAudit; the provider stub returns callAI's malformed-JSON shape { chapter, _jsonParseError }
+  const d = await batch(page, { nd: ND, audit: true, resetCounters: true, cfg: { auditJsonErrAt: 2 } });
+  const dAud = await page.evaluate(() => window.__h.realAuditCalls.slice());
+  check('F5', 'real malformed audit JSON (_jsonParseError) in a batch: reason parse at ch2 (not completed), no retry (1 audit call), draft kept, keptDraft 2, real usage (2 x 2100), nothing estimated', d.br.reason === 'parse' && d.br.stoppedAt === 2 && eq(d.br.completed, [1]) && /^continuity audit parse failure \(no retry\): continuity audit model JSON parse error \(_jsonParseError\): SyntaxError/.test(d.br.detail) && eq(dAud, [1, 2]) && /^Chapter 2 part 1 prose/.test(d.chapters[1]) && d.br.keptDraft === 2 && eq(d.br.usageEstimated, []) && d.br.tokensUsed === 4200 && /Drafted ch2 text kept\./.test(d.status), JSON.stringify({ br: d.br, dAud, status: d.status }));
+  const single = await page.evaluate(async () => {
+    try { const r = await runChapterContinuityAudit(2, { silent: true }); return { ok: true, risks: r && r.continuityRisks, dialogs: window.__h.dialogs.length }; } catch (e) { return { ok: false, err: String(e.message || e) }; }
+  });
+  check('F5', 'single-chapter audit (no batch) keeps its old fallback for _jsonParseError: no throw, risk "Unable to parse continuity audit output."', single.ok && eq(single.risks, ['Unable to parse continuity audit output.']), JSON.stringify(single));
+  for (const x of [a, b, r1, br2, c, d]) batchDialogTotals.push(x.dialogs.length);
+  await page.close();
+}
+
+// ---------------- F5 (#135 review): keptDraft survives a reload after the Resume's pre-chapter checkpoint ----------------
+{
+  const page = await openPage();
+  const s0 = await batch(page, { nd: ND, audit: true, resetCounters: true, cfg: { auditStub: true, auditErrs: { 2: ['HTTP error! Status: 503, Text: x', 'HTTP error! Status: 503, Text: x'] } } });
+  await page.evaluate(() => { const h = window.__h; h.calls.length = 0; h.hanging = false; h.cfg = { auditStub: true, hangAt: '2:1' }; window.__p = resumeBatchRun(); });
+  const hung = await page.waitForFunction(() => window.__h.hanging === true, null, { timeout: 20000 }).then(() => true, () => false);
+  check('F5', 'Resume after the audit stop starts with the kept-draft ch2 (its Part 1 is the call in flight)', hung, 'ch2 Part 1 never called (Resume skipped ch2)');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof restoreInterruptedBatchRun === 'function' && window.__nwBatchRestoreCheck, null, { timeout: 30000 });
+  await page.evaluate(() => window.__nwBatchRestoreCheck);
+  await installHarness(page);
+  const rs = await page.evaluate(async () => {
+    const found = !!nwBatchState.interrupted; const ok = await restoreInterruptedBatchRun();
+    if (!novelData.batchRun) return { found, ok, noRun: true };
+    return { found, ok, stoppedAt: novelData.batchRun.stoppedAt, keptDraft: novelData.batchRun.keptDraft, ch2: String(novelData.chapters[1] || ''), resumable: nwBatchIsResumable() };
+  });
+  check('F5', 'reload after the Resume pre-chapter checkpoint: restore shows ch2 in flight, keptDraft 2 kept, drafted ch2 text present, resumable', s0.br.keptDraft === 2 && rs.found && rs.ok && rs.stoppedAt === 2 && rs.keptDraft === 2 && /^Chapter 2 part 1 prose/.test(rs.ch2) && rs.resumable, JSON.stringify(rs));
+  const r = await batch(page, { resume: true, resetCounters: true, cfg: { auditStub: true } });
+  check('F5', 'Resume after reload + restore still regenerates ch2 (Part 1 + Part 2 called), then done; keptDraft cleared', !!r.br && r.br.reason === 'done' && r.calls.filter((c) => c.ch === 2).length === 2 && eq(r.br.completed, [1, 2, 3, 4]) && r.br.keptDraft == null, JSON.stringify({ br: r.br, calls: r.calls }));
+  batchDialogTotals.push(s0.dialogs.length, r.dialogs.length);
   await page.close();
 }
 
