@@ -226,7 +226,8 @@ export async function runQcatHarness(opts) {
     (wanted || []).forEach((n) => { texts[n] = (typeof nwChapterText === 'function') ? nwChapterText(n) : String((novelData.chapters || [])[n - 1] || ''); });
     const { apiKey, model, maxTokens, authors, bookImprovements, chapterImprovements, ...rest } = novelData;
     const session = { schemaVersion: '1.0', sourceTool: 'NovelWriter', sourceVersion: (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '0.3.4'), exportedAt: new Date().toISOString(), novelData: Object.assign({}, rest, { workflowStage: stage }) };
-    return { result: result, md: md, stage: stage, texts: texts, session: session, cards: JSON.parse(JSON.stringify(novelData.chapterScorecards || [])) };
+    if (typeof nwTimingExportSnapshot === 'function') session.nwTiming = nwTimingExportSnapshot();
+    return { result: result, md: md, stage: stage, texts: texts, session: session, cards: JSON.parse(JSON.stringify(novelData.chapterScorecards || [])), timing: (typeof nwTimingExportSnapshot === 'function') ? nwTimingExportSnapshot() : null };
   }, wanted);
 
   const sha = appSha();
@@ -250,8 +251,9 @@ export async function runQcatHarness(opts) {
     fs.writeFileSync(path.join(runDir, 'sessions', sessName), JSON.stringify(scored.session, null, 2));
   }
   fs.writeFileSync(path.join(runDir, 'run.log'), logLines.join('\n') + '\n');
+  if (scored.timing) fs.writeFileSync(path.join(runDir, 'timing.json'), JSON.stringify(scored.timing, null, 2));
   await browser.close();
-  return { exitCode: 0, runDir: runDir, scoreJson: scoreJson, md: scored.md, cards: scored.cards, log: logLines, stage: scored.stage };
+  return { exitCode: 0, runDir: runDir, scoreJson: scoreJson, md: scored.md, cards: scored.cards, log: logLines, stage: scored.stage, timing: scored.timing };
 }
 
 const isMain = process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
