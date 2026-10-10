@@ -447,6 +447,9 @@
             <h3>How to Use</h3>
             <ul>
                 <li><strong>Chapter Subpages</strong>: Select a chapter, then click <button class="example">Generate Chapter</button> to create its first draft.</li>
+                <li><strong>Skip automatic revision passes (draft only)</strong>: Writes each chapter from your outline and blueprint with no automatic rewrite passes. Use it when you want to revise by hand; quality scores are still shown.</li>
+                <li><strong>AI beat check (1 extra call per chapter)</strong>: Optional. Off by default. When on, scoring makes one extra call per chapter to judge blueprint beats as present, partial, or missing. It does not rewrite text. Draft-only skips this unless both boxes are ticked.</li>
+                <li><strong>Plan facts</strong>: Optional per-chapter must-include / must-not-include / probe rows under each chapter on this tab. Stored on the session, not in the shared blueprint schema.</li>
                 <li><button class="example">Back</button>: Return to Tab 4.</li>
                 <li><button class="example">Next: Edit Chapters</button>: Move to Tab 6.</li>
             </ul>
@@ -463,6 +466,8 @@
             <h3>How to Use</h3>
             <ul>
                 <li><strong>Chapter Subpages</strong>: Select a chapter and edit content manually, or paste notes into "Improvements to Implement."</li>
+                <li><strong>Chapter scorecards</strong>: After generate, revise, or Apply, Tab 6 shows PASS/WARN/FAIL per metric. Score all chapters (no AI unless AI beat check is on) or copy the Markdown table. Plan coverage is shown but is advisory until writing plans ship. FAILs flag the chapter and warn during Generate All; they do not stop the run. Score all chapters is locked while Generate All is running.</li>
+                <li><strong>Timing</strong>: The Timing panel next to the scorecard shows per-task averages (time and tokens). Stats persist across books. Reset timing stats clears them. Generate All shows a time estimate once a task type has three samples. A slow-step banner offers Keep waiting or Cancel (the hard timeout still applies).</li>
                 <li><button class="example">Update Chapter</button>: Apply improvements through AI assistance.</li>
                 <li><button class="example">Back</button>: Return to Tab 5.</li>
                 <li><button class="example">Next: Book</button>: Move to Tab 7.</li>
