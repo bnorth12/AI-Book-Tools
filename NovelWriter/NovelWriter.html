@@ -9707,6 +9707,11 @@ return c && c.name && c.backstory && c.arc; });
 		var NW_QCAT_ENABLE_REPLAY = true;
 		var NW_QCAT_ENABLE_PROBES = true;
 		var NW_QCAT_ENABLE_WRITE = true;
+		var NW_QCAT_REPLAY_REQUIRE_RESTART = true;
+		var NW_QCAT_FILTER_TITLE_FRAGMENTS = true;
+		var NW_QCAT_RESTART_MIN_WORDS = 40;
+		var NW_QCAT_RESTART_DENSITY = 0.4;
+		var NW_QCAT_NAME_TITLES = ['dr', 'doctor', 'captain', 'capt', 'mr', 'mrs', 'ms', 'prof', 'professor', 'commander', 'lt', 'sgt', 'admiral', 'general', 'colonel', 'major'];
 		var NW_NOTE_LEAK_TERMS = ['fail closed', 'followable', 'this row', 'fenced header', 'blueprint', 'obligation', 'beat checklist', 'sceneGoal', 'turnOrPayoff', 'deferred thread'];
 		var NW_QCAT_CAMEL_FIELDS = ['sceneGoal', 'castArcBeat', 'subplotPressure', 'dialogueTurn', 'sensoryWorldHook', 'turnOrPayoff', 'characterBeats', 'worldHooks', 'allowedPayoffs', 'deferredThreads', 'arcStep'];
 		var NW_QCAT_STOP = new Set(('a an the and or but if in on at to for of as by with from into over after before about against between through during without within along among upon than then so nor not no yes it its it\'s i me my we our you your he she they them his her their this that these those be is am are was were been being do did does doing have has had having will would can could should may might must shall').split(/\s+/));
@@ -9732,6 +9737,67 @@ return c && c.name && c.backstory && c.arc; });
 			var out = [];
 			for (var i = 0; i <= tokens.length - n; i++) out.push(tokens.slice(i, i + n).join(' '));
 			return out;
+		}
+		function nwQcatNormWord(w) {
+			return String(w || '').toLowerCase().replace(/[^\w']/g, '');
+		}
+		function nwQcatAlignedTokens(text) {
+			return nwQcatRawWords(text).map(nwQcatNormWord);
+		}
+		function nwQcatEmptyRepeatedRun() {
+			return { words: 0, firstAt: null, repeatAt: null };
+		}
+		function nwQcatEmptyPrevLongest() {
+			return { words: 0, offsetInChapter: null, offsetInPrev: null };
+		}
+		function nwQcatSentenceWalk(raw, at) {
+			var walk = Math.max(0, Math.min(at == null ? 0 : at, Math.max(0, raw.length - 1)));
+			var floor = Math.max(0, walk - 160);
+			while (walk > floor) {
+				var prev = raw[walk - 1] || '';
+				if (/[.!?]['"]*$/.test(prev) && /^[A-Z]/.test(raw[walk] || '')) break;
+				walk--;
+			}
+			return walk;
+		}
+		function nwQcatLongestSubstring(a, b) {
+			var same = a === b;
+			var n = 5;
+			var gramMap = {};
+			var i;
+			for (i = 0; i <= a.length - n; i++) {
+				var k = a.slice(i, i + n).join(' ');
+				if (gramMap[k] == null) gramMap[k] = i;
+			}
+			var best = { words: 0, aAt: null, bAt: null };
+			var j;
+			for (j = 0; j <= b.length - n; j++) {
+				var k2 = b.slice(j, j + n).join(' ');
+				var first = gramMap[k2];
+				if (first == null) continue;
+				if (same && first >= j - n + 1) continue;
+				var klen = 0;
+				while (first + klen < a.length && j + klen < b.length && a[first + klen] === b[j + klen]) {
+					if (same && first + klen >= j) break;
+					klen++;
+				}
+				if (klen > best.words) best = { words: klen, aAt: first, bAt: j };
+			}
+			return best;
+		}
+		function nwQcatTitleBare(tok) {
+			return String(tok || '').replace(/[.]/g, '').toLowerCase();
+		}
+		function nwQcatIsTitleToken(tok) {
+			return NW_QCAT_NAME_TITLES.indexOf(nwQcatTitleBare(tok)) >= 0;
+		}
+		function nwQcatStripTitles(name) {
+			var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+			while (parts.length && nwQcatIsTitleToken(parts[0])) parts.shift();
+			return parts.join(' ');
+		}
+		function nwQcatNameKey(name) {
+			return nwQcatStripTitles(name).toLowerCase().replace(/[^a-z0-9\s'-]/g, ' ').replace(/\s+/g, ' ').trim();
 		}
 		function nwChapterText(chapterNum) {
 			var i = chapterNum - 1;
@@ -9796,19 +9862,31 @@ return c && c.name && c.backstory && c.arc; });
 		function nwExtractCapNames(text) {
 			var names = [];
 			var seen = {};
-			var re = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
+			function push(n) {
+				n = String(n || '').replace(/\s+/g, ' ').trim();
+				if (!n || seen[n]) return;
+				seen[n] = 1;
+				names.push(n);
+			}
+			var raw = String(text || '');
+			var title = '(?:Dr|Doctor|Captain|Capt|Mr|Mrs|Ms|Prof|Professor|Commander|Lt|Sgt|Admiral|General|Colonel|Major)\\.?';
+			var word = '[A-Z][a-z]+';
+			var titledRe = new RegExp('\\b((?:' + title + '\\s+)+' + word + '(?:\\s+' + word + ')*)\\b', 'g');
 			var m;
+			while ((m = titledRe.exec(raw))) push(m[1]);
+			var re = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
 			var skip = { The: 1, A: 1, An: 1, I: 1, We: 1, You: 1, He: 1, She: 1, They: 1, It: 1, In: 1, On: 1, At: 1, To: 1, For: 1, Of: 1, And: 1, But: 1, If: 1, When: 1, Then: 1, After: 1, Before: 1, Chapter: 1 };
-			while ((m = re.exec(String(text || '')))) {
+			while ((m = re.exec(raw))) {
 				if (skip[m[1]]) continue;
-				var k = m[1];
-				if (!seen[k]) { seen[k] = 1; names.push(k); }
+				if (NW_QCAT_FILTER_TITLE_FRAGMENTS && nwQcatIsTitleToken(m[1])) continue;
+				push(m[1]);
 			}
 			return names;
 		}
 		function nwCountName(text, name) {
 			if (!name) return 0;
-			var parts = String(name).trim().split(/\s+/).filter(Boolean);
+			var stripped = nwQcatStripTitles(name) || String(name);
+			var parts = String(stripped).trim().split(/\s+/).filter(Boolean);
 			if (!parts.length) return 0;
 			var last = parts[parts.length - 1].replace(/[^A-Za-z'-]/g, '');
 			if (last.length < 2) return 0;
@@ -9925,18 +10003,42 @@ return c && c.name && c.backstory && c.arc; });
 		}
 		function nwScoreCast(text, bp) {
 			var required = [];
-			var seen = {};
+			var byKey = {};
+			var dialogueNames = nwExtractCapNames((bp && bp.dialogueTurn) || '');
+			var dialogueKeys = {};
 			function add(n) {
 				var s = String(n || '').trim();
-				if (!s || seen[s]) return;
-				seen[s] = 1;
+				if (!s) return;
+				var untitled = nwQcatStripTitles(s);
+				if (!untitled) {
+					if (!NW_QCAT_FILTER_TITLE_FRAGMENTS) {
+						if (required.indexOf(s) < 0) required.push(s);
+					}
+					return;
+				}
+				var key = nwQcatNameKey(s);
+				if (!key) return;
+				if (byKey[key]) {
+					var cur = byKey[key];
+					var prefer = (s.length > cur.length) || (untitled !== s && nwQcatStripTitles(cur) === cur);
+					if (prefer) {
+						required[required.indexOf(cur)] = s;
+						byKey[key] = s;
+					}
+					return;
+				}
+				byKey[key] = s;
 				required.push(s);
 			}
 			(Array.isArray(bp && bp.characterBeats) ? bp.characterBeats : []).forEach(function (b) {
 				if (b && b.name) add(b.name);
 			});
-			var dialogueNames = nwExtractCapNames((bp && bp.dialogueTurn) || '');
-			dialogueNames.forEach(add);
+			dialogueNames.forEach(function (n) {
+				add(n);
+				var key = nwQcatNameKey(n);
+				if (key) dialogueKeys[key] = 1;
+				else if (!NW_QCAT_FILTER_TITLE_FRAGMENTS && n) dialogueKeys[n] = 1;
+			});
 			var counts = {};
 			var missing = [];
 			var missingDialogue = [];
@@ -9944,7 +10046,8 @@ return c && c.name && c.backstory && c.arc; });
 				var c = nwCountName(text, n);
 				counts[n] = c;
 				if (c < 2) missing.push(n);
-				if (c < 1 && dialogueNames.indexOf(n) >= 0) missingDialogue.push(n);
+				var key = nwQcatNameKey(n) || n;
+				if (c < 1 && dialogueKeys[key]) missingDialogue.push(n);
 			});
 			var status = 'PASS';
 			if (missingDialogue.length) status = 'FAIL';
@@ -9968,78 +10071,123 @@ return c && c.name && c.backstory && c.arc; });
 			});
 			return { status: missingHooks.length ? 'WARN' : 'PASS', hooks: hooks, missingHooks: missingHooks };
 		}
+		function nwQcatFindRestartSpan(tokens, raw) {
+			var nTok = tokens.length;
+			var empty = { restartAt: null, restartSpanWords: null };
+			if (nTok < 50) return empty;
+			var mid = Math.floor(nTok / 2);
+			var grams = nwQcatShingles(tokens, 5);
+			var firstSet = {};
+			var gi;
+			for (gi = 0; gi < mid && gi < grams.length; gi++) {
+				if (firstSet[grams[gi]] == null) firstSet[grams[gi]] = gi;
+			}
+			var lv = nwQcatLongestSubstring(tokens, tokens);
+			var verbatimRestart = lv.words >= NW_QCAT_RESTART_MIN_WORDS && lv.aAt != null && lv.aAt < mid && lv.bAt != null && lv.bAt >= lv.aAt + lv.words;
+			var win = NW_QCAT_RESTART_MIN_WORDS;
+			var bestLen = 0;
+			var bestStart = null;
+			var runStart = null;
+			var i;
+			for (i = mid; i <= nTok - win; i++) {
+				var hit = 0, tot = 0, k;
+				for (k = i; k <= i + win - 5; k++) {
+					if (k >= grams.length) break;
+					tot++;
+					if (firstSet[grams[k]] != null) hit++;
+				}
+				var ratio = tot ? hit / tot : 0;
+				if (ratio >= NW_QCAT_RESTART_DENSITY) {
+					if (runStart == null) runStart = i;
+				} else if (runStart != null) {
+					var len = (i - 1) - runStart + win;
+					if (len > bestLen) { bestLen = len; bestStart = runStart; }
+					runStart = null;
+				}
+			}
+			if (runStart != null) {
+				var len2 = (nTok - win) - runStart + win;
+				if (len2 > bestLen) { bestLen = len2; bestStart = runStart; }
+			}
+			var earlyLimit = mid + 0.45 * (nTok - mid);
+			var densityRestart = bestLen >= NW_QCAT_RESTART_MIN_WORDS && bestStart != null && bestStart <= earlyLimit;
+			if (!verbatimRestart && !densityRestart) return empty;
+			var restartAt;
+			var spanWords;
+			if (verbatimRestart) {
+				restartAt = lv.bAt;
+				spanWords = lv.words;
+			} else {
+				spanWords = bestLen;
+				var firstHit = null;
+				for (i = mid; i < grams.length; i++) {
+					if (firstSet[grams[i]] != null) { firstHit = i; break; }
+				}
+				if (firstHit != null && firstHit <= bestStart && (bestStart - firstHit) <= 400) restartAt = firstHit;
+				else restartAt = bestStart;
+			}
+			if (raw && raw.length) restartAt = nwQcatSentenceWalk(raw, restartAt);
+			return { restartAt: restartAt, restartSpanWords: spanWords };
+		}
 		function nwScoreReplayInternal(text) {
-			var tokens = nwQcatTokens(text);
 			var raw = nwQcatRawWords(text);
-			var empty = { status: 'PASS', internal: { shared: 0, restartAt: null }, prevChapter: { shared: 0, openingCopyWords: 0 } };
-			if (!NW_QCAT_ENABLE_REPLAY) return { status: 'PASS', internal: { shared: 0, restartAt: null } };
-			if (tokens.length < 10) return { status: 'PASS', internal: { shared: 0, restartAt: null } };
+			var tokens = raw.map(nwQcatNormWord);
+			var longest = nwQcatEmptyRepeatedRun();
+			if (tokens.length >= 10) {
+				var lv = nwQcatLongestSubstring(tokens, tokens);
+				if (lv.words) longest = { words: lv.words, firstAt: lv.aAt, repeatAt: lv.bAt };
+			}
+			if (!NW_QCAT_ENABLE_REPLAY) {
+				return { status: 'PASS', internal: { shared: 0, restartAt: null, restartSpanWords: null, longestRepeatedRun: longest } };
+			}
+			if (tokens.length < 10) {
+				return { status: 'PASS', internal: { shared: 0, restartAt: null, restartSpanWords: null, longestRepeatedRun: longest } };
+			}
 			var mid = Math.floor(tokens.length / 2);
-			var first = new Set(nwQcatShingles(tokens.slice(0, mid), 5));
+			var first = {};
+			var firstSh = nwQcatShingles(tokens.slice(0, mid), 5);
+			firstSh.forEach(function (s) { first[s] = 1; });
 			var second = nwQcatShingles(tokens.slice(mid), 5);
 			var sharedSet = {};
 			var shared = 0;
 			second.forEach(function (s) {
-				if (first.has(s) && !sharedSet[s]) { sharedSet[s] = 1; shared += 1; }
+				if (first[s] && !sharedSet[s]) { sharedSet[s] = 1; shared += 1; }
 			});
-			var restartAt = null;
-			var rawMid = Math.floor(raw.length / 2);
-			var rawNorm = raw.map(function (w) { return String(w).toLowerCase().replace(/[^\w']/g, ''); });
-			var gramMap = {};
-			var gi;
-			for (gi = 0; gi <= rawNorm.length - 10; gi++) {
-				var gk = rawNorm.slice(gi, gi + 10).join(' ');
-				if (gramMap[gk] == null) gramMap[gk] = gi;
-			}
-			var bestRun = 0;
-			var bestAt = null;
-			for (gi = rawMid; gi <= rawNorm.length - 10; gi++) {
-				var g2 = rawNorm.slice(gi, gi + 10).join(' ');
-				var firstAt = gramMap[g2];
-				if (firstAt == null || firstAt >= gi - 9) continue;
-				var k = 0;
-				while (firstAt + k < gi && gi + k < rawNorm.length && rawNorm[firstAt + k] === rawNorm[gi + k]) k++;
-				if (k > bestRun) { bestRun = k; bestAt = gi; }
-				if (bestRun >= 40) break;
-			}
-			if (bestRun >= 40) restartAt = bestAt;
-			if (restartAt == null) {
-				var firstHit = -1;
-				for (i = 0; i < second.length; i++) {
-					if (sharedSet[second[i]]) { firstHit = mid + i; break; }
+			var restart = nwQcatFindRestartSpan(tokens, raw);
+			var status = 'PASS';
+			if (restart.restartAt != null) status = 'FAIL';
+			else if (shared >= 25) status = 'WARN';
+			if (!NW_QCAT_REPLAY_REQUIRE_RESTART && shared >= 25) status = 'FAIL';
+			return {
+				status: status,
+				internal: {
+					shared: shared,
+					restartAt: restart.restartAt,
+					restartSpanWords: restart.restartSpanWords,
+					longestRepeatedRun: longest
 				}
-				if (firstHit >= 0) {
-					var rw = firstHit;
-					if (rw > raw.length - 1) rw = Math.min(firstHit, raw.length - 1);
-					var walk = Math.min(rw, raw.length - 1);
-					var floor = Math.max(rawMid, walk - 120);
-					while (walk > floor) {
-						var prev = raw[walk - 1] || '';
-						if (/[.!?]['"]*$/.test(prev) && /^[A-Z]/.test(raw[walk] || '')) break;
-						walk--;
-					}
-					restartAt = walk;
-				}
-			}
-			var status = shared >= 25 ? 'FAIL' : 'PASS';
-			return { status: status, internal: { shared: shared, restartAt: restartAt } };
+			};
 		}
 		function nwScoreReplayPrev(text, prevText) {
+			var emptyRun = nwQcatEmptyPrevLongest();
 			if (!NW_QCAT_ENABLE_REPLAY || !prevText || !String(prevText).trim()) {
-				return { shared: 0, openingCopyWords: 0, status: 'PASS' };
+				return { shared: 0, openingCopyWords: 0, longestRun: emptyRun, status: 'PASS' };
 			}
-			var a = nwQcatTokens(prevText);
-			var b = nwQcatTokens(text);
-			var ua = new Set(nwQcatShingles(a, 5));
+			var a = nwQcatAlignedTokens(prevText);
+			var b = nwQcatAlignedTokens(text);
+			var ua = {};
+			nwQcatShingles(a, 5).forEach(function (s) { ua[s] = 1; });
 			var shared = 0;
 			var seen = {};
 			nwQcatShingles(b, 5).forEach(function (s) {
-				if (ua.has(s) && !seen[s]) { seen[s] = 1; shared += 1; }
+				if (ua[s] && !seen[s]) { seen[s] = 1; shared += 1; }
 			});
 			var opening = 0;
 			while (opening < a.length && opening < b.length && a[opening] === b[opening]) opening++;
+			var lv = nwQcatLongestSubstring(a, b);
+			var longestRun = lv.words ? { words: lv.words, offsetInChapter: lv.bAt, offsetInPrev: lv.aAt } : emptyRun;
 			var status = (shared >= 25 || opening >= 12) ? 'FAIL' : 'PASS';
-			return { shared: shared, openingCopyWords: opening, status: status };
+			return { shared: shared, openingCopyWords: opening, longestRun: longestRun, status: status };
 		}
 		function nwScoreRepetition(text) {
 			var tokens = nwQcatTokens(text);
@@ -10317,8 +10465,12 @@ return c && c.name && c.backstory && c.arc; });
 			var replayPrev = nwScoreReplayPrev(t, prevText);
 			var replay = {
 				status: nwQcatWorst([replayInt.status, replayPrev.status]),
-				internal: replayInt.internal || { shared: 0, restartAt: null },
-				prevChapter: { shared: replayPrev.shared, openingCopyWords: replayPrev.openingCopyWords }
+				internal: replayInt.internal || { shared: 0, restartAt: null, restartSpanWords: null, longestRepeatedRun: nwQcatEmptyRepeatedRun() },
+				prevChapter: {
+					shared: replayPrev.shared,
+					openingCopyWords: replayPrev.openingCopyWords,
+					longestRun: replayPrev.longestRun || nwQcatEmptyPrevLongest()
+				}
 			};
 			var repetition = nwScoreRepetition(t);
 			var voice = nwScoreVoice(t);
@@ -10533,8 +10685,14 @@ return c && c.name && c.backstory && c.arc; });
 			}
 			if (r.cast && r.cast.missing && r.cast.missing.length) bits.push('missing names: ' + r.cast.missing.join(', '));
 			if (r.setting && r.setting.missingHooks && r.setting.missingHooks.length) bits.push('missing hooks: ' + r.setting.missingHooks.join(', '));
-			if (r.replay && r.replay.internal) bits.push('replay internal shared=' + r.replay.internal.shared + ' restartAt=' + r.replay.internal.restartAt);
-			if (r.replay && r.replay.prevChapter) bits.push('replay vs prev shared=' + r.replay.prevChapter.shared + ' openingCopy=' + r.replay.prevChapter.openingCopyWords);
+			if (r.replay && r.replay.internal) {
+				var lr = r.replay.internal.longestRepeatedRun || {};
+				bits.push('replay internal shared=' + r.replay.internal.shared + ' restartAt=' + r.replay.internal.restartAt + ' span=' + r.replay.internal.restartSpanWords + ' longestRepeatedRun=' + (lr.words || 0) + '@' + lr.firstAt + '/' + lr.repeatAt);
+			}
+			if (r.replay && r.replay.prevChapter) {
+				var pr = r.replay.prevChapter.longestRun || {};
+				bits.push('replay vs prev shared=' + r.replay.prevChapter.shared + ' openingCopy=' + r.replay.prevChapter.openingCopyWords + ' longestRun=' + (pr.words || 0) + '@ch' + pr.offsetInChapter + '/prev' + pr.offsetInPrev);
+			}
 			if (r.repetition && r.repetition.top) r.repetition.top.slice(0, 5).forEach(function (t) { bits.push('repeat: "' + t.phrase + '" x' + t.n); });
 			if (r.voice && r.voice.dupLines) r.voice.dupLines.forEach(function (d) { bits.push('dup line: "' + d.line + '" speakers=' + (d.speakers || []).join('/')); });
 			if (r.noteLeak && r.noteLeak.hits) r.noteLeak.hits.forEach(function (h) { bits.push('leak: ' + h.term + ' — ' + h.quote); });
