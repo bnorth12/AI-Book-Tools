@@ -169,6 +169,9 @@ async function loadEnvelope(page, envelope) {
     novelData.chapterFactChecks = [[{ id: 'c1', label: 'Elena', kind: 'include', match: 'phrase', pattern: 'Elena' }]];
     novelData.aiBeatCheck = true;
     document.getElementById('aiBeatCheck').checked = true;
+    const factsBody = document.getElementById('planFactsBody1');
+    if (factsBody) factsBody.textContent = '';
+    if (typeof nwAddPlanFactRow === 'function') nwAddPlanFactRow(1, { id: 'c1', label: 'Elena', kind: 'include', match: 'phrase', pattern: 'Elena' });
     const orig = URL.createObjectURL;
     let blob = null;
     URL.createObjectURL = function (b) { blob = b; return orig.call(this, b); };
@@ -257,7 +260,7 @@ async function loadEnvelope(page, envelope) {
   check('1', 'ch2 replay FAIL with restart span', r.c2 && r.c2.replay && r.c2.replay.status === 'FAIL' && c2int && c2int.restartAt != null && c2int.restartSpanWords >= 40, JSON.stringify(r.c2 && r.c2.replay));
   const words = (BOOK3.novelData.chapters[1] || '').trim().split(/\s+/).length;
   const restart = c2int && c2int.restartAt;
-  check('1', 'ch2 restart offset within ±50 of the planted copy', restart != null && Math.abs(restart - 80) <= 80, JSON.stringify({ restart, words, span: c2int && c2int.restartSpanWords }));
+  check('1', 'ch2 restart offset within ±50 of the planted copy', restart != null && Math.abs(restart - 80) <= 50, JSON.stringify({ restart, words, span: c2int && c2int.restartSpanWords }));
   check('1', 'ch2 longestRepeatedRun is 40+ words', c2int && c2int.longestRepeatedRun && c2int.longestRepeatedRun.words >= 40, JSON.stringify(c2int && c2int.longestRepeatedRun));
   check('1', 'ch3 clean is not FAIL overall', r.c3 && r.c3.overall !== 'FAIL', JSON.stringify(r.c3 && { overall: r.c3.overall, length: r.c3.length, beats: r.c3.beats && r.c3.beats.status, cast: r.c3.cast, setting: r.c3.setting, replay: r.c3.replay && r.c3.replay.status, rep: r.c3.repetition && r.c3.repetition.status, voice: r.c3.voice, leak: r.c3.noteLeak, facts: r.c3.facts }));
   check('1', 'overall ignores planCoverage', (r.planInOverall || []).every((x) => x.recomputed === x.overall), JSON.stringify(r.planInOverall));
@@ -342,13 +345,16 @@ async function loadEnvelope(page, envelope) {
       probeHit: !!(probeHit),
       excludeHit: !!(excl && excl.hit === true),
       quirks: c3.facts.quirks,
-      includeElena: (c1.facts.include || []).some((x) => x.label === 'Elena present' && x.hit)
+      includeElena: (c1.facts.include || []).some((x) => x.label === 'Elena present' && x.hit),
+      bookExclude: (c1.facts.exclude || []).find((x) => x.label === 'three counts') || (c3.facts.exclude || []).find((x) => x.label === 'three counts')
     };
   }, { book: BOOK3, expect: EXPECT });
   check('3', 'probe miss reported', r.probeMiss, JSON.stringify(r));
   check('3', 'probe hit reported', r.probeHit, JSON.stringify(r));
   check('3', 'mustNotInclude hit reported', r.excludeHit, JSON.stringify(r));
   check('3', 'quirk counts reported', r.quirks && typeof r.quirks['gallery rail'] === 'number' && r.quirks['gallery rail'] >= 1, JSON.stringify(r.quirks));
+  check('3', 'chapter mustInclude Elena present hits', r.includeElena === true, JSON.stringify(r));
+  check('3', 'book-level mustNotInclude is evaluated', !!(r.bookExclude) && r.bookExclude.hit === false, JSON.stringify(r.bookExclude));
   await page.close();
 }
 
@@ -505,6 +511,116 @@ async function loadEnvelope(page, envelope) {
     const hasDr = req.concat(miss).some((n) => /^(Dr\.?|Doctor)$/i.test(String(n).trim()));
     check('5', 'M5 remove title-fragment filter: cast fixture fails the self-test', hasDr, JSON.stringify(r));
   }
+  {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qcat-mut-m6-'));
+    const copy = path.join(dir, 'NovelWriter.html');
+    let html = fs.readFileSync(HTML_PATH, 'utf8');
+    const from = 'var NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD = true;';
+    const to = 'var NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD = false;';
+    check('5', 'M6 flag present in source', html.indexOf(from) >= 0, 'NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD not found');
+    html = html.replace(from, to);
+    fs.writeFileSync(copy, html);
+    const page = await openPage(copy);
+    const r = await page.evaluate(async (book) => {
+      const n = normalizeImportedSessionData(book);
+      novelData = n.novelData;
+      applySessionDataToUI();
+      nwAddPlanFactRow(1, { label: 'survive-rebuild', kind: 'include', match: 'phrase', pattern: 'xyzzy-survive' });
+      showTab(6);
+      const stored = ((novelData.chapterFactChecks || [])[0] || []).some((e) => e && e.label === 'survive-rebuild');
+      return { stored: stored, facts: JSON.parse(JSON.stringify((novelData.chapterFactChecks || [])[0] || [])) };
+    }, BOOK3);
+    await page.close();
+    check('5', 'M6 skip persist-before-rebuild: Tab 6 rebuild drops Plan-fact edits (fails self-test)', r.stored === false, JSON.stringify(r));
+  }
+  {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qcat-mut-m7-'));
+    const copy = path.join(dir, 'NovelWriter.html');
+    let html = fs.readFileSync(HTML_PATH, 'utf8');
+    const from = 'var NW_QCAT_INVALID_REGEX_FAILS_FACTS = true;';
+    const to = 'var NW_QCAT_INVALID_REGEX_FAILS_FACTS = false;';
+    check('5', 'M7 flag present in source', html.indexOf(from) >= 0, 'NW_QCAT_INVALID_REGEX_FAILS_FACTS not found');
+    html = html.replace(from, to);
+    fs.writeFileSync(copy, html);
+    const page = await openPage(copy);
+    const r = await page.evaluate(async (book) => {
+      const n = normalizeImportedSessionData(book);
+      novelData = n.novelData;
+      novelData.chapterFactChecks = [[{ id: 'bad', label: 'bad re', kind: 'include', match: 'regex', pattern: '[' }]];
+      applySessionDataToUI();
+      const scored = await nwScoreBook({ trigger: 'scoreAll' });
+      const c1 = scored.chapters.find((c) => c.chapter === 1);
+      return c1 && c1.facts;
+    }, BOOK3);
+    await page.close();
+    check('5', 'M7 invalid regex does not fail Facts: self-test fails', r && r.status === 'PASS', JSON.stringify(r));
+  }
+  {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qcat-mut-m8-'));
+    const copy = path.join(dir, 'NovelWriter.html');
+    let html = fs.readFileSync(HTML_PATH, 'utf8');
+    const from = 'var NW_QCAT_SCORE_AFTER_COVERAGE = true;';
+    const to = 'var NW_QCAT_SCORE_AFTER_COVERAGE = false;';
+    check('5', 'M8 flag present in source', html.indexOf(from) >= 0, 'NW_QCAT_SCORE_AFTER_COVERAGE not found');
+    html = html.replace(from, to);
+    fs.writeFileSync(copy, html);
+    const page = await openPage(copy);
+    const r = await page.evaluate(async (nd) => {
+      const env = { schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: nd };
+      const imported = normalizeImportedSessionData(env);
+      novelData = imported.novelData;
+      novelData.chapters = Array.from({ length: nd.numChapters }, () => '');
+      novelData.skipAutoRevision = true;
+      novelData.autoContinuityAudit = false;
+      novelData.aiBeatCheck = true;
+      applySessionDataToUI();
+      document.getElementById('skipAutoRevision').checked = true;
+      document.getElementById('autoContinuityAudit').checked = false;
+      document.getElementById('aiBeatCheck').checked = true;
+      document.getElementById('apiKey').value = 'smoke-placeholder-not-a-key';
+      novelData.chapterScorecards[0] = { overall: 'PASS', trigger: 'sentinel-prev', chapter: 1 };
+      window.scoreObligationCoverage = function () {
+        return { covered: 0, total: 6, ratio: 0, words: 40, passed: false, failures: ['smoke: coverage reject'], misses: ['smoke-obligation'] };
+      };
+      window.__h.calls.length = 0;
+      let err = null;
+      try { await generateChapter(1); } catch (e) { err = String(e && e.message || e); }
+      const card = (novelData.chapterScorecards || [])[0];
+      return {
+        err: err,
+        trigger: card && card.trigger,
+        beat: window.__h.calls.filter((c) => c.operationName === 'beatCheck').length
+      };
+    }, ND);
+    await page.close();
+    const overwrote = r && r.trigger && r.trigger !== 'sentinel-prev';
+    check('5', 'M8 score before coverage: rejected draft stores a scorecard (fails self-test)', overwrote === true, JSON.stringify(r));
+  }
+  {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qcat-mut-m9-'));
+    const copy = path.join(dir, 'NovelWriter.html');
+    let html = fs.readFileSync(HTML_PATH, 'utf8');
+    const from = 'var NW_QCAT_CLEAR_EMPTY_PLAN_FACTS = true;';
+    const to = 'var NW_QCAT_CLEAR_EMPTY_PLAN_FACTS = false;';
+    check('5', 'M9 flag present in source', html.indexOf(from) >= 0, 'NW_QCAT_CLEAR_EMPTY_PLAN_FACTS not found');
+    html = html.replace(from, to);
+    fs.writeFileSync(copy, html);
+    const page = await openPage(copy);
+    const r = await page.evaluate(async (book) => {
+      const n = normalizeImportedSessionData(book);
+      novelData = n.novelData;
+      applySessionDataToUI();
+      nwAddPlanFactRow(1, { label: 'keep-me', kind: 'include', match: 'phrase', pattern: 'keep-me' });
+      nwCollectPlanFactsFromUi();
+      const tbody = document.getElementById('planFactsBody1');
+      if (tbody) Array.from(tbody.querySelectorAll('tr')).forEach((tr) => tr.parentNode.removeChild(tr));
+      nwCollectPlanFactsFromUi();
+      return JSON.parse(JSON.stringify((novelData.chapterFactChecks || [])[0] || []));
+    }, BOOK3);
+    await page.close();
+    const stillThere = Array.isArray(r) && r.some((e) => e && e.label === 'keep-me');
+    check('5', 'M9 skip clearing empty Plan facts: deleted rows remain stored (fails self-test)', stillThere === true, JSON.stringify(r));
+  }
   const after = sha256(HTML_PATH);
   check('5', 'SHA-256 after mutations matches before (source restored / never edited)', after === before, before + ' vs ' + after);
 }
@@ -520,7 +636,9 @@ async function loadEnvelope(page, envelope) {
     const enriched = st({ numChapters: 3, chapterBlueprints: [{ sceneGoal: 'g', dialogueTurn: 'd', turnOrPayoff: 't' }], chapters: [] });
     const drafted = st({ numChapters: 3, chapters: ['draft text', '', ''], chapterBlueprints: [{ sceneGoal: 'g', dialogueTurn: 'd', turnOrPayoff: 't' }] });
     const complete = st({ numChapters: 2, chapters: ['a', 'b'], chapterScorecards: [{ overall: 'PASS' }, { overall: 'WARN' }], chapterBlueprints: [{ sceneGoal: 'g', dialogueTurn: 'd', turnOrPayoff: 't' }] });
-    return { plan, outlines, bps, enriched, drafted, complete };
+    const holes = st({ numChapters: 3, chapters: ['a', '', 'c'], chapterScorecards: [{ overall: 'PASS' }, null, { overall: 'WARN' }], chapterBlueprints: [{ sceneGoal: 'g', dialogueTurn: 'd', turnOrPayoff: 't' }] });
+    const lastOnly = st({ numChapters: 3, chapters: ['', '', 'c'], chapterScorecards: [null, null, { overall: 'PASS' }], chapterBlueprints: [{ sceneGoal: 'g', dialogueTurn: 'd', turnOrPayoff: 't' }] });
+    return { plan, outlines, bps, enriched, drafted, complete, holes, lastOnly };
   });
   check('stage', 'plan-only is 01-plan', r.plan === '01-plan', JSON.stringify(r));
   check('stage', 'outlines is 02-outlines', r.outlines === '02-outlines', JSON.stringify(r));
@@ -528,10 +646,203 @@ async function loadEnvelope(page, envelope) {
   check('stage', 'enriched is 04-enriched', r.enriched === '04-enriched', JSON.stringify(r));
   check('stage', 'ch1-drafted is 05-ch01-drafted', r.drafted === '05-ch01-drafted', JSON.stringify(r));
   check('stage', 'complete is 07-book-complete', r.complete === '07-book-complete', JSON.stringify(r));
+  check('stage', 'blank earlier chapters are not 07-book-complete', r.holes !== '07-book-complete' && r.lastOnly !== '07-book-complete', JSON.stringify(r));
+  await page.close();
+}
+
+// ---------------- 1d. Resize scorecards/facts with numChapters ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (book) => {
+    const n = normalizeImportedSessionData(book);
+    novelData = n.novelData;
+    novelData.chapterScorecards = [{ overall: 'PASS', chapter: 1 }, { overall: 'WARN', chapter: 2 }, { overall: 'FAIL', chapter: 3 }];
+    novelData.chapterFactChecks = [[{ label: 'a' }], [{ label: 'b' }], [{ label: 'c' }]];
+    applySessionDataToUI();
+    document.getElementById('numChapters').value = '2';
+    await updateChapterSubpages();
+    return {
+      n: novelData.numChapters,
+      cards: (novelData.chapterScorecards || []).length,
+      facts: (novelData.chapterFactChecks || []).length,
+      droppedCard: (novelData.chapterScorecards || [])[2],
+      droppedFact: (novelData.chapterFactChecks || [])[2]
+    };
+  }, BOOK3);
+  check('1d', 'reducing numChapters resizes chapterScorecards and chapterFactChecks', r.n === 2 && r.cards === 2 && r.facts === 2 && r.droppedCard == null && r.droppedFact == null, JSON.stringify(r));
+  await page.close();
+}
+
+// ---------------- 2. Plan-fact edits survive Tab 6 rebuild ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (book) => {
+    const n = normalizeImportedSessionData(book);
+    novelData = n.novelData;
+    applySessionDataToUI();
+    nwAddPlanFactRow(1, { label: 'survive-rebuild', kind: 'include', match: 'phrase', pattern: 'xyzzy-survive' });
+    showTab(6);
+    const stored = ((novelData.chapterFactChecks || [])[0] || []).some((e) => e && e.label === 'survive-rebuild' && e.pattern === 'xyzzy-survive');
+    const tbody = document.getElementById('planFactsBody1');
+    const rendered = tbody ? Array.from(tbody.querySelectorAll('.pf-label')).some((el) => el.value === 'survive-rebuild') : false;
+    return { stored: stored, rendered: rendered };
+  }, BOOK3);
+  check('2', 'Plan-fact edits survive a Tab 6 rebuild', r.stored === true && r.rendered === true, JSON.stringify(r));
+  await page.close();
+}
+
+// ---------------- 4. AI beat check does not overwrite probe-backed items ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async ({ book, expect }) => {
+    const n = normalizeImportedSessionData(book);
+    novelData = n.novelData;
+    applySessionDataToUI();
+    nwMergeQcatExpect(expect);
+    novelData.aiBeatCheck = true;
+    const orig = window.callAI;
+    window.callAI = async function (messages, tab, opts) {
+      if (opts && opts.operationName === 'beatCheck') {
+        return { beats: [{ field: 'turnOrPayoff', result: 'present', evidence: 'ai override should not win' }] };
+      }
+      return orig.apply(this, arguments);
+    };
+    const scored = await nwScoreBook({ trigger: 'scoreAll' });
+    window.callAI = orig;
+    const c1 = scored.chapters.find((c) => c.chapter === 1);
+    const probe = (c1.beats.items || []).find((it) => it.via === 'probe' && /planted probe miss/i.test(it.label || ''));
+    return { probe: probe, mode: c1.beats && c1.beats.mode };
+  }, { book: BOOK3, expect: EXPECT });
+  check('4', 'AI beat check preserves probe-backed miss', r.probe && r.probe.via === 'probe' && r.probe.result === 'missing', JSON.stringify(r));
+  await page.close();
+}
+
+// ---------------- 5b. Scoring loops declare i; no global leak ----------------
+{
+  const start = HTML.indexOf('// ---- NW.T8d:');
+  const end = HTML.indexOf('// ---- NW.T5: Chapter Generation');
+  const block = (start >= 0 && end > start) ? HTML.slice(start, end) : HTML;
+  check('5b', 'scoring code has no undeclared for-i', !/\bfor\s*\(\s*i\s*=/.test(block), 'found undeclared for (i =');
+  const page = await openPage();
+  const leaked = await page.evaluate(async (book) => {
+    window.i = 'sentinel-qcat-i';
+    const n = normalizeImportedSessionData(book);
+    novelData = n.novelData;
+    applySessionDataToUI();
+    await nwScoreBook({ trigger: 'scoreAll' });
+    return window.i;
+  }, BOOK3);
+  check('5b', 'scoring leaves no global i', leaked === 'sentinel-qcat-i', String(leaked));
+  await page.close();
+}
+
+// ---------------- 6. Invalid regex makes Facts FAIL ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (book) => {
+    const n = normalizeImportedSessionData(book);
+    novelData = n.novelData;
+    novelData.chapterFactChecks = [[{ id: 'bad', label: 'bad re', kind: 'include', match: 'regex', pattern: '[' }]];
+    applySessionDataToUI();
+    const scored = await nwScoreBook({ trigger: 'scoreAll' });
+    const c1 = scored.chapters.find((c) => c.chapter === 1);
+    return c1 && c1.facts;
+  }, BOOK3);
+  check('6', 'invalid regex makes Facts FAIL', r && r.status === 'FAIL' && (r.include || []).some((x) => x.invalid), JSON.stringify(r));
+  await page.close();
+}
+
+// ---------------- 12. Coverage reject does not store a scorecard ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (nd) => {
+    const env = { schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: nd };
+    const imported = normalizeImportedSessionData(env);
+    novelData = imported.novelData;
+    novelData.chapters = Array.from({ length: nd.numChapters }, () => '');
+    novelData.skipAutoRevision = true;
+    novelData.autoContinuityAudit = false;
+    novelData.aiBeatCheck = true;
+    applySessionDataToUI();
+    document.getElementById('skipAutoRevision').checked = true;
+    document.getElementById('autoContinuityAudit').checked = false;
+    document.getElementById('aiBeatCheck').checked = true;
+    document.getElementById('apiKey').value = 'smoke-placeholder-not-a-key';
+    novelData.chapterScorecards[0] = { overall: 'PASS', trigger: 'sentinel-prev', chapter: 1 };
+    window.scoreObligationCoverage = function () {
+      return { covered: 0, total: 6, ratio: 0, words: 40, passed: false, failures: ['smoke: coverage reject'], misses: ['smoke-obligation'] };
+    };
+    window.__h.calls.length = 0;
+    let err = null;
+    try { await generateChapter(1); } catch (e) { err = String(e && e.message || e); }
+    const card = (novelData.chapterScorecards || [])[0];
+    return {
+      err: err,
+      trigger: card && card.trigger,
+      beat: window.__h.calls.filter((c) => c.operationName === 'beatCheck').length,
+      coverage: /OBLIGATION COVERAGE FAIL-CLOSED/.test(err || '')
+    };
+  }, ND);
+  check('12', 'coverage reject restores previous scorecard and skips beat-check', r.coverage && r.trigger === 'sentinel-prev' && r.beat === 0, JSON.stringify(r));
+  await page.close();
+}
+
+// ---------------- 20. Score all chapters collects UI first ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (book) => {
+    const n = normalizeImportedSessionData(book);
+    novelData = n.novelData;
+    novelData.aiBeatCheck = false;
+    applySessionDataToUI();
+    document.getElementById('aiBeatCheck').checked = true;
+    novelData.aiBeatCheck = false;
+    nwAddPlanFactRow(1, { label: 'score-all-fact', kind: 'include', match: 'phrase', pattern: 'Elena' });
+    await nwScoreAllChapters();
+    const c1 = (novelData.chapterScorecards || [])[0];
+    const factHit = c1 && c1.facts && (c1.facts.include || []).some((x) => x.label === 'score-all-fact' && x.hit);
+    return { ai: novelData.aiBeatCheck, factHit: factHit };
+  }, BOOK3);
+  check('20', 'Score all chapters collectData uses current Plan facts and aiBeatCheck', r.ai === true && r.factHit === true, JSON.stringify(r));
+  await page.close();
+}
+
+// ---------------- 21. Deleting every Plan fact row clears the stored array ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (book) => {
+    const n = normalizeImportedSessionData(book);
+    novelData = n.novelData;
+    applySessionDataToUI();
+    nwAddPlanFactRow(1, { label: 'gone', kind: 'include', match: 'phrase', pattern: 'gone' });
+    nwCollectPlanFactsFromUi();
+    const before = ((novelData.chapterFactChecks || [])[0] || []).length;
+    const tbody = document.getElementById('planFactsBody1');
+    if (tbody) Array.from(tbody.querySelectorAll('tr')).forEach((tr) => tr.parentNode.removeChild(tr));
+    nwCollectPlanFactsFromUi();
+    const after = (novelData.chapterFactChecks || [])[0];
+    return { before: before, after: after };
+  }, BOOK3);
+  check('21', 'deleting every Plan fact row clears the stored array', r.before > 0 && Array.isArray(r.after) && r.after.length === 0, JSON.stringify(r));
   await page.close();
 }
 
 await browser.close();
+
+// ---------------- 14. Harness bad input is exit 2 ----------------
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qcat-bad-'));
+  fs.writeFileSync(path.join(tmp, 'bad-book.json'), '{not json');
+  const badBook = await runQcatHarness({ book: path.join(tmp, 'bad-book.json'), out: tmp, label: 'bad-book', stubAi: true });
+  check('14', 'malformed book JSON is exit 2', badBook.exitCode === 2 && /malformed book JSON/i.test((badBook.log || []).join('\n')), JSON.stringify(badBook.log));
+  const missing = await runQcatHarness({ book: path.join(FIX, 'book-3ch.json'), expect: path.join(tmp, 'no-such-expect.json'), out: tmp, label: 'missing-expect', stubAi: true });
+  check('14', 'missing --expect file is exit 2', missing.exitCode === 2 && /--expect file not found/i.test((missing.log || []).join('\n')), JSON.stringify(missing.log));
+  fs.writeFileSync(path.join(tmp, 'bad-expect.json'), '{nope');
+  const badExpect = await runQcatHarness({ book: path.join(FIX, 'book-3ch.json'), expect: path.join(tmp, 'bad-expect.json'), out: tmp, label: 'bad-expect', stubAi: true });
+  check('14', 'malformed expect JSON is exit 2', badExpect.exitCode === 2 && /malformed expect JSON/i.test((badExpect.log || []).join('\n')), JSON.stringify(badExpect.log));
+}
+
+check('pageerror', 'no uncaught pageerror events', pageErrors.length === 0, pageErrors.join(' | '));
 
 const failed = checks.filter((c) => !c.ok);
 const report = { passed: checks.filter((c) => c.ok).length, failed: failed.length, checks, pageErrors };
