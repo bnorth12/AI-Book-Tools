@@ -459,6 +459,7 @@ Synced: 2026-04-19
 	        <label><input type="checkbox" id="continuityStrictMode" checked> Strict Continuity Mode</label>
 	        <label><input type="checkbox" id="autoContinuityAudit" checked> Auto Continuity Audit After Chapter Generation</label>
 	        <label title="Writes each chapter from your outline and blueprint with no automatic rewrite passes. Use it when you want to revise by hand; quality scores are still shown."><input type="checkbox" id="skipAutoRevision"> Skip automatic revision passes (draft only)</label>
+	        <p id="draftOnlyNote" role="status" hidden>Draft-only mode is on: automatic revision passes are skipped.</p>
 	        <button onclick="rebuildContinuityPackets()">Rebuild Continuity Packets</button>
 	        <button onclick="runContinuityAuditAll()">Run Continuity Audit (All Chapters)</button>
 	        <label for="continuityStatusPanel">Continuity Tracker:</label>
@@ -8798,7 +8799,9 @@ return c && c.name && c.backstory && c.arc; });
 		            chapterImprovements: Array.isArray(normalizedNovelData.chapterImprovements) ? normalizedNovelData.chapterImprovements : [],
 		            continuityStrictMode: typeof normalizedNovelData.continuityStrictMode === 'boolean' ? normalizedNovelData.continuityStrictMode : true,
 		            autoContinuityAudit: typeof normalizedNovelData.autoContinuityAudit === 'boolean' ? normalizedNovelData.autoContinuityAudit : true,
-		            skipAutoRevision: typeof normalizedNovelData.skipAutoRevision === 'boolean' ? normalizedNovelData.skipAutoRevision : false,
+		            skipAutoRevision: typeof normalizedNovelData.skipAutoRevision === 'boolean'
+		                ? normalizedNovelData.skipAutoRevision
+		                : !!document.getElementById('skipAutoRevision')?.checked,
 		            chapterContinuityPackets: Array.isArray(normalizedNovelData.chapterContinuityPackets) ? normalizedNovelData.chapterContinuityPackets : [],
 		            continuityFindings: Array.isArray(normalizedNovelData.continuityFindings) ? normalizedNovelData.continuityFindings : [],
 		            continuityTracker: normalizedNovelData.continuityTracker && typeof normalizedNovelData.continuityTracker === 'object'
@@ -10280,6 +10283,8 @@ return c && c.name && c.backstory && c.arc; });
 
         /** Prefill range "to" and the token cap (estimate x 1.25) unless the user typed a cap. */
         function nwBatchRefreshEstimate() {
+            var draftOnlyNote = nwBatchEl('draftOnlyNote');
+            if (draftOnlyNote) draftOnlyNote.hidden = !nwBatchSkipAutoRevision();
             if (nwBatchState.running) return null;
             var n = nwBatchNumChapters();
             var fromEl = nwBatchEl('batchFrom');
@@ -11177,6 +11182,7 @@ return c && c.name && c.backstory && c.arc; });
 			document.getElementById('continuityStrictMode').checked = true;
 			document.getElementById('autoContinuityAudit').checked = true;
 			document.getElementById('skipAutoRevision').checked = false;
+			document.getElementById('draftOnlyNote').hidden = true;
 			if (typeof renderBlueprintBeatStatus === 'function') renderBlueprintBeatStatus();
 		    document.getElementById('characterList').innerHTML = '<div class="character"><label>Name:</label><input type="text" class="charName"><label>Backstory:</label><textarea class="charBackstory"></textarea><label>Arc:</label><textarea class="charArc"></textarea></div>';
 		    document.getElementById('subplotList').innerHTML = '<div class="subplot-section"><label>Subplot 1:</label><textarea class="subplot" style="height: 300px;"></textarea></div>';
