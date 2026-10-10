@@ -85,7 +85,10 @@ for (const m of JSON.parse(fs.readFileSync(path.join(FIX, 'nw_slop', 'inject_spa
 }
 for (const f of fs.readdirSync(path.join(FIX, 'slop_corpus')).filter(f => f.endsWith('.txt'))) parity['slop_corpus ' + f] = fs.readFileSync(path.join(FIX, 'slop_corpus', f), 'utf8');
 // every file under scripts/fixtures (all 16): raw file text, plus each chapter of any JSON with a chapters[] array
-const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => {
+  if (e.isDirectory() && e.name === 'qcat') return [];
+  return e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)];
+});
 const fixtureFiles = walk(FIX).map(f => path.relative(FIX, f).split(path.sep).join('/')).sort();
 for (const rel of fixtureFiles) {
   const raw = fs.readFileSync(path.join(FIX, rel), 'utf8');

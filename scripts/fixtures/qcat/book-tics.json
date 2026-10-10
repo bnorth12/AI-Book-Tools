@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "sourceTool": "NovelWriter",
+  "sourceVersion": "0.3.4-8d",
+  "novelData": {
+    "title": "QCAT Fixture Tics",
+    "genre": "scifi",
+    "numChapters": 1,
+    "chapterLength": 1000,
+    "storyArc": "Voice-tic fixture.",
+    "generalPlot": "Planted did-not rate and a duplicated spoken line.",
+    "setting": "Lunar hub.",
+    "characters": [
+      { "name": "Bastian Kane", "backstory": "Tech.", "arc": "Refuses the shift." },
+      { "name": "Jonas Reyes", "backstory": "Pilot.", "arc": "Refuses the shift." }
+    ],
+    "subplots": ["Shared refusal line."],
+    "novelOutline": "One chapter with a known did-not rate and a duplicated dialogue line.",
+    "plotOutline": "Bastian Kane and Jonas Reyes speak the same refusal.",
+    "storyArcOutline": "Fixture-only.",
+    "chapterOutlines": [
+      "Bastian Kane and Jonas Reyes refuse the same shift in the same words. The rest of the chapter is filler so the did-not rate is exactly 7.0 per thousand words."
+    ],
+    "chapterArcs": ["Shared refusal."],
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "voice tic",
+        "arcStep": "Two speakers share one refusal line.",
+        "sceneGoal": "Bastian Kane and Jonas Reyes must refuse the shift on the record.",
+        "castArcBeat": "Bastian Kane and Jonas Reyes both refuse.",
+        "subplotPressure": "The shared refusal line is the planted tic.",
+        "dialogueTurn": "Bastian Kane tells Jonas Reyes he is not blessing this shift.",
+        "sensoryWorldHook": "Lunar hub rail and a cold glove.",
+        "turnOrPayoff": "The duplicated line is the turn.",
+        "characterBeats": [
+          { "name": "Bastian Kane", "beat": "Refuses the shift." },
+          { "name": "Jonas Reyes", "beat": "Refuses the shift." }
+        ],
+        "worldHooks": ["lunar hub"]
+      }
+    ],
+    "chapters": [
+      "Bastian Kane stood on the lunar hub rail. \"I am not blessing this shift,\" Bastian Kane said. Jonas Reyes turned his glove on the same rail. \"I am not blessing this shift,\" Jonas Reyes asked. The pumps ticked. The deck held. The watch stayed open. The rail stayed cold. The bus stayed seated. The log stayed red. The habitat stayed dark. The vector stayed marked. The crew stayed quiet. The hour stayed long. The nut stayed shy. The grate stayed brown. The plant stayed still. The count stayed even. The lock stayed barred. The core stayed closed. The pump stayed true. The valve stayed seated. The string stayed inside spec. The corridor stayed inbound. The receiver stayed waiting. The flicker stayed single. The pulse stayed named. The story stayed a fixture. The page stayed synthetic. The rest stayed filler. She did not average them. He did not ease the wheel. They did not open the archive. Bastian Kane did not sign the log. Jonas Reyes did not leave the rail. The watch did not close early. The habitat did not take the vote. The lunar hub hummed and the lunar hub hummed and the lunar hub hummed while Bastian Kane and Jonas Reyes kept the rail. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Filler prose keeps the word count near one thousand so the did-not rate is known. Extra tokens pad the chapter: bolt plank ozone dock clock relay cable tray hydroponic bay failing lights ceramic post rain quay lamp desk room door."
+    ],
+    "editedChapters": [],
+    "chapterImprovements": [""],
+    "skipAutoRevision": false,
+    "aiBeatCheck": false
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0",
+  "sourceTool": "NovelWriter",
+  "sourceVersion": "0.3.4-8d",
+  "novelData": {
+    "title": "QCAT Fixture Three",
+    "genre": "scifi",
+    "numChapters": 3,
+    "chapterLength": 80,
+    "storyArc": "A synthetic three-chapter fixture for the QCAT harness self-test.",
+    "generalPlot": "Short, replay, and clean chapters with planted metrics.",
+    "setting": "A lunar hub and gallery rail.",
+    "characters": [
+      { "name": "Elena Voss", "backstory": "Lead observer on the lunar hub.", "arc": "Learns to share the watch." },
+      { "name": "Bastian Kane", "backstory": "Cryogenic tech.", "arc": "Names the cost aloud." }
+    ],
+    "subplots": ["The ice haul vector must stay red until the habitat vote."],
+    "novelOutline": "Three synthetic chapters only. No book text from production sessions belongs here.",
+    "plotOutline": "Ch1 is short. Ch2 replays its first half. Ch3 is clean.",
+    "storyArcOutline": "Fixture-only arc.",
+    "chapterOutlines": [
+      "Elena Voss stands at the lunar hub and counts bolts. Bastian Kane logs the bus. The scene is a stub so length fails.",
+      "Elena Voss walks the gallery rail. Bastian Kane names the ice haul vector. The second half copies the first half on purpose.",
+      "Elena Voss and Bastian Kane finish the watch on the lunar hub without repeating a forty-word span or stacking did-not tics."
+    ],
+    "chapterArcs": ["Short stub.", "Replay seam.", "Clean close."],
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "opening stub",
+        "arcStep": "Fixture opens on a short lunar-hub watch that will fail the length metric.",
+        "sceneGoal": "Elena Voss must log the lunar hub bolts before the gallery rail goes quiet.",
+        "castArcBeat": "Elena Voss shifts from solo counting toward asking Bastian Kane to confirm the bus.",
+        "subplotPressure": "The ice haul vector subplot forces a written log before the watch ends.",
+        "dialogueTurn": "Elena Voss asks Bastian Kane whether the cryogenic bus still holds.",
+        "sensoryWorldHook": "Cold lunar hub air and the gallery rail ticking under gloves.",
+        "turnOrPayoff": "The stub ends before any payoff; length is the planted fail.",
+        "characterBeats": [
+          { "name": "Elena Voss", "beat": "Counts bolts alone on the lunar hub." },
+          { "name": "Bastian Kane", "beat": "Logs the cryogenic bus." }
+        ],
+        "worldHooks": ["lunar hub", "gallery rail"]
+      },
+      {
+        "chapter": 2,
+        "role": "replay plant",
+        "arcStep": "The same gallery-rail walk is drafted twice so internal shingles fail.",
+        "sceneGoal": "Elena Voss must walk the gallery rail and hear Bastian Kane name the ice haul vector.",
+        "castArcBeat": "Bastian Kane shifts from silence to naming the ice haul vector out loud.",
+        "subplotPressure": "The ice haul vector subplot repeats because the second half copies the first.",
+        "dialogueTurn": "Bastian Kane tells Elena Voss the ice haul vector stays red.",
+        "sensoryWorldHook": "Gallery rail vibration and lunar hub cold in the gloves.",
+        "turnOrPayoff": "The restart copies the opening walk instead of turning.",
+        "characterBeats": [
+          { "name": "Elena Voss", "beat": "Walks the gallery rail twice." },
+          { "name": "Bastian Kane", "beat": "Names the ice haul vector." }
+        ],
+        "worldHooks": ["lunar hub", "gallery rail"]
+      },
+      {
+        "chapter": 3,
+        "role": "clean close",
+        "arcStep": "A single clean watch with named cast and setting and no replay seam.",
+        "sceneGoal": "Elena Voss and Bastian Kane must close the lunar hub watch without a copied span.",
+        "castArcBeat": "Elena Voss accepts Bastian Kane's count and they leave the gallery rail together.",
+        "subplotPressure": "The ice haul vector subplot is logged once and left red.",
+        "dialogueTurn": "Elena Voss tells Bastian Kane the lunar hub watch is closed.",
+        "sensoryWorldHook": "Warm glove leather on the gallery rail and a single pump tick.",
+        "turnOrPayoff": "They close the watch; no second pass of the same walk.",
+        "characterBeats": [
+          { "name": "Elena Voss", "beat": "Closes the lunar hub watch." },
+          { "name": "Bastian Kane", "beat": "Confirms the ice haul vector stays red." }
+        ],
+        "worldHooks": ["lunar hub", "gallery rail"]
+      }
+    ],
+    "chapters": [
+      "Elena Voss stood at the lunar hub. Bastian Kane logged the bus. Gallery rail stayed quiet.",
+      "Elena Voss walked the gallery rail of the lunar hub while Bastian Kane named the ice haul vector and the cryogenic bus ticked under the deck plates near the observation window. Elena Voss walked the gallery rail of the lunar hub while Bastian Kane named the ice haul vector and the cryogenic bus ticked under the deck plates near the observation window. Unique zipper yarn xenon walnut violet umber timber silver quartz pebble nutmeg maple lemon kiwi jade iron nickel copper bronze. Elena Voss walked the gallery rail of the lunar hub while Bastian Kane named the ice haul vector and the cryogenic bus ticked under the deck plates near the observation window. Elena Voss walked the gallery rail of the lunar hub while Bastian Kane named the ice haul vector and the cryogenic bus ticked under the deck plates near the observation window.",
+      "Elena Voss closed the lunar hub watch with Bastian Kane beside the gallery rail. Elena Voss said the count was enough. Bastian Kane confirmed the ice haul vector stayed red. They left the lunar hub together after one pump tick. A log margin still said did not ease it. The gallery rail stayed a gallery rail and the lunar hub stayed a lunar hub for the last clean page of the fixture. Extra clean padding keeps the voice rate down: pump tick glove leather observation window cryogenic bus habitat vote red remainder cable tray ozone drift wet plank relay click failing lights ceramic post rain quay lamp desk."
+    ],
+    "editedChapters": [],
+    "chapterImprovements": ["", "", ""],
+    "skipAutoRevision": false,
+    "aiBeatCheck": false
+  }
+}
