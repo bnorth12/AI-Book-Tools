@@ -493,6 +493,7 @@ Synced: 2026-04-19
 	        <label><input type="checkbox" id="continuityStrictMode" checked> Strict Continuity Mode</label>
 	        <label><input type="checkbox" id="autoContinuityAudit" checked> Auto Continuity Audit After Chapter Generation</label>
 	        <label title="Writes each chapter from your outline and blueprint with no automatic rewrite passes. Use it when you want to revise by hand; quality scores are still shown."><input type="checkbox" id="skipAutoRevision"> Skip automatic revision passes (draft only)</label>
+	        <p id="draftOnlyNote" role="status" hidden>Draft-only mode is on: automatic revision passes are skipped.</p>
 	        <label title="One extra callAI per scored chapter to judge each blueprint beat as present, partial, or missing. Off by default. Does not rewrite text. Counted in the Generate All estimate and token ledger. Skipped when draft-only is on unless this box is also ticked."><input type="checkbox" id="aiBeatCheck" data-testid="nw-ai-beat-check"> AI beat check (1 extra call per chapter)</label>
 	        <button onclick="rebuildContinuityPackets()">Rebuild Continuity Packets</button>
 	        <button onclick="runContinuityAuditAll()">Run Continuity Audit (All Chapters)</button>
@@ -9421,7 +9422,9 @@ return c && c.name && c.backstory && c.arc; });
 		            chapterImprovements: Array.isArray(normalizedNovelData.chapterImprovements) ? normalizedNovelData.chapterImprovements : [],
 		            continuityStrictMode: typeof normalizedNovelData.continuityStrictMode === 'boolean' ? normalizedNovelData.continuityStrictMode : true,
 		            autoContinuityAudit: typeof normalizedNovelData.autoContinuityAudit === 'boolean' ? normalizedNovelData.autoContinuityAudit : true,
-		            skipAutoRevision: typeof normalizedNovelData.skipAutoRevision === 'boolean' ? normalizedNovelData.skipAutoRevision : false,
+		            skipAutoRevision: typeof normalizedNovelData.skipAutoRevision === 'boolean'
+		                ? normalizedNovelData.skipAutoRevision
+		                : !!document.getElementById('skipAutoRevision')?.checked,
 		            aiBeatCheck: typeof normalizedNovelData.aiBeatCheck === 'boolean' ? normalizedNovelData.aiBeatCheck : false,
 		            chapterScorecards: Array.isArray(normalizedNovelData.chapterScorecards) ? normalizedNovelData.chapterScorecards : [],
 		            chapterFactChecks: Array.isArray(normalizedNovelData.chapterFactChecks) ? normalizedNovelData.chapterFactChecks : [],
@@ -9498,6 +9501,7 @@ return c && c.name && c.backstory && c.arc; });
 			if (strictModeEl) strictModeEl.checked = !!novelData.continuityStrictMode;
 			if (autoAuditEl) autoAuditEl.checked = !!novelData.autoContinuityAudit;
 			if (skipRevEl) skipRevEl.checked = !!novelData.skipAutoRevision;
+			document.getElementById('draftOnlyNote').hidden = !novelData.skipAutoRevision;
 			if (aiBeatEl) aiBeatEl.checked = !!novelData.aiBeatCheck;
 
 		    // CodeQL (DOM text reinterpreted as HTML): session/checkpoint data is never interpolated into innerHTML here.
@@ -12214,6 +12218,8 @@ return c && c.name && c.backstory && c.arc; });
 
         /** Prefill range "to" and the token cap (estimate x 1.25) unless the user typed a cap. */
         function nwBatchRefreshEstimate() {
+            var draftOnlyNote = nwBatchEl('draftOnlyNote');
+            if (draftOnlyNote) draftOnlyNote.hidden = !nwBatchSkipAutoRevision();
             if (nwBatchState.running) return null;
             var n = nwBatchNumChapters();
             var fromEl = nwBatchEl('batchFrom');
@@ -13133,6 +13139,7 @@ return c && c.name && c.backstory && c.arc; });
 			document.getElementById('continuityStrictMode').checked = true;
 			document.getElementById('autoContinuityAudit').checked = true;
 			document.getElementById('skipAutoRevision').checked = false;
+			document.getElementById('draftOnlyNote').hidden = true;
 			var aiBeatReset = document.getElementById('aiBeatCheck');
 			if (aiBeatReset) aiBeatReset.checked = false;
 			if (typeof renderBlueprintBeatStatus === 'function') renderBlueprintBeatStatus();
