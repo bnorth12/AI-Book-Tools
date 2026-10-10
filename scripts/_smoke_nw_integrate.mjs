@@ -15,6 +15,11 @@
  *   I5  ch3 (no breakdown) untouched byte-for-byte; novelOutline gets one [Integration Notes] block
  *   I6  batch lock: nwBatchIsLocked() true -> Integrate returns false and changes nothing
  *
+ * Mutations (TEMP copy, flags flipped false; each must turn a core assertion red):
+ *   M1  wrong prose target (write to #chapterContent{n}) -> I1 red
+ *   M2  missing reject path -> I3 red
+ *   M3  status flip-all -> I4 red
+ *
  * I3 uses an in-page hard timeout (I3_TIMEOUT_MS) plus a Node-side backup so a hang is FAIL, not a
  * stuck process. The ch2 stub rejects without invoking the callback, which hangs the main-branch
  * Promise that only has a resolve path.
@@ -23,6 +28,7 @@
  * Env:   NW_HTML_PATH (default this checkout's NovelWriter/NovelWriter.html), NW_OUT_DIR (default out/nw-smoke)
  */
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { chromium } from 'playwright';
@@ -191,10 +197,14 @@ async function installHarness(page) {
   });
 }
 
-async function openPage() {
+async function openPage(htmlPath) {
   const page = await browser.newPage();
   page.setDefaultTimeout(I3_NODE_TIMEOUT_MS);
-  page.on('pageerror', (e) => pageErrors.push(String(e && e.message || e)));
+  page.on('pageerror', (e) => {
+    const m = String(e && e.message || e);
+    if (/smoke: provider reject ch2/.test(m)) return;
+    pageErrors.push(m);
+  });
   page.on('dialog', (d) => d.dismiss().catch(() => {}));
   await page.route('**/*', async (route) => {
     const url = route.request().url();
@@ -202,10 +212,69 @@ async function openPage() {
     networkSeen.push(url);
     return route.abort('blockedbyclient');
   });
-  await page.goto(pathToFileURL(HTML_PATH).href, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.goto(pathToFileURL(htmlPath || HTML_PATH).href, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForFunction(() => typeof integrateBreakdownSuggestions === 'function' && typeof collectData === 'function' && typeof nwBatchIsLocked === 'function', null, { timeout: 30000 });
   await installHarness(page);
   return page;
+}
+
+const HTML = fs.readFileSync(HTML_PATH, 'utf8');
+const FLAGS = {
+  prose: 'var NW_6B_WRITE_PROSE_TO_GEN = true;',
+  reject: 'var NW_6B_CALLAI_REJECT_PATH = true;',
+  status: 'var NW_6B_STATUS_PER_ITEM = true;'
+};
+function mutateCopy(flagFrom) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-6b-'));
+  const copy = path.join(dir, 'NovelWriter.html');
+  if (HTML.indexOf(flagFrom) < 0) return { ok: false, copy: null, dir, detail: 'flag not found: ' + flagFrom };
+  fs.writeFileSync(copy, HTML.replace(flagFrom, flagFrom.replace('true', 'false')));
+  return { ok: true, copy, dir };
+}
+
+async function runI1I5(htmlPath) {
+  const page = await openPage(htmlPath);
+  let r;
+  try {
+    r = await hardTimeout(page.evaluate(async ({ fix, timeoutMs }) => {
+      const h = window.__h;
+      await h.load(fix);
+      const t0 = Date.now();
+      let timedOut = false;
+      let returned;
+      let threw = null;
+      const work = Promise.resolve().then(() => integrateBreakdownSuggestions())
+        .then((v) => { returned = v; return v; })
+        .catch((e) => { threw = String(e && e.message || e); });
+      const raced = await Promise.race([
+        work.then(() => 'settled'),
+        new Promise((res) => setTimeout(() => res('timeout'), timeoutMs))
+      ]);
+      if (raced === 'timeout') timedOut = true;
+      const ms = Date.now() - t0;
+      if (typeof collectData === 'function') collectData();
+      const after = h.snap();
+      return { after, timedOut, returned, threw, ms, settled: raced === 'settled' };
+    }, { fix: clone(FIX), timeoutMs: I3_TIMEOUT_MS }), I3_NODE_TIMEOUT_MS, 'I3');
+  } catch (e) {
+    r = { hardTimeout: true, error: String(e && e.message || e), timedOut: true, settled: false, returned: undefined, threw: null, ms: I3_NODE_TIMEOUT_MS, after: null };
+  }
+  const after = r.after || { chapters: [], chapterOutlines: [], chapterArcs: [], novelOutline: '', statuses: [], genDom: ['', '', ''], loadingDisplay: 'unknown' };
+  const out0 = String(after.chapterOutlines[0] || '');
+  const arc0 = String(after.chapterArcs[0] || '');
+  const loadingHidden = after.loadingDisplay === 'none' || after.loadingDisplay === '';
+  const ch2Unchanged = after.chapters[1] === CH2 && after.genDom[1] === CH2;
+  const notesCount = (String(after.novelOutline).match(/\[Integration Notes\]/g) || []).length;
+  const novelNotesOk = after.novelOutline.indexOf(NOVEL_OUTLINE) >= 0 && notesCount === 1 && after.novelOutline.indexOf(NOVEL_NOTE_1) >= 0;
+  const verdict = {
+    I1: after.chapters[0] === 'REVISED ch1' && after.genDom[0] === 'REVISED ch1',
+    I2: out0.indexOf(OUT1) >= 0 && arc0 === ARC1 && out0.indexOf('[Integration Notes]') >= 0 && out0.indexOf(NOTE1) >= 0,
+    I3: r.settled === true && r.timedOut === false && !r.hardTimeout && loadingHidden && ch2Unchanged && r.ms <= I3_TIMEOUT_MS,
+    I4: after.statuses[0] === 'Incorporated' && after.statuses[1] === 'To Incorporate',
+    I5: after.chapters[2] === CH3 && after.genDom[2] === CH3 && novelNotesOk
+  };
+  await page.close();
+  return { verdict, after, r };
 }
 
 // ---------------- I1-I5: one integrate with ch1 stub success, ch2 reject ----------------
@@ -326,6 +395,31 @@ async function openPage() {
     JSON.stringify({ locked: r.locked, returned: r.returned, timedOut: r.timedOut, hardTimeout: r.hardTimeout || false, calls: r.calls, statuses: r.afterStatuses, error: r.error || '', threw: r.threw }));
 
   await page.close();
+}
+
+// ---------------- Mutations: TEMP copy, flags flipped false ----------------
+{
+  const m1 = mutateCopy(FLAGS.prose);
+  check('M1', 'flag NW_6B_WRITE_PROSE_TO_GEN present', m1.ok, m1.detail);
+  if (m1.ok) {
+    const r = await runI1I5(m1.copy);
+    check('M1', 'wrong prose target turns I1 red', r.verdict.I1 === false, JSON.stringify({ I1: r.verdict.I1, chapter0: r.after.chapters[0], gen1: r.after.genDom[0] }));
+    try { fs.rmSync(m1.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m2 = mutateCopy(FLAGS.reject);
+  check('M2', 'flag NW_6B_CALLAI_REJECT_PATH present', m2.ok, m2.detail);
+  if (m2.ok) {
+    const r = await runI1I5(m2.copy);
+    check('M2', 'missing reject path turns I3 red', r.verdict.I3 === false, JSON.stringify({ I3: r.verdict.I3, timedOut: r.r.timedOut, settled: r.r.settled, hardTimeout: r.r.hardTimeout, ms: r.r.ms }));
+    try { fs.rmSync(m2.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m3 = mutateCopy(FLAGS.status);
+  check('M3', 'flag NW_6B_STATUS_PER_ITEM present', m3.ok, m3.detail);
+  if (m3.ok) {
+    const r = await runI1I5(m3.copy);
+    check('M3', 'status flip-all turns I4 red', r.verdict.I4 === false, JSON.stringify({ I4: r.verdict.I4, statuses: r.after.statuses }));
+    try { fs.rmSync(m3.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
 }
 
 check('ALL', 'no unexpected page errors', pageErrors.length === 0, pageErrors.slice(0, 5).join(' | '));

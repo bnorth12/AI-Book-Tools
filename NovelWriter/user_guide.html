@@ -447,6 +447,7 @@
             <h3>How to Use</h3>
             <ul>
                 <li><strong>Chapter Subpages</strong>: Select a chapter, then click <button class="example">Generate Chapter</button> to create its first draft.</li>
+                <li><strong>Coverage-failed flag</strong>: If Generate All stops because a chapter failed obligation coverage, that draft is kept (never discarded) and flagged on Tab 5 and Tab 6. Use Accept (keep and rebuild continuity from it), Regenerate, or Skip. An acknowledged skip is saved with the session so Resume does not ask again.</li>
                 <li><strong>Skip automatic revision passes (draft only)</strong>: Writes each chapter from your outline and blueprint with no automatic rewrite passes. Use it when you want to revise by hand; quality scores are still shown. A note in Tab 5 confirms when draft-only is on. Importing an older session without this setting keeps your current checkbox value; an explicit true or false in the session overrides it.</li>
                 <li><strong>AI beat check (1 extra call per chapter)</strong>: Optional. Off by default. When on, scoring makes one extra call per chapter to judge blueprint beats as present, partial, or missing. It does not rewrite text. Draft-only skips this unless both boxes are ticked.</li>
                 <li><strong>Plan facts</strong>: Optional per-chapter must-include / must-not-include / probe rows under each chapter on this tab. Stored on the session, not in the shared blueprint schema.</li>
@@ -466,6 +467,7 @@
             <h3>How to Use</h3>
             <ul>
                 <li><strong>Chapter Subpages</strong>: Select a chapter and edit content manually, or paste notes into "Improvements to Implement."</li>
+                <li><strong>Coverage-failed flag</strong>: A chapter that failed obligation coverage during Generate All stays in the editor with a Coverage failed flag (missing obligations and when it failed). Accept, Regenerate, or Skip on Tab 5; the flag is saved with the session.</li>
                 <li><strong>Chapter scorecards</strong>: After generate, revise, or Apply, Tab 6 shows PASS/WARN/FAIL per metric. Score all chapters (no AI unless AI beat check is on) or copy the Markdown table. Plan coverage is shown but is advisory until writing plans ship. FAILs flag the chapter and warn during Generate All; they do not stop the run. Score all chapters is locked while Generate All is running.</li>
                 <li><strong>Timing</strong>: The Timing panel next to the scorecard shows per-task averages (time and tokens). Stats persist across books. Reset timing stats clears them. Generate All shows a time estimate once a task type has three samples. A slow-step banner offers Keep waiting or Cancel (the hard timeout still applies).</li>
                 <li><button class="example">Update Chapter</button>: Apply improvements through AI assistance.</li>
@@ -501,16 +503,17 @@
                     <h2>Consolidated Breakdown Suggestions</h2>
                 </div>
             </div>
-            <p>View all improvement breakdowns in one place.</p>
+            <p>Review pending breakdowns, then apply chapter content, chapter-outline notes, and novel-outline notes with Integrate Suggestions. Character and subplot breakdowns are listed here for review; they are not applied by that button.</p>
             <h3>How to Use</h3>
             <ul>
                 <li><strong>Textareas</strong>: Displays sorted suggestions for characters, subplots, novel outlines, chapter outlines, and chapter content.</li>
-                <li><button class="example">Consolidate Breakdowns</button>: Refresh the combined view manually.</li>
+                <li><button class="example">Refresh Breakdowns</button>: Refresh the combined view manually.</li>
+                <li><button class="example">Integrate Suggestions</button>: Revises each targeted chapter through the same Tab 5/Tab 6 prose boxes Generate All uses, appends [Integration Notes] to chapter outlines and the novel outline, and marks an improvement Incorporated only when every chapter it touched succeeded. A failed chapter call leaves that item as To Incorporate. Character and subplot breakdowns stay in the list for you to apply elsewhere.</li>
                 <li>Auto-populates after breaking down all improvements in Tab 7 or importing a session that already contains breakdowns.</li>
                 <li><button class="example">Back</button>: Return to Tab 7.</li>
                 <li><button class="example">Next: Request Log</button>: Move to Tab 9.</li>
             </ul>
-            <div class="note">Note: Copy suggestions to Tab 4 or Tab 6 improvement fields to apply them where they belong.</div>
+            <div class="note">Note: Character and subplot suggestions are not written by Integrate Suggestions; copy those to Tab 2 or Tab 3 if you want them applied.</div>
         </div>
 
         <div class="tab-section" id="tab9">
