@@ -157,7 +157,9 @@ const FLAGS = {
   timeout: 'var NW_CALLAI_ENABLE_TIMEOUT = true;',
   abort: 'var NW_CALLAI_ENABLE_ABORT_CLEANUP = true;',
   record: 'var NW_TIMING_ENABLE_RECORD = true;',
-  lock: 'var NW_TIMING_ENABLE_SCOREALL_LOCK = true;'
+  lock: 'var NW_TIMING_ENABLE_SCOREALL_LOCK = true;',
+  perCall: 'var NW_CALLAI_ENABLE_PER_CALL_STATE = true;',
+  awaitLoad: 'var NW_TIMING_ENABLE_AWAIT_LOAD = true;'
 };
 
 function mutateCopy(flagFrom) {
@@ -333,6 +335,128 @@ function mutateCopy(flagFrom) {
   await page.close();
 }
 
+async function concurrentCancelEval(page) {
+  return page.evaluate(async (nd) => {
+    const h = window.__h; h.load(nd); h.useRealCallAI({ delayMs: 700 });
+    document.getElementById('aiCallTimeoutSec').value = '30';
+    const msgs = [{ role: 'system', content: 'sys' }, { role: 'user', content: 'Return JSON only: {"chapter":"ok"}' }];
+    const tab = document.getElementById('tab5');
+    const wrap = (p) => p.then((r) => ({ ok: true, r }), (e) => ({ ok: false, err: String(e && e.message || e) }));
+    const p1 = wrap(callAI(msgs, tab, { operationName: 'opA', taskType: 'draft', chapter: 1 }));
+    const p2 = wrap(callAI(msgs, tab, { operationName: 'opB', taskType: 'draft', chapter: 2 }));
+    for (let i = 0; i < 80 && h.fetchCalls.length < 2; i++) await new Promise((x) => setTimeout(x, 25));
+    const nBefore = (typeof nwActiveCallCount === 'function') ? nwActiveCallCount() : (nwActiveCalls ? nwActiveCalls.size : 0);
+    const hudBefore = document.getElementById('executionDetail').textContent;
+    const aborted = nwCallAIAbort();
+    await new Promise((x) => setTimeout(x, 60));
+    const nMid = (typeof nwActiveCallCount === 'function') ? nwActiveCallCount() : (nwActiveCalls ? nwActiveCalls.size : 0);
+    const hudMid = document.getElementById('executionDetail').textContent;
+    const r1 = await p1;
+    const r2 = await p2;
+    return {
+      fetchN: h.fetchCalls.length, nBefore, nMid, aborted, hudBefore, hudMid,
+      p1ok: !!(r1.ok && r1.r && r1.r.chapter), p1err: r1.ok ? null : r1.err,
+      p2err: r2.ok ? null : r2.err, busy: activeAICallCount
+    };
+  }, ND);
+}
+
+{
+  const page = await openPage();
+  const r = await concurrentCancelEval(page);
+  check('concurrent', '2 concurrent stubbed calls: cancel one, the other completes', r.aborted === true && r.p1ok === true && /^Aborted \(/.test(r.p2err || '') && r.busy === 0, JSON.stringify(r));
+  check('concurrent', 'HUD shows remaining active calls after cancelling one of two', r.nBefore === 2 && r.nMid === 1 && /2 active calls/.test(r.hudBefore || '') && /Waiting on LLM response/.test(r.hudMid || ''), JSON.stringify(r));
+  await page.close();
+}
+
+async function timingAwaitLoadEval(page) {
+  return page.evaluate(async () => {
+    await nwTimingLoadStats();
+    const recBase = {
+      taskType: 'draft', model: 'await-load-smoke', bucket: 2000, bucketKind: 'words',
+      skillId: 'tab5.generateChapter', skillVersion: '1', promptHash: 'aabbccdd',
+      promptTokens: 10, completionTokens: 10, totalTokens: 20
+    };
+    const key = nwTimingStatKey(recBase);
+    const seed = Object.assign(nwTimingEmptyStat(recBase), { count: 7, min: 11, max: 11, avg: 11, lastMs: 11, lastTokens: 20 });
+    await nwTimingIdbPut(seed);
+    nwTimingState.loaded = false;
+    nwTimingState.stats = {};
+    const orig = nwTimingLoadStats;
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    nwTimingLoadStats = function () { return gate.then(function () { return orig(); }); };
+    const rec = Object.assign({}, recBase, { outcome: 'ok', ms: 22, chapter: 1, callIndex: 0 });
+    const p = nwTimingRecordSettle(rec);
+    const early = (nwTimingState.stats[key] && nwTimingState.stats[key].count) || 0;
+    release();
+    if (p && typeof p.then === 'function') await p;
+    await new Promise((r) => setTimeout(r, 250));
+    const finalCount = (nwTimingState.stats[key] && nwTimingState.stats[key].count) || 0;
+    nwTimingLoadStats = orig;
+    return { key, early, finalCount };
+  });
+}
+
+{
+  const page = await openPage();
+  const r = await timingAwaitLoadEval(page);
+  check('timing-load', 'record before load resolves keeps persisted count plus the new sample', r.finalCount === 8 && r.early === 0, JSON.stringify(r));
+  await page.close();
+}
+
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (nd) => {
+    const h = window.__h; h.load(nd); h.useRealCallAI({ delayMs: 20 });
+    document.getElementById('skipAutoRevision').checked = true;
+    novelData.skipAutoRevision = true;
+    document.getElementById('aiBeatCheck').checked = false;
+    novelData.aiBeatCheck = false;
+    await generateChapter(1, { batch: false });
+    const cost1 = JSON.parse(JSON.stringify(((novelData.chapterScorecards || [])[0] || {}).cost || {}));
+    await generateChapter(1, { batch: false });
+    const cost2 = JSON.parse(JSON.stringify(((novelData.chapterScorecards || [])[0] || {}).cost || {}));
+    const scored = await nwScoreAllChapters();
+    const costAll = JSON.parse(JSON.stringify(((novelData.chapterScorecards || [])[0] || {}).cost || {}));
+    return { cost1, cost2, costAll, scoredTrigger: scored && scored.trigger };
+  }, ND);
+  check('cost-bound', 'second run per-call cost excludes the first run\'s calls', r.cost1.source === 'per-call' && r.cost2.source === 'per-call' && r.cost1.calls >= 1 && r.cost2.calls === r.cost1.calls, JSON.stringify(r));
+  check('cost-bound', 'Score all with AI off reports no per-call cost', r.costAll.source !== 'per-call' && r.costAll.calls === 0, JSON.stringify(r));
+  await page.close();
+}
+
+{
+  const page = await openPage();
+  const r = await page.evaluate((nd) => {
+    const h = window.__h; h.load(nd);
+    document.getElementById('skipAutoRevision').checked = true;
+    novelData.skipAutoRevision = true;
+    novelData.autoContinuityAudit = false;
+    novelData.aiBeatCheck = false;
+    const skipOn = nwTimingChainSteps(3);
+    document.getElementById('skipAutoRevision').checked = false;
+    novelData.skipAutoRevision = false;
+    const skipOff = nwTimingChainSteps(3);
+    const maxP = (NW_QUALITY_REVISE && NW_QUALITY_REVISE.maxAutoPasses != null) ? NW_QUALITY_REVISE.maxAutoPasses : null;
+    const revOn = skipOn.find((s) => s.taskType === 'revise');
+    const revOff = skipOff.find((s) => s.taskType === 'revise');
+    return { skipOnN: revOn ? revOn.n : 0, skipOffN: revOff ? revOff.n : 0, maxP, stepsOn: skipOn, stepsOff: skipOff };
+  }, ND);
+  check('chain', 'chain estimate counts revise as maxAutoPasses and 0 when skipAutoRevision is on', r.skipOnN === 0 && r.maxP === 2 && r.skipOffN === 3 * r.maxP, JSON.stringify(r));
+  await page.close();
+}
+
+{
+  const page = await openPage();
+  const r = await page.evaluate(() => {
+    const el = document.getElementById('nwSlowStepBanner');
+    return { role: el && el.getAttribute('role'), live: el && el.getAttribute('aria-live') };
+  });
+  check('a11y', 'slow-step banner has role=alert and aria-live=assertive', r.role === 'alert' && r.live === 'assertive', JSON.stringify(r));
+  await page.close();
+}
+
 const shaBefore = sha256(HTML_PATH);
 check('mut', 'SHA-256 before mutations recorded', !!shaBefore, shaBefore);
 
@@ -390,6 +514,30 @@ check('mut', 'SHA-256 before mutations recorded', !!shaBefore, shaBefore);
     await page.close();
     const failedSelf = !r.rec && r.n === 0;
     check('mut', 'disabling timing record fails the timing self-test', failedSelf, JSON.stringify(r));
+  }
+}
+
+{
+  const m = mutateCopy(FLAGS.perCall);
+  check('mut', 'per-call state flag present in source', m.ok, m.detail);
+  if (m.copy) {
+    const page = await openPage(m.copy);
+    const r = await concurrentCancelEval(page);
+    await page.close();
+    const failedSelf = !(r.aborted === true && r.p1ok === true && /^Aborted \(/.test(r.p2err || ''));
+    check('mut', 'reverting to shared active-call state fails the concurrent-cancel self-test', failedSelf, JSON.stringify(r));
+  }
+}
+
+{
+  const m = mutateCopy(FLAGS.awaitLoad);
+  check('mut', 'await-load flag present in source', m.ok, m.detail);
+  if (m.copy) {
+    const page = await openPage(m.copy);
+    const r = await timingAwaitLoadEval(page);
+    await page.close();
+    const failedSelf = r.finalCount !== 8;
+    check('mut', 'removing await/merge of timing load fails the persisted-stats self-test', failedSelf, JSON.stringify(r));
   }
 }
 

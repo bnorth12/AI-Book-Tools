@@ -515,7 +515,7 @@ Synced: 2026-04-19
 	            <div id="batchRunStatus" role="status" aria-live="polite" data-testid="nw-batch-status"></div>
 	            <div id="batchTimeEstimate" data-testid="nw-batch-time-est"></div>
 	            <div id="batchRunSubStep" aria-live="off" data-testid="nw-batch-substep"></div>
-	            <div id="nwSlowStepBanner" data-testid="nw-slow-step" hidden>
+	            <div id="nwSlowStepBanner" data-testid="nw-slow-step" role="alert" aria-live="assertive" hidden>
 	                <span id="nwSlowStepText">This step is taking more than 2× its average.</span>
 	                <button type="button" id="nwSlowKeepWaiting" data-testid="nw-slow-keep">Keep waiting</button>
 	                <button type="button" id="nwSlowCancel" data-testid="nw-slow-cancel">Cancel</button>
@@ -1082,7 +1082,12 @@ let activeAICallCount = 0;
 		//               and, when the step makes several calls, "call k of n" (e.g. "Part 2 of 2", "revise 1/2").
 		// NW.GEN.TO.2: callAI SHALL abort a request after the configured timeout (AbortController); a late resolve is ignored.
 		const NW_CALLAI_TIMEOUT_DEFAULT_S = 300;
-		let nwActiveCall = null; // { operation, label, startedAt, ticker }
+		var nwActiveCalls = new Map(); // id -> per-call state
+		var nwActiveCallSeq = 0;
+		let nwActiveCall = null; // HUD/current call; remaining live calls stay in nwActiveCalls
+		function nwCallAIPerCallState() {
+			return (typeof NW_CALLAI_ENABLE_PER_CALL_STATE === 'undefined' || NW_CALLAI_ENABLE_PER_CALL_STATE);
+		}
 		function nwCallAITimeoutMs() {
 			const el = document.getElementById('aiCallTimeoutSec');
 			const s = el ? parseFloat(el.value) : NaN;
@@ -1092,11 +1097,17 @@ let activeAICallCount = 0;
 			const s = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
 			return Math.floor(s / 60) + 'm ' + String(s % 60).padStart(2, '0') + 's';
 		}
+		function nwActiveCallCount() {
+			if (nwCallAIPerCallState()) return nwActiveCalls.size;
+			return nwActiveCall ? 1 : 0;
+		}
 		function nwRenderActiveCall() {
 			const c = nwActiveCall;
 			if (!c) return;
+			var n = nwActiveCallCount();
 			var elapsed = Date.now() - c.startedAt;
 			var detail = 'Waiting on LLM response... ' + nwFmtElapsed(elapsed) + (c.label ? ' (' + c.label + ')' : '');
+			if (n > 1) detail += ' — ' + n + ' active calls';
 			if (c.expectedMs > 0) detail += ' — expected ' + nwFmtElapsed(c.expectedMs);
 			if (nwTimingState && nwTimingState.chain && nwTimingState.chain.expectedMs > 0) {
 				var chainElapsed = Date.now() - (nwTimingState.chain.startedAt || c.startedAt);
@@ -1107,10 +1118,14 @@ let activeAICallCount = 0;
 			if (typeof nwTimingCheckSlowStep === 'function') nwTimingCheckSlowStep(c, elapsed);
 		}
 		function nwCallStart(operation, label, extra) {
-			const prev = nwActiveCall;
-			if (prev && prev.ticker) clearInterval(prev.ticker);
 			extra = extra || {};
-			const c = { operation: operation, label: label || '', startedAt: Date.now(), ticker: null, prev: prev, abortCtl: extra.abortCtl || null, taskType: extra.taskType || '', expectedMs: extra.expectedMs || 0, keepWaiting: false, userAbort: false };
+			const perCall = nwCallAIPerCallState();
+			if (!perCall) {
+				const prev = nwActiveCall;
+				if (prev && prev.ticker) clearInterval(prev.ticker);
+			}
+			const c = { id: ++nwActiveCallSeq, operation: operation, label: label || '', startedAt: Date.now(), ticker: null, abortCtl: extra.abortCtl || null, taskType: extra.taskType || '', expectedMs: extra.expectedMs || 0, keepWaiting: false, userAbort: false, rejectAbort: perCall ? (extra.rejectAbort || null) : null };
+			if (perCall) nwActiveCalls.set(c.id, c);
 			nwActiveCall = c;
 			c.ticker = setInterval(nwRenderActiveCall, 1000);
 			nwRenderActiveCall();
@@ -1120,14 +1135,27 @@ let activeAICallCount = 0;
 			if (!c) return;
 			if (c.ticker) clearInterval(c.ticker);
 			c.ticker = null;
-			if (nwActiveCall === c) nwActiveCall = null;
-			if (typeof nwTimingHideSlowStep === 'function') nwTimingHideSlowStep();
+			const perCall = nwCallAIPerCallState();
+			if (perCall) {
+				nwActiveCalls.delete(c.id);
+				if (nwActiveCall === c) {
+					nwActiveCall = null;
+					nwActiveCalls.forEach(function (x) { nwActiveCall = x; });
+				}
+				if (nwActiveCall) nwRenderActiveCall();
+				else if (typeof nwTimingHideSlowStep === 'function') nwTimingHideSlowStep();
+			} else {
+				if (nwActiveCall === c) nwActiveCall = null;
+				if (typeof nwTimingHideSlowStep === 'function') nwTimingHideSlowStep();
+			}
 		}
 
 		// ---- NW.T8b: per-call timing (IndexedDB nwTimingStats + session log; not a schema change) ----
 		var NW_CALLAI_ENABLE_TIMEOUT = true;
 		var NW_CALLAI_ENABLE_ABORT_CLEANUP = true;
+		var NW_CALLAI_ENABLE_PER_CALL_STATE = true;
 		var NW_TIMING_ENABLE_RECORD = true;
+		var NW_TIMING_ENABLE_AWAIT_LOAD = true;
 		var NW_TIMING_ENABLE_SCOREALL_LOCK = true;
 		var NW_TIMING_TASK_TYPES = ['chapterOutline', 'draft', 'revise', 'antiSlop', 'audit', 'apply', 'enrich', 'continuity', 'scorecardBeat', 'other'];
 		var NW_TIMING_MIN_SAMPLES = 3;
@@ -1234,9 +1262,15 @@ let activeAICallCount = 0;
 					q.onsuccess = function () {
 						var map = {};
 						(q.result || []).forEach(function (row) { if (row && row.key) map[row.key] = row; });
-						nwTimingState.stats = map;
-						nwTimingState.loaded = true;
-						resolve(map);
+						if (!nwTimingState.loaded) {
+							nwTimingState.stats = map;
+							nwTimingState.loaded = true;
+						} else {
+							Object.keys(map).forEach(function (k) {
+								if (!nwTimingState.stats[k]) nwTimingState.stats[k] = map[k];
+							});
+						}
+						resolve(nwTimingState.stats);
 					};
 					q.onerror = function () { reject(q.error); };
 				});
@@ -1254,26 +1288,31 @@ let activeAICallCount = 0;
 			rec = rec || {};
 			nwTimingState.sessionLog.push(rec);
 			window.__nwLastTimingRecord = rec;
-			var key = nwTimingStatKey(rec);
-			var row = nwTimingState.stats[key] || nwTimingEmptyStat(rec);
-			if (rec.outcome === 'ok') {
-				row.count += 1;
-				row.lastMs = rec.ms;
-				row.min = row.count === 1 ? rec.ms : Math.min(row.min, rec.ms);
-				row.max = row.count === 1 ? rec.ms : Math.max(row.max, rec.ms);
-				row.avg = row.avg + (rec.ms - row.avg) / row.count;
-				var tok = Number(rec.totalTokens) || 0;
-				row.lastTokens = tok;
-				row.promptTokensAvg = row.promptTokensAvg + ((Number(rec.promptTokens) || 0) - row.promptTokensAvg) / row.count;
-				row.completionTokensAvg = row.completionTokensAvg + ((Number(rec.completionTokens) || 0) - row.completionTokensAvg) / row.count;
-				row.totalTokensAvg = row.totalTokensAvg + (tok - row.totalTokensAvg) / row.count;
-			} else if (rec.outcome === 'timeout') row.timeouts += 1;
-			else if (rec.outcome === 'abort') row.aborts += 1;
-			else row.errors += 1;
-			nwTimingState.stats[key] = row;
-			nwTimingIdbPut(row);
-			if (typeof nwRenderTimingPanel === 'function') nwRenderTimingPanel();
-			return rec;
+			var apply = function () {
+				var key = nwTimingStatKey(rec);
+				var row = nwTimingState.stats[key] || nwTimingEmptyStat(rec);
+				if (rec.outcome === 'ok') {
+					row.count += 1;
+					row.lastMs = rec.ms;
+					row.min = row.count === 1 ? rec.ms : Math.min(row.min, rec.ms);
+					row.max = row.count === 1 ? rec.ms : Math.max(row.max, rec.ms);
+					row.avg = row.avg + (rec.ms - row.avg) / row.count;
+					var tok = Number(rec.totalTokens) || 0;
+					row.lastTokens = tok;
+					row.promptTokensAvg = row.promptTokensAvg + ((Number(rec.promptTokens) || 0) - row.promptTokensAvg) / row.count;
+					row.completionTokensAvg = row.completionTokensAvg + ((Number(rec.completionTokens) || 0) - row.completionTokensAvg) / row.count;
+					row.totalTokensAvg = row.totalTokensAvg + (tok - row.totalTokensAvg) / row.count;
+				} else if (rec.outcome === 'timeout') row.timeouts += 1;
+				else if (rec.outcome === 'abort') row.aborts += 1;
+				else row.errors += 1;
+				nwTimingState.stats[key] = row;
+				nwTimingIdbPut(row);
+				if (typeof nwRenderTimingPanel === 'function') nwRenderTimingPanel();
+				return rec;
+			};
+			var awaitLoad = (typeof NW_TIMING_ENABLE_AWAIT_LOAD === 'undefined' || NW_TIMING_ENABLE_AWAIT_LOAD);
+			if (!awaitLoad || nwTimingState.loaded) return apply();
+			return nwTimingLoadStats().then(function () { return apply(); });
 		}
 		function nwTimingStatsList() {
 			return Object.keys(nwTimingState.stats).map(function (k) { return nwTimingState.stats[k]; });
@@ -1402,6 +1441,16 @@ let activeAICallCount = 0;
 				} else { impEl.hidden = true; impEl.textContent = ''; }
 			}
 		}
+		function nwTimingChainSteps(nCh) {
+			nCh = Number(nCh) || 0;
+			var steps = [{ taskType: 'draft', n: nCh * 2, label: 'draft' }];
+			if (novelData && novelData.autoContinuityAudit) steps.push({ taskType: 'audit', n: nCh, label: 'audit' });
+			var skip = (typeof nwBatchSkipAutoRevision === 'function') ? nwBatchSkipAutoRevision() : !!(novelData && novelData.skipAutoRevision);
+			var maxAuto = skip ? 0 : ((typeof NW_QUALITY_REVISE !== 'undefined' && NW_QUALITY_REVISE) ? (Number(NW_QUALITY_REVISE.maxAutoPasses) || 0) : 0);
+			if (maxAuto > 0) steps.push({ taskType: 'revise', n: nCh * maxAuto, label: 'revise' });
+			if (novelData && novelData.aiBeatCheck) steps.push({ taskType: 'scorecardBeat', n: nCh, label: 'beat check' });
+			return steps;
+		}
 		function nwTimingStartChain(steps, label) {
 			var est = nwTimingEstimateSteps(steps);
 			est.startedAt = Date.now();
@@ -1435,6 +1484,8 @@ let activeAICallCount = 0;
 		window.nwTimingResetStats = nwTimingResetStats;
 		window.nwTimingAvgFor = nwTimingAvgFor;
 		window.nwTimingStatsList = nwTimingStatsList;
+		window.nwTimingLoadStats = nwTimingLoadStats;
+		window.nwTimingChainSteps = nwTimingChainSteps;
 		window.nwCallAIAbort = nwCallAIAbort;
 		window.nwTimingInferTaskType = nwTimingInferTaskType;
 		window.nwPromptHash = nwPromptHash;
@@ -2863,10 +2914,15 @@ let activeAICallCount = 0;
 			let timeoutTimer = null;
 			let callTick = null;
 			const t0 = Date.now();
+			const callIndexAtStart = (novelData && novelData.tokenUsage && novelData.tokenUsage.calls) ? novelData.tokenUsage.calls.length : 0;
 			let timingUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, reasoning_tokens: 0 };
 			const timeoutError = new Error('Timed out after ' + timeoutSec + ' s (' + operationName + ')');
 			const abortError = new Error('Aborted (' + operationName + ')');
-			function callAbandoned() { return timedOut || userAborted || (nwActiveCall && nwActiveCall.userAbort); }
+			function callAbandoned() {
+				if (callTick && callTick.userAbort) userAborted = true;
+				if (!nwCallAIPerCallState() && nwActiveCall && nwActiveCall.userAbort) userAborted = true;
+				return timedOut || userAborted;
+			}
 
 		    if (!apiKey) {
 		        console.error('API Key is missing');
@@ -2883,7 +2939,7 @@ let activeAICallCount = 0;
 						promptTokens: 0, completionTokens: 0, totalTokens: 0, reasoningTokens: 0,
 						runLabel: (typeof nwTimingRunLabel === 'function') ? nwTimingRunLabel() : '',
 						complexity: { chapters: (typeof novelData !== 'undefined' && novelData.numChapters) || 0, targetWords: (typeof novelData !== 'undefined' && novelData.chapterLength) || 0, characterCount: ((typeof novelData !== 'undefined' && novelData.characters) || []).length, subplotCount: ((typeof novelData !== 'undefined' && novelData.subplots) || []).length, promptTokens: 0 },
-						callIndex: (novelData && novelData.tokenUsage && novelData.tokenUsage.calls) ? novelData.tokenUsage.calls.length : 0
+						callIndex: callIndexAtStart
 					});
 				}
 		        throw new Error('API Key is missing');
@@ -2956,14 +3012,12 @@ let activeAICallCount = 0;
 		        if (typeof NW_CALLAI_ENABLE_TIMEOUT === 'undefined' || NW_CALLAI_ENABLE_TIMEOUT) racers.push(timeoutRace);
 		        if (typeof NW_CALLAI_ENABLE_ABORT_CLEANUP === 'undefined' || NW_CALLAI_ENABLE_ABORT_CLEANUP) racers.push(abortRace);
 		        const response = await Promise.race(racers);
-		        if (nwActiveCall && nwActiveCall.userAbort) { userAborted = true; }
 		        if ((typeof NW_CALLAI_ENABLE_ABORT_CLEANUP === 'undefined' || NW_CALLAI_ENABLE_ABORT_CLEANUP) && callAbandoned()) throw timedOut ? timeoutError : abortError;
 		        if (!response.ok) {
 		            throw new Error(`HTTP error! Status: ${response.status}, Text: ${await Promise.race([response.text()].concat(racers.slice(1)))}`);
 		        }
 		        		        const text = await Promise.race([response.text()].concat(racers.slice(1)));
 		        // Late-resolve guard: nothing below (usage row, parsed chapter) may run once the call timed out or was cancelled.
-		        if (nwActiveCall && nwActiveCall.userAbort) { userAborted = true; }
 		        if ((typeof NW_CALLAI_ENABLE_ABORT_CLEANUP === 'undefined' || NW_CALLAI_ENABLE_ABORT_CLEANUP) && callAbandoned()) throw timedOut ? timeoutError : abortError;
 		        clearTimeout(timeoutTimer);
 		        console.log('Raw AI response:', text);
@@ -3091,7 +3145,7 @@ let activeAICallCount = 0;
 
 		        return jsonResponse;
 		    } catch (caught) {
-		        if (nwActiveCall && nwActiveCall.userAbort) userAborted = true;
+		        callAbandoned();
 		        const error = timedOut ? timeoutError : (userAborted ? abortError : caught); // timeout wins over AbortError; user cancel is abort
 		        console.error('API call failed:', error);
 		        requestLog.status = 'Failed';
@@ -3117,7 +3171,7 @@ let activeAICallCount = 0;
 					var skillMeta = (typeof nwTimingSkillMeta === 'function') ? nwTimingSkillMeta(taskType, opts) : { skillId: '', skillVersion: '1' };
 					var buck = (typeof nwTimingBucket === 'function') ? nwTimingBucket(opts, timingUsage.prompt_tokens) : { kind: 'tokens', bucket: 4000 };
 					var ch = opts.chapter != null ? opts.chapter : ((typeof nwBatchState !== 'undefined' && nwBatchState && nwBatchState.chapterInFlight) || (window.__lastGenerateChapterGate && window.__lastGenerateChapterGate.chapter) || null);
-					nwTimingRecordSettle({
+					var settled = nwTimingRecordSettle({
 						taskType: taskType,
 						chapter: ch,
 						ms: Date.now() - t0,
@@ -3140,8 +3194,11 @@ let activeAICallCount = 0;
 							subplotCount: ((typeof novelData !== 'undefined' && novelData.subplots) || []).length,
 							promptTokens: timingUsage.prompt_tokens || 0
 						},
-						callIndex: (novelData && novelData.tokenUsage && novelData.tokenUsage.calls) ? novelData.tokenUsage.calls.length : 0
+						callIndex: callIndexAtStart
 					});
+					if (settled && typeof settled.then === 'function') {
+						try { await settled; } catch (_) { /* timing persist must not fail the call */ }
+					}
 				}
 		    }
 }
@@ -10908,6 +10965,7 @@ return c && c.name && c.backstory && c.arc; });
 				if (typeof nwTimingState !== 'undefined' && nwTimingState && Array.isArray(nwTimingState.sessionLog) && chapterNum != null) {
 					recs = nwTimingState.sessionLog.filter(function (r) {
 						if (r.chapter !== chapterNum) return false;
+						// callIndex is the ledger length at call start; fromIdx is exclusive of earlier runs.
 						if (fromIdx != null && r.callIndex != null && r.callIndex < fromIdx) return false;
 						return true;
 					});
@@ -12353,10 +12411,7 @@ return c && c.name && c.backstory && c.arc; });
                 nwBatchState.log = [];
                 if (typeof nwTimingStartChain === 'function') {
                     var nCh = plan.planned.length;
-                    var chainSteps = [{ taskType: 'draft', n: nCh * 2, label: 'draft' }];
-                    if (novelData.autoContinuityAudit) chainSteps.push({ taskType: 'audit', n: nCh, label: 'audit' });
-                    if (typeof nwBatchSkipAutoRevision === 'function' ? !nwBatchSkipAutoRevision() : !novelData.skipAutoRevision) chainSteps.push({ taskType: 'revise', n: nCh, label: 'revise' });
-                    if (novelData.aiBeatCheck) chainSteps.push({ taskType: 'scorecardBeat', n: nCh, label: 'beat check' });
+                    var chainSteps = (typeof nwTimingChainSteps === 'function') ? nwTimingChainSteps(nCh) : [{ taskType: 'draft', n: nCh * 2, label: 'draft' }];
                     nwTimingStartChain(chainSteps, 'generateAll');
                 }
                 nwBatchApplyLock();
