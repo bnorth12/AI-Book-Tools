@@ -249,8 +249,33 @@ for (const file of fixtureFiles) {
     check(id, 'newer-version warning', (result.warns || []).some((w) => /newer/i.test(w)), JSON.stringify(result.warns));
   }
   if (file === 'v1-wrong-types.json') {
-    check(id, 'wrong types kept as-is', result.once.storyWorld === 'text' && eq(result.once.chapterRequirements, {}) && result.once.chapterRequiredFacts === 5 && result.once.chapterIds === 'not-an-array' && eq(result.once.chapterScenes, { nope: true }), JSON.stringify({ sw: result.once.storyWorld, req: result.once.chapterRequirements, rf: result.once.chapterRequiredFacts, ids: result.once.chapterIds, sc: result.once.chapterScenes }));
+    check(id, 'wrong types kept as-is', result.once.storyWorld === 'text' && eq(result.once.chapterRequirements, {}) && result.once.chapterRequiredFacts === 5 && result.once.chapterIds === 'not-an-array' && eq(result.once.chapterScenes, { nope: true }) && result.once.subplotsMeta === 'not-an-array', JSON.stringify({ sw: result.once.storyWorld, req: result.once.chapterRequirements, rf: result.once.chapterRequiredFacts, ids: result.once.chapterIds, sc: result.once.chapterScenes, sm: result.once.subplotsMeta }));
     check(id, 'wrong-typed chapterIds/chapterScenes warn; owner write skipped', (result.warns || []).some((w) => /chapterIds/.test(w)) && (result.warns || []).some((w) => /chapterScenes/.test(w)), JSON.stringify(result.warns));
+    const normMeta = await page.evaluate((nd) => {
+      const warns = [];
+      const orig = console.warn;
+      console.warn = function () { warns.push(Array.from(arguments).map(String).join(' ')); return orig.apply(console, arguments); };
+      const n = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: JSON.parse(JSON.stringify(nd)) });
+      console.warn = orig;
+      return { meta: n.novelData.subplotsMeta, warns };
+    }, ndIn);
+    check(id, 'wrong-typed subplotsMeta kept as-is; warn', result.once.subplotsMeta === 'not-an-array' && (result.warns || []).some((w) => /subplotsMeta/.test(w)) && normMeta.meta === 'not-an-array' && (normMeta.warns || []).some((w) => /subplotsMeta/.test(w)), JSON.stringify({ mig: result.once.subplotsMeta, migWarns: result.warns, norm: normMeta }));
+    const scCase = await page.evaluate((nd) => {
+      const warns = [];
+      const orig = console.warn;
+      console.warn = function () { warns.push(Array.from(arguments).map(String).join(' ')); return orig.apply(console, arguments); };
+      const once = nwMigrateSession(JSON.parse(JSON.stringify(nd)));
+      console.warn = orig;
+      const rec = once.chapterScenes && once.chapterScenes[0];
+      const scene = rec && rec.scenes && rec.scenes[0];
+      return {
+        ids: once.chapterIds,
+        chapterId: scene && scene.chapterId,
+        hasScene: !!(scene && scene.id),
+        warns
+      };
+    }, fx.inputSceneChapterIds);
+    check(id, 'wrong-typed chapterIds skips scene chapterId write; warn', scCase.hasScene === true && scCase.ids === 'not-an-array' && scCase.chapterId == null && (scCase.warns || []).some((w) => /skipping scene chapterId/i.test(w)), JSON.stringify(scCase));
   }
   if (file === 'v1-n-wrong-types.json') {
     check(id, 'chapterThemeTags string and systems {} kept', result.once.chapterThemeTags === 'x' && result.once.storyWorld && eq(result.once.storyWorld.systems, {}), JSON.stringify({ tags: result.once.chapterThemeTags, sys: result.once.storyWorld && result.once.storyWorld.systems }));
@@ -710,6 +735,45 @@ await page.close();
       return { ids: once.chapterIds, sc: once.chapterScenes };
     }, fx.input);
     check('MIG:v1-wrong-types:mutation', 'coercing wrong-typed chapterIds/chapterScenes to [] turns keep-as-is red', Array.isArray(r.ids) && Array.isArray(r.sc), JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_KEEP_WRONG_SUBPLOTS_META = true;', 'var NW_S1_KEEP_WRONG_SUBPLOTS_META = false;');
+  check('MIG:v1-wrong-types:subplotsMeta-mutation-flag', 'keep-wrong-subplotsMeta flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-wrong-types.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      const warns = [];
+      const orig = console.warn;
+      console.warn = function () { warns.push(Array.from(arguments).map(String).join(' ')); return orig.apply(console, arguments); };
+      const once = nwMigrateSession(JSON.parse(JSON.stringify(nd)));
+      const n = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: JSON.parse(JSON.stringify(nd)) });
+      console.warn = orig;
+      return { mig: once.subplotsMeta, norm: n.novelData.subplotsMeta, warns };
+    }, fx.input);
+    console.log('MIG:subplotsMeta-mutation red-run ' + JSON.stringify(r));
+    check('MIG:v1-wrong-types:subplotsMeta-mutation', 'overwriting wrong-typed subplotsMeta turns keep-as-is red', Array.isArray(r.mig) && Array.isArray(r.norm), JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS = true;', 'var NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS = false;');
+  check('MIG:v1-wrong-types:scene-chapterId-mutation-flag', 'skip-scene-chapterId flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-wrong-types.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      const once = nwMigrateSession(JSON.parse(JSON.stringify(nd)));
+      const rec = once.chapterScenes && once.chapterScenes[0];
+      const scene = rec && rec.scenes && rec.scenes[0];
+      return { ids: once.chapterIds, chapterId: scene && scene.chapterId, hasScene: !!(scene && scene.id) };
+    }, fx.inputSceneChapterIds);
+    console.log('MIG:scene-chapterId-mutation red-run ' + JSON.stringify(r));
+    check('MIG:v1-wrong-types:scene-chapterId-mutation', 'writing junk scene chapterId from wrong-typed chapterIds turns skip-write green red', r.hasScene === true && r.ids === 'not-an-array' && typeof r.chapterId === 'string' && r.chapterId.length === 1, JSON.stringify(r));
     await p.close();
   }
 }

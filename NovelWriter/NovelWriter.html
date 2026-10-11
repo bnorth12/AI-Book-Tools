@@ -2224,6 +2224,8 @@ let activeAICallCount = 0;
 		var NW_S1_LOCK_GENALL_SETUP = true;
 		var NW_S1_CANCEL_RELEASES_LOCK = true;
 		var NW_S1_KEEP_WRONG_TYPES = true;
+		var NW_S1_KEEP_WRONG_SUBPLOTS_META = true;
+		var NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS = true;
 		var NW_S1_RESIZE_SPLICE_ALL = true;
 		var NW_S1_RESIZE_CHAPTERS = true;
 		var NW_S1_RESTORE_OPAQUE_RNG = true;
@@ -2469,6 +2471,14 @@ let activeAICallCount = 0;
 
 		function nwCopySubplotMetaFromRaw(nd, raw, i) {
 			if (!nd || raw == null || typeof raw !== 'object' || Array.isArray(raw)) return;
+			if (nwHasOwn(nd, 'subplotsMeta') && !Array.isArray(nd.subplotsMeta)) {
+				if ((typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES)
+					&& (typeof NW_S1_KEEP_WRONG_SUBPLOTS_META === 'undefined' || NW_S1_KEEP_WRONG_SUBPLOTS_META)) {
+					console.warn('nwCopySubplotMetaFromRaw: subplotsMeta has wrong type; keeping as-is', nd.subplotsMeta);
+					return;
+				}
+				nd.subplotsMeta = [];
+			}
 			if (!Array.isArray(nd.subplotsMeta)) nd.subplotsMeta = [];
 			if (nd.subplotsMeta[i] == null) nd.subplotsMeta[i] = Object.assign({}, raw);
 		}
@@ -2933,7 +2943,11 @@ let activeAICallCount = 0;
 					var row = Object.assign({}, s.id && byId[s.id] ? byId[s.id] : {}, s);
 					delete row.migratedBy;
 					if (!row.id) row.id = nwOpaqueId('sc_', taken);
-					if (!row.chapterId) row.chapterId = (target.chapterIds || [])[n - 1];
+					if (!row.chapterId) {
+						var skipFillChapterId = nwHasOwn(target, 'chapterIds') && !Array.isArray(target.chapterIds)
+							&& (typeof NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS === 'undefined' || NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS);
+						if (!skipFillChapterId) row.chapterId = (target.chapterIds || [])[n - 1];
+					}
 					if (row.order == null) row.order = i + 1;
 					if (row.breakApproved == null) row.breakApproved = false;
 					if (origin === 'user' && row.source == null) row.source = 'user';
@@ -3082,21 +3096,27 @@ let activeAICallCount = 0;
 					if (!nwChapterHasText(nd, i - 1)) continue;
 					var existingScenes = Array.isArray(nd.chapterScenes) ? nd.chapterScenes[i - 1] : null;
 					if (existingScenes && typeof existingScenes === 'object') continue;
-					var chId = (nd.chapterIds || [])[i - 1];
+					var chapterIdsStillWrong = nwHasOwn(nd, 'chapterIds') && !Array.isArray(nd.chapterIds);
+					var skipSceneChId = chapterIdsStillWrong && (typeof NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS === 'undefined' || NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS);
+					if (skipSceneChId && i === 1) {
+						console.warn('nwMigrateSession: chapterIds has wrong type; skipping scene chapterId write', nd.chapterIds);
+					}
+					var chId = skipSceneChId ? undefined : (nd.chapterIds || [])[i - 1];
 					var scTaken = nwTakenIds(nd, 'sc_');
 					var scId = nwOpaqueId('sc_', scTaken);
 					var textHash = nwChapterTextHash(i, nd);
+					var sceneRow = {
+						id: scId,
+						order: 1,
+						breakApproved: false,
+						source: 'import',
+						boundaryReasons: []
+					};
+					if (!skipSceneChId) sceneRow.chapterId = chId;
 					nwChapterScenesUpdate(i, {
 						version: 1,
 						textHash: textHash,
-						scenes: [{
-							id: scId,
-							chapterId: chId,
-							order: 1,
-							breakApproved: false,
-							source: 'import',
-							boundaryReasons: []
-						}]
+						scenes: [sceneRow]
 					}, 'import', nd);
 				}
 				nwStampMigratedBy(nd);
