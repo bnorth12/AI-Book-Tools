@@ -1,0 +1,95 @@
+{
+  "input": {
+    "title": "DS",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y"
+      }
+    ],
+    "chapterIds": [
+      "ch_a"
+    ],
+    "chapterScenes": [
+      {
+        "version": 1,
+        "textHash": "a",
+        "scenes": [
+          {
+            "id": "sc_live",
+            "chapterId": "ch_a",
+            "order": 1,
+            "breakApproved": true,
+            "source": "user"
+          }
+        ]
+      }
+    ],
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ],
+        "beats": [
+          {
+            "id": "bt_x",
+            "sceneId": "sc_deleted"
+          }
+        ]
+      }
+    ],
+    "chapterWritingPlans": [
+      {
+        "items": [
+          {
+            "kind": "beat",
+            "sceneId": "sc_deleted"
+          }
+        ]
+      }
+    ],
+    "chapterFlags": [
+      {
+        "coverageFailed": true,
+        "missing": [
+          {
+            "sceneId": "sc_deleted",
+            "label": "miss"
+          }
+        ]
+      }
+    ]
+  },
+  "expectedAddedKeys": [
+    "chapterFingerprints[0]",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "dangling refs kept, resolve to chapter scope"
+}

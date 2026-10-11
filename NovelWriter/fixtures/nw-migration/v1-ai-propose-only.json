@@ -1,0 +1,25 @@
+{
+  "input": {
+    "title": "AP",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      ""
+    ],
+    "storyWorld": {
+      "version": 1,
+      "genreProfiles": [
+        "hard-scifi"
+      ],
+      "immersionWeight": {
+        "culture": 0.2,
+        "science": 0.4,
+        "tech": 0.6
+      }
+    }
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "helper: origin ai refused, user accept writes"
+}

@@ -1,0 +1,283 @@
+{
+  "input": {
+    "title": "PS",
+    "genre": "scifi",
+    "numChapters": 5,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y"
+      }
+    ],
+    "chapterIds": [
+      "ch_a",
+      "ch_b",
+      "ch_c",
+      "ch_d",
+      "ch_e"
+    ],
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      },
+      {
+        "chapter": 2,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      },
+      {
+        "chapter": 3,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      },
+      {
+        "chapter": 4,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      },
+      {
+        "chapter": 5,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      }
+    ],
+    "chapterRequirements": [
+      {
+        "cast": [
+          "mira"
+        ],
+        "setting": [
+          "Wet dock"
+        ],
+        "mustNotInclude": [],
+        "derivedFrom": "x"
+      },
+      {
+        "cast": [
+          "mira"
+        ],
+        "setting": [
+          "Wet dock"
+        ],
+        "mustNotInclude": [],
+        "derivedFrom": "x"
+      },
+      {
+        "cast": [
+          "mira"
+        ],
+        "setting": [
+          "Wet dock"
+        ],
+        "mustNotInclude": [],
+        "derivedFrom": "x"
+      },
+      {
+        "cast": [
+          "mira"
+        ],
+        "setting": [
+          "Wet dock"
+        ],
+        "mustNotInclude": [
+          "no-magic"
+        ],
+        "derivedFrom": "x"
+      },
+      {
+        "cast": [
+          "mira"
+        ],
+        "setting": [
+          "Wet dock"
+        ],
+        "mustNotInclude": [],
+        "derivedFrom": "x"
+      }
+    ],
+    "chapterRequiredFacts": [
+      {
+        "items": [
+          {
+            "id": "b",
+            "text": "b",
+            "mustInclude": true,
+            "source": "user"
+          },
+          {
+            "id": "a",
+            "text": "a",
+            "mustInclude": true,
+            "source": "user"
+          }
+        ]
+      },
+      {
+        "items": [
+          {
+            "id": "a",
+            "text": "a",
+            "mustInclude": true,
+            "source": "user"
+          }
+        ]
+      },
+      {
+        "items": [
+          {
+            "id": "a",
+            "text": "a",
+            "mustInclude": true,
+            "source": "user"
+          }
+        ]
+      },
+      {
+        "items": [
+          {
+            "id": "a",
+            "text": "a",
+            "mustInclude": true,
+            "source": "user"
+          }
+        ]
+      },
+      {
+        "items": [
+          {
+            "id": "a",
+            "text": "a",
+            "mustInclude": true,
+            "source": "user"
+          }
+        ]
+      }
+    ],
+    "chapterWritingPlans": [
+      {
+        "items": [],
+        "builtFrom": "PLACEHOLDER"
+      },
+      {
+        "items": [],
+        "builtFrom": "PLACEHOLDER"
+      },
+      {
+        "items": [],
+        "builtFrom": "PLACEHOLDER"
+      },
+      {
+        "items": [],
+        "builtFrom": "PLACEHOLDER"
+      },
+      {
+        "items": []
+      }
+    ]
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "helper: stale ch2-ch5; ch1 fresh after reorder+derivedFrom-only change"
+}

@@ -1,0 +1,169 @@
+{
+  "input": {
+    "title": "WF",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      ""
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y",
+        "knows": [
+          {
+            "conceptId": "c1",
+            "learnedIn": 1,
+            "locked": true,
+            "source": "user"
+          }
+        ]
+      }
+    ],
+    "chapterIds": [
+      "ch_preset0001"
+    ],
+    "chapterScenes": [
+      {
+        "version": 1,
+        "textHash": "aaaaaaaa",
+        "scenes": [
+          {
+            "id": "sc_preset0001",
+            "chapterId": "ch_preset0001",
+            "order": 1,
+            "breakApproved": true,
+            "source": "user"
+          }
+        ]
+      }
+    ],
+    "chapterThemeTags": [
+      {
+        "tags": [
+          "t1"
+        ],
+        "source": "user"
+      }
+    ],
+    "chapterWritingPlans": [
+      {
+        "items": [
+          {
+            "kind": "worldBeat",
+            "conceptId": "c1",
+            "deliveryMode": "dialogue"
+          }
+        ],
+        "builtFrom": "x",
+        "worldFrom": "y"
+      }
+    ],
+    "storyWorld": {
+      "version": 1,
+      "notes": "n",
+      "genreProfiles": [
+        "hard-scifi"
+      ],
+      "structureTemplate": {
+        "id": "threeAct",
+        "beats": [
+          {
+            "name": "act1",
+            "pct": 25
+          }
+        ]
+      },
+      "concepts": [
+        {
+          "id": "c1",
+          "name": "Coherence",
+          "mustExplain": true,
+          "familiarity": "introduced",
+          "locked": true,
+          "source": "user",
+          "approvedAt": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "rules": [
+        {
+          "id": "r1",
+          "name": "Observe",
+          "locked": false,
+          "source": "user"
+        }
+      ],
+      "locations": [
+        {
+          "id": "l1",
+          "name": "Dock",
+          "locked": false,
+          "source": "user"
+        }
+      ],
+      "systems": [
+        {
+          "id": "s1",
+          "name": "Relay",
+          "kind": "tech",
+          "hardness": "hard",
+          "powerSource": "grid",
+          "costs": [],
+          "limits": [],
+          "users": [
+            "mira"
+          ],
+          "ruleIds": [
+            "r1"
+          ],
+          "locked": false,
+          "source": "user"
+        }
+      ],
+      "themes": [
+        {
+          "id": "t1",
+          "text": "cost of seeing",
+          "locked": false,
+          "source": "user"
+        }
+      ],
+      "setupRefs": [
+        "setup-clock"
+      ],
+      "immersionWeight": {
+        "culture": 0.2,
+        "science": 0.5,
+        "tech": 0.8
+      },
+      "role": {
+        "value": "character",
+        "source": "user",
+        "evidence": [
+          "dock"
+        ],
+        "decidedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "arc": [
+        {
+          "stage": "rise",
+          "chapterPos": 0.2,
+          "change": "named"
+        }
+      ],
+      "subplots": [
+        {
+          "index": 0,
+          "textHash": "bbbbbbbb"
+        }
+      ],
+      "contradictions": []
+    }
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "every N15-N24 key deep-equal; no setups store"
+}

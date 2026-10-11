@@ -1,0 +1,21 @@
+{
+  "input": {
+    "title": "RB",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      ""
+    ],
+    "storyWorld": {
+      "version": 1,
+      "role": {
+        "value": "backdrop",
+        "source": "user"
+      }
+    }
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "helper refuses arc write while backdrop? user may store; ai whole-replace refused. arc stays absent for ai."
+}

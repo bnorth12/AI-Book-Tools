@@ -1,0 +1,34 @@
+{
+  "input": {
+    "title": "WT",
+    "genre": "scifi",
+    "numChapters": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed."
+      }
+    ],
+    "storyWorld": "text",
+    "chapterRequirements": {},
+    "chapterRequiredFacts": 5
+  },
+  "expectedAddedKeys": [
+    "nwSchemaVersion",
+    "chapterIds",
+    "chapterScenes[0]",
+    "chapterFingerprints[0]",
+    "characters[0].id",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [
+    "storyWorld",
+    "chapterRequirements",
+    "chapterRequiredFacts"
+  ],
+  "notes": "wrong types kept as-is"
+}

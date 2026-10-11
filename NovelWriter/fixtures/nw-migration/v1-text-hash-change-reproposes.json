@@ -1,0 +1,56 @@
+{
+  "input": {
+    "title": "THC",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y"
+      }
+    ],
+    "chapterIds": [
+      "ch_ok"
+    ],
+    "chapterScenes": [
+      {
+        "version": 1,
+        "textHash": "WILL-SET",
+        "scenes": [
+          {
+            "id": "sc_ok",
+            "chapterId": "ch_ok",
+            "order": 1,
+            "breakApproved": true,
+            "source": "user",
+            "span": {
+              "start": 0,
+              "end": 20
+            },
+            "boundaryReasons": []
+          }
+        ]
+      }
+    ],
+    "chapterWritingPlans": [
+      {
+        "items": [
+          {
+            "sceneId": "sc_ok",
+            "kind": "beat"
+          }
+        ],
+        "builtFrom": "WILL-SET"
+      }
+    ]
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "helper: edit text without save; then user save"
+}
