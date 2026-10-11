@@ -46,6 +46,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
   const exportedJson = await page.evaluate((apiKey) => new Promise((resolve) => {
     novelData.apiKey = apiKey;
     novelData.nested = { accessToken: apiKey, bearer: apiKey, title: 'Safe content' };
+    novelData.key = 'sort-key';
+    novelData.token = 'ordinary-token';
     novelData.tokenUsage = { calls: 2, promptTokens: 17 };
     novelData.maxTokens = 4321;
     novelData.promptTokens = 17;
@@ -64,6 +66,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
   }), secret);
   expect(exportedJson).not.toContain(secret);
   expect(JSON.parse(exportedJson).novelData).toMatchObject({
+    key: 'sort-key',
+    token: 'ordinary-token',
     tokenUsage: { calls: 2, promptTokens: 17 },
     maxTokens: 4321,
     promptTokens: 17,
@@ -83,6 +87,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
       novelData: {
         title: 'Imported safely',
         apiKey: secret,
+        key: 'sort-key',
+        token: 'ordinary-token',
         nested: { authorization: secret, bearer: secret },
         tokenUsage: { calls: 2, promptTokens: 17 },
         maxTokens: 4321,
@@ -98,6 +104,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     hasApiKey: Object.hasOwn(novelData, 'apiKey'),
     hasAuthorization: Object.hasOwn(novelData.nested, 'authorization'),
     hasBearer: Object.hasOwn(novelData.nested, 'bearer'),
+    key: novelData.key,
+    token: novelData.token,
     tokenUsage: novelData.tokenUsage,
     maxTokens: novelData.maxTokens,
     promptTokens: novelData.promptTokens,
@@ -106,6 +114,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     hasApiKey: false,
     hasAuthorization: false,
     hasBearer: false,
+    key: 'sort-key',
+    token: 'ordinary-token',
     tokenUsage: { calls: 2, promptTokens: 17 },
     maxTokens: 4321,
     promptTokens: 17,

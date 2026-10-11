@@ -304,6 +304,8 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
     document.getElementById('genre').value = 'scifi';
     document.getElementById('maxTokens').value = '4321';
     novelData.tokenUsage = { calls: 2, promptTokens: 17 };
+    novelData.key = 'sort-key';
+    novelData.token = 'ordinary-token';
     novelData.promptTokens = 17;
     novelData.agentKey = 'fetchAuthors';
     requestLog.tokenUsage = '17 tokens';
@@ -345,6 +347,8 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
   expect(Array.isArray(parsed.novelData.chapters)).toBe(true);
   expect(parsed.novelData).toHaveProperty('requestLog');
   expect(parsed.novelData).toMatchObject({
+    key: 'sort-key',
+    token: 'ordinary-token',
     tokenUsage: { calls: 2, promptTokens: 17 },
     maxTokens: 4321,
     promptTokens: 17,
@@ -392,6 +396,8 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
         chapters: [],
         apiKey: 'xai-TESTKEY-123',
         bearer: 'xai-TESTKEY-123',
+        key: 'sort-key',
+        token: 'ordinary-token',
         tokenUsage: { calls: 2, promptTokens: 17 },
         maxTokens: 4321,
         promptTokens: 17,
@@ -413,6 +419,8 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
     hasApiKey: Object.hasOwn(novelData, 'apiKey'),
     apiKey: novelData.apiKey,
     hasBearer: Object.hasOwn(novelData, 'bearer'),
+    key: novelData.key,
+    token: novelData.token,
     tokenUsage: novelData.tokenUsage,
     promptTokens: novelData.promptTokens,
     agentKey: novelData.agentKey,
@@ -421,6 +429,8 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
     hasApiKey: true,
     apiKey: 'existing-user-key',
     hasBearer: false,
+    key: 'sort-key',
+    token: 'ordinary-token',
     tokenUsage: { calls: 2, promptTokens: 17 },
     promptTokens: 17,
     agentKey: 'fetchAuthors',

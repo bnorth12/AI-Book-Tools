@@ -72,6 +72,8 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
       ...novelData,
       apiKey,
       bearer: apiKey,
+      key: 'chapter-key',
+      token: 'ordinary-token',
       tokenUsage: { calls: 2, promptTokens: 17 },
       maxTokens: 4321,
       promptTokens: 17,
@@ -92,6 +94,8 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
   const parsedBook = JSON.parse(exportedBook);
   expect(exportedBook).not.toContain(secret);
   expect(parsedBook.novelData).toMatchObject({
+    key: 'chapter-key',
+    token: 'ordinary-token',
     tokenUsage: { calls: 2, promptTokens: 17 },
     maxTokens: 4321,
     promptTokens: 17,
@@ -113,6 +117,8 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
   });
   await expect.poll(() => page.evaluate(() => ({
     tokenUsage: novelData.tokenUsage,
+    key: novelData.key,
+    token: novelData.token,
     maxTokens: novelData.maxTokens,
     promptTokens: novelData.promptTokens,
     agentKey: novelData.agentKey,
@@ -120,6 +126,8 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
     hasAuthorization: Object.hasOwn(novelData, 'authorization'),
   }))).toEqual({
     tokenUsage: { calls: 2, promptTokens: 17 },
+    key: 'chapter-key',
+    token: 'ordinary-token',
     maxTokens: 4321,
     promptTokens: 17,
     agentKey: 'fetchAuthors',

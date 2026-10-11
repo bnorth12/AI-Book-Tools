@@ -107,6 +107,8 @@ test.describe('HerbalBookForge Smoke Test', () => {
       document.getElementById('api-key').value = apiKey;
       project.setup.apiKey = apiKey;
       project.setup.authorization = apiKey;
+      project.key = 'sort-key';
+      project.token = 'ordinary-token';
       project.tokenUsage = { calls: 2, promptTokens: 17 };
       project.maxTokens = 4321;
       project.promptTokens = 17;
@@ -135,6 +137,8 @@ test.describe('HerbalBookForge Smoke Test', () => {
     expect(JSON.parse(storedProject).setup).not.toHaveProperty('apiKey');
     expect(JSON.parse(storedProject).setup).not.toHaveProperty('authorization');
     expect(JSON.parse(exportedJson)).toMatchObject({
+      key: 'sort-key',
+      token: 'ordinary-token',
       tokenUsage: { calls: 2, promptTokens: 17 },
       maxTokens: 4321,
       promptTokens: 17,
@@ -149,6 +153,8 @@ test.describe('HerbalBookForge Smoke Test', () => {
       buffer: Buffer.from(JSON.stringify({
         setup: { apiKey: secret, bearer: secret },
         meta: { name: 'Imported project' },
+        key: 'sort-key',
+        token: 'ordinary-token',
         tokenUsage: { calls: 3, promptTokens: 19 },
         maxTokens: 5432,
         promptTokens: 19,
@@ -159,12 +165,16 @@ test.describe('HerbalBookForge Smoke Test', () => {
     await expect(page.locator('#project-name')).toHaveValue('Imported project');
     await expect.poll(() => page.evaluate(() => ({
       metaName: project.meta.name,
+      key: project.key,
+      token: project.token,
       tokenUsage: project.tokenUsage,
       maxTokens: project.maxTokens,
       promptTokens: project.promptTokens,
       agentKey: project.agentKey,
     }))).toEqual({
       metaName: 'Imported project',
+      key: 'sort-key',
+      token: 'ordinary-token',
       tokenUsage: { calls: 3, promptTokens: 19 },
       maxTokens: 5432,
       promptTokens: 19,
@@ -174,6 +184,8 @@ test.describe('HerbalBookForge Smoke Test', () => {
     await expect.poll(() => page.evaluate(() => localStorage.getItem('herbalBookForgeProject_v1.0.0'))).not.toContain(secret);
     expect(JSON.parse(await page.evaluate(() => localStorage.getItem('herbalBookForgeProject_v1.0.0')))).toMatchObject({
       meta: { name: 'Imported project' },
+      key: 'sort-key',
+      token: 'ordinary-token',
       tokenUsage: { calls: 3, promptTokens: 19 },
       maxTokens: 5432,
       promptTokens: 19,
