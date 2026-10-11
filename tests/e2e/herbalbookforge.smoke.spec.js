@@ -183,7 +183,7 @@ test.describe('HerbalBookForge Smoke Test', () => {
       agentKey: 'fetchAuthors',
     });
 
-    await page.locator('#api-key').fill('existing-user-key');
+    await page.evaluate(() => { const el = document.getElementById('api-key'); el.value = 'existing-user-key'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
     await page.locator('#import-file').setInputFiles({
       name: 'project-with-key.json',
       mimeType: 'application/json',
