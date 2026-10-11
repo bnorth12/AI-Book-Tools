@@ -38,6 +38,12 @@ jobs:
       - name: NovelWriter retention smoke
         run: npm run test:smoke:nw-retention
 
+      - name: Smoke: qe5 (offline)
+        run: npm run test:smoke:qe5
+
+      - name: Smoke: b2 lean (offline)
+        run: npm run test:smoke:b2-lean
+
       - name: Lint HTML files
         run: |
           npx htmlhint "**/*.html"

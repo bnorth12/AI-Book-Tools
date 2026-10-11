@@ -18,6 +18,8 @@
     "test:smoke:nw-callai-timeout": "node scripts/_smoke_nw_callai_timeout.mjs",
     "test:smoke:nw-integrate": "node scripts/_smoke_nw_integrate.mjs",
     "test:smoke:nw-retention": "node scripts/_smoke_nw_retention.mjs",
+    "test:smoke:qe5": "node scripts/_qe5_smoke.cjs",
+    "test:smoke:b2-lean": "node scripts/_smoke_b2_lean.mjs",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:install": "playwright install chromium",
     "test:regression": "npm run test:governance && npm run test:e2e",
