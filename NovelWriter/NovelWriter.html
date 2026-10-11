@@ -12126,6 +12126,7 @@ return c && c.name && c.backstory && c.arc; });
         var NW_6B_START_REFUSES_LOCK = true;
         var NW_6B_LAST_CHAPTER_FINALIZE = true;
         var NW_6B_COVERAGE_DECIDE_ACTIVE_CHECKPOINT = true;
+        var NW_6B_COVERAGE_ACK_APPLIED = true;
         var NW_6B_INTEGRATE_KEY_NORMALIZE = true;
         var NW_6B_MANUAL_ONLY_STAYS = true;
         window.NW_BATCH = NW_BATCH;
@@ -12398,6 +12399,15 @@ return c && c.name && c.backstory && c.arc; });
                 nwBatchMarkContinuitySkip(br, n);
             }
             if (typeof refreshContinuityAfterChapter === 'function') refreshContinuityAfterChapter(n);
+            return hadPrior;
+        }
+        /** Resume/restore/implicit-skip must not re-apply: first apply already consumed priorDrafts. */
+        function nwBatchApplySkipSideEffectsIfNeeded(br, n) {
+            if (!br || !(n >= 1)) return false;
+            var ack = br.coverageAck;
+            if (ack && ack.chapter === n && ack.applied) return false;
+            var hadPrior = nwBatchApplySkipSideEffects(br, n);
+            if (ack && ack.chapter === n) ack.applied = true;
             return hadPrior;
         }
 
@@ -12767,15 +12777,15 @@ return c && c.name && c.backstory && c.arc; });
                     if (typeof buildChapterContinuityPacket === 'function') buildChapterContinuityPacket(n);
                     if (typeof refreshContinuityAfterChapter === 'function') refreshContinuityAfterChapter(n);
                     if ((br.completed || []).indexOf(n) < 0) br.completed.push(n);
-                    br.coverageAck = { chapter: n, decision: 'accept', at: now };
+                    br.coverageAck = { chapter: n, decision: 'accept', at: now, applied: true };
                     nwBatchClearPriorDraft(br, n);
                     nwBatchClearContinuitySkip(br, n);
                 } else if (decision === 'skip') {
                     nwBatchApplySkipSideEffects(br, n);
-                    br.coverageAck = { chapter: n, decision: 'skip', at: now };
+                    br.coverageAck = { chapter: n, decision: 'skip', at: now, applied: true };
                     nwBatchState.coverageAck = br.id + ':' + n;
                 } else {
-                    br.coverageAck = { chapter: n, decision: 'regenerate', at: now };
+                    br.coverageAck = { chapter: n, decision: 'regenerate', at: now, applied: true };
                 }
                 nwBatchShow('batchCoverageBox', false);
                 var finalized = false;
@@ -12880,7 +12890,13 @@ return c && c.name && c.backstory && c.arc; });
                             forceChapter = br.stoppedAt;
                         } else if (persisted && (persisted.decision === 'skip' || persisted.decision === 'accept')) {
                             skipChapter = br.stoppedAt;
-                            if (persisted.decision === 'skip') nwBatchApplySkipSideEffects(br, br.stoppedAt);
+                            if (persisted.decision === 'skip') {
+                                if (typeof NW_6B_COVERAGE_ACK_APPLIED !== 'undefined' && !NW_6B_COVERAGE_ACK_APPLIED) {
+                                    nwBatchApplySkipSideEffects(br, br.stoppedAt);
+                                } else {
+                                    nwBatchApplySkipSideEffectsIfNeeded(br, br.stoppedAt);
+                                }
+                            }
                         } else {
                             var ackKey = br.id + ':' + br.stoppedAt;
                             if (nwBatchState.coverageAck !== ackKey) {
@@ -12891,7 +12907,7 @@ return c && c.name && c.backstory && c.arc; });
                             }
                             skipChapter = br.stoppedAt;
                             br.coverageAck = { chapter: br.stoppedAt, decision: 'skip', at: new Date().toISOString() };
-                            nwBatchApplySkipSideEffects(br, br.stoppedAt);
+                            nwBatchApplySkipSideEffectsIfNeeded(br, br.stoppedAt);
                         }
                     }
                     range = { from: br.range.from, to: br.range.to };
@@ -13216,6 +13232,9 @@ return c && c.name && c.backstory && c.arc; });
                 br.stoppedAt = savedStoppedAt;
                 br.coverageAck = savedAck;
                 br.detail = savedDetail || 'restored after reload';
+                if (br.coverageAck && br.coverageAck.decision === 'skip' && br.stoppedAt != null) {
+                    nwBatchApplySkipSideEffectsIfNeeded(br, br.stoppedAt);
+                }
             } else {
                 br.reason = 'user';
                 if (was != null) {

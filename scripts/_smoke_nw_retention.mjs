@@ -29,6 +29,8 @@
  *   R17 last planned chapter Accept/Skip finalizes the run (no Click Resume)
  *   R18 mid-run coverage Accept/Regenerate checkpoints ACTIVE so reload offers restore
  *       with coverageAck and priorDrafts intact (N1)
+ *   R19 Skip with prior: Resume (and reload/restore then Resume) must not re-apply skip
+ *       side effects; ch3 packet keeps the restored original and continuitySkip lacks 2
  *
  * Mutations (TEMP copy, flags flipped false; each must turn a core assertion red):
  *   M3  drop packet rollback -> R2 red
@@ -46,6 +48,7 @@
  *   M15 restore forces reason user on coverage stop -> R15 red
  *   M16 Start during import is not refused -> R16 red
  *   M18 coverage decide always checkpoints inactive -> R18 red
+ *   M19 unconditional Skip re-apply on Resume -> R19 red
  *
  * Usage: node scripts/_smoke_nw_retention.mjs
  * Env:   NW_HTML_PATH (default this checkout's NovelWriter/NovelWriter.html), NW_OUT_DIR (default out/nw-smoke)
@@ -107,7 +110,8 @@ const FLAGS = {
   acceptAudit: 'var NW_6B_ACCEPT_AUDIT_ABORT = true;',
   restoreCoverage: 'var NW_6B_RESTORE_KEEP_COVERAGE = true;',
   startLock: 'var NW_6B_START_REFUSES_LOCK = true;',
-  decideActiveCk: 'var NW_6B_COVERAGE_DECIDE_ACTIVE_CHECKPOINT = true;'
+  decideActiveCk: 'var NW_6B_COVERAGE_DECIDE_ACTIVE_CHECKPOINT = true;',
+  ackApplied: 'var NW_6B_COVERAGE_ACK_APPLIED = true;'
 };
 function mutateCopy(flagFrom) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-6b-ret-'));
@@ -331,6 +335,62 @@ function r18Ok(s, decision, priorText) {
     && restoredAck && restoredAck.decision === decision && restoredAck.chapter === 2
     && s.after.restoredOk === true && s.after.restoredReason === 'coverage'
     && priorOk);
+}
+
+function r19Ok(s, OLD2) {
+  const p3s = s && s.p3 ? JSON.stringify(s.p3) : '';
+  return !!(s && s.ch2 === OLD2
+    && p3s.indexOf(OLD2) >= 0
+    && p3s.indexOf('KEPT-DRAFT-CH2') < 0
+    && !(s.skipList || []).includes(2)
+    && s.ack && s.ack.decision === 'skip' && s.ack.applied === true);
+}
+
+async function r19SkipThenResume(page, OLD2, reloadRestore) {
+  await coverageStop(page, { nd: ND, regenerate: true, prefill: { 2: OLD2 } });
+  const skipped = await page.evaluate(async () => {
+    const ok = await nwBatchCoverageDecide('skip');
+    const rec = novelData.batchRun ? await window.__h.idbGet(novelData.batchRun.id) : null;
+    return {
+      ok,
+      ch2: (novelData.chapters || [])[1] || '',
+      ack: novelData.batchRun && novelData.batchRun.coverageAck ? JSON.parse(JSON.stringify(novelData.batchRun.coverageAck)) : null,
+      recAck: rec && rec.batchRun && rec.batchRun.coverageAck ? JSON.parse(JSON.stringify(rec.batchRun.coverageAck)) : null,
+      skipList: (novelData.batchRun && novelData.batchRun.continuitySkip) || []
+    };
+  });
+  let restored = null;
+  if (reloadRestore) {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => typeof generateAllChapters === 'function' && window.__nwBatchRestoreCheck, null, { timeout: 30000 });
+    await page.evaluate(() => window.__nwBatchRestoreCheck);
+    await installHarness(page);
+    restored = await page.evaluate(async () => {
+      const rec = await nwBatchFindInterrupted();
+      const hadInterrupted = !!nwBatchState.interrupted;
+      const restoredOk = nwBatchState.interrupted ? await restoreInterruptedBatchRun() : false;
+      return {
+        offered: !!(rec && rec.active && hadInterrupted),
+        restoredOk,
+        restoredAck: novelData.batchRun && novelData.batchRun.coverageAck ? JSON.parse(JSON.stringify(novelData.batchRun.coverageAck)) : null,
+        skipList: (novelData.batchRun && novelData.batchRun.continuitySkip) || [],
+        ch2: (novelData.chapters || [])[1] || ''
+      };
+    });
+  }
+  const after = await page.evaluate(async () => {
+    window.__h.cfg = {};
+    const r = await resumeBatchRun();
+    const p3 = typeof buildChapterContinuityPacket === 'function' ? buildChapterContinuityPacket(3) : null;
+    return {
+      r,
+      ch2: (novelData.chapters || [])[1] || '',
+      p3: p3 ? JSON.parse(JSON.stringify(p3)) : null,
+      skipList: (novelData.batchRun && novelData.batchRun.continuitySkip) || [],
+      ack: novelData.batchRun && novelData.batchRun.coverageAck ? JSON.parse(JSON.stringify(novelData.batchRun.coverageAck)) : null
+    };
+  });
+  return { skipped, restored, after };
 }
 
 // ---------------- R1 keep and flag ----------------
@@ -1048,6 +1108,29 @@ async function runPre6bNoFlags(page, raw) {
   await page2.close();
 }
 
+// ---------------- R19 Skip with prior: no re-apply on Resume / restore+Resume ----------------
+{
+  const OLD2 = 'Hand-written chapter two ORIGINAL prior text that must stay in ch3 continuity after Resume.';
+  const page = await openPage();
+  const a = await r19SkipThenResume(page, OLD2, false);
+  const skipAck = !!(a.skipped && a.skipped.ok === true && a.skipped.ch2 === OLD2
+    && a.skipped.ack && a.skipped.ack.applied === true && a.skipped.ack.decision === 'skip'
+    && a.skipped.recAck && a.skipped.recAck.applied === true
+    && !(a.skipped.skipList || []).includes(2));
+  check('R19', 'Skip with prior sets coverageAck.applied in memory and checkpoint; continuitySkip lacks 2', skipAck, JSON.stringify(a.skipped));
+  check('R19', 'Resume after Skip with prior: ch3 packet has restored original and continuitySkip lacks 2', r19Ok(a.after, OLD2), JSON.stringify(a.after));
+  await page.close();
+  const page2 = await openPage();
+  const b = await r19SkipThenResume(page2, OLD2, true);
+  const restoredOk = !!(b.restored && b.restored.offered === true && b.restored.restoredOk === true
+    && b.restored.ch2 === OLD2
+    && b.restored.restoredAck && b.restored.restoredAck.applied === true && b.restored.restoredAck.decision === 'skip'
+    && !(b.restored.skipList || []).includes(2));
+  check('R19', 'reload/restore after Skip with prior keeps applied and does not mark continuitySkip', restoredOk, JSON.stringify(b.restored));
+  check('R19', 'restore then Resume: ch3 packet has restored original and continuitySkip lacks 2', r19Ok(b.after, OLD2), JSON.stringify(b.after));
+  await page2.close();
+}
+
 // ---------------- Mutations ----------------
 {
   const m3 = mutateCopy(FLAGS.packet);
@@ -1327,6 +1410,16 @@ async function runPre6bNoFlags(page, raw) {
     check('M18', 'forcing checkpoint(false) after mid-run coverage decide turns R18 red', r18Ok(regen, 'regenerate', OLD2) === false, JSON.stringify(regen));
     await page.close();
     try { fs.rmSync(m18.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m19 = mutateCopy(FLAGS.ackApplied);
+  check('M19', 'flag NW_6B_COVERAGE_ACK_APPLIED present', m19.ok, m19.detail);
+  if (m19.ok) {
+    const page = await openPage(m19.copy);
+    const OLD2 = 'Hand-written chapter two ORIGINAL prior text that must stay in ch3 continuity after Resume.';
+    const a = await r19SkipThenResume(page, OLD2, false);
+    check('M19', 'unconditional Skip re-apply on Resume turns R19 red', r19Ok(a.after, OLD2) === false, JSON.stringify(a.after));
+    await page.close();
+    try { fs.rmSync(m19.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
   }
 }
 
