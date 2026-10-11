@@ -22,6 +22,26 @@
       "ch_b",
       "ch_c"
     ],
+    "chapterRequiredFacts": [
+      { "items": [{ "id": "f-a", "text": "fact-a" }] },
+      { "items": [{ "id": "f-b", "text": "fact-b" }] },
+      { "items": [{ "id": "f-c", "text": "fact-c-stale" }] }
+    ],
+    "chapterRequirements": [
+      { "cast": ["mira"], "setting": "a" },
+      { "cast": ["mira"], "setting": "b" },
+      { "cast": ["mira"], "setting": "stale-req" }
+    ],
+    "chapterFingerprints": [
+      { "textHash": "fp-a" },
+      { "textHash": "fp-b" },
+      { "textHash": "fp-stale" }
+    ],
+    "chapterWritingPlans": [
+      { "builtFrom": "plan-a" },
+      { "builtFrom": "plan-b" },
+      { "builtFrom": "plan-stale" }
+    ],
     "chapterScenes": [
       {
         "version": 1,
@@ -66,5 +86,5 @@
   },
   "expectedAddedKeys": [],
   "expectedWarnings": [],
-  "notes": "helper: resize up to 5 and down to 2"
+  "notes": "helper: resize up to 5 and down to 2; shrink-then-grow must not restore stale S1 per-chapter records"
 }

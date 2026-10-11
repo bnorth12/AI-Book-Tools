@@ -831,33 +831,51 @@ async function loadEnvelope(page, envelope) {
   await page.close();
 }
 
-// ---------------- 23. Post-S1 calibration pin: migrate then score; numbers must not move ----
+// ---------------- 23. REQ-SCH-07: unmigrated==migrated==pre-s1 baseline; post-s1 pin includes repetition ----
 {
-  const pinPath = path.join(FIX, 'calibration-post-s1.json');
+  const prePath = path.join(FIX, 'calibration-pre-s1.json');
+  const postPath = path.join(FIX, 'calibration-post-s1.json');
   const page = await openPage();
-  const scored = await page.evaluate(async (book) => {
+  const pair = await page.evaluate(async (book) => {
+    function rows(s) {
+      return (s.chapters || []).map((c) => ({
+        chapter: c.chapter,
+        overall: c.overall,
+        words: c.length && c.length.words,
+        replayInternal: c.replay && c.replay.internal && c.replay.internal.shared,
+        factsStatus: c.facts && c.facts.status,
+        noteLeak: c.noteLeak && c.noteLeak.status,
+        cast: c.cast && c.cast.status,
+        repetition: c.repetition && c.repetition.status
+      }));
+    }
     const n = normalizeImportedSessionData(book);
-    novelData = (typeof nwMigrateSession === 'function') ? nwMigrateSession(n.novelData) : n.novelData;
+    novelData = JSON.parse(JSON.stringify(n.novelData));
     applySessionDataToUI();
-    const s = await nwScoreBook({ trigger: 'harness' });
-    return (s.chapters || []).map((c) => ({
-      chapter: c.chapter,
-      overall: c.overall,
-      words: c.length && c.length.words,
-      replayInternal: c.replay && c.replay.internal && c.replay.internal.shared,
-      factsStatus: c.facts && c.facts.status,
-      noteLeak: c.noteLeak && c.noteLeak.status,
-      cast: c.cast && c.cast.status,
-      repetition: c.repetition && c.repetition.score
-    }));
+    const unmigrated = rows(await nwScoreBook({ trigger: 'harness' }));
+    novelData = (typeof nwMigrateSession === 'function') ? nwMigrateSession(JSON.parse(JSON.stringify(n.novelData))) : JSON.parse(JSON.stringify(n.novelData));
+    applySessionDataToUI();
+    const migrated = rows(await nwScoreBook({ trigger: 'harness' }));
+    return { unmigrated, migrated };
   }, BOOK3);
   await page.close();
-  if (!fs.existsSync(pinPath)) {
-    check('23', 'post-S1 calibration pin file present', false, 'missing ' + pinPath);
+  if (!fs.existsSync(prePath)) {
+    check('23', 'pre-S1 calibration pin file present', false, 'missing ' + prePath);
   } else {
-    const pin = JSON.parse(fs.readFileSync(pinPath, 'utf8'));
-    check('23', 'post-S1 calibration pin deep-equal (migrated then scored)', JSON.stringify(scored) === JSON.stringify(pin.book3ch), JSON.stringify({ scored, pin: pin.book3ch }).slice(0, 1400));
+    const pre = JSON.parse(fs.readFileSync(prePath, 'utf8'));
+    check('23', 'unmigrated book-3ch scores deep-equal migrated (same run)', JSON.stringify(pair.unmigrated) === JSON.stringify(pair.migrated), JSON.stringify({ unmigrated: pair.unmigrated, migrated: pair.migrated }).slice(0, 1400));
+    check('23', 'post-S1 (migrated) scores deep-equal calibration-pre-s1.json', JSON.stringify(pair.migrated) === JSON.stringify(pre.book3ch), JSON.stringify({ migrated: pair.migrated, pre: pre.book3ch }).slice(0, 1400));
   }
+  if (!fs.existsSync(postPath)) {
+    check('23', 'post-S1 calibration pin file present', false, 'missing ' + postPath);
+  } else {
+    const post = JSON.parse(fs.readFileSync(postPath, 'utf8'));
+    check('23', 'post-S1 pin includes repetition and deep-equals migrated', post.book3ch && post.book3ch.every((r) => Object.prototype.hasOwnProperty.call(r, 'repetition')) && JSON.stringify(pair.migrated) === JSON.stringify(post.book3ch), JSON.stringify({ migrated: pair.migrated, post: post.book3ch }).slice(0, 1400));
+  }
+  const perturbed = JSON.parse(JSON.stringify(pair.migrated));
+  if (perturbed[0]) perturbed[0].overall = perturbed[0].overall === 'FAIL' ? 'PASS' : 'FAIL';
+  const pre = fs.existsSync(prePath) ? JSON.parse(fs.readFileSync(prePath, 'utf8')) : { book3ch: [] };
+  check('23', 'mutation: perturbing a score after migration turns QH:23 red', JSON.stringify(perturbed) !== JSON.stringify(pre.book3ch) && JSON.stringify(pair.migrated) === JSON.stringify(pre.book3ch), JSON.stringify({ perturbed: perturbed[0], pin: pre.book3ch && pre.book3ch[0] }));
 }
 
 await browser.close();

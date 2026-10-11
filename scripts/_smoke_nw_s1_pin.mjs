@@ -1,5 +1,5 @@
 /**
- * REQ-SCH-10: re-run the nw-s1 Step 0 fixture (pinned to #153) against this S1 head.
+ * REQ-SCH-10: re-run the nw-s1 Step 0 fixture created in S1 against A1 v9.3.
  * Seeded nwOpaqueId ids must match expected.json exactly. Prints PASS/FAIL per check id.
  *
  *   node scripts/_smoke_nw_s1_pin.mjs

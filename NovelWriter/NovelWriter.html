@@ -2218,6 +2218,13 @@ let activeAICallCount = 0;
 		// ---- NW S1: schema v1 + scenes + owner helpers (ARCHITECTURE.md §2-§8) ----
 		var NW_S1_NORMALIZER_PASSTHROUGH = true;
 		var NW_S1_LOCK_SETUP_INPUTS = true;
+		var NW_S1_LOCK_TAB47 = true;
+		var NW_S1_LOCK_PAUSE_HELD = true;
+		var NW_S1_KEEP_WRONG_TYPES = true;
+		var NW_S1_RESIZE_SPLICE_ALL = true;
+		var NW_S1_RESTORE_OPAQUE_RNG = true;
+		var NW_S1_WORLD_REMOVED_STALE = true;
+		var NW_S1_SPLICE_SCENES = true;
 		var NW_S1_SCHEMA_VERSION = 1;
 		var nwMigrateInProgress = false;
 		var nwOpaqueRngCurrent = null;
@@ -2247,7 +2254,9 @@ let activeAICallCount = 0;
 		}
 
 		function nwRefuseAiIfLocked(name) {
-			if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
+			var setupLocked = (typeof nwBatchSetupIsLocked === 'function') ? nwBatchSetupIsLocked()
+				: (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked());
+			if (setupLocked) {
 				var msg = (name || 'AI action') + ' is locked while a Generate All run is active or awaiting restore.';
 				if (typeof nwToast === 'function') nwToast(msg);
 				else if (typeof nwNotify === 'function') nwNotify(msg);
@@ -2322,10 +2331,10 @@ let activeAICallCount = 0;
 			var set = new Set();
 			nd = nd || (typeof novelData !== 'undefined' ? novelData : {});
 			if (kind === 'ch_' || kind === 'all') {
-				(nd.chapterIds || []).forEach(function (id) { if (id) set.add(id); });
+				if (Array.isArray(nd.chapterIds)) nd.chapterIds.forEach(function (id) { if (id) set.add(id); });
 			}
 			if (kind === 'sc_' || kind === 'all') {
-				(nd.chapterScenes || []).forEach(function (rec) {
+				if (Array.isArray(nd.chapterScenes)) nd.chapterScenes.forEach(function (rec) {
 					if (rec && Array.isArray(rec.scenes)) rec.scenes.forEach(function (s) { if (s && s.id) set.add(s.id); });
 				});
 			}
@@ -2765,6 +2774,13 @@ let activeAICallCount = 0;
 		}
 
 		function nwEnsureChapterIdsArray(nd) {
+			if (nwHasOwn(nd, 'chapterIds') && !Array.isArray(nd.chapterIds)) {
+				if (typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES) {
+					console.warn('nwEnsureChapterIdsArray: chapterIds has wrong type; keeping as-is', nd.chapterIds);
+					return null;
+				}
+				nd.chapterIds = [];
+			}
 			if (!Array.isArray(nd.chapterIds)) nd.chapterIds = [];
 			return nd.chapterIds;
 		}
@@ -2774,6 +2790,7 @@ let activeAICallCount = 0;
 			if (nwOwnerLocked()) return { ok: false, reason: 'locked' };
 			var taken = nwTakenIds(target, 'ch_');
 			var ids = nwEnsureChapterIdsArray(target);
+			if (!ids) return { ok: false, reason: 'wrong-type' };
 			var count = nwChapterCount(target);
 			if (op === 'assign') {
 				if (!(n >= 1)) return { ok: false, reason: 'bad-n' };
@@ -2813,7 +2830,13 @@ let activeAICallCount = 0;
 				if (!Array.isArray(target.chapters)) target.chapters = [];
 				while (ids.length < next) ids.push(nwOpaqueId('ch_', taken));
 				if (ids.length > next) ids.length = next;
-				if (Array.isArray(target.chapterScenes) && target.chapterScenes.length > next) target.chapterScenes.length = next;
+				var spliceAll = (typeof NW_S1_RESIZE_SPLICE_ALL === 'undefined' || NW_S1_RESIZE_SPLICE_ALL);
+				var s1Arrs = spliceAll
+					? ['chapterRequiredFacts', 'chapterRequirements', 'chapterFingerprints', 'chapterWritingPlans', 'chapterScenes']
+					: ['chapterScenes'];
+				s1Arrs.forEach(function (k) {
+					if (Array.isArray(target[k]) && target[k].length > next) target[k].length = next;
+				});
 				target.numChapters = next;
 				return { ok: true };
 			}
@@ -2830,6 +2853,7 @@ let activeAICallCount = 0;
 		function nwSplicePerChapter(target, index, op, to) {
 			var keys = ['chapterScenes', 'chapterOutlines', 'chapterArcs', 'chapterBlueprints', 'chapterWritingPlans', 'chapterRequirements', 'chapterRequiredFacts', 'chapterFingerprints', 'chapterThemeTags', 'chapterFlags', 'chapterScorecards', 'chapterFactChecks', 'editedChapters', 'chapterImprovements', 'chapterContinuityPackets'];
 			keys.forEach(function (k) {
+				if (k === 'chapterScenes' && typeof NW_S1_SPLICE_SCENES !== 'undefined' && !NW_S1_SPLICE_SCENES) return;
 				if (!Array.isArray(target[k])) return;
 				if (op === 'insert') target[k].splice(index, 0, undefined);
 				else if (op === 'delete') target[k].splice(index, 1);
@@ -2881,6 +2905,13 @@ let activeAICallCount = 0;
 			target = target || novelData;
 			if (nwOwnerLocked()) return { ok: false, reason: 'locked' };
 			if (!(n >= 1) || !patch || typeof patch !== 'object') return { ok: false, reason: 'bad-args' };
+			if (nwHasOwn(target, 'chapterScenes') && !Array.isArray(target.chapterScenes)) {
+				if (typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES) {
+					console.warn('nwChapterScenesUpdate: chapterScenes has wrong type; keeping as-is', target.chapterScenes);
+					return { ok: false, reason: 'wrong-type' };
+				}
+				target.chapterScenes = [];
+			}
 			if (!Array.isArray(target.chapterScenes)) target.chapterScenes = [];
 			var prev = target.chapterScenes[n - 1] && typeof target.chapterScenes[n - 1] === 'object' ? target.chapterScenes[n - 1] : {};
 			var next = Object.assign({}, prev, patch);
@@ -2972,7 +3003,12 @@ let activeAICallCount = 0;
 			if (hasWb && !plan.worldFrom) return true;
 			if (plan.worldFrom) {
 				var cur = nwComputeWorldFrom(n, target);
-				if (cur && plan.worldFrom !== cur) return true;
+				var worldRemovedStale = (typeof NW_S1_WORLD_REMOVED_STALE === 'undefined' || NW_S1_WORLD_REMOVED_STALE);
+				if (worldRemovedStale) {
+					if (cur == null || plan.worldFrom !== cur) return true;
+				} else if (cur && plan.worldFrom !== cur) {
+					return true;
+				}
 			}
 			return false;
 		}
@@ -2991,7 +3027,9 @@ let activeAICallCount = 0;
 		function nwMigrateSession(nd, opts) {
 			opts = opts || {};
 			if (!nd || typeof nd !== 'object') return nd;
+			var prevRng = nwOpaqueRngCurrent;
 			if (opts.rng) nwSetOpaqueRng(opts.rng);
+			try {
 			var ver = nd.nwSchemaVersion;
 			if (typeof ver === 'number' && ver > NW_S1_SCHEMA_VERSION) {
 				console.warn('nwMigrateSession: nwSchemaVersion ' + ver + ' is newer than this app; read-through, unchanged');
@@ -3020,8 +3058,19 @@ let activeAICallCount = 0;
 				}
 				var nCh = nwChapterCount(nd);
 				var i;
-				for (i = 1; i <= nCh; i++) nwChapterIdsUpdate('assign', i, null, nd);
+				var keepWrong = (typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES);
+				var chapterIdsWrong = nwHasOwn(nd, 'chapterIds') && !Array.isArray(nd.chapterIds);
+				var chapterScenesWrong = nwHasOwn(nd, 'chapterScenes') && !Array.isArray(nd.chapterScenes);
+				if (chapterIdsWrong && keepWrong) {
+					console.warn('nwMigrateSession: chapterIds has wrong type; skipping owner write', nd.chapterIds);
+				} else {
+					for (i = 1; i <= nCh; i++) nwChapterIdsUpdate('assign', i, null, nd);
+				}
 				for (i = 1; i <= nCh; i++) {
+					if (chapterScenesWrong && keepWrong) {
+						if (i === 1) console.warn('nwMigrateSession: chapterScenes has wrong type; skipping owner write', nd.chapterScenes);
+						continue;
+					}
 					if (!nwChapterHasText(nd, i - 1)) continue;
 					var existingScenes = Array.isArray(nd.chapterScenes) ? nd.chapterScenes[i - 1] : null;
 					if (existingScenes && typeof existingScenes === 'object') continue;
@@ -3063,6 +3112,11 @@ let activeAICallCount = 0;
 				nwMigrateInProgress = false;
 			}
 			return nd;
+			} finally {
+				if (typeof NW_S1_RESTORE_OPAQUE_RNG === 'undefined' || NW_S1_RESTORE_OPAQUE_RNG) {
+					nwSetOpaqueRng(prevRng);
+				}
+			}
 		}
 
 		function nwCollectCharactersFromDom() {
@@ -9788,6 +9842,7 @@ return c && c.name && c.backstory && c.arc; });
 
 			//Break improvements into executable parts
 			async function breakdownImprovement(index) {
+			    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Break Down')) return;
 			    collectData();
 		    // Agent Skill I/O pack (tab7.breakdownImprovement)
 			    const improvement = (novelData.bookImprovementsWithStatus || [])[index];
@@ -10442,6 +10497,7 @@ return c && c.name && c.backstory && c.arc; });
 		    // NW.T4.F1: incorporateOutlineSuggestions() SHALL send current outlines plus user improvement notes to the LLM and overwrite all three outline fields with the revised versions.
 		    // Incorporate user-suggested improvements into the main outlines
 		    async function incorporateOutlineSuggestions() {
+			    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Incorporate Suggestions')) return;
 			    collectData();
 		    // Agent Skill I/O pack (tab4.incorporateOutlineSuggestions)
 		    window.__lastSkillPack = packSkillInputs('tab4.incorporateOutlineSuggestions', { novelData: novelData });
@@ -13495,6 +13551,16 @@ return c && c.name && c.backstory && c.arc; });
             return !!(nwBatchState.running || nwBatchState.interrupted || nwBatchState.importing || nwBatchState.integrating);
         }
 
+        function nwBatchPauseHoldsSetupLock() {
+            if (typeof NW_S1_LOCK_PAUSE_HELD !== 'undefined' && !NW_S1_LOCK_PAUSE_HELD) return false;
+            var br = typeof novelData !== 'undefined' && novelData && novelData.batchRun;
+            return !!(br && br.reason === 'paused' && !(nwBatchState && nwBatchState.running));
+        }
+
+        function nwBatchSetupIsLocked() {
+            return nwBatchIsLocked() || nwBatchPauseHoldsSetupLock();
+        }
+
         function nwBatchIsResumable() {
             var br = novelData.batchRun;
             if (!br || !br.range || nwBatchState.running) return false;
@@ -13517,6 +13583,7 @@ return c && c.name && c.backstory && c.arc; });
 
         function nwBatchApplyLock() {
             var locked = nwBatchIsLocked();
+            var setupLocked = (typeof nwBatchSetupIsLocked === 'function') ? nwBatchSetupIsLocked() : locked;
             document.querySelectorAll('#chapterGenContainer button, #chapterEditContainer button').forEach(function (b) { b.disabled = locked; });
             document.querySelectorAll('textarea[id^="chapterEditContent"]').forEach(function (t) { t.readOnly = locked; t.disabled = locked; });
             // Tab 7 Apply (updateChapter) and Tab 8 Integrate Suggestions are writers too.
@@ -13527,18 +13594,22 @@ return c && c.name && c.backstory && c.arc; });
                 var el = nwBatchEl(id);
                 if (el) el.disabled = locked;
             });
-            var setupIds = ['setting', 'generalPlot', 'storyArc', 'title', 'genre', 'authorStyle', 'styleGuide', 'chapterLength'];
+            var setupIds = ['setting', 'generalPlot', 'storyArc', 'title', 'genre', 'authorStyle', 'styleGuide', 'chapterLength', 'numCharacters', 'minSubplots'];
             if (typeof NW_S1_LOCK_SETUP_INPUTS === 'undefined' || NW_S1_LOCK_SETUP_INPUTS) {
                 setupIds.forEach(function (id) {
                     var el = document.getElementById(id);
-                    if (el) el.disabled = locked;
+                    if (el) el.disabled = setupLocked;
                 });
             }
-            var aiSel = '#tab1 button[onclick*="suggest"], #tab1 button[onclick*="fetchAuthors"], #tab1 button[onclick*="fetchStyleGuide"], #tab2 button[onclick*="suggest"], #tab2 button[onclick*="scrape"], #tab2 button[onclick*="refine"], #tab3 button[onclick*="suggest"], #tab4 button[onclick*="generate"], #tab4 button[onclick*="enrich"], #tab4 button[onclick*="updateChapter"], #tab7 button[onclick*="suggestBookImprovements"]';
-            document.querySelectorAll(aiSel).forEach(function (b) { b.disabled = locked; });
+            var aiSel = '#tab1 button[onclick*="suggest"], #tab1 button[onclick*="fetchAuthors"], #tab1 button[onclick*="fetchStyleGuide"], #tab2 button[onclick*="suggest"], #tab2 button[onclick*="scrape"], #tab2 button[onclick*="refine"], #tab2 button[onclick*="enrich"], #tab3 button[onclick*="suggest"], #tab3 button[onclick*="enrich"], #tab4 button[onclick*="generate"], #tab4 button[onclick*="enrich"], #tab4 button[onclick*="updateChapter"], #tab7 button[onclick*="suggestBookImprovements"]';
+            if (typeof NW_S1_LOCK_TAB47 === 'undefined' || NW_S1_LOCK_TAB47) {
+                aiSel += ', #tab4 button[onclick*="incorporateOutlineSuggestions"], #tab7 button[onclick*="breakdownImprovement"], #tab2 button[onclick*="addCharacter"], #tab3 button[onclick*="addSubplot"]';
+            }
+            document.querySelectorAll(aiSel).forEach(function (b) { b.disabled = setupLocked; });
+            document.querySelectorAll('#chapterOutlines button').forEach(function (b) { b.disabled = setupLocked; });
             document.querySelectorAll('#tab2 .charName, #tab2 .charBackstory, #tab2 .charArc, #tab3 .subplot, #tab4 textarea').forEach(function (t) {
-                t.disabled = locked;
-                if ('readOnly' in t) t.readOnly = locked;
+                t.disabled = setupLocked;
+                if ('readOnly' in t) t.readOnly = setupLocked;
             });
             var decideBusy = !!nwBatchState.coverageDecideOwner;
             ['batchCoverageAcceptBtn', 'batchCoverageRegenerateBtn', 'batchCoverageSkipBtn'].forEach(function (id) {
@@ -14229,6 +14300,10 @@ return c && c.name && c.backstory && c.arc; });
         window.generateAllChapters = generateAllChapters;
         window.resumeBatchRun = resumeBatchRun;
         window.pauseBatchRun = pauseBatchRun;
+        window.nwBatchIsLocked = nwBatchIsLocked;
+        window.nwBatchSetupIsLocked = nwBatchSetupIsLocked;
+        window.nwBatchPauseHoldsSetupLock = nwBatchPauseHoldsSetupLock;
+        window.nwBatchApplyLock = nwBatchApplyLock;
         // === NW_BATCH_END ===
 
 	    // ---- NW.T6: Chapter Editing Functions ----
@@ -14445,6 +14520,7 @@ return c && c.name && c.backstory && c.arc; });
 		// NW.DOM.4: addSubplot() SHALL append a new blank subplot textarea to #subplotList and update the #minSubplots counter.
 		//addCharacter
 		function addCharacter() {
+			if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Add Character')) return;
 		    const charList = document.getElementById('characterList');
 		    const div = document.createElement('div');
 		    div.className = 'character';
@@ -14588,6 +14664,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		//addSubplot
 		function addSubplot() {
+			if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Add Subplot')) return;
 		    const subplotList = document.getElementById('subplotList');
 		    const index = subplotList.getElementsByClassName('subplot-section').length + 1;
 		    const div = document.createElement('div');

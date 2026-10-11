@@ -1,6 +1,8 @@
 /**
- * Offline smoke for REQ-SCH-08 / issue #159: mid-run Setup edit cannot change later prompts.
- * LOCK:setup-midrun + mutation LOCK:M1 (drop Setup inputs from nwBatchApplyLock).
+ * Offline smoke for REQ-SCH-08 / #159 and REQ-SCH-11:
+ * LOCK:setup-midrun + LOCK:M1 (drop Setup inputs from nwBatchApplyLock).
+ * LOCK:pause-held + LOCK:M2 (release Setup lock on pause).
+ * Full Tab 1-4/7 AI control list; nonzero matched-control count per tab (1b).
  * No network, no API key. Prints each check id PASS/FAIL.
  *
  *   node scripts/_smoke_nw_setup_lock.mjs
@@ -57,7 +59,7 @@ const pageErrors = [];
 
 async function install(page) {
   await page.evaluate(() => {
-    const h = window.__h = { calls: [], prompts: [], dialogs: [] };
+    const h = window.__h = { calls: [], prompts: [], dialogs: [], toasts: [] };
     ['alert', 'confirm', 'prompt'].forEach((k) => {
       window[k] = function (m) { h.dialogs.push(k + ': ' + String(m).slice(0, 200)); return k === 'confirm' ? true : (k === 'prompt' ? null : undefined); };
     });
@@ -74,6 +76,7 @@ async function install(page) {
       }
       return realGen.apply(this, arguments);
     };
+    window.nwToast = function (m) { h.toasts.push(String(m)); const el = document.getElementById('nwToast'); if (el) { el.textContent = String(m); el.hidden = false; } };
     window.callAI = async function (messages) {
       const g = window.__lastGenerateChapterGate;
       const ch = g ? g.chapter : 0;
@@ -107,8 +110,26 @@ async function install(page) {
       document.getElementById('batchFrom').value = '1';
       document.getElementById('batchTo').value = '3';
       document.getElementById('batchRegenerate').checked = false;
+      novelData.bookImprovementsWithStatus = [{ text: 'Chapter 2: tighten the relay scene.', status: 'To Incorporate', breakdown: null }];
+      if (typeof updateBookImprovementsTable === 'function') updateBookImprovementsTable('Chapter 2: tighten the relay scene.');
     };
   });
+}
+
+const TAB_AI = {
+  1: '#tab1 button[onclick*="suggestSetting"], #tab1 button[onclick*="suggestStoryArc"], #tab1 button[onclick*="suggestGeneralPlot"], #tab1 button[onclick*="suggestStoryInfo"], #tab1 button[onclick*="fetchAuthors"], #tab1 button[onclick*="fetchStyleGuide"]',
+  2: '#tab2 button[onclick*="suggestCharacters"], #tab2 button[onclick*="scrapeBookInfoForCharacters"], #tab2 button[onclick*="refineCharacters"], #tab2 button[onclick*="enrichCharacters"], #tab2 button[onclick*="addCharacter"]',
+  3: '#tab3 button[onclick*="suggestSubplots"], #tab3 button[onclick*="enrichSubplots"], #tab3 button[onclick*="addSubplot"]',
+  4: '#tab4 button[onclick*="generateNovelOutlines"], #tab4 button[onclick*="enrichChapterBlueprints"], #tab4 button[onclick*="incorporateOutlineSuggestions"]',
+  7: '#tab7 button[onclick*="suggestBookImprovements"], #tab7 button[onclick*="breakdownImprovement"]'
+};
+
+function tabMatchCounts(controls) {
+  const out = {};
+  for (const [tab, sel] of Object.entries(controls)) {
+    out[tab] = { sel, n: 0, allDisabled: true };
+  }
+  return out;
 }
 
 async function openPage(htmlPath) {
@@ -148,7 +169,23 @@ async function runCase(htmlPath, mutateUnlocked) {
     });
     const settingDisabled = document.getElementById('setting').disabled;
     const plotDisabled = document.getElementById('generalPlot').disabled;
-    const suggestDisabled = Array.from(document.querySelectorAll('#tab1 button[onclick*="suggestSetting"]')).every((b) => b.disabled);
+    const tabSels = {
+      1: '#tab1 button[onclick*="suggestSetting"], #tab1 button[onclick*="suggestStoryArc"], #tab1 button[onclick*="suggestGeneralPlot"], #tab1 button[onclick*="suggestStoryInfo"], #tab1 button[onclick*="fetchAuthors"], #tab1 button[onclick*="fetchStyleGuide"]',
+      2: '#tab2 button[onclick*="suggestCharacters"], #tab2 button[onclick*="scrapeBookInfoForCharacters"], #tab2 button[onclick*="refineCharacters"], #tab2 button[onclick*="enrichCharacters"], #tab2 button[onclick*="addCharacter"]',
+      3: '#tab3 button[onclick*="suggestSubplots"], #tab3 button[onclick*="enrichSubplots"], #tab3 button[onclick*="addSubplot"]',
+      4: '#tab4 button[onclick*="generateNovelOutlines"], #tab4 button[onclick*="enrichChapterBlueprints"], #tab4 button[onclick*="incorporateOutlineSuggestions"]',
+      7: '#tab7 button[onclick*="suggestBookImprovements"], #tab7 button[onclick*="breakdownImprovement"]'
+    };
+    const tabs = {};
+    Object.keys(tabSels).forEach((tab) => {
+      const nodes = Array.from(document.querySelectorAll(tabSels[tab]));
+      tabs[tab] = { n: nodes.length, allDisabled: nodes.length > 0 && nodes.every((b) => b.disabled) };
+    });
+    const extras = {
+      numCharacters: !!(document.getElementById('numCharacters') && document.getElementById('numCharacters').disabled),
+      minSubplots: !!(document.getElementById('minSubplots') && document.getElementById('minSubplots').disabled)
+    };
+    const suggestDisabled = tabs[1].allDisabled && tabs[2].allDisabled && tabs[3].allDisabled && tabs[4].allDisabled && tabs[7].allDisabled && extras.numCharacters && extras.minSubplots;
     const settingSnap = String(novelData.setting || '');
     const plotSnap = String(novelData.generalPlot || '');
     const pre2 = buildGenerateChapterUserContent(2, 1);
@@ -179,7 +216,7 @@ async function runCase(htmlPath, mutateUnlocked) {
     const g3 = line(p3, 'Plot');
     return {
       r2: r2 && r2.reason, completed: (novelData.batchRun && novelData.batchRun.completed) || [],
-      settingDisabled, plotDisabled, suggestDisabled, edited,
+      settingDisabled, plotDisabled, suggestDisabled, edited, tabs, extras,
       eq2: p2 === pre2,
       setupSame: s2 && s2 === s3 && g2 && g2 === g3,
       mutated: /MUTATED SETTING/.test(p2 + p3) || /MUTATED PLOT/.test(p2 + p3),
@@ -192,8 +229,22 @@ async function runCase(htmlPath, mutateUnlocked) {
 
 const green = await runCase(HTML_PATH, false);
 check('LOCK:setup-midrun', 'start 3-chapter stubbed run, after ch1 Setup #setting/#generalPlot disabled', green.settingDisabled === true && green.plotDisabled === true, JSON.stringify({ settingDisabled: green.settingDisabled, plotDisabled: green.plotDisabled, r2: green.r2 }));
-check('LOCK:setup-midrun', 'Tab 1-4 AI suggest controls disabled mid-run', green.suggestDisabled === true, JSON.stringify({ suggestDisabled: green.suggestDisabled }));
+check('LOCK:setup-midrun', 'Tab 1-4/7 AI controls + #numCharacters/#minSubplots/addCharacter/addSubplot disabled mid-run', green.suggestDisabled === true, JSON.stringify({ tabs: green.tabs, extras: green.extras }));
 check('LOCK:setup-midrun', 'ch2/ch3 prompts byte-equal to pre-edit prompts', green.eq2 === true && green.setupSame === true && !green.mutated, JSON.stringify(green));
+check('LOCK:setup-midrun', 'nonzero matched-control count per tab (1,2,3,4,7)', [1, 2, 3, 4, 7].every((t) => green.tabs && green.tabs[t] && green.tabs[t].n > 0), JSON.stringify(green.tabs));
+
+{
+  const emptySels = Object.assign({}, TAB_AI, { 4: '#tab4 button[onclick*="__empty_selector_mutation__"]' });
+  const page = await openPage(HTML_PATH);
+  const emptyCounts = await page.evaluate((sels) => {
+    const out = {};
+    Object.keys(sels).forEach((tab) => { out[tab] = document.querySelectorAll(sels[tab]).length; });
+    return out;
+  }, emptySels);
+  await page.close();
+  const vacuousWouldPass = emptyCounts[4] === 0 && [emptyCounts[4]].every((n) => n === 0 || true);
+  check('LOCK:empty-selector', 'an empty selector has zero matches (turns per-tab nonzero red; no vacuous .every)', emptyCounts[4] === 0 && emptyCounts[1] > 0, JSON.stringify({ emptyCounts, vacuousWouldPass }));
+}
 
 const mut = mutateCopy('var NW_S1_LOCK_SETUP_INPUTS = true;', 'var NW_S1_LOCK_SETUP_INPUTS = false;');
 check('LOCK:M1', 'mutation flag present', mut.ok, mut.detail);
@@ -202,11 +253,84 @@ if (mut.ok) {
   check('LOCK:M1', 'dropping Setup inputs from nwBatchApplyLock turns setup-midrun red (fields enabled, later prompts change)', red.settingDisabled === false && red.edited === true && red.mutated === true, JSON.stringify(red));
 }
 
+const mutTab = mutateCopy('var NW_S1_LOCK_TAB47 = true;', 'var NW_S1_LOCK_TAB47 = false;');
+check('LOCK:M-tab47', 'TAB47 mutation flag present', mutTab.ok, mutTab.detail);
+if (mutTab.ok) {
+  const red = await runCase(mutTab.copy, true);
+  const t4 = red.tabs && red.tabs[4];
+  const t7 = red.tabs && red.tabs[7];
+  check('LOCK:M-tab47', 'dropping Tab 4 incorporate / Tab 7 breakdown / addCharacter / addSubplot turns full-list red', t4 && t7 && (t4.allDisabled === false || t7.allDisabled === false), JSON.stringify(red.tabs));
+}
+
+async function runPauseHeld(htmlPath) {
+  const page = await openPage(htmlPath);
+  const out = await page.evaluate(async (nd) => {
+    const h = window.__h;
+    h.cfg = {};
+    h.load(nd);
+    document.getElementById('setting').value = 'ORIGINAL SETTING: wet dock under failing lights, ozone and relay hum.';
+    document.getElementById('generalPlot').value = 'ORIGINAL PLOT: Mira names the mismatch, then pays the delayed cost.';
+    novelData.setting = 'ORIGINAL SETTING: wet dock under failing lights, ozone and relay hum.';
+    novelData.generalPlot = 'ORIGINAL PLOT: Mira names the mismatch, then pays the delayed cost.';
+    const realCall = window.callAI;
+    window.callAI = async function (messages) {
+      const g = window.__lastGenerateChapterGate;
+      const ch = g ? g.chapter : 0;
+      const part = /Part 2/.test(String(requestLog.status)) ? 2 : 1;
+      if (ch === 1 && part === 1) pauseBatchRun();
+      return realCall.apply(this, arguments);
+    };
+    const r = await generateAllChapters();
+    const pre2 = buildGenerateChapterUserContent(2, 1);
+    const settingDisabled = document.getElementById('setting').disabled;
+    const plotDisabled = document.getElementById('generalPlot').disabled;
+    const setupLocked = typeof nwBatchSetupIsLocked === 'function' && nwBatchSetupIsLocked();
+    const numCharactersDisabled = document.getElementById('numCharacters').disabled;
+    const addCharDisabled = Array.from(document.querySelectorAll('#tab2 button[onclick*="addCharacter"]')).every((b) => b.disabled);
+    h.toasts.length = 0;
+    const refusedAi = typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Suggest Setting');
+    const notice = (h.toasts.join(' ') + ' ' + ((document.getElementById('nwToast') || {}).textContent || ''));
+    let edited = false;
+    if (!settingDisabled) {
+      document.getElementById('setting').value = 'MUTATED SETTING SHOULD CHANGE PROMPTS: a different city of glass.';
+      novelData.setting = 'MUTATED SETTING SHOULD CHANGE PROMPTS: a different city of glass.';
+      edited = true;
+    }
+    h.prompts.length = 0;
+    const resumed = await resumeBatchRun();
+    const p2 = (h.prompts.find((p) => p.ch === 2 && p.part === 1) || {}).prompt || '';
+    return {
+      r: r && r.reason, resumed: resumed && resumed.reason,
+      settingDisabled, plotDisabled, setupLocked, numCharactersDisabled, addCharDisabled,
+      refusedAi, notice, edited,
+      eq2: p2 === pre2,
+      mutated: /MUTATED SETTING/.test(p2),
+      br: novelData.batchRun && { reason: novelData.batchRun.reason, stoppedAt: novelData.batchRun.stoppedAt, completed: novelData.batchRun.completed },
+      resumeDisabled: document.getElementById('batchResumeBtn').disabled
+    };
+  }, ND);
+  await page.close();
+  return out;
+}
+
+const pauseGreen = await runPauseHeld(HTML_PATH);
+check('LOCK:pause-held', 'pause keeps Setup lock; edit refused with locked notice', pauseGreen.setupLocked === true && pauseGreen.settingDisabled === true && pauseGreen.refusedAi === true && /locked while a Generate All run/i.test(pauseGreen.notice), JSON.stringify(pauseGreen));
+check('LOCK:pause-held', 'resume later prompts byte-equal to pre-pause', pauseGreen.eq2 === true && pauseGreen.mutated !== true, JSON.stringify(pauseGreen));
+
+const mutM2 = mutateCopy('var NW_S1_LOCK_PAUSE_HELD = true;', 'var NW_S1_LOCK_PAUSE_HELD = false;');
+check('LOCK:M2', 'mutation flag present', mutM2.ok, mutM2.detail);
+let lockM2Red = null;
+if (mutM2.ok) {
+  lockM2Red = await runPauseHeld(mutM2.copy);
+  check('LOCK:M2', 'release lock on pause turns LOCK:pause-held red (fields enabled, later prompts change)', lockM2Red.settingDisabled === false && lockM2Red.edited === true && lockM2Red.mutated === true, JSON.stringify(lockM2Red));
+}
+globalThis.__LOCK_M2_RED = lockM2Red;
+
 check('pageerror', 'no uncaught pageerror', pageErrors.length === 0, pageErrors.join(' | '));
 await browser.close();
 
 const failed = checks.filter((c) => !c.ok);
-const report = { passed: checks.filter((c) => c.ok).length, failed: failed.length, checks, pageErrors };
+const report = { passed: checks.filter((c) => c.ok).length, failed: failed.length, checks, pageErrors, lockM2Red: globalThis.__LOCK_M2_RED || null };
 fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(path.join(OUT_DIR, 'SMOKE_NW_SETUP_LOCK.json'), JSON.stringify(report, null, 2));
 console.log('NW setup-lock smoke: ' + report.passed + ' passed, ' + report.failed + ' failed');

@@ -15,12 +15,12 @@
     ],
     "storyWorld": "text",
     "chapterRequirements": {},
-    "chapterRequiredFacts": 5
+    "chapterRequiredFacts": 5,
+    "chapterIds": "not-an-array",
+    "chapterScenes": { "nope": true }
   },
   "expectedAddedKeys": [
     "nwSchemaVersion",
-    "chapterIds",
-    "chapterScenes[0]",
     "chapterFingerprints[0]",
     "characters[0].id",
     "ext.novelWriter.migratedBy"
@@ -28,7 +28,9 @@
   "expectedWarnings": [
     "storyWorld",
     "chapterRequirements",
-    "chapterRequiredFacts"
+    "chapterRequiredFacts",
+    "chapterIds",
+    "chapterScenes"
   ],
-  "notes": "wrong types kept as-is"
+  "notes": "wrong types kept as-is (including chapterIds and chapterScenes); migration skips owner write"
 }

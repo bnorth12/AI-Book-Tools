@@ -1,5 +1,5 @@
 {
-  "notes": "Pinned AFTER S1 migration of scripts/fixtures/qcat/book-3ch.json (stand-in for qcat-chapters-1-5 / ch6-8, which are not in this checkout).",
+  "notes": "Pinned AFTER S1 migration of scripts/fixtures/qcat/book-3ch.json (stand-in for qcat-chapters-1-5 / ch6-8, which are not in this checkout). Includes repetition. Deep-equal to calibration-pre-s1.json book3ch (REQ-SCH-07).",
   "book3ch": [
     {
       "chapter": 1,
@@ -8,7 +8,8 @@
       "replayInternal": 0,
       "factsStatus": "PASS",
       "noteLeak": "PASS",
-      "cast": "WARN"
+      "cast": "WARN",
+      "repetition": "PASS"
     },
     {
       "chapter": 2,
@@ -17,7 +18,8 @@
       "replayInternal": 31,
       "factsStatus": "PASS",
       "noteLeak": "PASS",
-      "cast": "PASS"
+      "cast": "PASS",
+      "repetition": "WARN"
     },
     {
       "chapter": 3,
@@ -26,7 +28,8 @@
       "replayInternal": 0,
       "factsStatus": "PASS",
       "noteLeak": "PASS",
-      "cast": "PASS"
+      "cast": "PASS",
+      "repetition": "PASS"
     }
   ]
 }

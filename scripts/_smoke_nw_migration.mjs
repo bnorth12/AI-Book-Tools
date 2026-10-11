@@ -249,7 +249,8 @@ for (const file of fixtureFiles) {
     check(id, 'newer-version warning', (result.warns || []).some((w) => /newer/i.test(w)), JSON.stringify(result.warns));
   }
   if (file === 'v1-wrong-types.json') {
-    check(id, 'wrong types kept as-is', result.once.storyWorld === 'text' && eq(result.once.chapterRequirements, {}) && result.once.chapterRequiredFacts === 5, JSON.stringify({ sw: result.once.storyWorld, req: result.once.chapterRequirements, rf: result.once.chapterRequiredFacts }));
+    check(id, 'wrong types kept as-is', result.once.storyWorld === 'text' && eq(result.once.chapterRequirements, {}) && result.once.chapterRequiredFacts === 5 && result.once.chapterIds === 'not-an-array' && eq(result.once.chapterScenes, { nope: true }), JSON.stringify({ sw: result.once.storyWorld, req: result.once.chapterRequirements, rf: result.once.chapterRequiredFacts, ids: result.once.chapterIds, sc: result.once.chapterScenes }));
+    check(id, 'wrong-typed chapterIds/chapterScenes warn; owner write skipped', (result.warns || []).some((w) => /chapterIds/.test(w)) && (result.warns || []).some((w) => /chapterScenes/.test(w)), JSON.stringify(result.warns));
   }
   if (file === 'v1-n-wrong-types.json') {
     check(id, 'chapterThemeTags string and systems {} kept', result.once.chapterThemeTags === 'x' && result.once.storyWorld && eq(result.once.storyWorld.systems, {}), JSON.stringify({ tags: result.once.chapterThemeTags, sys: result.once.storyWorld && result.once.storyWorld.systems }));
@@ -488,15 +489,22 @@ for (const file of fixtureFiles) {
     const scB = novelData.chapterScenes[1].scenes.map((s) => s.id);
     nwChapterIdsUpdate('insert', 2);
     const afterIns = novelData.chapterIds.slice();
+    const scenesAfterIns = (novelData.chapterScenes || []).map((rec, i) => rec && rec.scenes && rec.scenes.map((s) => ({ id: s.id, chapterId: s.chapterId, order: s.order, chAt: novelData.chapterIds[i] })));
     nwChapterIdsUpdate('reorder', 3, 4);
     const afterOrd = novelData.chapterIds.slice();
+    const scenesAfterOrd = (novelData.chapterScenes || []).map((rec, i) => rec && rec.scenes && rec.scenes.map((s) => ({ id: s.id, chapterId: s.chapterId, order: s.order, chAt: novelData.chapterIds[i] })));
     nwChapterIdsUpdate('delete', 4);
     const afterDel = novelData.chapterIds.slice();
     const rec = novelData.chapterScenes[2];
     nwChapterScenesUpdate(3, { scenes: rec.scenes.slice().reverse().map((s, i) => Object.assign({}, s, { order: i + 1 })) }, 'user');
-    return { orig, afterIns, afterOrd, afterDel, scB, scenesAfter: (novelData.chapterScenes[1] && novelData.chapterScenes[1].scenes || []).map((s) => s.id), chIds: novelData.chapterIds, sceneChapterIds: (novelData.chapterScenes || []).map((rec, i) => rec && rec.scenes && rec.scenes.map((s) => s.chapterId)) };
+    return { orig, afterIns, afterOrd, afterDel, scB, scenesAfter: (novelData.chapterScenes[1] && novelData.chapterScenes[1].scenes || []).map((s) => s.id), chIds: novelData.chapterIds, sceneChapterIds: (novelData.chapterScenes || []).map((rec, i) => rec && rec.scenes && rec.scenes.map((s) => s.chapterId)), scenesAfterIns, scenesAfterOrd };
   }, fx.input);
-  check('MIG:v1-ids-survive-insert-reorder', 'surviving ids unchanged; insert mints one new ch_; scenes move with chapter', r.afterIns.length === 4 && r.afterIns[0] === r.orig[0] && r.afterIns[2] === r.orig[1] && r.afterDel.length === 3, JSON.stringify(r));
+  const insOk = r.afterIns.length === 4 && r.afterIns[0] === r.orig[0] && r.afterIns[2] === r.orig[1] && r.afterIns[3] === r.orig[2] && r.afterIns[1] !== r.orig[0] && r.afterIns[1] !== r.orig[1] && r.afterIns[1] !== r.orig[2];
+  const ordOk = r.afterOrd.length === 4 && r.afterOrd[0] === r.orig[0] && r.afterOrd[1] === r.afterIns[1] && r.afterOrd[2] === r.orig[2] && r.afterOrd[3] === r.orig[1];
+  const linkIns = Array.isArray(r.scenesAfterIns) && r.scenesAfterIns.every((row) => !row || row.every((s) => s.chapterId === s.chAt));
+  const linkOrd = Array.isArray(r.scenesAfterOrd) && r.scenesAfterOrd.every((row) => !row || row.every((s) => s.chapterId === s.chAt));
+  check('MIG:v1-ids-survive-insert-reorder', 'surviving ids unchanged; insert mints one new ch_; scenes move with chapter', insOk && r.afterDel.length === 3, JSON.stringify(r));
+  check('MIG:v1-ids-survive-insert-reorder', 'every intermediate order and each scene chapterId after insert and reorder', insOk && ordOk && linkIns && linkOrd, JSON.stringify({ afterIns: r.afterIns, afterOrd: r.afterOrd, scenesAfterIns: r.scenesAfterIns, scenesAfterOrd: r.scenesAfterOrd }));
 }
 
 {
@@ -509,11 +517,29 @@ for (const file of fixtureFiles) {
     const up = novelData.chapterIds.slice();
     const upScenes = (novelData.chapterScenes || []).length;
     nwChapterIdsUpdate('resize', 2);
-    const down = novelData.chapterIds.slice();
-    const downScenes = (novelData.chapterScenes || []).length;
-    return { orig, up, down, upScenes, downScenes };
+    const down = {
+      ids: novelData.chapterIds.slice(),
+      scenes: (novelData.chapterScenes || []).length,
+      facts: (novelData.chapterRequiredFacts || []).length,
+      reqs: (novelData.chapterRequirements || []).length,
+      fps: (novelData.chapterFingerprints || []).length,
+      plans: (novelData.chapterWritingPlans || []).length,
+      staleFact: novelData.chapterRequiredFacts && novelData.chapterRequiredFacts[2],
+      stalePlan: novelData.chapterWritingPlans && novelData.chapterWritingPlans[2]
+    };
+    nwChapterIdsUpdate('resize', 5);
+    const grown = {
+      ids: novelData.chapterIds.slice(),
+      facts2: novelData.chapterRequiredFacts && novelData.chapterRequiredFacts[2],
+      reqs2: novelData.chapterRequirements && novelData.chapterRequirements[2],
+      fps2: novelData.chapterFingerprints && novelData.chapterFingerprints[2],
+      plans2: novelData.chapterWritingPlans && novelData.chapterWritingPlans[2],
+      scenes2: novelData.chapterScenes && novelData.chapterScenes[2]
+    };
+    return { orig, up, down, upScenes, grown };
   }, fx.input);
-  check('MIG:v1-ids-resize', 'grow pads new ch_ ids; shrink truncates ids and scenes', r.up.length === 5 && r.up[0] === r.orig[0] && r.up[1] === r.orig[1] && r.up[2] === r.orig[2] && r.down.length === 2 && r.downScenes === 2, JSON.stringify(r));
+  check('MIG:v1-ids-resize', 'grow pads new ch_ ids; shrink truncates ids and scenes', r.up.length === 5 && r.up[0] === r.orig[0] && r.up[1] === r.orig[1] && r.up[2] === r.orig[2] && r.down.ids.length === 2 && r.down.scenes === 2, JSON.stringify(r));
+  check('MIG:v1-ids-resize', 'shrink truncates every S1 per-chapter array; shrink-then-grow brings back no stale record', r.down.facts === 2 && r.down.reqs === 2 && r.down.fps === 2 && r.down.plans === 2 && r.down.staleFact == null && r.down.stalePlan == null && r.grown.facts2 == null && r.grown.reqs2 == null && r.grown.fps2 == null && r.grown.plans2 == null && r.grown.scenes2 == null && r.grown.ids.length === 5 && r.grown.ids[0] === r.orig[0], JSON.stringify(r));
 }
 
 {
@@ -550,9 +576,17 @@ for (const file of fixtureFiles) {
     const afterLock = [1, 2, 3].map((n) => nwPlanIsStale(n));
     nwStoryWorldUpdate({ concepts: [{ id: 'c-new', approvedAt: '2026-02-01T00:00:00.000Z', mustExplain: true, familiarity: 'new' }] }, 'user');
     const afterApprove = [1, 2, 3].map((n) => nwPlanIsStale(n));
-    return { afterLock, afterApprove, preW1: afterLock[0], wbNoWorld: afterLock[2] };
+    novelData.chapterWritingPlans[0].builtFrom = nwComputeBuiltFrom(1);
+    novelData.chapterWritingPlans[0].worldFrom = nwComputeWorldFrom(1) || 'stored-worldFrom';
+    novelData.chapterWritingPlans[1].builtFrom = nwComputeBuiltFrom(2);
+    novelData.chapterWritingPlans[1].worldFrom = nwComputeWorldFrom(2);
+    novelData.chapterWritingPlans[2].builtFrom = nwComputeBuiltFrom(3);
+    delete novelData.storyWorld;
+    const afterRemove = [1, 2, 3].map((n) => nwPlanIsStale(n));
+    return { afterLock, afterApprove, preW1: afterLock[0], wbNoWorld: afterLock[2], afterRemove };
   }, fx.input);
   check('MIG:v1-plan-world-stale', 'locking alone leaves plans fresh; worldBeat without worldFrom is stale; pre-W1 no worldBeats fresh', r.afterLock[0] === false && r.afterLock[2] === true, JSON.stringify(r));
+  check('MIG:v1-plan-world-stale', 'removing storyWorld marks plans with stored worldFrom stale (cur===null => stale)', r.afterRemove && r.afterRemove[0] === true, JSON.stringify(r.afterRemove));
 }
 
 {
@@ -627,6 +661,20 @@ for (const file of fixtureFiles) {
 
 await page.close();
 
+{
+  const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v0-chapters-to-proposed-scenes.json'), 'utf8'));
+  const pRng = await openPage();
+  const r = await pRng.evaluate((nd) => {
+    const marker = function () { return 0.5; };
+    nwSetOpaqueRng(marker);
+    nwMigrateSession(JSON.parse(JSON.stringify(nd)), { rng: nwSeededRng(0x53310001) });
+    const after = nwOpaqueId('xx_', new Set());
+    return { after, expectedMarker: 'xx_iiiiiiiiii' };
+  }, fx.input);
+  await pRng.close();
+  check('MIG:rng-restore', 'opaque-id RNG restored in finally after migration', r.after === r.expectedMarker, JSON.stringify(r));
+}
+
 // SCH-01 mutation: whitelist rebuild turns v1-unknown-nested red
 {
   const mut = mutateCopy('var NW_S1_NORMALIZER_PASSTHROUGH = true;', 'var NW_S1_NORMALIZER_PASSTHROUGH = false;');
@@ -643,6 +691,99 @@ await page.close();
       };
     }, fx.input);
     check('MIG:v1-unknown-nested:mutation', 'whitelist rebuild drops unknown nested keys (turns green case red)', r.extraWorld !== true && r.extraRole !== true && r.extraSys !== true, JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_KEEP_WRONG_TYPES = true;', 'var NW_S1_KEEP_WRONG_TYPES = false;');
+  check('MIG:v1-wrong-types:mutation-flag', 'keep-wrong-types flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-wrong-types.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      const once = nwMigrateSession(JSON.parse(JSON.stringify(nd)));
+      return { ids: once.chapterIds, sc: once.chapterScenes };
+    }, fx.input);
+    check('MIG:v1-wrong-types:mutation', 'coercing wrong-typed chapterIds/chapterScenes to [] turns keep-as-is red', Array.isArray(r.ids) && Array.isArray(r.sc), JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_RESIZE_SPLICE_ALL = true;', 'var NW_S1_RESIZE_SPLICE_ALL = false;');
+  check('MIG:v1-ids-resize:mutation-flag', 'resize-splice flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-ids-resize.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      novelData = JSON.parse(JSON.stringify(nd));
+      nwChapterIdsUpdate('resize', 2);
+      nwChapterIdsUpdate('resize', 5);
+      return {
+        plans2: novelData.chapterWritingPlans && novelData.chapterWritingPlans[2],
+        facts2: novelData.chapterRequiredFacts && novelData.chapterRequiredFacts[2],
+        fps2: novelData.chapterFingerprints && novelData.chapterFingerprints[2],
+        reqs2: novelData.chapterRequirements && novelData.chapterRequirements[2]
+      };
+    }, fx.input);
+    check('MIG:v1-ids-resize:mutation', 'skipping S1 array truncate on resize brings stale records back (turns green red)', !!(r.plans2 && r.plans2.builtFrom === 'plan-stale') || !!(r.facts2 && r.facts2.items && r.facts2.items[0] && r.facts2.items[0].id === 'f-c'), JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_SPLICE_SCENES = true;', 'var NW_S1_SPLICE_SCENES = false;');
+  check('MIG:v1-ids-survive-insert-reorder:mutation-flag', 'splice-scenes flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-ids-survive-insert-reorder.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      novelData = JSON.parse(JSON.stringify(nd));
+      const orig = novelData.chapterIds.slice();
+      nwChapterIdsUpdate('insert', 2);
+      const afterIns = novelData.chapterIds.slice();
+      const scenesAfterIns = (novelData.chapterScenes || []).map((rec, i) => rec && rec.scenes && rec.scenes.map((s) => ({ id: s.id, chapterId: s.chapterId, chAt: novelData.chapterIds[i] })));
+      const linkIns = scenesAfterIns.every((row) => !row || row.every((s) => s.chapterId === s.chAt));
+      return { orig, afterIns, linkIns, scenesAfterIns };
+    }, fx.input);
+    check('MIG:v1-ids-survive-insert-reorder:mutation', 'skipping scene splice on insert turns order/chapterId asserts red', r.linkIns === false, JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_WORLD_REMOVED_STALE = true;', 'var NW_S1_WORLD_REMOVED_STALE = false;');
+  check('MIG:v1-plan-world-stale:mutation-flag', 'world-removed-stale flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-plan-world-stale.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      novelData = JSON.parse(JSON.stringify(nd));
+      novelData.chapterWritingPlans[0].builtFrom = nwComputeBuiltFrom(1);
+      novelData.chapterWritingPlans[0].worldFrom = nwComputeWorldFrom(1) || 'stored-worldFrom';
+      delete novelData.storyWorld;
+      return { stale: nwPlanIsStale(1), cur: nwComputeWorldFrom(1) };
+    }, fx.input);
+    check('MIG:v1-plan-world-stale:mutation', 'cur && guard treats removed storyWorld as fresh (turns green red)', r.stale === false, JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_RESTORE_OPAQUE_RNG = true;', 'var NW_S1_RESTORE_OPAQUE_RNG = false;');
+  check('MIG:rng-restore:mutation-flag', 'restore-rng flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v0-chapters-to-proposed-scenes.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      const marker = function () { return 0.5; };
+      nwSetOpaqueRng(marker);
+      nwMigrateSession(JSON.parse(JSON.stringify(nd)), { rng: nwSeededRng(0x53310001) });
+      const after = nwOpaqueId('xx_', new Set());
+      return { after, expectedMarker: 'xx_iiiiiiiiii' };
+    }, fx.input);
+    check('MIG:rng-restore:mutation', 'skipping RNG restore leaks seeded rng (turns green red)', r.after !== r.expectedMarker, JSON.stringify(r));
     await p.close();
   }
 }
