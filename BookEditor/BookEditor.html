@@ -993,23 +993,48 @@ Synced: 2026-04-19
 
 
 
+        const SECRET_FIELD_DENYLIST = {
+            exact: ["apiKey", "api_key", "accessToken", "access_token", "authToken", "authorization", "privateKey"],
+            patterns: [/secret/i, /password/i, /^bearer/i]
+        };
+
         function isSecretField(name) {
-            const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-            return normalized === "authorization"
-                || /secret|password|apikey|accesstoken|authtoken|refreshtoken|bearer/i.test(normalized);
+            const normalized = String(name).toLowerCase();
+            return SECRET_FIELD_DENYLIST.exact.some(field => field.toLowerCase() === normalized)
+                || SECRET_FIELD_DENYLIST.patterns.some(pattern => pattern.test(normalized));
         }
 
-        function containsSecretFields(value) {
-            if (Array.isArray(value)) return value.some(containsSecretFields);
-            if (!value || typeof value !== "object") return false;
-            return Object.entries(value).some(([name, nested]) => isSecretField(name) || containsSecretFields(nested));
+        function isSensitiveUrl(value) {
+            if (typeof value !== "string") return false;
+            try {
+                const url = new URL(value, window.location.href);
+                if (url.username && url.password) return true;
+                return Array.from(url.searchParams.keys()).some(name =>
+                    ["key", "token"].includes(name.toLowerCase()) || isSecretField(name)
+                );
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function findRemovedSecretFields(value, fieldName = "") {
+            if (Array.isArray(value)) {
+                return [...new Set(value.flatMap(item => isSensitiveUrl(item)
+                    ? [fieldName || "URL value"]
+                    : findRemovedSecretFields(item, fieldName)))];
+            }
+            if (!value || typeof value !== "object") return [];
+            return [...new Set(Object.entries(value).flatMap(([name, nested]) => {
+                if (isSecretField(name) || isSensitiveUrl(nested)) return [name];
+                return findRemovedSecretFields(nested, name);
+            }))];
         }
 
         function stripSecretFields(value) {
-            if (Array.isArray(value)) return value.map(stripSecretFields);
+            if (Array.isArray(value)) return value.filter(item => !isSensitiveUrl(item)).map(stripSecretFields);
             if (!value || typeof value !== "object") return value;
             return Object.fromEntries(Object.entries(value)
-                .filter(([name]) => !isSecretField(name))
+                .filter(([name, nested]) => !isSecretField(name) && !isSensitiveUrl(nested))
                 .map(([name, nested]) => [name, stripSecretFields(nested)]));
         }
 
@@ -1045,7 +1070,7 @@ Synced: 2026-04-19
 			const reader = new FileReader();
 			reader.onload = function(e) {
 				const rawSessionData = JSON.parse(e.target.result);
-				const secretsRemoved = containsSecretFields(rawSessionData);
+				const removedFields = findRemovedSecretFields(rawSessionData);
 				const sessionData = stripSecretFields(rawSessionData);
                 sessionData.model = applyModelSelection(sessionData.model);
                 document.getElementById("maxTokens").value = sessionData.maxTokens || 6000;
@@ -1072,8 +1097,8 @@ Synced: 2026-04-19
 					}
 				});
 				console.log("Imported session: chapters:", chapters.length, "editedChapters:", editedChapters.filter(ch => ch !== null).length);
-                if (secretsRemoved) {
-                    alert("Sensitive fields were removed from the imported file. If it was shared, rotate your API key at console.x.ai.");
+                if (removedFields.length) {
+                    alert(`Sensitive fields removed: ${removedFields.join(", ")}. If the file was shared, rotate your API key at console.x.ai.`);
                 }
 			};
 			reader.readAsText(file);
@@ -1092,13 +1117,13 @@ Synced: 2026-04-19
                     try {
                         const data = JSON.parse(e.target.result);
                         const sourceNovelData = (data && data.schemaVersion && data.novelData) ? data.novelData : data;
-                        const secretsRemoved = containsSecretFields(data);
+                        const removedFields = findRemovedSecretFields(data);
                         const importedNovelData = stripSecretFields(sourceNovelData);
                         if (!importedNovelData || typeof importedNovelData !== "object") {
                             throw new Error("Invalid schema payload.");
                         }
 
-                        novelData = { ...novelData, ...importedNovelData };
+                        novelData = stripSecretFields({ ...novelData, ...importedNovelData });
                         document.getElementById("genre").value = novelData.genre || "";
                         document.getElementById("bookText").value = novelData.bookText || "";
                         chapters = Array.isArray(novelData.chapters) ? novelData.chapters : [];
@@ -1122,8 +1147,8 @@ Synced: 2026-04-19
                             }
                         });
 
-                        alert(secretsRemoved
-                            ? "Book imported successfully. Sensitive fields were removed. If the file was shared, rotate your API key at console.x.ai."
+                        alert(removedFields.length
+                            ? `Book imported successfully. Sensitive fields removed: ${removedFields.join(", ")}. If the file was shared, rotate your API key at console.x.ai.`
                             : "Book imported successfully!");
                     } catch (error) {
                         alert("Error parsing JSON file: " + error.message);

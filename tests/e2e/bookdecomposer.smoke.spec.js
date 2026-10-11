@@ -46,6 +46,13 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
   const exportedJson = await page.evaluate((apiKey) => new Promise((resolve) => {
     novelData.apiKey = apiKey;
     novelData.nested = { accessToken: apiKey, bearer: apiKey, title: 'Safe content' };
+    novelData.API_KEY = apiKey;
+    novelData.privateKey = apiKey;
+    novelData.endpointWithCredentials = `https://${'user:pass'}@example.com/service`;
+    novelData.endpointWithToken = 'https://example.com/service?token=hidden';
+    novelData.serviceSecret = 'hidden-secret';
+    novelData.savedPassword = 'hidden-password';
+    novelData.bearerToken = 'hidden-bearer';
     novelData.key = 'sort-key';
     novelData.token = 'ordinary-token';
     novelData.tokenUsage = { calls: 2, promptTokens: 17 };
@@ -65,6 +72,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     exportJSON();
   }), secret);
   expect(exportedJson).not.toContain(secret);
+  expect(exportedJson).not.toContain('user:pass@');
+  expect(exportedJson).not.toContain('token=hidden');
   expect(JSON.parse(exportedJson).novelData).toMatchObject({
     key: 'sort-key',
     token: 'ordinary-token',
@@ -73,6 +82,13 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     promptTokens: 17,
     agentKey: 'fetchAuthors',
   });
+  expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('API_KEY');
+  expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('privateKey');
+  expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('endpointWithCredentials');
+  expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('endpointWithToken');
+  expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('serviceSecret');
+  expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('savedPassword');
+  expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('bearerToken');
 
   const [fileChooser] = await Promise.all([
     page.waitForEvent('filechooser'),
@@ -87,6 +103,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
       novelData: {
         title: 'Imported safely',
         apiKey: secret,
+        API_KEY: secret,
+        privateKey: secret,
         key: 'sort-key',
         token: 'ordinary-token',
         nested: { authorization: secret, bearer: secret },
@@ -94,6 +112,10 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
         maxTokens: 4321,
         promptTokens: 17,
         agentKey: 'fetchAuthors',
+        endpoint: 'https://example.com/service?access_token=hidden',
+        serviceSecret: 'hidden-secret',
+        savedPassword: 'hidden-password',
+        bearerToken: 'hidden-bearer',
       },
     })),
   });
@@ -104,6 +126,12 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     hasApiKey: Object.hasOwn(novelData, 'apiKey'),
     hasAuthorization: Object.hasOwn(novelData.nested, 'authorization'),
     hasBearer: Object.hasOwn(novelData.nested, 'bearer'),
+    hasApiKeyUpper: Object.hasOwn(novelData, 'API_KEY'),
+    hasPrivateKey: Object.hasOwn(novelData, 'privateKey'),
+    hasEndpoint: Object.hasOwn(novelData, 'endpoint'),
+    hasServiceSecret: Object.hasOwn(novelData, 'serviceSecret'),
+    hasSavedPassword: Object.hasOwn(novelData, 'savedPassword'),
+    hasBearerToken: Object.hasOwn(novelData, 'bearerToken'),
     key: novelData.key,
     token: novelData.token,
     tokenUsage: novelData.tokenUsage,
@@ -114,6 +142,12 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     hasApiKey: false,
     hasAuthorization: false,
     hasBearer: false,
+    hasApiKeyUpper: false,
+    hasPrivateKey: false,
+    hasEndpoint: false,
+    hasServiceSecret: false,
+    hasSavedPassword: false,
+    hasBearerToken: false,
     key: 'sort-key',
     token: 'ordinary-token',
     tokenUsage: { calls: 2, promptTokens: 17 },
@@ -122,5 +156,5 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     agentKey: 'fetchAuthors',
   });
   await expect(page.locator('#apiKey')).toHaveValue('');
-  expect(importNotices.some(message => message.includes('Sensitive fields were removed') && message.includes('console.x.ai'))).toBe(true);
+  expect(importNotices.some(message => message.includes('apiKey') && message.includes('endpoint') && message.includes('console.x.ai'))).toBe(true);
 });

@@ -31,23 +31,48 @@ let novelData = {
 };
 let isBookProcessed = false;
 
+const SECRET_FIELD_DENYLIST = {
+    exact: ["apiKey", "api_key", "accessToken", "access_token", "authToken", "authorization", "privateKey"],
+    patterns: [/secret/i, /password/i, /^bearer/i]
+};
+
 function isSecretField(name) {
-    const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-    return normalized === "authorization"
-        || /secret|password|apikey|accesstoken|authtoken|refreshtoken|bearer/i.test(normalized);
+    const normalized = String(name).toLowerCase();
+    return SECRET_FIELD_DENYLIST.exact.some(field => field.toLowerCase() === normalized)
+        || SECRET_FIELD_DENYLIST.patterns.some(pattern => pattern.test(normalized));
 }
 
-function containsSecretFields(value) {
-    if (Array.isArray(value)) return value.some(containsSecretFields);
-    if (!value || typeof value !== "object") return false;
-    return Object.entries(value).some(([name, nested]) => isSecretField(name) || containsSecretFields(nested));
+function isSensitiveUrl(value) {
+    if (typeof value !== "string") return false;
+    try {
+        const url = new URL(value, window.location.href);
+        if (url.username && url.password) return true;
+        return Array.from(url.searchParams.keys()).some(name =>
+            ["key", "token"].includes(name.toLowerCase()) || isSecretField(name)
+        );
+    } catch (error) {
+        return false;
+    }
+}
+
+function findRemovedSecretFields(value, fieldName = "") {
+    if (Array.isArray(value)) {
+        return [...new Set(value.flatMap(item => isSensitiveUrl(item)
+            ? [fieldName || "URL value"]
+            : findRemovedSecretFields(item, fieldName)))];
+    }
+    if (!value || typeof value !== "object") return [];
+    return [...new Set(Object.entries(value).flatMap(([name, nested]) => {
+        if (isSecretField(name) || isSensitiveUrl(nested)) return [name];
+        return findRemovedSecretFields(nested, name);
+    }))];
 }
 
 function stripSecretFields(value) {
-    if (Array.isArray(value)) return value.map(stripSecretFields);
+    if (Array.isArray(value)) return value.filter(item => !isSensitiveUrl(item)).map(stripSecretFields);
     if (!value || typeof value !== "object") return value;
     return Object.fromEntries(Object.entries(value)
-        .filter(([name]) => !isSecretField(name))
+        .filter(([name, nested]) => !isSecretField(name) && !isSensitiveUrl(nested))
         .map(([name, nested]) => [name, stripSecretFields(nested)]));
 }
 
@@ -453,7 +478,7 @@ window.importJSON = function() {
             try {
                 const raw = JSON.parse(e.target.result);
                 const incomingData = raw && raw.novelData && typeof raw.novelData === "object" ? raw.novelData : raw;
-                const secretsRemoved = containsSecretFields(raw);
+                const removedFields = findRemovedSecretFields(raw);
                 const incoming = stripSecretFields(incomingData);
                 if (!incoming || typeof incoming !== "object") {
                     throw new Error("Invalid JSON structure.");
@@ -483,8 +508,8 @@ window.importJSON = function() {
                 generateJSON();
                 isBookProcessed = true;
                 showTab(4);
-                if (secretsRemoved) {
-                    alert("Sensitive fields were removed from the imported file. If it was shared, rotate your API key at console.x.ai.");
+                if (removedFields.length) {
+                    alert(`Sensitive fields removed: ${removedFields.join(", ")}. If the file was shared, rotate your API key at console.x.ai.`);
                 }
             } catch (error) {
                 alert("Error importing JSON: " + error.message);

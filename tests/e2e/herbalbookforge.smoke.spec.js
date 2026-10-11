@@ -107,6 +107,13 @@ test.describe('HerbalBookForge Smoke Test', () => {
       document.getElementById('api-key').value = apiKey;
       project.setup.apiKey = apiKey;
       project.setup.authorization = apiKey;
+      project.setup.API_KEY = apiKey;
+      project.setup.privateKey = apiKey;
+      project.setup.endpointWithCredentials = `https://${'user:pass'}@example.com/service`;
+      project.setup.endpointWithToken = 'https://example.com/service?token=hidden';
+      project.setup.serviceSecret = 'hidden-secret';
+      project.setup.savedPassword = 'hidden-password';
+      project.setup.bearerToken = 'hidden-bearer';
       project.key = 'sort-key';
       project.token = 'ordinary-token';
       project.tokenUsage = { calls: 2, promptTokens: 17 };
@@ -133,6 +140,15 @@ test.describe('HerbalBookForge Smoke Test', () => {
     expect(exportedJson).not.toContain(secret);
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('apiKey');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('authorization');
+    expect(exportedJson).not.toContain('user:pass@');
+    expect(exportedJson).not.toContain('token=hidden');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('API_KEY');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('privateKey');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithCredentials');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithToken');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('serviceSecret');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('savedPassword');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('bearerToken');
     expect(storedProject).not.toContain(secret);
     expect(JSON.parse(storedProject).setup).not.toHaveProperty('apiKey');
     expect(JSON.parse(storedProject).setup).not.toHaveProperty('authorization');
@@ -151,7 +167,16 @@ test.describe('HerbalBookForge Smoke Test', () => {
       name: 'project-with-key.json',
       mimeType: 'application/json',
       buffer: Buffer.from(JSON.stringify({
-        setup: { apiKey: secret, bearer: secret },
+        setup: {
+          apiKey: secret,
+          bearer: secret,
+          API_KEY: secret,
+          privateKey: secret,
+          endpoint: 'https://example.com/?access_token=hidden',
+          serviceSecret: 'hidden-secret',
+          savedPassword: 'hidden-password',
+          bearerToken: 'hidden-bearer',
+        },
         meta: { name: 'Imported project' },
         key: 'sort-key',
         token: 'ordinary-token',
@@ -180,7 +205,14 @@ test.describe('HerbalBookForge Smoke Test', () => {
       promptTokens: 19,
       agentKey: 'importedAgent',
     });
-    expect(importNotices.some(message => message.includes('Sensitive fields were removed') && message.includes('console.x.ai'))).toBe(true);
+    const importedSetup = await page.evaluate(() => project.setup);
+    expect(importedSetup).not.toHaveProperty('API_KEY');
+    expect(importedSetup).not.toHaveProperty('privateKey');
+    expect(importedSetup).not.toHaveProperty('endpoint');
+    expect(importedSetup).not.toHaveProperty('serviceSecret');
+    expect(importedSetup).not.toHaveProperty('savedPassword');
+    expect(importedSetup).not.toHaveProperty('bearerToken');
+    expect(importNotices.some(message => message.includes('API_KEY') && message.includes('endpoint') && message.includes('console.x.ai'))).toBe(true);
     await expect.poll(() => page.evaluate(() => localStorage.getItem('herbalBookForgeProject_v1.0.0'))).not.toContain(secret);
     expect(JSON.parse(await page.evaluate(() => localStorage.getItem('herbalBookForgeProject_v1.0.0')))).toMatchObject({
       meta: { name: 'Imported project' },

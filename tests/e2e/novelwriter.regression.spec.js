@@ -306,6 +306,13 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
     novelData.tokenUsage = { calls: 2, promptTokens: 17 };
     novelData.key = 'sort-key';
     novelData.token = 'ordinary-token';
+    novelData.API_KEY = 'xai-TESTKEY-123';
+    novelData.privateKey = 'xai-TESTKEY-123';
+    novelData.endpointWithCredentials = `https://${'user:pass'}@example.com/service`;
+    novelData.endpointWithToken = 'https://example.com/service?token=hidden';
+    novelData.serviceSecret = 'hidden-secret';
+    novelData.savedPassword = 'hidden-password';
+    novelData.bearerToken = 'hidden-bearer';
     novelData.promptTokens = 17;
     novelData.agentKey = 'fetchAuthors';
     requestLog.tokenUsage = '17 tokens';
@@ -329,6 +336,8 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
 
   const parsed = JSON.parse(exportedJson);
   expect(exportedJson).not.toContain('xai-TESTKEY-123');
+  expect(exportedJson).not.toContain('user:pass@');
+  expect(exportedJson).not.toContain('token=hidden');
 
   // Required schema envelope fields
   expect(parsed.schemaVersion).toBe('1.0');
@@ -358,6 +367,13 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
       tokenUsageDetail: { promptTokens: 17 },
     },
   });
+  expect(parsed.novelData).not.toHaveProperty('API_KEY');
+  expect(parsed.novelData).not.toHaveProperty('privateKey');
+  expect(parsed.novelData).not.toHaveProperty('endpointWithCredentials');
+  expect(parsed.novelData).not.toHaveProperty('endpointWithToken');
+  expect(parsed.novelData).not.toHaveProperty('serviceSecret');
+  expect(parsed.novelData).not.toHaveProperty('savedPassword');
+  expect(parsed.novelData).not.toHaveProperty('bearerToken');
 
   // Sensitive and operational fields must NOT be present in novelData
   expect(parsed.novelData).not.toHaveProperty('apiKey');
@@ -396,6 +412,12 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
         chapters: [],
         apiKey: 'xai-TESTKEY-123',
         bearer: 'xai-TESTKEY-123',
+        API_KEY: 'xai-TESTKEY-123',
+        privateKey: 'xai-TESTKEY-123',
+        endpoint: 'https://example.com/service?access_token=hidden',
+        serviceSecret: 'hidden-secret',
+        savedPassword: 'hidden-password',
+        bearerToken: 'hidden-bearer',
         key: 'sort-key',
         token: 'ordinary-token',
         tokenUsage: { calls: 2, promptTokens: 17 },
@@ -419,6 +441,12 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
     hasApiKey: Object.hasOwn(novelData, 'apiKey'),
     apiKey: novelData.apiKey,
     hasBearer: Object.hasOwn(novelData, 'bearer'),
+    hasApiKeyUpper: Object.hasOwn(novelData, 'API_KEY'),
+    hasPrivateKey: Object.hasOwn(novelData, 'privateKey'),
+    hasEndpoint: Object.hasOwn(novelData, 'endpoint'),
+    hasServiceSecret: Object.hasOwn(novelData, 'serviceSecret'),
+    hasSavedPassword: Object.hasOwn(novelData, 'savedPassword'),
+    hasBearerToken: Object.hasOwn(novelData, 'bearerToken'),
     key: novelData.key,
     token: novelData.token,
     tokenUsage: novelData.tokenUsage,
@@ -429,6 +457,12 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
     hasApiKey: true,
     apiKey: 'existing-user-key',
     hasBearer: false,
+    hasApiKeyUpper: false,
+    hasPrivateKey: false,
+    hasEndpoint: false,
+    hasServiceSecret: false,
+    hasSavedPassword: false,
+    hasBearerToken: false,
     key: 'sort-key',
     token: 'ordinary-token',
     tokenUsage: { calls: 2, promptTokens: 17 },
@@ -439,7 +473,7 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
       tokenUsageDetail: { promptTokens: 17 },
     },
   });
-  expect(importNotices.some(message => message.includes('Sensitive fields were removed') && message.includes('console.x.ai'))).toBe(true);
+  expect(importNotices.some(message => message.includes('apiKey') && message.includes('endpoint') && message.includes('console.x.ai'))).toBe(true);
 });
 
 // --- Execution HUD state transitions ---

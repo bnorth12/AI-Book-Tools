@@ -65,13 +65,20 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
   });
   await expect(page.locator('#bookText')).toHaveValue('Imported text.');
   await expect(page.locator('#apiKey')).toHaveValue('');
-  expect(importNotices.some(message => message.includes('Sensitive fields were removed') && message.includes('console.x.ai'))).toBe(true);
+  expect(importNotices.some(message => message.includes('apiKey') && message.includes('console.x.ai'))).toBe(true);
 
   const exportedBook = await page.evaluate((apiKey) => new Promise((resolve) => {
     novelData = {
       ...novelData,
       apiKey,
       bearer: apiKey,
+      API_KEY: apiKey,
+      privateKey: apiKey,
+      endpointWithCredentials: `https://${'user:pass'}@example.com/service`,
+      endpointWithToken: 'https://example.com/service?token=hidden',
+      serviceSecret: 'hidden-secret',
+      savedPassword: 'hidden-password',
+      bearerToken: 'hidden-bearer',
       key: 'chapter-key',
       token: 'ordinary-token',
       tokenUsage: { calls: 2, promptTokens: 17 },
@@ -93,6 +100,9 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
   }), secret);
   const parsedBook = JSON.parse(exportedBook);
   expect(exportedBook).not.toContain(secret);
+  expect(exportedBook).not.toContain('user:');
+  expect(exportedBook).not.toContain('user:password@');
+  expect(exportedBook).not.toContain('token=hidden');
   expect(parsedBook.novelData).toMatchObject({
     key: 'chapter-key',
     token: 'ordinary-token',
@@ -101,6 +111,13 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
     promptTokens: 17,
     agentKey: 'fetchAuthors',
   });
+  expect(parsedBook.novelData).not.toHaveProperty('API_KEY');
+  expect(parsedBook.novelData).not.toHaveProperty('privateKey');
+  expect(parsedBook.novelData).not.toHaveProperty('endpointWithCredentials');
+  expect(parsedBook.novelData).not.toHaveProperty('endpointWithToken');
+  expect(parsedBook.novelData).not.toHaveProperty('serviceSecret');
+  expect(parsedBook.novelData).not.toHaveProperty('savedPassword');
+  expect(parsedBook.novelData).not.toHaveProperty('bearerToken');
 
   await page.evaluate(() => { delete novelData.apiKey; });
   const [fileChooser] = await Promise.all([
@@ -112,7 +129,16 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({
       ...parsedBook,
-      novelData: { ...parsedBook.novelData, apiKey: secret, authorization: secret },
+      novelData: {
+        ...parsedBook.novelData,
+        apiKey: secret,
+        authorization: secret,
+        privateKey: secret,
+        endpoint: 'https://example.com/?api_key=hidden',
+        serviceSecret: 'hidden-secret',
+        savedPassword: 'hidden-password',
+        bearerToken: 'hidden-bearer',
+      },
     })),
   });
   await expect.poll(() => page.evaluate(() => ({
@@ -124,6 +150,11 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
     agentKey: novelData.agentKey,
     hasApiKey: Object.hasOwn(novelData, 'apiKey'),
     hasAuthorization: Object.hasOwn(novelData, 'authorization'),
+    hasPrivateKey: Object.hasOwn(novelData, 'privateKey'),
+    hasEndpoint: Object.hasOwn(novelData, 'endpoint'),
+    hasServiceSecret: Object.hasOwn(novelData, 'serviceSecret'),
+    hasSavedPassword: Object.hasOwn(novelData, 'savedPassword'),
+    hasBearerToken: Object.hasOwn(novelData, 'bearerToken'),
   }))).toEqual({
     tokenUsage: { calls: 2, promptTokens: 17 },
     key: 'chapter-key',
@@ -133,6 +164,11 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
     agentKey: 'fetchAuthors',
     hasApiKey: false,
     hasAuthorization: false,
+    hasPrivateKey: false,
+    hasEndpoint: false,
+    hasServiceSecret: false,
+    hasSavedPassword: false,
+    hasBearerToken: false,
   });
-  expect(importNotices.some(message => message.includes('rotate your API key') && message.includes('console.x.ai'))).toBe(true);
+  expect(importNotices.some(message => message.includes('apiKey') && message.includes('privateKey') && message.includes('endpoint') && message.includes('console.x.ai'))).toBe(true);
 });
