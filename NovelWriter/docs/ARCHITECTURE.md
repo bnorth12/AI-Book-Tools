@@ -126,8 +126,9 @@ sequenceDiagram
 
     Author->>Batch: Generate All or Resume
     Note over Author,Batch: Concurrency: reject if another batch runs or a manual AI call is active, acquire this run's owner token.
+    Note over Author,Batch: 4p (planned) builds chapterWritingPlans BEFORE nwBatchStart, outside the run. Stale plans (builtFrom mismatch) warn first.
     Batch->>Batch: collectData, preflight, plan, estimate, initialize run
-    Note over Batch,Chapter: S1 (planned) story entities storyWorld, Characters, Plot, chapterRequiredFacts, chapterRequirements, chapterWritingPlans are read-only during the run. 6b and Q3 still write chapterFlags and chapterFingerprints mid-run.
+    Note over Batch,Chapter: Writer lock nwBatchIsLocked() is true while running, interrupted, importing or integrating. S1 (planned) story entities storyWorld, Characters, Plot, chapterRequiredFacts, chapterRequirements, chapterWritingPlans are read-only during the run. 6b and Q3 still write chapterFlags (via nwSetChapterFlag) and chapterFingerprints mid-run.
     Batch->>IDB: checkpoint before chapter
     loop each planned chapter, in order
         Batch->>Chapter: generateChapter(n, {batch:true})
@@ -148,6 +149,7 @@ sequenceDiagram
             AI-->>Quality: revised prose
             Quality->>Quality: guardChapterReviseGrowth restores rejected growth/shrink
         end
+        Note over Chapter,Quality: Q5 (planned) moves the continuity audit here, after revise, on final text only.
         Chapter->>Quality: obligation coverage, then score against legacy chapterFactChecks (current), plus planned chapterWritingPlans planCoverage, chapterRequirements, chapterRequiredFacts
         opt AI beat check enabled
             Quality->>AI: scorecard beat check
@@ -307,7 +309,7 @@ Status: DESIGN for A1, revision v6 (v4 cleared Reviewer's NO-GO on `ee8a303`. v5
 - **Persistence (corrected in v4, matches "State and persistence" above):**
   - In memory: `novelData`.
   - Session file: `exportSession()` (~L9325) and `importSession()` (~L9559) through `normalizeImportedSessionData()` (~L9381).
-  - IndexedDB `novelwriter` / `checkpoints`: `nwBatchCheckpoint()` (~L12127) stores the **full `novelData`** (API key deleted) for Generate All. `nwBatchFindInterrupted()` (~L12139) and `nwBatchCheckForInterrupted()` (~L12570) find an active checkpoint after reload, and `restoreInterruptedBatchRun()` (~L12582) replaces `novelData` with it. That path runs `normalizeImportedSessionData()` (~L12587) but **not** `importSession()`, so anything wired only into `importSession()` is skipped.
+  - IndexedDB `novelwriter` / `checkpoints`: `nwBatchCheckpoint()` (~L12127) stores the **full `novelData`** (API key deleted) for Generate All. `nwBatchFindInterrupted()` (~L12139) and `nwBatchCheckForInterrupted()` (~L12570) find an active checkpoint after reload, and `restoreInterruptedBatchRun()` (~L12582) replaces `novelData` with it. That path runs `normalizeImportedSessionData()` (~L12587) but **not** `importSession()`, so anything wired only into `importSession()` is skipped. After 6b the checkpoint also persists `batchRun.coverageAck {chapter, decision: accept\|skip\|regenerate, at}` and `batchRun.suggestedCap`, and restore keeps them so Resume honours the decision. `batchRun.rejectedDraft` is **never** checkpointed. Line refs here shift by roughly +230 after 6b and stay approximate.
   - IndexedDB `novelwriter-timing` / `nwTimingStats`: timing aggregates only, never story data.
   - **localStorage holds no book data.** There is no `localStorage.setItem` on main, and there is no autosave. The only `localStorage` mentions are comments (~L13161, ~L13192, ~L13767, ~L13796).
 
@@ -327,10 +329,10 @@ Status: DESIGN for A1, revision v6 (v4 cleared Reviewer's NO-GO on `ee8a303`. v5
 | Required facts (new key, S1) | `chapterRequiredFacts[n-1].items[]` | `nwRequiredFactsUpsert(n, items, source)` (S1). Each `source` value has one caller (§7.1) | Q1 prompt, 8d (from Q1), 4p `factId` |
 | Requirements, derived | `chapterRequirements[n-1].cast`, `.setting`, `.derivedFrom` | `nwDeriveChapterRequirements(n)` (S1) | Q1, Q2 prompt, 8d cast and noteLeak |
 | Requirements, user | `chapterRequirements[n-1].mustNotInclude` | Tab 5 user edit via `nwRequirementsSetMustNotInclude(n, list)` (S1) | same |
-| Writing plan | `chapterWritingPlans[n-1]`, incl. `kind:'worldBeat'` items (N16, §2a) | 4p plan build or edit | 8d `planCoverage`, Generate All prompt |
+| Writing plan | `chapterWritingPlans[n-1]`, incl. `kind:'worldBeat'` items (N16, §2a) and `builtFrom` (hash of blueprint, requirements and required facts, §7.2) | 4p plan build or edit, **before** a batch starts. Read-only during a run. Rebuild is always a user action | 8d `planCoverage`, Generate All prompt |
 | Theme tags (new key, S1) | `chapterThemeTags[n-1]` (N22, §2a) | `nwChapterThemeTagsUpdate(n, patch, origin)` (S1) | 4p, 8d (advisory, later) |
-| Coverage flags | `chapterFlags[n-1].coverageFailed`, `.missing`, `.at` | 6b | Tab 6, Resume |
-| Replay flag | `chapterFlags[n-1].replay` | Q3 | Tab 6, Resume |
+| Coverage flags | `chapterFlags[n-1].coverageFailed`, `.missing`, `.at` | 6b, only through `nwSetChapterFlag(n, patch)` (sole writer, key merge). Clear-on-pass: a passing regenerate merges `{coverageFailed:false, missing:[], at}` | `nwRenderChapterFlag` (Tab 5 `#chapterGenFlag{n}`, Tab 6 `#chapterEditFlag{n}`), renders only when `coverageFailed === true`. Resume |
+| Replay flag | `chapterFlags[n-1].replay{…, at}` | Q3, only through `nwSetChapterFlag` | `nwRenderChapterFlag`, Resume |
 | Fingerprint cache | `chapterFingerprints[n-1]` | `nwBuildChapterFingerprint(n)` (S1). Called by migration and by Q3 | Q3 replay check |
 | Scorecards | `chapterScorecards[n-1]` (incl. advisory `planCoverage`, null `worldImmersion`) | 8d scorer (`nwWriteChapterScorecard`, existing) | Tab 6, export |
 | Continuity | `continuityTracker` | Q5 (final text only) | prompts. Per-chapter character state lives here and is **never duplicated** on Character |
@@ -353,7 +355,7 @@ All are **NovelWriter-local, optional and additive**. Absent stays absent, and a
 | N17 | `storyWorld.contradictions[]{id, conceptId, text, chapter?, at}` | `nwStoryWorldUpdate`, called by the check call `nwCanonCheck()` (planned) | Tab 1-2 World editor, Tab 6 | append, de-duplicated by `id` (hash of `conceptId + text + chapter`). Cleared only by user dismiss, keyed by `id` |
 | N18 | `storyWorld.immersionWeight{culture, science, tech}`, each a number 0-1 | `nwStoryWorldUpdate` (user, or AI-suggest from genre profiles) | 8d `worldImmersion` (when built) | per-axis key merge. 8d `worldImmersion` stays **null** until the scorer is built |
 | N19 | `characters[].knows[]{conceptId, learnedIn, locked?, source?}`, `learnedIn` a chapter number | `nwCharacterKnowsUpdate(charId, entries, origin)` (S1), which writes through `normalizeCharacterItem` | 4p explainer choice, Q5 | merge by `conceptId`. D6 option C `chapterReveals` is **not** in v5 |
-| N20 | **No setup store in the world layer.** Setup and payoff are owned by the story ledger (`/workspace/plans/NW_STORY_LEDGER_PLAN.md` L46, L151-189): `novelData.storyLedger.entries[]` with `kind:'setup'\|'payoff'`, its own status lifecycle (`planned, open, advanced, discharged, dropped`), `dischargeBy`, and the `nw_setup_unpaid` and `nw_payoff_before_setup` rules, built by `buildStoryLedgerFromPlan` (ledger L1-L3). The world layer adds only optional `storyWorld.setupRefs[]`: ledger entry ids (e.g. `setup-field-escape`), a pure reference with no status or text | `nwStoryWorldUpdate` (refs only) | 4p, 8d (read the ledger through the ref) | replace per user edit. A ref with no matching ledger entry is shown as unresolved and never repaired. The UI label 'abandoned (intentional)' goes on ledger status `dropped` (with `dropReason`). Replacing the ledger's setup and payoff kinds would be a CoS call and is **not** proposed |
+| N20 | **No setup store in the world layer.** Setup and payoff are owned by the story ledger (`/workspace/plans/NW_STORY_LEDGER_PLAN.md` L46, L151-189): `novelData.storyLedger.entries[]` with `kind:'setup'\|'payoff'`, its own status lifecycle (`planned, open, advanced, discharged, dropped`), `dischargeBy`, and the `nw_setup_unpaid` and `nw_payoff_before_setup` rules, built by `buildStoryLedgerFromPlan` (ledger L1-L3). The world layer adds only optional `storyWorld.setupRefs[]`: ledger entry ids (e.g. `setup-field-escape`), a pure reference with no status or text. **`storyLedger` defaults and creation are out of A1/S1 scope** (no default, no normalizer case, no migration step). The `setupRefs` editor is hidden or read-only until ledger L1, which gets its own later A1 amendment | `nwStoryWorldUpdate` (refs only) | 4p, 8d (read the ledger through the ref) | replace per user edit. A ref with no matching ledger entry is shown as unresolved and never repaired. The UI label 'abandoned (intentional)' goes on ledger status `dropped` (with `dropReason`). Replacing the ledger's setup and payoff kinds would be a CoS call and is **not** proposed |
 | N21 | `storyWorld.systems[]{id, name, kind, hardness, powerSource, costs[], limits[], users[], ruleIds[], locked?, source?}`, `kind` `magic` or `tech`, `hardness` `hard` or `soft` | `nwStoryWorldUpdate` | 4p budget (hard systems raise the must-explain floor), Q2, Q5 | merge by `id`. `users[]` are character ids or text, `ruleIds[]` are `rules[].id` |
 | N22 | `storyWorld.themes[]{id, text, locked?, source?}` | `nwStoryWorldUpdate` | 4p, 8d (advisory later) | merge by `id` |
 | N22 | **new key** `chapterThemeTags[n-1]{tags[], source}` (theme ids or text) | `nwChapterThemeTagsUpdate(n, patch, origin)` (S1) | 4p, 8d (advisory later) | per-chapter object, `Object.assign` (§5). Separate from `chapterRequirements`, so that record's merge rule is unchanged. Sparse, never padded |
@@ -374,6 +376,7 @@ All are **NovelWriter-local, optional and additive**. Absent stays absent, and a
 ### 3. Preservation rules (the #141 lesson)
 1. **Absent stays absent.** Import, restore, tab rebuild and save never write a default into a field the session didn't have. Exceptions are only the **existing** coercions on main, listed so S1 doesn't add more: `normalizeImportedSessionData` (~L9414-9448) coerces non-arrays to `[]` for `authors, characters, subplots, chapterOutlines, chapterArcs, chapters, editedChapters, bookImprovements, bookImprovementsWithStatus, chapterImprovements, chapterScorecards, chapterFactChecks, workflowLog, chapterContinuityPackets, continuityFindings` and fills `factChecks` and `continuityTracker` shells. `updateChapterSubpages()` (~L4694) pads the per-chapter arrays it already pads. **No new S1 key is padded or coerced.**
 2. **Unknown keys survive.** The normalizer only adds or validates known keys and never rebuilds `novelData` from a whitelist.
+   - **`chapterFlags` (after 6b):** the import and restore normalizer passes each entry through (shallow copy of an object entry, every key kept, wrong type kept with a warning, absent stays absent). It is not in the defaults and is never padded. `nwSetChapterFlag` creates an entry **lazily on first write** only, with no `null` padding and no fixed-key rebuild. `missing` is a copy of the CoverageReport misses (a reference, not a redefinition).
 3. **One normalizer per entity**, used by import, restore, DOM rebuild and AI-suggest alike. S1 routes the Tab 2 rebuild (~L4042) through `normalizeCharacterItem` (~L2210).
 4. **`normalizeCharacterItem` must be extended so absent stays absent.** Today it invents `obligations: []`, `backstory: ''`, `arc: ''` (~L2213-2223) and drops items with no name, backstory or arc. S1 changes it to **copy every key present on the input, unknown keys included** (a shallow copy, then type-check of known keys), with **no keep-list**. It only validates or normalizes known keys (`name, backstory, arc, role, goal, flaw, notes, obligations, id, voice, relationships, explainerFor, knows`) and never writes a default for an absent key. `knows[]` and its per-entry `locked`/`source` therefore survive every Tab 2 rebuild. It keeps the drop rule. Callers that need a default apply it at read time.
 5. **Subplots:** `normalizeSubplotItem` (~L2227) keeps flattening to the string array for compatibility, but **first** copies object fields to `subplotsMeta[i]`.
@@ -391,6 +394,7 @@ All are **NovelWriter-local, optional and additive**. Absent stays absent, and a
   3. `resetState()` (~L13129) and the defaults (~L732) build a fresh v1 object, so they need no migration.
   - Not a load path: `_nwSmokeSnapshot` restore (`Object.assign(novelData, saved)`, ~L5890) puts back the same in-memory object a smoke test borrowed.
 - Checkpoint restore replaces the whole of `novelData`. This is intentional: the checkpoint is the book. Merge-not-replace (§5) governs writes to a loaded session, not the load itself. Restore is only offered when no run is active, and `nwBatchApplyLock()` keeps the UI locked until restore or discard.
+- **Writer lock states (6b):** `nwBatchIsLocked()` is true while the batch is **running**, **interrupted** (a checkpoint awaits restore or discard), **importing** or **integrating** (Tab 8). Import and Integrate are lock holders, so S1's migration on the import path runs inside the import lock.
 
 #### 4.2 v0 to v1 steps (in order, each calls the owner function)
 1. Copy subplot objects to `subplotsMeta` (normalizer copy step).
@@ -412,7 +416,7 @@ Export always writes the current `nwSchemaVersion`. Older builds keep the new ke
 - **Requirements freshness:** `chapterRequirements[n-1].derivedFrom = nwTextHash(JSON.stringify(chapterBlueprints[n-1]))`. There is **no timestamp**. A re-derive is skipped when `derivedFrom` matches, so migration is deterministic.
 
 #### 4.4 S1 fixtures (N6)
-Path: `NovelWriter/fixtures/nw-migration/<case>.json` (beside the existing `NovelWriter/fixtures/rich-scifi-v1/`), each `{input, expectedAddedKeys, expectedWarnings, notes}`. Smoke: `scripts/_smoke_nw_migration.mjs`. For each fixture: `migrate(input)` equals `input` plus exactly `expectedAddedKeys` (JSON paths), every pre-existing key deep-equals its input, `migrate(migrate(x))` deep-equals `migrate(x)`, and export-then-import round-trips deep-equal. The **mutation check**: for each fixture, the smoke deletes in turn every top-level key and every key of `characters[0]` from a migrated copy, re-runs the comparison, and must fail each time.
+Path: `NovelWriter/fixtures/nw-migration/<case>.json` (beside the existing `NovelWriter/fixtures/rich-scifi-v1/`), each `{input, expectedAddedKeys, expectedWarnings, notes}`. Smoke: `scripts/_smoke_nw_migration.mjs`. For each fixture: `migrate(input)` equals `input` plus exactly `expectedAddedKeys` (JSON paths), every pre-existing key deep-equals its input, `migrate(migrate(x))` deep-equals `migrate(x)`, and export-then-import round-trips deep-equal. The **mutation check**: for each fixture, the smoke deletes in turn every top-level key and every key of `characters[0]` from a migrated copy, re-runs the comparison, and must fail each time. **Scorecard must not move:** the 8d calibration fixtures ("must match pre-slot exactly") are pinned **after** S1's migration, and the smoke asserts the 8d fact score is unchanged on migrated QCAT sessions.
 
 | Case file | Input | expectedAddedKeys |
 |---|---|---|
@@ -440,13 +444,15 @@ Path: `NovelWriter/fixtures/nw-migration/<case>.json` (beside the existing `Nove
 | `v1-n-wrong-types.json` | `chapterThemeTags: "x"`, `storyWorld.systems: {}` | none, warnings, kept as-is, readers treat them as absent |
 | `v1-knows-tab2-rebuild.json` | characters with `knows[]` (one locked, one with an unknown key) and an unknown character key, driven through the Tab 2 DOM rebuild and `normalizeCharacterItem` | helper test. `knows[]`, its `locked`/`source` and the unknown keys deep-equal after rebuild |
 | `v1-ai-propose-only.json` | user-set `genreProfiles` and `immersionWeight`, then `origin:'ai'` patches to both | helper test. Both refused, values deep-equal, a proposal is returned. A following `origin:'user'` accept writes it |
+| `v1-plan-stale.json` | 5 chapters with plans built from the current inputs, then: ch1 unchanged, ch2 blueprint edited, ch3 a `chapterRequiredFacts` item text edited, ch4 `mustNotInclude` edited, ch5 plan with no `builtFrom`. Also ch1 re-ordered required-facts items and a changed `derivedFrom` only | none. Stale check returns ch2-ch5, ch1 stays fresh (sort by id and `derivedFrom` exclusion), migration writes no `builtFrom`, and no rebuild is triggered |
+| `v1-flags-passthrough.json` | sparse `chapterFlags` with an unknown key, `coverageFailed:false`, a `replay` object and a wrong-type entry | none. Every entry deep-equal after import and restore, no padding, one warning |
 | `v1-batch-locked.json` | `nwBatchIsLocked()` stubbed true, then one `user` write each to `nwStoryWorldUpdate`, `nwCharacterKnowsUpdate`, `nwChapterThemeTagsUpdate` | helper test. All three refused, `novelData` deep-equal |
 
 ### 5. Write-concurrency rules
 | Rule | Applies to | Enforcement (S1 or existing) |
 |---|---|---|
 | Single writer per field | §2 table | owner functions. Migration calls them and writes nothing directly |
-| Story entities locked during a batch | storyWorld (incl. every N15-N24 editor in §2a), Plot, Character (incl. `knows`), required facts, mustNotInclude, chapter theme tags edits and AI-suggest | `nwBatchIsLocked()` (~L12154) plus the `nwBatchApplyLock()` list (~L12172). S1 adds each new control to that list |
+| Story entities locked during a batch | storyWorld (incl. every N15-N24 editor in §2a), Plot, Character (incl. `knows`), required facts, mustNotInclude, chapter theme tags edits and AI-suggest | `nwBatchIsLocked()` (~L12154, true while running, interrupted, importing or integrating) plus the `nwBatchApplyLock()` list (~L12172). S1 adds each new control to that list |
 | Per-chapter records merge, never replace | `chapterFlags`, `chapterWritingPlans`, `chapterScorecards`, `chapterRequirements`, `chapterRequiredFacts`, `chapterThemeTags` (all **objects** per chapter) | `Object.assign({}, existing, patch)` keyed by chapter index. Q3 and 6b share `chapterFlags[n-1]`. A re-derive of `chapterRequirements` replaces only `cast`, `setting`, `derivedFrom` and never touches `mustNotInclude`. `nwRequiredFactsUpsert(n, items, source)` replaces only items whose `source` equals its argument, matched by `id`, so user items survive a 4p or migration call |
 | Legacy arrays keep main's semantics | `chapterFactChecks` (array per chapter) | not merged with `Object.assign`. Existing writers keep `concat` (harness) and replace-rows (Tab 5) |
 | Await load before write | IndexedDB `nwTimingStats` | existing: `nwTimingLoadStats()` (~L1259) and the record path (8b) |
@@ -471,10 +477,16 @@ Engineering confirms the names `chapterRequirements` and `chapterFingerprints`. 
 |---|---|---|---|---|
 | `chapterRequiredFacts[n-1]` (N9) | `{items:[{id, text, mustInclude:boolean, source:'blueprint'\|'user'\|'plan', legacyId?}]}` | `nwRequiredFactsUpsert` (S1), per source: `user` = Tab 5 edit (Q1) and migration, `plan` = 4p, `blueprint` = `nwDeriveChapterRequirements` (Q1) | Q1 prompt, 8d (Q1 switches it on), 4p `factId` | Sparse: absent chapters stay absent |
 | `chapterRequirements[n-1]` (N10, N11) | `{cast:[charId\|text], setting:[locationId\|text], mustNotInclude:[string], derivedFrom}` | `cast`, `setting`, `derivedFrom`: `nwDeriveChapterRequirements(n)` (S1), also used by 8d `cast`. `mustNotInclude`: Tab 5 user edit | Q1, Q2 prompt, 8d cast and noteLeak | Derived at migration and whenever `derivedFrom` is stale. `mustNotInclude` is merged with `NW_NOTE_LEAK_TERMS` at read time, never written into it |
-| `chapterFlags[n-1].replay` (N12) | `{internal, prev, openingCopy, at}` | Q3 | Tab 6, Resume | merges keys only (§5) |
+| `chapterFlags[n-1].replay` (N12) | `{internal, prev, openingCopy, at}` (`at` inside `replay`) | Q3, through `nwSetChapterFlag(n, {replay})` | `nwRenderChapterFlag`, Resume | merges keys only (§5). **`replay` is the only name.** 6b's `replayFail` is renamed to `replay`. If any build still reads `replayFail`, it is legacy read-only and never written |
 | `chapterFingerprints[n-1]` (N12) | `{textHash, tailWindowWords:250, openingShingles:[hash]}` | `nwBuildChapterFingerprint(n)` (S1), called by migration and Q3 | Q3 replay check | **A derived cache, never authoritative.** Holds hashes, not text. Rebuilt when `textHash` doesn't match, safe to drop |
 | tracker row `auditedTextHash` (N13) | string (`nwTextHash`) | Q5 | Q5 | A mismatch marks the row stale. Q5 reads `storyWorld.rules` and `relationships` and never writes them |
 | `chapterWritingPlans` item refs (N14) | optional `charId`, `locationId`, `factId` (a `chapterRequiredFacts` item id), `conceptId` (a `storyWorld.concepts[].id`) | 4p | 8d planCoverage | References only. A missing id keeps the item's `label` text |
+
+#### 7.2 Plan freshness and precedence (CoS ruling)
+- **`chapterWritingPlans[n-1].builtFrom`** = `nwTextHash` of a canonical join of three inputs, taken at build time: `JSON.stringify([chapterBlueprints[n-1], {cast, setting, mustNotInclude} of chapterRequirements[n-1] (derivedFrom excluded), chapterRequiredFacts[n-1].items mapped to {id, text, mustInclude} and sorted by id])`. An absent input is written as `null` in its slot, and object keys are serialized in that fixed order. Only 4p writes `builtFrom`, on every plan build or rebuild. Migration never writes it.
+- **Stale triggers:** when the current hash differs, the plan is **stale**. That happens on a blueprint change, a required-facts edit or a `mustNotInclude` edit alike (a re-derive of `cast`/`setting` that changes them counts too). Tab 5 and Generate All's pre-run step warn and offer a rebuild. A plan with no `builtFrom` (built before S1) is treated as stale. **Rebuild is always a user action.** It never happens automatically, and never during a batch (plans are read-only while `nwBatchIsLocked()`).
+- **Precedence, stated once (agreed with Fiction): the blueprint outranks the writing plan.** The plan is derived from the blueprint. When they conflict, the user sees a warning, `builtFrom` marks the plan stale (also when required facts or `mustNotInclude` change after the build), and the prompt and 8d both follow the blueprint. The user decides when to rebuild.
+- **Order:** 4p plans are built **before** a batch starts and are read-only during it. Q5 audits **after** revise, on final text only. Q3 writes through `nwSetChapterFlag`, with `at` inside `replay`.
 
 #### 7.1 Legacy `chapterFactChecks` on main: every reader and writer
 | Site (main) | Kind | S1 | Q1 |
@@ -506,7 +518,7 @@ erDiagram
     STORYWORLD ||--o{ CONCEPT : "concepts[], N16 N17"
     STORYWORLD ||--o{ SYSTEM : "systems[], N21"
     STORYWORLD }o--o{ LEDGERENTRY : "setupRefs[] ids, N20"
-    NOVELDATA ||--o| STORYLEDGER : "storyLedger, ledger plan L1"
+    NOVELDATA ||--o| STORYLEDGER : "storyLedger, parked until ledger L1, not in S1"
     STORYLEDGER ||--o{ LEDGERENTRY : "entries[], kind setup or payoff, owns status"
     STORYWORLD ||--o{ THEME : "themes[], N22"
     STORYWORLD ||--o{ CONTRADICTION : "contradictions[], N17"
