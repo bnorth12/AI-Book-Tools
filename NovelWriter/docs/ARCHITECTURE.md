@@ -59,6 +59,9 @@ flowchart TD
     T7["Tab 7 · Book<br/>review / export prose; suggest improvements"]
     T8["Tab 8 · Consolidated Breakdown Suggestions<br/>integrate selected suggestions"]
     END["Review, export session, or return to edit"]
+    STORY[("Story entities (A1 §2, §8)<br/>World, Characters, Plot,<br/>chapterFactChecks.items")]
+    REQ["chapterRequirements<br/>cast, setting, mustNotInclude"]
+    PLAN["chapterWritingPlans (4p)"]
 
     T1 --> T2 --> T3 --> T4 --> READY
     READY -- no --> FIX --> T4
@@ -72,6 +75,12 @@ flowchart TD
     T6 -. edit / apply again .-> T6
     T7 -. more suggestions .-> T7
     T8 -. integrated changes .-> T6
+    T1 & T2 & T3 & T4 -. write .-> STORY
+    STORY -. derive .-> REQ
+    STORY -. build .-> PLAN
+    REQ -. build .-> PLAN
+    STORY & REQ & PLAN -. prompt inputs .-> MODE
+    REQ & PLAN -. score against .-> SCORE
 ```
 
 `generateChapter()` generates two prose parts and then runs continuity,
@@ -112,9 +121,11 @@ sequenceDiagram
     Author->>Batch: Generate All or Resume
     Note over Author,Batch: Concurrency: reject if another batch runs or a manual AI call is active; acquire this run's owner token.
     Batch->>Batch: collectData, preflight, plan, estimate, initialize run
+    Note over Batch,Chapter: Schema inputs (A1 §2, §7): World, Characters, Plot, chapterFactChecks.items, chapterRequirements, chapterWritingPlans are read-only during the run
     Batch->>IDB: checkpoint before chapter
     loop each planned chapter, in order
         Batch->>Chapter: generateChapter(n, {batch:true})
+        Chapter->>Chapter: build prompt from blueprint, chapterRequirements, chapterWritingPlans, World and Character digests
         Chapter->>AI: Part 1
         AI-->>Chapter: response and usage
         Chapter->>AI: Part 2
@@ -131,7 +142,7 @@ sequenceDiagram
             AI-->>Quality: revised prose
             Quality->>Quality: guardChapterReviseGrowth restores rejected growth/shrink
         end
-        Chapter->>Quality: obligation coverage, then score generated chapter
+        Chapter->>Quality: obligation coverage, then score generated chapter against chapterWritingPlans (planCoverage), chapterRequirements and chapterFactChecks.items
         opt AI beat check enabled
             Quality->>AI: scorecard beat check
             AI-->>Quality: beat evidence
@@ -318,21 +329,21 @@ Status: DESIGN for A1. Engineering owns it. Product needs come from Fiction's `N
 3. **One normalizer per entity**, used by import, DOM rebuild and AI-suggest alike. S1 must route the Tab 2 rebuild (~L4042) through `normalizeCharacterItem` (~L2210) and extend that function to keep `role, goal, flaw, notes, obligations, id, voice, relationships, explainerFor`.
 4. **Subplots:** `normalizeSubplotItem` (~L2227) keeps flattening to the string array for compatibility, but **first** copies object fields to `subplotsMeta[i]`.
 5. **World:** `worldBible`/`world` are kept byte-for-byte. A string value is also mirrored into `world.notes` only when `world` is otherwise absent, and the original key is left untouched.
-6. `normalizeImportedSessionData` (~L9381) adds explicit handling for `world`, `worldBible`, `subplotsMeta`, `chapterFlags`, `chapterWritingPlans` and `nwSchemaVersion`: it validates type, keeps absent as absent, and keeps the wrong type as-is with a console warning, never dropping it.
+6. `normalizeImportedSessionData` (~L9381) adds explicit handling for `world`, `worldBible`, `subplotsMeta`, `chapterFlags`, `chapterWritingPlans`, `chapterRequirements`, `chapterFingerprints`, `chapterFactChecks` (both the legacy form and the new `items` form, §7) and `nwSchemaVersion`: it validates type, keeps absent as absent, and keeps the wrong type as-is with a console warning, never dropping it.
 
 ### 4. Versioning and migration
 - New `novelData.nwSchemaVersion` (integer). **Absent means legacy (0).** S1 sets it to `1`.
 - `nwMigrateSession(nd)` runs once after `normalizeImportedSessionData` and before `applySessionDataToUI` (~L9464). It is pure (no DOM, no network, **no AI calls**), **additive**, and **idempotent**: `migrate(migrate(x))` deep-equals `migrate(x)`. It never deletes or renames a key. A version newer than the app knows is loaded read-through, unchanged, with a warning.
-- v0 to v1 steps: stamp a version, copy subplot objects to `subplotsMeta`, mirror a string `worldBible` into `world.notes`, assign `characters[].id` (a stable slug of the name plus a de-dup suffix) only where it's missing, and leave every `[WAIT]` field untouched.
+- v0 to v1 steps: stamp a version, copy subplot objects to `subplotsMeta`, mirror a string `worldBible` into `world.notes`, assign `characters[].id` (a stable slug of the name plus a de-dup suffix) only where it's missing, add `chapterFactChecks[n-1].items` built from legacy forms (legacy value kept, §7), run `nwDeriveChapterRequirements(n)` for every chapter that has a blueprint (cast and setting names that don't resolve stay as text), build `chapterFingerprints` from saved text, and leave every `[WAIT]` field untouched. Migration **never creates a `chapterFlags` entry**: flags come only from 6b and Q3 at run time.
 - Export always writes the current `nwSchemaVersion`. Older app builds ignore the extra keys through the existing spread.
-- **S1 fixtures** (N6): a pre-6b session with no `chapterFlags`; a string `worldBible`; characters with `obligations/goal/flaw`; object subplots; a partial `chapterWritingPlans`; and a v1 session (to prove idempotence). Each must round-trip deep-equal except for the documented added keys. A mutation that drops any one field must fail the smoke.
+- **S1 fixtures** (N6): a pre-6b session with no `chapterFlags`; a string `worldBible`; characters with `obligations/goal/flaw`; object subplots; a partial `chapterWritingPlans`; legacy `chapterFactChecks` (string and array forms); cast names in blueprints that don't resolve to a character; a replayed chapter that predates `chapterFlags` (fingerprint is built and no flag is invented); and a v1 session (to prove idempotence). Each must round-trip deep-equal except for the documented added keys. A mutation that drops any one field must fail the smoke.
 
 ### 5. Write-concurrency rules
 | Rule | Applies to | Enforcement (S1 or existing) |
 |---|---|---|
 | Single writer per entity | §2 table | owner helpers; other code reads only |
 | Story entities locked during a batch | World, Plot, Character edits and AI-suggest | `nwBatchIsLocked()` (~L12154) plus `nwBatchApplyLock` list. S1 adds any new World/Character controls to that list |
-| Per-chapter records merge, never replace | `chapterFlags`, `chapterWritingPlans`, `chapterScorecards` | write `Object.assign({}, existing, patch)` keyed by chapter index. Q3 and 6b share `chapterFlags[n-1]` |
+| Per-chapter records merge, never replace | `chapterFlags`, `chapterWritingPlans`, `chapterScorecards`, `chapterRequirements`, `chapterFactChecks` | write `Object.assign({}, existing, patch)` keyed by chapter index. Q3 and 6b share `chapterFlags[n-1]`. A re-derive of `chapterRequirements` replaces only the derived `cast`/`setting`/`derivedAt` keys and never touches user-entered `mustNotInclude`. A re-derive of `chapterFactChecks.items` keeps `source:'user'` items and edited text, and only adds or updates `source:'blueprint'` items by `id` |
 | Await load before write | IndexedDB `nwTimingStats` | existing: `nwTimingLoadStats()` (~L1259) and the record path (8b) |
 | Per-call / per-run identity | AI calls, Generate All runs | existing: per-call `nwActiveCalls` Map (8b); per-run reset of batch state |
 | Migration runs once, before UI | import path | `nwMigrateSession` between normalize and apply (S1) |
@@ -344,7 +355,6 @@ Status: DESIGN for A1. Engineering owns it. Product needs come from Fiction's `N
 4. `normalizeSubplotItem` (~L2227) flattens objects to strings with no copy.
 
 All four are the same class of data loss as #141. S1 closes them before Q1-Q3 and 4p build on the schema.
-
 
 ### 7. Per-chapter requirement and replay records (N9-N14)
 Engineering confirms the names `chapterRequirements` and `chapterFingerprints`. Both are NovelWriter-local and indexed by `n-1`, like the other per-chapter arrays.
