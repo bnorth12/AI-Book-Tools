@@ -736,6 +736,21 @@
                 .map(([name, nested]) => [name, stripSecretFields(nested)]));
         }
 
+        function stripSecretFieldsInPlace(value) {
+            if (Array.isArray(value)) {
+                for (let index = value.length - 1; index >= 0; index--) {
+                    if (isSensitiveUrl(value[index])) value.splice(index, 1);
+                    else stripSecretFieldsInPlace(value[index]);
+                }
+                return;
+            }
+            if (!value || typeof value !== 'object') return;
+            Object.entries(value).forEach(([name, nested]) => {
+                if (isSecretField(name) || isSensitiveUrl(nested)) delete value[name];
+                else stripSecretFieldsInPlace(nested);
+            });
+        }
+
         const DEFAULT_MODEL = 'grok-4.7';
         let project = {
             meta: { version: "1.0.0", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
@@ -860,8 +875,10 @@
                 || localStorage.getItem('herbalBookForgeProject_v0.9.3');
             if (importedProject || saved) {
                 try {
-                    const parsed = stripSecretFields(importedProject || JSON.parse(saved));
-                    project = stripSecretFields({
+                    const parsed = importedProject || JSON.parse(saved);
+                    stripSecretFieldsInPlace(parsed);
+                    stripSecretFieldsInPlace(project);
+                    project = {
                         ...project,
                         ...parsed,
                         setup: { ...project.setup, ...(parsed.setup || {}) },
@@ -873,7 +890,7 @@
                         safetyReport: parsed.safetyReport !== undefined ? parsed.safetyReport : null,
                         // HBF.PR4: preserve preview state from saved state with schema-safe defaults
                         preview: normalizePreviewState(parsed.preview)
-                    });
+                    };
                 } catch (e) {}
             }
 
@@ -952,20 +969,9 @@
                 try {
                     const rawProject = JSON.parse(e.target.result);
                     const removedFields = findRemovedSecretFields(rawProject);
-                    const parsed = stripSecretFields(rawProject);
-                    project = {
-                        ...project,
-                        ...parsed,
-                        setup: { ...project.setup, ...(parsed.setup || {}) },
-                        prompts: { ...project.prompts, ...(parsed.prompts || {}) },
-                        goals: { ...project.goals, ...(parsed.goals || {}) },
-                        // HBF.DR7: preserve drafts on import; fall back to empty array
-                        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
-                        // HBF.PR4: preserve preview metadata on import with schema-safe defaults
-                        preview: normalizePreviewState(parsed.preview)
-                    };
+                    stripSecretFieldsInPlace(rawProject);
                     project.meta.version = "1.0.0";
-                    loadProject(project);
+                    loadProject(rawProject);
                     saveProject();
                     alert(removedFields.length
                         ? `Project imported successfully. Sensitive fields removed: ${removedFields.join(", ")}. If the file was shared, rotate your API key at console.x.ai.`
