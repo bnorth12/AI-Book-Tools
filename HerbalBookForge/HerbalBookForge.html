@@ -705,7 +705,9 @@
             try {
                 const url = new URL(value, window.location.href);
                 if (url.username && url.password) return true;
-                return Array.from(url.searchParams.keys()).some(name =>
+                const fragment = url.hash.slice(1);
+                const fragmentParams = new URLSearchParams(fragment.includes("?") ? fragment.slice(fragment.indexOf("?") + 1) : fragment);
+                return [...url.searchParams.keys(), ...fragmentParams.keys()].some(name =>
                     ["key", "token"].includes(name.toLowerCase()) || isSecretField(name)
                 );
             } catch (error) {
@@ -786,7 +788,11 @@
         function getStoredProject() {
             const { setup, ...projectData } = project;
             const { apiKey: _apiKey, ...safeSetup } = setup;
-            return stripSecretFields({ ...projectData, setup: safeSetup });
+            return { ...projectData, setup: safeSetup };
+        }
+
+        function projectStorageReplacer(name, value) {
+            return (isSecretField(name) || isSensitiveUrl(value)) ? undefined : value;
         }
 
         function escapeHtml(text) {
@@ -881,7 +887,7 @@
             if (!Array.isArray(project.setup.collectionIds)) {
                 project.setup.collectionIds = ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"];
             }
-            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject()));
+            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject(), projectStorageReplacer));
             ['v0.14.0', 'v0.11.0', 'v0.10.0', 'v0.9.5', 'v0.9.3'].forEach(version => {
                 localStorage.removeItem(`herbalBookForgeProject_${version}`);
             });
@@ -905,7 +911,7 @@
 
         function saveProject() {
             project.meta.lastEdited = new Date().toISOString();
-            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject()));
+            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject(), projectStorageReplacer));
             const status = document.getElementById('save-status');
             if (status) {
                 status.innerHTML = `Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;

@@ -50,6 +50,7 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     novelData.privateKey = apiKey;
     novelData.endpointWithCredentials = `https://${'user:pass'}@example.com/service`;
     novelData.endpointWithToken = 'https://example.com/service?token=hidden';
+    novelData.endpointWithFragment = 'https://example.com/callback#access_token=hidden';
     novelData.serviceSecret = 'hidden-secret';
     novelData.savedPassword = 'hidden-password';
     novelData.bearerToken = 'hidden-bearer';
@@ -74,6 +75,7 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
   expect(exportedJson).not.toContain(secret);
   expect(exportedJson).not.toContain('user:pass@');
   expect(exportedJson).not.toContain('token=hidden');
+  expect(exportedJson).not.toContain('access_token=hidden');
   expect(JSON.parse(exportedJson).novelData).toMatchObject({
     key: 'sort-key',
     token: 'ordinary-token',
@@ -86,6 +88,7 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('privateKey');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('endpointWithCredentials');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('endpointWithToken');
+  expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('endpointWithFragment');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('serviceSecret');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('savedPassword');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('bearerToken');
@@ -113,6 +116,7 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
         promptTokens: 17,
         agentKey: 'fetchAuthors',
         endpoint: 'https://example.com/service?access_token=hidden',
+        callback: 'https://example.com/callback#access_token=hidden',
         serviceSecret: 'hidden-secret',
         savedPassword: 'hidden-password',
         bearerToken: 'hidden-bearer',
@@ -129,6 +133,7 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     hasApiKeyUpper: Object.hasOwn(novelData, 'API_KEY'),
     hasPrivateKey: Object.hasOwn(novelData, 'privateKey'),
     hasEndpoint: Object.hasOwn(novelData, 'endpoint'),
+    hasCallback: Object.hasOwn(novelData, 'callback'),
     hasServiceSecret: Object.hasOwn(novelData, 'serviceSecret'),
     hasSavedPassword: Object.hasOwn(novelData, 'savedPassword'),
     hasBearerToken: Object.hasOwn(novelData, 'bearerToken'),
@@ -145,6 +150,7 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     hasApiKeyUpper: false,
     hasPrivateKey: false,
     hasEndpoint: false,
+    hasCallback: false,
     hasServiceSecret: false,
     hasSavedPassword: false,
     hasBearerToken: false,

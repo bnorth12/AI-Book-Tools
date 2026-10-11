@@ -76,6 +76,7 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
       privateKey: apiKey,
       endpointWithCredentials: `https://${'user:pass'}@example.com/service`,
       endpointWithToken: 'https://example.com/service?token=hidden',
+      endpointWithFragment: 'https://example.com/callback#access_token=hidden',
       serviceSecret: 'hidden-secret',
       savedPassword: 'hidden-password',
       bearerToken: 'hidden-bearer',
@@ -101,8 +102,8 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
   const parsedBook = JSON.parse(exportedBook);
   expect(exportedBook).not.toContain(secret);
   expect(exportedBook).not.toContain('user:');
-  expect(exportedBook).not.toContain('user:password@');
   expect(exportedBook).not.toContain('token=hidden');
+  expect(exportedBook).not.toContain('access_token=hidden');
   expect(parsedBook.novelData).toMatchObject({
     key: 'chapter-key',
     token: 'ordinary-token',
@@ -115,6 +116,7 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
   expect(parsedBook.novelData).not.toHaveProperty('privateKey');
   expect(parsedBook.novelData).not.toHaveProperty('endpointWithCredentials');
   expect(parsedBook.novelData).not.toHaveProperty('endpointWithToken');
+  expect(parsedBook.novelData).not.toHaveProperty('endpointWithFragment');
   expect(parsedBook.novelData).not.toHaveProperty('serviceSecret');
   expect(parsedBook.novelData).not.toHaveProperty('savedPassword');
   expect(parsedBook.novelData).not.toHaveProperty('bearerToken');
@@ -135,6 +137,7 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
         authorization: secret,
         privateKey: secret,
         endpoint: 'https://example.com/?api_key=hidden',
+        callback: 'https://example.com/callback#access_token=hidden',
         serviceSecret: 'hidden-secret',
         savedPassword: 'hidden-password',
         bearerToken: 'hidden-bearer',
@@ -152,6 +155,7 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
     hasAuthorization: Object.hasOwn(novelData, 'authorization'),
     hasPrivateKey: Object.hasOwn(novelData, 'privateKey'),
     hasEndpoint: Object.hasOwn(novelData, 'endpoint'),
+    hasCallback: Object.hasOwn(novelData, 'callback'),
     hasServiceSecret: Object.hasOwn(novelData, 'serviceSecret'),
     hasSavedPassword: Object.hasOwn(novelData, 'savedPassword'),
     hasBearerToken: Object.hasOwn(novelData, 'bearerToken'),
@@ -166,6 +170,7 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
     hasAuthorization: false,
     hasPrivateKey: false,
     hasEndpoint: false,
+    hasCallback: false,
     hasServiceSecret: false,
     hasSavedPassword: false,
     hasBearerToken: false,

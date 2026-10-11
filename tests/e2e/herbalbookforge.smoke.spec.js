@@ -111,6 +111,7 @@ test.describe('HerbalBookForge Smoke Test', () => {
       project.setup.privateKey = apiKey;
       project.setup.endpointWithCredentials = `https://${'user:pass'}@example.com/service`;
       project.setup.endpointWithToken = 'https://example.com/service?token=hidden';
+      project.setup.endpointWithFragment = 'https://example.com/callback#access_token=hidden';
       project.setup.serviceSecret = 'hidden-secret';
       project.setup.savedPassword = 'hidden-password';
       project.setup.bearerToken = 'hidden-bearer';
@@ -142,16 +143,23 @@ test.describe('HerbalBookForge Smoke Test', () => {
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('authorization');
     expect(exportedJson).not.toContain('user:pass@');
     expect(exportedJson).not.toContain('token=hidden');
+    expect(exportedJson).not.toContain('access_token=hidden');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('API_KEY');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('privateKey');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithCredentials');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithToken');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithFragment');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('serviceSecret');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('savedPassword');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('bearerToken');
     expect(storedProject).not.toContain(secret);
+    expect(storedProject).not.toContain('user:pass@');
+    expect(storedProject).not.toContain('token=hidden');
+    expect(storedProject).not.toContain('access_token=hidden');
     expect(JSON.parse(storedProject).setup).not.toHaveProperty('apiKey');
     expect(JSON.parse(storedProject).setup).not.toHaveProperty('authorization');
+    expect(JSON.parse(storedProject).setup).not.toHaveProperty('API_KEY');
+    expect(JSON.parse(storedProject).setup).not.toHaveProperty('privateKey');
     expect(JSON.parse(exportedJson)).toMatchObject({
       key: 'sort-key',
       token: 'ordinary-token',
@@ -173,6 +181,7 @@ test.describe('HerbalBookForge Smoke Test', () => {
           API_KEY: secret,
           privateKey: secret,
           endpoint: 'https://example.com/?access_token=hidden',
+          callback: 'https://example.com/callback#access_token=hidden',
           serviceSecret: 'hidden-secret',
           savedPassword: 'hidden-password',
           bearerToken: 'hidden-bearer',
@@ -209,6 +218,7 @@ test.describe('HerbalBookForge Smoke Test', () => {
     expect(importedSetup).not.toHaveProperty('API_KEY');
     expect(importedSetup).not.toHaveProperty('privateKey');
     expect(importedSetup).not.toHaveProperty('endpoint');
+    expect(importedSetup).not.toHaveProperty('callback');
     expect(importedSetup).not.toHaveProperty('serviceSecret');
     expect(importedSetup).not.toHaveProperty('savedPassword');
     expect(importedSetup).not.toHaveProperty('bearerToken');

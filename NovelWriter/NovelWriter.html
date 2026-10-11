@@ -9337,7 +9337,9 @@ return c && c.name && c.backstory && c.arc; });
 		        try {
 		            const url = new URL(value, window.location.href);
 		            if (url.username && url.password) return true;
-		            return Array.from(url.searchParams.keys()).some(name =>
+		            const fragment = url.hash.slice(1);
+		            const fragmentParams = new URLSearchParams(fragment.includes('?') ? fragment.slice(fragment.indexOf('?') + 1) : fragment);
+		            return [...url.searchParams.keys(), ...fragmentParams.keys()].some(name =>
 		                ['key', 'token'].includes(name.toLowerCase()) || isSecretField(name)
 		            );
 		        } catch (error) {

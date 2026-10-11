@@ -310,6 +310,7 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
     novelData.privateKey = 'xai-TESTKEY-123';
     novelData.endpointWithCredentials = `https://${'user:pass'}@example.com/service`;
     novelData.endpointWithToken = 'https://example.com/service?token=hidden';
+    novelData.endpointWithFragment = 'https://example.com/callback#access_token=hidden';
     novelData.serviceSecret = 'hidden-secret';
     novelData.savedPassword = 'hidden-password';
     novelData.bearerToken = 'hidden-bearer';
@@ -338,6 +339,7 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
   expect(exportedJson).not.toContain('xai-TESTKEY-123');
   expect(exportedJson).not.toContain('user:pass@');
   expect(exportedJson).not.toContain('token=hidden');
+  expect(exportedJson).not.toContain('access_token=hidden');
 
   // Required schema envelope fields
   expect(parsed.schemaVersion).toBe('1.0');
@@ -371,6 +373,7 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
   expect(parsed.novelData).not.toHaveProperty('privateKey');
   expect(parsed.novelData).not.toHaveProperty('endpointWithCredentials');
   expect(parsed.novelData).not.toHaveProperty('endpointWithToken');
+  expect(parsed.novelData).not.toHaveProperty('endpointWithFragment');
   expect(parsed.novelData).not.toHaveProperty('serviceSecret');
   expect(parsed.novelData).not.toHaveProperty('savedPassword');
   expect(parsed.novelData).not.toHaveProperty('bearerToken');
@@ -415,6 +418,7 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
         API_KEY: 'xai-TESTKEY-123',
         privateKey: 'xai-TESTKEY-123',
         endpoint: 'https://example.com/service?access_token=hidden',
+        callback: 'https://example.com/callback#access_token=hidden',
         serviceSecret: 'hidden-secret',
         savedPassword: 'hidden-password',
         bearerToken: 'hidden-bearer',
@@ -444,6 +448,7 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
     hasApiKeyUpper: Object.hasOwn(novelData, 'API_KEY'),
     hasPrivateKey: Object.hasOwn(novelData, 'privateKey'),
     hasEndpoint: Object.hasOwn(novelData, 'endpoint'),
+    hasCallback: Object.hasOwn(novelData, 'callback'),
     hasServiceSecret: Object.hasOwn(novelData, 'serviceSecret'),
     hasSavedPassword: Object.hasOwn(novelData, 'savedPassword'),
     hasBearerToken: Object.hasOwn(novelData, 'bearerToken'),
@@ -460,6 +465,7 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
     hasApiKeyUpper: false,
     hasPrivateKey: false,
     hasEndpoint: false,
+    hasCallback: false,
     hasServiceSecret: false,
     hasSavedPassword: false,
     hasBearerToken: false,
