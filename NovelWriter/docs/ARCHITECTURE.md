@@ -289,3 +289,58 @@ network by default, imports a session, optionally stubs `callAI`, and invokes
 `nwScoreBook()` to produce scorecard/session artifacts. Live regeneration is
 opt-in and requires `QCAT_LIVE_ACK=1` (`scripts/qcat_harness.mjs:84-156`,
 `159-168`, `221-255`). Its scoring logic remains in `NovelWriter.html`.
+
+## Data model and schema (design only)
+
+Status: DESIGN for A1. Engineering owns it. Product needs come from Fiction's `NW_STORY_SCHEMA_NEEDS.md` (written against main `600b35d`). No code changes in this PR. Slot S1 implements it, with a Reviewer GO on the migration trigger. Line numbers are approximate. The function names are the contract.
+
+### 1. Where the data lives
+- Everything is a **NovelWriter-local extension inside `novelData`**, carried in the existing shared v1.0 envelope. There are **no `schema/` or `docs/architecture/book-tools-contract/` changes**, so Nonfiction's confirm is not triggered by this design.
+- Promoting any entity (`world`, `characters[].voice/relationships`, a cross-tool `id` scheme) into the shared book schema is a **separate, later decision**. It would need Nonfiction's confirm and a Reviewer GO.
+- Persistence is unchanged: in memory `novelData`, then the session export/import envelope plus localStorage autosave. IndexedDB holds only `nwTimingStats` (8b) and is never story data.
+
+### 2. Entities and single owners
+| Entity | Keys in `novelData` | Owner (only writer) | Read-only consumers |
+|---|---|---|---|
+| World | `setting`, `genre`, `world{version,locations[],rules[],concepts[]*,topicTags[]*,notes?}`, legacy `worldBible`/`world` (preserved, never rewritten) | User edits in Tabs 1-2 and the AI-suggest buttons, through one `nwWorldUpdate(patch)` helper (S1) | prompt binders (`digestWorldBible`), 4p plan build, 8d scorecard, Q5 |
+| Plot | `storyArc`, `generalPlot`, outlines, `chapterOutlines[]`, `chapterArcs[]`, `chapterBlueprints[]`, `subplots[]` (strings), `subplotsMeta[]` (same index), `chapterFactChecks[]`, `factChecks` | User and AI-suggest in Tabs 1-5 | Generate All, 4p, 8d, Q1-Q3 |
+| Character | `characters[]{id?,name,backstory,arc,role,goal,flaw,notes,obligations[],voice?,relationships[]?,explainerFor[]*}` | User and AI-suggest in Tab 2, through `normalizeCharacterItem` only | prompts, 4p `cast`, 8d voice/cast, Q5 |
+| Writing plan | `chapterWritingPlans[n-1]` | slot 4p build/edit | 8d `planCoverage`, Generate All prompt |
+| Chapter flags | `chapterFlags[n-1]{coverageFailed?,missing?,replay?,at}` | 6b (coverage/missing) and Q3 (replay), **merge keys only** | Tab 6, Resume, Q3 |
+| Scorecards | `chapterScorecards[n-1]` (incl. advisory `planCoverage`, null `worldImmersion`) | 8d scorer | Tab 6, export |
+| Continuity | `continuityTracker` | Q5 (final text only) | prompts. Character per-chapter state is read here, **never duplicated** on Character |
+
+`*` marks fields reserved for Brian's world-beats talk (`[WAIT]`). S1 accepts and preserves them as optional and does nothing else with them.
+
+### 3. Preservation rules (the #141 lesson)
+1. **Absent stays absent.** Import, tab rebuild and save never write a default into a field the session didn't have. The only exception is the documented empty-array coercion for arrays main already coerces.
+2. **Unknown keys survive.** The normalizer only adds or validates known keys and never rebuilds `novelData` from a whitelist.
+3. **One normalizer per entity**, used by import, DOM rebuild and AI-suggest alike. S1 must route the Tab 2 rebuild (~L4042) through `normalizeCharacterItem` (~L2210) and extend that function to keep `role, goal, flaw, notes, obligations, id, voice, relationships, explainerFor`.
+4. **Subplots:** `normalizeSubplotItem` (~L2227) keeps flattening to the string array for compatibility, but **first** copies object fields to `subplotsMeta[i]`.
+5. **World:** `worldBible`/`world` are kept byte-for-byte. A string value is also mirrored into `world.notes` only when `world` is otherwise absent, and the original key is left untouched.
+6. `normalizeImportedSessionData` (~L9381) adds explicit handling for `world`, `worldBible`, `subplotsMeta`, `chapterFlags`, `chapterWritingPlans` and `nwSchemaVersion`: it validates type, keeps absent as absent, and keeps the wrong type as-is with a console warning, never dropping it.
+
+### 4. Versioning and migration
+- New `novelData.nwSchemaVersion` (integer). **Absent means legacy (0).** S1 sets it to `1`.
+- `nwMigrateSession(nd)` runs once after `normalizeImportedSessionData` and before `applySessionDataToUI` (~L9464). It is pure (no DOM, no network, **no AI calls**), **additive**, and **idempotent**: `migrate(migrate(x))` deep-equals `migrate(x)`. It never deletes or renames a key. A version newer than the app knows is loaded read-through, unchanged, with a warning.
+- v0 to v1 steps: stamp a version, copy subplot objects to `subplotsMeta`, mirror a string `worldBible` into `world.notes`, assign `characters[].id` (a stable slug of the name plus a de-dup suffix) only where it's missing, and leave every `[WAIT]` field untouched.
+- Export always writes the current `nwSchemaVersion`. Older app builds ignore the extra keys through the existing spread.
+- **S1 fixtures** (N6): a pre-6b session with no `chapterFlags`; a string `worldBible`; characters with `obligations/goal/flaw`; object subplots; a partial `chapterWritingPlans`; and a v1 session (to prove idempotence). Each must round-trip deep-equal except for the documented added keys. A mutation that drops any one field must fail the smoke.
+
+### 5. Write-concurrency rules
+| Rule | Applies to | Enforcement (S1 or existing) |
+|---|---|---|
+| Single writer per entity | §2 table | owner helpers; other code reads only |
+| Story entities locked during a batch | World, Plot, Character edits and AI-suggest | `nwBatchIsLocked()` (~L12154) plus `nwBatchApplyLock` list. S1 adds any new World/Character controls to that list |
+| Per-chapter records merge, never replace | `chapterFlags`, `chapterWritingPlans`, `chapterScorecards` | write `Object.assign({}, existing, patch)` keyed by chapter index. Q3 and 6b share `chapterFlags[n-1]` |
+| Await load before write | IndexedDB `nwTimingStats` | existing: `nwTimingLoadStats()` (~L1259) and the record path (8b) |
+| Per-call / per-run identity | AI calls, Generate All runs | existing: per-call `nwActiveCalls` Map (8b); per-run reset of batch state |
+| Migration runs once, before UI | import path | `nwMigrateSession` between normalize and apply (S1) |
+
+### 6. Gaps on main that S1 must close
+1. `worldBible`/`world` aren't in the `novelData` defaults (~L732) or the import normalizer, and only survive through the spread.
+2. The Tab 2 character DOM rebuild (~L4042) drops `obligations`, `goal` and `flaw`.
+3. `normalizeCharacterItem` (~L2210) keeps only `name, backstory, arc, obligations`.
+4. `normalizeSubplotItem` (~L2227) flattens objects to strings with no copy.
+
+All four are the same class of data loss as #141. S1 closes them before Q1-Q3 and 4p build on the schema.
