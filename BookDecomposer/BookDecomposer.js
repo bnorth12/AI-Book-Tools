@@ -71,7 +71,7 @@ function findRemovedSecretFields(value, fieldName = "") {
 }
 
 function stripSecretFields(value) {
-    if (Array.isArray(value)) return value.filter(item => !isSensitiveUrl(item)).map(stripSecretFields);
+    if (Array.isArray(value)) return Array.from(value, item => isSensitiveUrl(item) ? null : stripSecretFields(item));
     if (!value || typeof value !== "object") return value;
     return Object.fromEntries(Object.entries(value)
         .filter(([name, nested]) => !isSecretField(name) && !isSensitiveUrl(nested))
