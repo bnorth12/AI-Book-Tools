@@ -119,7 +119,7 @@ sequenceDiagram
     participant IDB as IndexedDB checkpoints
 
     Author->>Batch: Generate All or Resume
-    Note over Author,Batch: Concurrency: reject if another batch runs or a manual AI call is active; acquire this run's owner token.
+    Note over Author,Batch: Concurrency: reject if another batch runs or a manual AI call is active, acquire this run's owner token.
     Batch->>Batch: collectData, preflight, plan, estimate, initialize run
     Note over Batch,Chapter: Schema inputs (A1 §2, §7): World, Characters, Plot, chapterFactChecks.items, chapterRequirements, chapterWritingPlans are read-only during the run
     Batch->>IDB: checkpoint before chapter
@@ -135,7 +135,7 @@ sequenceDiagram
             AI-->>Chapter: findings
         end
         alt draft-only enabled
-            Chapter->>Chapter: ensureQualityAfterGenerate records skip; no automatic revise passes
+            Chapter->>Chapter: ensureQualityAfterGenerate records skip, no automatic revise passes
         else normal generation
             Chapter->>Quality: ensureQualityAfterGenerate
             Quality->>AI: sequential gate-fail / targeted revise calls as needed
@@ -148,17 +148,17 @@ sequenceDiagram
             AI-->>Quality: beat evidence
         end
         Quality-->>Batch: chapter outcome and scorecard
-        Batch->>Batch: add real usage (estimate only if no usage); record completion or stop reason
+        Batch->>Batch: add real usage (estimate only if no usage), record completion or stop reason
         Batch->>IDB: checkpoint after chapter
         alt cap reached before or after chapter
-            Batch->>Batch: stop with budget reason; keep saved cap for Resume
+            Batch->>Batch: stop with budget reason, keep saved cap for Resume
         else next chapter remains
-            Note over Batch,AI: Concurrency: the loop awaits each chapter; Part 1, Part 2, audit, and revisions are sequential.
+            Note over Batch,AI: Concurrency: the loop awaits each chapter, Part 1, Part 2, audit, and revisions are sequential.
         end
     end
     opt interrupted by reload
         IDB-->>Batch: active checkpoint found by nwBatchCheckForInterrupted
-        Batch->>Batch: restore; remove in-flight chapter from completed; Resume regenerates it
+        Batch->>Batch: restore, remove in-flight chapter from completed, Resume regenerates it
     end
     Batch->>IDB: final inactive checkpoint
     Batch-->>Author: done, paused, stopped, or budget-stopped
@@ -197,14 +197,14 @@ sequenceDiagram
     participant IDB as nwTimingStats
 
     Caller->>Call: messages, tab, options
-    Note over Caller,Call: Concurrency: each call gets a monotonically increasing ID in nwActiveCalls; activeAICallCount gates batch start.
-    Call->>Book: validate key/model; mark request pending
-    Call->>HUD: nwCallStart; show operation and elapsed time
+    Note over Caller,Call: Concurrency: each call gets a monotonically increasing ID in nwActiveCalls, activeAICallCount gates batch start.
+    Call->>Book: validate key/model, mark request pending
+    Call->>HUD: nwCallStart, show operation and elapsed time
     Call->>API: POST chat/completions or responses
     alt response arrives before timeout
         API-->>Call: HTTP response
         Call->>Call: parse envelope, record usage, normalize model content
-        Call->>Book: requestLog completed; return parsed result
+        Call->>Book: requestLog completed, return parsed result
         opt generated chapter proceeds through scoring
             Call-->>Score: chapter prose and usage
             Score->>Score: nwScoreChapterVsBlueprint / nwScoreAndStoreChapter
@@ -212,14 +212,14 @@ sequenceDiagram
         end
     else timeout or user cancels
         Call->>API: AbortController.abort()
-        Call->>Book: mark request failed; ignore any late response
+        Call->>Book: mark request failed, ignore any late response
     else HTTP, network, or parse error
         API-->>Call: error
-        Call->>Book: mark request failed; reject to caller
+        Call->>Book: mark request failed, reject to caller
     end
-    Call->>HUD: nwCallEnd; decrement active count
+    Call->>HUD: nwCallEnd, decrement active count
     Call->>IDB: nwTimingRecordSettle upserts aggregate row
-    Note over Call,IDB: Concurrency: timing rows are loaded before updating when needed; the current tab merges newly seen keys.
+    Note over Call,IDB: Concurrency: timing rows are loaded before updating when needed, the current tab merges newly seen keys.
 ```
 
 `nwScoreChapterVsBlueprint()` calculates heuristic dimensions and can make a
@@ -241,10 +241,10 @@ stateDiagram-v2
     Stopping --> BudgetStopped: real usage reaches cap
     Running --> Done: all planned chapters complete and checkpointed
     Running --> Interrupted: reload while active checkpoint exists
-    Interrupted --> Resumed: restore; in-flight chapter becomes incomplete
+    Interrupted --> Resumed: restore, in-flight chapter becomes incomplete
     Resumed --> Running: Resume
     Stopped --> Resumed: Resume / retry
-    BudgetStopped --> Resumed: raise cap or keep saved cap; Resume
+    BudgetStopped --> Resumed: raise cap or keep saved cap, Resume
     Done --> [*]
 ```
 
