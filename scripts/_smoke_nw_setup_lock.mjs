@@ -2,6 +2,8 @@
  * Offline smoke for REQ-SCH-08 / #159 and REQ-SCH-11:
  * LOCK:setup-midrun + LOCK:M1 (drop Setup inputs from nwBatchApplyLock).
  * LOCK:pause-held + LOCK:M2 (release Setup lock on pause).
+ * LOCK:M3 (Generate All disabled on `locked` instead of setupLocked).
+ * LOCK:M4 (Cancel while paused does not release Setup lock).
  * Full Tab 1-4/7 AI control list; nonzero matched-control count per tab (1b).
  * No network, no API key. Prints each check id PASS/FAIL.
  *
@@ -76,7 +78,13 @@ async function install(page) {
       }
       return realGen.apply(this, arguments);
     };
-    window.nwToast = function (m) { h.toasts.push(String(m)); const el = document.getElementById('nwToast'); if (el) { el.textContent = String(m); el.hidden = false; } };
+    const realToast = window.nwToast;
+    window.nwToast = function (m) {
+      h.toasts.push(String(m));
+      if (typeof realToast === 'function') return realToast.apply(this, arguments);
+      const el = document.getElementById('nwToast');
+      if (el) { el.textContent = String(m); el.hidden = false; }
+    };
     window.callAI = async function (messages) {
       const g = window.__lastGenerateChapterGate;
       const ch = g ? g.chapter : 0;
@@ -262,9 +270,18 @@ if (mutTab.ok) {
   check('LOCK:M-tab47', 'dropping Tab 4 incorporate / Tab 7 breakdown / addCharacter / addSubplot turns full-list red', t4 && t7 && (t4.allDisabled === false || t7.allDisabled === false), JSON.stringify(red.tabs));
 }
 
-async function runPauseHeld(htmlPath) {
+const LOCKED_NOTICE_RE = /is locked while a Generate All run is active or awaiting restore/i;
+const PAUSED_STATUS_RE = /Paused before ch\d+\. Setup is locked until the run ends or is cancelled\./;
+
+async function runPauseHeld(htmlPath, opts) {
+  opts = opts || {};
+  const after = opts.after || 'resume';
+  const probe = opts.probe !== false;
   const page = await openPage(htmlPath);
-  const out = await page.evaluate(async (nd) => {
+  const out = await page.evaluate(async (args) => {
+    const nd = args.nd;
+    const after = args.after;
+    const probe = args.probe;
     const h = window.__h;
     h.cfg = {};
     h.load(nd);
@@ -286,10 +303,41 @@ async function runPauseHeld(htmlPath) {
     const plotDisabled = document.getElementById('generalPlot').disabled;
     const setupLocked = typeof nwBatchSetupIsLocked === 'function' && nwBatchSetupIsLocked();
     const numCharactersDisabled = document.getElementById('numCharacters').disabled;
+    const numChaptersDisabled = document.getElementById('numChapters').disabled;
+    const importFileDisabled = document.getElementById('importFile').disabled;
+    const genAllDisabled = document.getElementById('batchGenerateAllBtn').disabled;
     const addCharDisabled = Array.from(document.querySelectorAll('#tab2 button[onclick*="addCharacter"]')).every((b) => b.disabled);
-    h.toasts.length = 0;
+    const cancelBtn = document.getElementById('batchCancelBtn');
+    const cancelExists = !!cancelBtn;
+    const cancelDisabled = cancelBtn ? !!cancelBtn.disabled : true;
+    const toastEl = document.getElementById('nwToast');
+    const pausedStatus = String((document.getElementById('batchRunStatus') || {}).textContent || '');
+    function readNotice() { return String((toastEl && toastEl.textContent) || ''); }
+    function clearNotice() {
+      h.toasts.length = 0;
+      if (toastEl) { toastEl.textContent = ''; toastEl.hidden = true; }
+    }
+    let importRefused = false, importNotice = '', chaptersRefused = false, chaptersNotice = '', genAllRefused = false, genAllNotice = '';
+    if (probe) {
+      clearNotice();
+      const titleBefore = novelData.title;
+      importSession({ target: { files: [], value: 'x.json' } });
+      importRefused = novelData.title === titleBefore;
+      importNotice = readNotice();
+      clearNotice();
+      const chLenBefore = (novelData.chapters || []).length;
+      const numBefore = novelData.numChapters;
+      await updateChapterSubpages();
+      chaptersRefused = (novelData.chapters || []).length === chLenBefore && novelData.numChapters === numBefore;
+      chaptersNotice = readNotice();
+      clearNotice();
+      const ga = await generateAllChapters();
+      genAllRefused = !!(ga && ga.started === false);
+      genAllNotice = readNotice();
+    }
+    clearNotice();
     const refusedAi = typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Suggest Setting');
-    const notice = (h.toasts.join(' ') + ' ' + ((document.getElementById('nwToast') || {}).textContent || ''));
+    const notice = readNotice();
     let edited = false;
     if (!settingDisabled) {
       document.getElementById('setting').value = 'MUTATED SETTING SHOULD CHANGE PROMPTS: a different city of glass.';
@@ -297,40 +345,89 @@ async function runPauseHeld(htmlPath) {
       edited = true;
     }
     h.prompts.length = 0;
-    const resumed = await resumeBatchRun();
+    let resumed = null;
+    let cancelled = null;
+    let afterCancel = null;
+    if (after === 'cancel') {
+      cancelled = await cancelBatchRun();
+      afterCancel = {
+        setupLocked: typeof nwBatchSetupIsLocked === 'function' && nwBatchSetupIsLocked(),
+        settingDisabled: document.getElementById('setting').disabled,
+        numChaptersDisabled: document.getElementById('numChapters').disabled,
+        numCharactersDisabled: document.getElementById('numCharacters').disabled,
+        importFileDisabled: document.getElementById('importFile').disabled,
+        genAllDisabled: document.getElementById('batchGenerateAllBtn').disabled,
+        addCharDisabled: Array.from(document.querySelectorAll('#tab2 button[onclick*="addCharacter"]')).every((b) => b.disabled),
+        cancelDisabled: document.getElementById('batchCancelBtn') ? document.getElementById('batchCancelBtn').disabled : true,
+        reason: novelData.batchRun && novelData.batchRun.reason
+      };
+    } else {
+      resumed = await resumeBatchRun();
+    }
     const p2 = (h.prompts.find((p) => p.ch === 2 && p.part === 1) || {}).prompt || '';
     return {
       r: r && r.reason, resumed: resumed && resumed.reason,
-      settingDisabled, plotDisabled, setupLocked, numCharactersDisabled, addCharDisabled,
-      refusedAi, notice, edited,
+      settingDisabled, plotDisabled, setupLocked, numCharactersDisabled, numChaptersDisabled,
+      importFileDisabled, genAllDisabled, addCharDisabled,
+      cancelExists, cancelDisabled,
+      refusedAi, notice, importRefused, importNotice, chaptersRefused, chaptersNotice, genAllRefused, genAllNotice,
+      pausedStatus, edited, cancelled, afterCancel,
       eq2: p2 === pre2,
       mutated: /MUTATED SETTING/.test(p2),
       br: novelData.batchRun && { reason: novelData.batchRun.reason, stoppedAt: novelData.batchRun.stoppedAt, completed: novelData.batchRun.completed },
       resumeDisabled: document.getElementById('batchResumeBtn').disabled
     };
-  }, ND);
+  }, { nd: ND, after, probe });
   await page.close();
   return out;
 }
 
-const pauseGreen = await runPauseHeld(HTML_PATH);
-check('LOCK:pause-held', 'pause keeps Setup lock; edit refused with locked notice', pauseGreen.setupLocked === true && pauseGreen.settingDisabled === true && pauseGreen.refusedAi === true && /locked while a Generate All run/i.test(pauseGreen.notice), JSON.stringify(pauseGreen));
+function pauseHeldOk(p) {
+  return p.setupLocked === true && p.settingDisabled === true && p.numChaptersDisabled === true && p.numCharactersDisabled === true && p.addCharDisabled === true && p.importFileDisabled === true && p.genAllDisabled === true && p.importRefused === true && p.chaptersRefused === true && p.genAllRefused === true && p.refusedAi === true && LOCKED_NOTICE_RE.test(p.notice) && LOCKED_NOTICE_RE.test(p.importNotice) && LOCKED_NOTICE_RE.test(p.chaptersNotice) && LOCKED_NOTICE_RE.test(p.genAllNotice) && PAUSED_STATUS_RE.test(p.pausedStatus) && p.cancelExists === true && p.cancelDisabled === false;
+}
+
+const pauseGreen = await runPauseHeld(HTML_PATH, { after: 'resume', probe: true });
+check('LOCK:pause-held', 'pause keeps Setup lock; import/chapters/Generate All/AI refused with real locked notice', pauseHeldOk(pauseGreen), JSON.stringify(pauseGreen));
 check('LOCK:pause-held', 'resume later prompts byte-equal to pre-pause', pauseGreen.eq2 === true && pauseGreen.mutated !== true, JSON.stringify(pauseGreen));
+
+const pauseCancel = await runPauseHeld(HTML_PATH, { after: 'cancel', probe: true });
+check('LOCK:pause-held', 'after Cancel, Setup controls re-enable', pauseCancel.cancelled === true && pauseCancel.afterCancel && pauseCancel.afterCancel.setupLocked === false && pauseCancel.afterCancel.settingDisabled === false && pauseCancel.afterCancel.numChaptersDisabled === false && pauseCancel.afterCancel.numCharactersDisabled === false && pauseCancel.afterCancel.addCharDisabled === false && pauseCancel.afterCancel.importFileDisabled === false && pauseCancel.afterCancel.genAllDisabled === false, JSON.stringify(pauseCancel));
 
 const mutM2 = mutateCopy('var NW_S1_LOCK_PAUSE_HELD = true;', 'var NW_S1_LOCK_PAUSE_HELD = false;');
 check('LOCK:M2', 'mutation flag present', mutM2.ok, mutM2.detail);
 let lockM2Red = null;
 if (mutM2.ok) {
-  lockM2Red = await runPauseHeld(mutM2.copy);
+  lockM2Red = await runPauseHeld(mutM2.copy, { after: 'resume', probe: false });
   check('LOCK:M2', 'release lock on pause turns LOCK:pause-held red (fields enabled, later prompts change)', lockM2Red.settingDisabled === false && lockM2Red.edited === true && lockM2Red.mutated === true, JSON.stringify(lockM2Red));
 }
 globalThis.__LOCK_M2_RED = lockM2Red;
+console.log('LOCK:M2 red-run ' + JSON.stringify(lockM2Red));
+
+const mutM3 = mutateCopy('var NW_S1_LOCK_GENALL_SETUP = true;', 'var NW_S1_LOCK_GENALL_SETUP = false;');
+check('LOCK:M3', 'mutation flag present', mutM3.ok, mutM3.detail);
+let lockM3Red = null;
+if (mutM3.ok) {
+  lockM3Red = await runPauseHeld(mutM3.copy, { after: 'resume', probe: true });
+  check('LOCK:M3', 'Generate All on locked (not setupLocked) turns pause-held red (Generate All enabled while paused)', lockM3Red.genAllDisabled === false && lockM3Red.setupLocked === true, JSON.stringify(lockM3Red));
+}
+globalThis.__LOCK_M3_RED = lockM3Red;
+console.log('LOCK:M3 red-run ' + JSON.stringify(lockM3Red));
+
+const mutM4 = mutateCopy('var NW_S1_CANCEL_RELEASES_LOCK = true;', 'var NW_S1_CANCEL_RELEASES_LOCK = false;');
+check('LOCK:M4', 'mutation flag present', mutM4.ok, mutM4.detail);
+let lockM4Red = null;
+if (mutM4.ok) {
+  lockM4Red = await runPauseHeld(mutM4.copy, { after: 'cancel', probe: true });
+  check('LOCK:M4', 'Cancel not releasing lock turns pause-held red (Setup still locked after Cancel)', !!(lockM4Red.afterCancel && lockM4Red.afterCancel.setupLocked === true && lockM4Red.afterCancel.numChaptersDisabled === true && lockM4Red.afterCancel.genAllDisabled === true), JSON.stringify(lockM4Red));
+}
+globalThis.__LOCK_M4_RED = lockM4Red;
+console.log('LOCK:M4 red-run ' + JSON.stringify(lockM4Red));
 
 check('pageerror', 'no uncaught pageerror', pageErrors.length === 0, pageErrors.join(' | '));
 await browser.close();
 
 const failed = checks.filter((c) => !c.ok);
-const report = { passed: checks.filter((c) => c.ok).length, failed: failed.length, checks, pageErrors, lockM2Red: globalThis.__LOCK_M2_RED || null };
+const report = { passed: checks.filter((c) => c.ok).length, failed: failed.length, checks, pageErrors, lockM2Red: globalThis.__LOCK_M2_RED || null, lockM3Red: globalThis.__LOCK_M3_RED || null, lockM4Red: globalThis.__LOCK_M4_RED || null };
 fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(path.join(OUT_DIR, 'SMOKE_NW_SETUP_LOCK.json'), JSON.stringify(report, null, 2));
 console.log('NW setup-lock smoke: ' + report.passed + ' passed, ' + report.failed + ' failed');

@@ -516,10 +516,12 @@ for (const file of fixtureFiles) {
     nwChapterIdsUpdate('resize', 5);
     const up = novelData.chapterIds.slice();
     const upScenes = (novelData.chapterScenes || []).length;
+    const upCh = (novelData.chapters || []).length;
     nwChapterIdsUpdate('resize', 2);
     const down = {
       ids: novelData.chapterIds.slice(),
       scenes: (novelData.chapterScenes || []).length,
+      chLen: (novelData.chapters || []).length,
       facts: (novelData.chapterRequiredFacts || []).length,
       reqs: (novelData.chapterRequirements || []).length,
       fps: (novelData.chapterFingerprints || []).length,
@@ -530,15 +532,17 @@ for (const file of fixtureFiles) {
     nwChapterIdsUpdate('resize', 5);
     const grown = {
       ids: novelData.chapterIds.slice(),
+      chLen: (novelData.chapters || []).length,
       facts2: novelData.chapterRequiredFacts && novelData.chapterRequiredFacts[2],
       reqs2: novelData.chapterRequirements && novelData.chapterRequirements[2],
       fps2: novelData.chapterFingerprints && novelData.chapterFingerprints[2],
       plans2: novelData.chapterWritingPlans && novelData.chapterWritingPlans[2],
       scenes2: novelData.chapterScenes && novelData.chapterScenes[2]
     };
-    return { orig, up, down, upScenes, grown };
+    return { orig, up, upCh, down, upScenes, grown };
   }, fx.input);
   check('MIG:v1-ids-resize', 'grow pads new ch_ ids; shrink truncates ids and scenes', r.up.length === 5 && r.up[0] === r.orig[0] && r.up[1] === r.orig[1] && r.up[2] === r.orig[2] && r.down.ids.length === 2 && r.down.scenes === 2, JSON.stringify(r));
+  check('MIG:v1-ids-resize', 'chapters.length === chapterIds.length after shrink and grow', r.upCh === r.up.length && r.down.chLen === r.down.ids.length && r.grown.chLen === r.grown.ids.length, JSON.stringify(r));
   check('MIG:v1-ids-resize', 'shrink truncates every S1 per-chapter array; shrink-then-grow brings back no stale record', r.down.facts === 2 && r.down.reqs === 2 && r.down.fps === 2 && r.down.plans === 2 && r.down.staleFact == null && r.down.stalePlan == null && r.grown.facts2 == null && r.grown.reqs2 == null && r.grown.fps2 == null && r.grown.plans2 == null && r.grown.scenes2 == null && r.grown.ids.length === 5 && r.grown.ids[0] === r.orig[0], JSON.stringify(r));
 }
 
@@ -728,6 +732,25 @@ await page.close();
       };
     }, fx.input);
     check('MIG:v1-ids-resize:mutation', 'skipping S1 array truncate on resize brings stale records back (turns green red)', !!(r.plans2 && r.plans2.builtFrom === 'plan-stale') || !!(r.facts2 && r.facts2.items && r.facts2.items[0] && r.facts2.items[0].id === 'f-c'), JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_RESIZE_CHAPTERS = true;', 'var NW_S1_RESIZE_CHAPTERS = false;');
+  check('MIG:v1-ids-resize:chapters-mutation-flag', 'resize-chapters flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-ids-resize.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      novelData = JSON.parse(JSON.stringify(nd));
+      nwChapterIdsUpdate('resize', 2);
+      const down = { chLen: (novelData.chapters || []).length, idLen: (novelData.chapterIds || []).length };
+      nwChapterIdsUpdate('resize', 5);
+      const grown = { chLen: (novelData.chapters || []).length, idLen: (novelData.chapterIds || []).length };
+      return { down, grown };
+    }, fx.input);
+    check('MIG:v1-ids-resize:chapters-mutation', 'skipping chapters resize turns length-equal green red', r.down.chLen !== r.down.idLen || r.grown.chLen !== r.grown.idLen, JSON.stringify(r));
     await p.close();
   }
 }

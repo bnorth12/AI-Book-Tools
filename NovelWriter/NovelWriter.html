@@ -486,7 +486,7 @@ Synced: 2026-04-19
 	    <!-- NW.T5.5: Tab 5 SHALL provide a Strict Continuity Mode toggle that enforces stronger chapter-to-chapter consistency constraints in generation prompts. -->
 	    <!-- NW.T5.6: Tab 5 SHALL provide continuity packet and audit controls (rebuild packets and run continuity audit) plus a read-only continuity status panel. -->
 	    <!-- NW.T5.7: Continuity packet, tracker, and findings data SHALL persist in session state and round-trip through import/export as optional schema-compatible fields. -->
-	    <!-- NW.T5.8: Tab 5 SHALL provide an optional "Generate All Chapters" batch (range, regenerate-existing and per-chapter-download toggles off by default, token cap, Pause/Resume, status line) that drafts prose only for chapters with outlines (NW_GENERATE_ALL_SPEC). -->
+	    <!-- NW.T5.8: Tab 5 SHALL provide an optional "Generate All Chapters" batch (range, regenerate-existing and per-chapter-download toggles off by default, token cap, Pause/Resume/Cancel run, status line) that drafts prose only for chapters with outlines (NW_GENERATE_ALL_SPEC). -->
 	    <!-- NW.T5.19: Tab 5 SHALL provide an optional AI beat check (off by default) and per-chapter Plan facts rows stored on novelData.chapterFactChecks, not inside chapterBlueprints. -->
 	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	    <div id="tab5" class="tab">
@@ -511,6 +511,7 @@ Synced: 2026-04-19
 	            <small id="batchEstimateHint" aria-live="polite"></small>
 	            <button id="batchPauseBtn" data-testid="nw-batch-pause" onclick="pauseBatchRun()" disabled>Pause</button>
 	            <button id="batchResumeBtn" data-testid="nw-batch-resume" onclick="resumeBatchRun()" disabled>Resume</button>
+	            <button id="batchCancelBtn" data-testid="nw-batch-cancel" onclick="cancelBatchRun()" disabled>Cancel run</button>
 	            <div id="batchCoverageBox" data-testid="nw-batch-coverage-box" hidden>
 	                <p id="batchCoverageMsg">This chapter is missing required story points. Accept keeps the draft and rebuilds continuity from it. Regenerate retries this chapter. Skip continues without feeding this draft into later chapters.</p>
 	                <button type="button" id="batchCoverageAcceptBtn" data-testid="nw-batch-coverage-accept" onclick="nwBatchCoverageDecide('accept')">Accept</button>
@@ -2220,8 +2221,11 @@ let activeAICallCount = 0;
 		var NW_S1_LOCK_SETUP_INPUTS = true;
 		var NW_S1_LOCK_TAB47 = true;
 		var NW_S1_LOCK_PAUSE_HELD = true;
+		var NW_S1_LOCK_GENALL_SETUP = true;
+		var NW_S1_CANCEL_RELEASES_LOCK = true;
 		var NW_S1_KEEP_WRONG_TYPES = true;
 		var NW_S1_RESIZE_SPLICE_ALL = true;
+		var NW_S1_RESIZE_CHAPTERS = true;
 		var NW_S1_RESTORE_OPAQUE_RNG = true;
 		var NW_S1_WORLD_REMOVED_STALE = true;
 		var NW_S1_SPLICE_SCENES = true;
@@ -2830,6 +2834,10 @@ let activeAICallCount = 0;
 				if (!Array.isArray(target.chapters)) target.chapters = [];
 				while (ids.length < next) ids.push(nwOpaqueId('ch_', taken));
 				if (ids.length > next) ids.length = next;
+				if (typeof NW_S1_RESIZE_CHAPTERS === 'undefined' || NW_S1_RESIZE_CHAPTERS) {
+					while (target.chapters.length < next) target.chapters.push('');
+					if (target.chapters.length > next) target.chapters.length = next;
+				}
 				var spliceAll = (typeof NW_S1_RESIZE_SPLICE_ALL === 'undefined' || NW_S1_RESIZE_SPLICE_ALL);
 				var s1Arrs = spliceAll
 					? ['chapterRequiredFacts', 'chapterRequirements', 'chapterFingerprints', 'chapterWritingPlans', 'chapterScenes']
@@ -3776,7 +3784,7 @@ let activeAICallCount = 0;
 	            if (typeof NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD === 'undefined' || NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD) {
 	                if (typeof nwCollectPlanFactsFromUi === 'function') nwCollectPlanFactsFromUi();
 	            }
-	            updateChapterSubpages();
+	            updateChapterSubpages({ internal: true });
 	            showEditChapterSubpage(1);
 	            if (typeof nwRenderChapterScorecards === 'function') nwRenderChapterScorecards();
 	        }
@@ -5672,7 +5680,13 @@ const messages = [
 	    // NW.CH.3: Each chapter subpage in Tab 5 SHALL include a chapter draft textarea and a "Generate Chapter" button.
 	    // NW.CH.4: Each chapter subpage in Tab 6 SHALL include an editable chapter textarea, an improvements field, "Update Chapter", and "Check Spelling & Grammar" buttons.
         // Update chapter subpages across all relevant tabs
-		async function updateChapterSubpages() {
+		async function updateChapterSubpages(opts) {
+		    opts = opts || {};
+		    if (!opts.internal && typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Chapter count')) {
+		        var numEl = document.getElementById('numChapters');
+		        if (numEl && typeof novelData !== 'undefined' && novelData) numEl.value = String(novelData.numChapters || '');
+		        return;
+		    }
 		    const numChapters = parseInt(document.getElementById('numChapters').value);
 		    novelData.numChapters = numChapters;
 		    novelData.chapterOutlines = novelData.chapterOutlines.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapterOutlines.length)).fill(''));
@@ -10796,7 +10810,7 @@ return c && c.name && c.backstory && c.arc; });
 		    document.getElementById('plotOutline').value = novelData.plotOutline || '';
 		    document.getElementById('storyArcOutline').value = novelData.storyArcOutline || '';
 		    document.getElementById('outlineImprovements').value = novelData.outlineImprovements || '';
-		    updateChapterSubpages();
+		    updateChapterSubpages({ internal: true });
 
 		    // Handle improvements for older files and restore breakdowns
 		    if (novelData.bookImprovements && (!novelData.bookImprovementsWithStatus || novelData.bookImprovementsWithStatus.length === 0)) {
@@ -10825,7 +10839,11 @@ return c && c.name && c.backstory && c.arc; });
 
         // Import a session from a JSON file.
 	    function importSession(event) {
-		    // Generate All single writer: no import while a batch runs or an interrupted run awaits restore.
+		    // Generate All single writer: no import while a batch runs, is paused, or an interrupted run awaits restore.
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Import session')) {
+		        if (event && event.target) event.target.value = '';
+		        return;
+		    }
 		    if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
 		        console.warn('importSession locked: Generate All Chapters run is active or awaiting restore.');
 		        if (event && event.target) event.target.value = '';
@@ -10838,8 +10856,12 @@ return c && c.name && c.backstory && c.arc; });
 		    reader.onload = async function(e) {
 		        // #134 follow-up 1 (NW.T5.14): a Generate All run may have started while the file was being read.
 		        // Recheck the lock before touching anything; nothing from the file is applied.
-		        if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
-		            if (typeof nwToast === 'function') nwToast(NW_IMPORT_CANCELLED_MSG);
+		        if ((typeof nwBatchSetupIsLocked === 'function' && nwBatchSetupIsLocked()) || (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked())) {
+		            if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
+		                if (typeof nwToast === 'function') nwToast(NW_IMPORT_CANCELLED_MSG);
+		            } else if (typeof nwRefuseAiIfLocked === 'function') {
+		                nwRefuseAiIfLocked('Import session');
+		            }
 		            if (event && event.target) event.target.value = '';
 		            return;
 		        }
@@ -13564,7 +13586,7 @@ return c && c.name && c.backstory && c.arc; });
         function nwBatchIsResumable() {
             var br = novelData.batchRun;
             if (!br || !br.range || nwBatchState.running) return false;
-            if (br.reason == null || br.reason === 'done') return false;
+            if (br.reason == null || br.reason === 'done' || br.reason === 'cancelled') return false;
             // Only a coverage stop skips its chapter; a parse/provider/gate stop regenerates the stopped chapter on Resume.
             // Accept/Skip keep the skip; Regenerate retries the stopped chapter.
             var skip = br.reason === 'coverage' ? br.stoppedAt : null;
@@ -13590,10 +13612,20 @@ return c && c.name && c.backstory && c.arc; });
             document.querySelectorAll('#tab7 button[onclick*="applyTopBookCritiques"], #improvementsTableBody button[onclick*="applyBookCritiqueItem"], #tab8 button[onclick*="integrateBreakdownSuggestions"]').forEach(function (b) { b.disabled = locked; });
             // #134 follow-up 4: the Tab 5 continuity writers are locked the same way.
             document.querySelectorAll('#tab5 button[onclick*="rebuildContinuityPackets"], #tab5 button[onclick*="runContinuityAuditAll"]').forEach(function (b) { b.disabled = locked; });
-            ['importFile', 'numChapters', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap', 'skipAutoRevision', 'aiBeatCheck', 'scoreAllChaptersBtn'].forEach(function (id) {
+            ['batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap', 'skipAutoRevision', 'aiBeatCheck', 'scoreAllChaptersBtn'].forEach(function (id) {
                 var el = nwBatchEl(id);
                 if (el) el.disabled = locked;
             });
+            ['importFile', 'numChapters'].forEach(function (id) {
+                var el = nwBatchEl(id);
+                if (el) el.disabled = setupLocked;
+            });
+            var genAllBtn = nwBatchEl('batchGenerateAllBtn');
+            if (genAllBtn) {
+                var genAllLock = setupLocked;
+                if (typeof NW_S1_LOCK_GENALL_SETUP !== 'undefined' && !NW_S1_LOCK_GENALL_SETUP) genAllLock = locked;
+                genAllBtn.disabled = genAllLock;
+            }
             var setupIds = ['setting', 'generalPlot', 'storyArc', 'title', 'genre', 'authorStyle', 'styleGuide', 'chapterLength', 'numCharacters', 'minSubplots'];
             if (typeof NW_S1_LOCK_SETUP_INPUTS === 'undefined' || NW_S1_LOCK_SETUP_INPUTS) {
                 setupIds.forEach(function (id) {
@@ -13620,6 +13652,8 @@ return c && c.name && c.backstory && c.arc; });
             if (pause) pause.disabled = !nwBatchState.running;
             var resume = nwBatchEl('batchResumeBtn');
             if (resume) resume.disabled = locked || !nwBatchIsResumable();
+            var cancel = nwBatchEl('batchCancelBtn');
+            if (cancel) cancel.disabled = !nwBatchPauseHoldsSetupLock();
             var fs = nwBatchEl('batchRunFieldset');
             if (fs) fs.dataset.locked = locked ? '1' : '0';
             return locked;
@@ -13821,8 +13855,30 @@ return c && c.name && c.backstory && c.arc; });
 
         // ---- batch entry points ----
         function generateAllChapters() {
+            if (typeof nwBatchPauseHoldsSetupLock === 'function' && nwBatchPauseHoldsSetupLock()) {
+                if (typeof nwRefuseAiIfLocked === 'function') nwRefuseAiIfLocked('Generate All');
+                return Promise.resolve({ started: false, reason: 'paused' });
+            }
             nwBatchState.lastPromise = nwBatchStart(false);
             return nwBatchState.lastPromise;
+        }
+
+        async function cancelBatchRun() {
+            var br = typeof novelData !== 'undefined' && novelData && novelData.batchRun;
+            if (!br || br.reason !== 'paused' || (nwBatchState && nwBatchState.running)) return false;
+            if (typeof NW_S1_CANCEL_RELEASES_LOCK !== 'undefined' && !NW_S1_CANCEL_RELEASES_LOCK) {
+                nwBatchSetStatus(nwBatchState.lastStatus || 'Paused.', 'stopped');
+                nwBatchApplyLock();
+                return true;
+            }
+            br.reason = 'cancelled';
+            br.detail = 'cancelled while paused';
+            br.inFlight = null;
+            br.updatedAt = new Date().toISOString();
+            try { await nwBatchCheckpoint(false); } catch (e) { console.warn('[batch] cancel checkpoint', e); }
+            nwBatchApplyLock();
+            nwBatchSetStatus('Cancelled. Setup is unlocked. Completed: ' + ((br.completed && br.completed.length) ? br.completed.join(', ') : 'none') + '.', 'idle');
+            return true;
         }
 
         function resumeBatchRun() {
@@ -14151,7 +14207,7 @@ return c && c.name && c.backstory && c.arc; });
                 br.updatedAt = new Date().toISOString();
             }
             var text = stop
-                ? (stop.reason === 'paused' ? 'Paused before ch' + stop.at + '.' : 'Stopped at ch' + stop.at + ' (' + stop.reason + '): ' + nwBatchEndSentence(nwBatchShort(stop.detail, 240)))
+                ? (stop.reason === 'paused' ? 'Paused before ch' + stop.at + '. Setup is locked until the run ends or is cancelled.' : 'Stopped at ch' + stop.at + ' (' + stop.reason + '): ' + nwBatchEndSentence(nwBatchShort(stop.detail, 240)))
                 : 'Done: ch' + br.range.from + '-' + br.range.to + '.';
             if (stop && stop.reason === 'parse') text += ' Response could not be parsed (no retry); Resume regenerates ch' + stop.at + '.';
             else if (stop && stop.reason === 'provider') text += (stop.noRetry ? '' : (stop.timeoutInfo ? ' ' + nwBatchCap1(stop.timeoutInfo) + ';' : ' Provider error (retried once where retryable);')) + ' Resume regenerates ch' + stop.at + '.';
@@ -14300,6 +14356,7 @@ return c && c.name && c.backstory && c.arc; });
         window.generateAllChapters = generateAllChapters;
         window.resumeBatchRun = resumeBatchRun;
         window.pauseBatchRun = pauseBatchRun;
+        window.cancelBatchRun = cancelBatchRun;
         window.nwBatchIsLocked = nwBatchIsLocked;
         window.nwBatchSetupIsLocked = nwBatchSetupIsLocked;
         window.nwBatchPauseHoldsSetupLock = nwBatchPauseHoldsSetupLock;
