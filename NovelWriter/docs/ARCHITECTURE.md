@@ -4,7 +4,7 @@ NovelWriter is a single-page application in `NovelWriter.html`. The UI, shared
 book state, workflow logic, and AI gateway are in that file; session files and
 IndexedDB checkpoints provide the explicit persistence paths. Prose and tables
 outside the "Data model and schema" section describe the code on main
-(`600b35d`). Diagram nodes, notes and messages labelled "S1 (planned)",
+(`34a2417`, 6b #154 merged). Diagram nodes, notes and messages labelled "S1 (planned)",
 "4p (planned)" or "Q-slot (planned)" are the A1 design target, not current code.
 
 ## State and persistence
@@ -14,26 +14,26 @@ outside the "Data model and schema" section describe the code on main
   scorecard results, token usage, and batch progress. `requestLog` is the most
   recent request/response display. `collectData()` copies editable controls
   into `novelData`; chapter text is read from the Tab 5/6 editors
-  (`NovelWriter.html:13023-13118`).
+  (`NovelWriter.html:13680-13775`).
 - **localStorage:** the app does not use `localStorage` to save or restore the
   book or API key. The key is held in the UI/in-memory state but is omitted from
   session exports and batch checkpoints. An old in-file testing comment about
   storing the key in localStorage is not the session persistence path
-  (`NovelWriter.html:9325-9364`, `12126-12136`).
+  (`NovelWriter.html:9597-9637`, `12549-12560`).
 - **IndexedDB:** the `novelwriter` database / `checkpoints` store holds the
   latest resumable Generate All snapshot. It contains book data without the
   API key, and excludes the rejected draft that is retained only for session
-  export (`NovelWriter.html:12087-12149`). A separate `novelwriter-timing` /
+  export (`NovelWriter.html:12510-12573`). A separate `novelwriter-timing` /
   `nwTimingStats` store holds aggregated per-call timing statistics
-  (`NovelWriter.html:1223-1257`, `1288-1317`).
+  (`NovelWriter.html:1230-1264`, `1295-1324`).
 - **Session envelope:** `exportSession()` emits `schemaVersion: "1.0"`,
   `sourceTool`, `sourceVersion`, `exportedAt`, and `novelData` (including the
   request log), with timing data at the envelope's top-level `nwTiming` key
-  (`NovelWriter.html:9325-9374`). `normalizeImportedSessionData()` accepts
+  (`NovelWriter.html:9597-9647`). `normalizeImportedSessionData()` accepts
   this envelope and legacy envelopes/bare data; `applySessionDataToUI()` then
-  restores controls and views (`NovelWriter.html:9381-9461`,
-  `9463-9556`). Imported timing data is shown for reference, not merged into
-  the persistent timing statistics (`NovelWriter.html:9579-9584`).
+  restores controls and views (`NovelWriter.html:9654-9761`,
+  `9763-9857`). Imported timing data is shown for reference, not merged into
+  the persistent timing statistics (`NovelWriter.html:9885-9890`).
 
 ## End-to-end tabs
 
@@ -100,30 +100,30 @@ flowchart TD
 
 `generateChapter()` generates two prose parts and then runs continuity,
 quality/revision (unless draft-only), obligation coverage, and the chapter
-scorecard (`NovelWriter.html:11554-11753`). Tab 6's staged improvement path
+scorecard (`NovelWriter.html:11865-12064`). Tab 6's staged improvement path
 uses `applyStagedChapterImprovements()` and can run a bounded targeted pass
-after the edit (`NovelWriter.html:7623-7705`). Tab 7 presents the assembled
+after the edit (`NovelWriter.html:7746-7828`). Tab 7 presents the assembled
 book and suggestions; Tab 8 integrates breakdowns into chapter planning and
-prose (`populateConsolidatedBreakdowns()` at `NovelWriter.html:8939`,
-`integrateBreakdownSuggestions()` at `NovelWriter.html:9019`).
+prose (`populateConsolidatedBreakdowns()` at `NovelWriter.html:9069`,
+`integrateBreakdownSuggestions()` at `NovelWriter.html:9149`).
 
 `ensureQualityAfterGenerate()` runs the heuristic gate, then
 `reviseChapterForQuality()` and `runTargetedQualityPass()` as needed; the
 draft-only branch records that automatic passes were skipped
-(`NovelWriter.html:7418-7554`, `7290-7334`, `7134-7218` respectively). The growth guard
+(`NovelWriter.html:7541-7677`, `7413-7457`, `7192-7276` respectively). The growth guard
 rejects excessive growth, shrink, or lost paragraph structure and restores the
-previous prose (`NovelWriter.html:7242-7286`). `scoreObligationCoverage()`
+previous prose (`NovelWriter.html:7365-7409`). `scoreObligationCoverage()`
 checks chapter blueprint obligations; `nwWorkflowStage()` derives the
 book's progress label from its outlines, prose, and scorecards
-(`NovelWriter.html:5604-5644`, `11370-11414`).
+(`NovelWriter.html:5662-5702`, `11681-11725`).
 
 ## Generate All: one chapter
 
 Generate All runs chapters serially. It drafts prose for existing outlines; it
 does not generate outlines. Preflight checks Tab 4 readiness and an 80-word
-outline floor before any provider call (`NovelWriter.html:12063-12085`).
+outline floor before any provider call (`NovelWriter.html:12486-12508`).
 Existing prose is skipped unless regeneration is selected
-(`NovelWriter.html:12049-12060`).
+(`NovelWriter.html:12472-12483`).
 
 ```mermaid
 sequenceDiagram
@@ -184,14 +184,14 @@ sequenceDiagram
 
 At run start, `nwBatchStart()` establishes a run owner and resets transient
 batch flags/logs; a resumed run keeps its saved completed chapters, cap, and
-usage (`NovelWriter.html:12320-12445`). `nwBatchEstimate()` uses mean real
+usage (`NovelWriter.html:12840-13007`). `nwBatchEstimate()` uses mean real
 session usage or a conservative fallback; `nwBatchRefreshEstimate()` refreshes
-the displayed estimate and cap (`NovelWriter.html:12015-12027`,
-`12221-12247`). `nwBatchLoop()` writes before/after chapter checkpoints,
+the displayed estimate and cap (`NovelWriter.html:12438-12450`,
+`12656-12682`). `nwBatchLoop()` writes before/after chapter checkpoints,
 charges actual provider usage when present, applies the cap, and classifies
-stops (`NovelWriter.html:12448-12566`). A run also stops if a checkpoint write
+stops (`NovelWriter.html:13010-13197`). A run also stops if a checkpoint write
 fails. `nwBatchCheckForInterrupted()` offers restore; the in-flight chapter is
-not marked complete and Resume retries it (`NovelWriter.html:12570-12609`).
+not marked complete and Resume retries it (`NovelWriter.html:13201-13264`).
 Parse/provider stops regenerate the stopped chapter; a coverage stop is
 acknowledged and skipped on the next Resume.
 
@@ -199,10 +199,10 @@ acknowledged and skipped on the next Resume.
 
 `callAI()` is the shared provider gateway. It selects the xAI endpoint by
 model, sends the request, records returned token usage, parses/normalizes the
-response, and returns it to its caller (`NovelWriter.html:2897-2909`,
-`2950-3017`, `3025-3148`). HTTP/network errors set the request log to failed.
+response, and returns it to its caller (`NovelWriter.html:2904-2916`,
+`2957-3024`, `3032-3155`). HTTP/network errors set the request log to failed.
 In a batch, a model JSON parse marker is treated as a parse stop by
-`nwBatchRunChapter()` (`NovelWriter.html:12252-12299`).
+`nwBatchRunChapter()` (`NovelWriter.html:12687-12734`).
 
 ```mermaid
 sequenceDiagram
@@ -243,10 +243,10 @@ sequenceDiagram
 `nwScoreChapterVsBlueprint()` calculates heuristic dimensions and can make a
 separate AI beat-check call; `nwWriteChapterScorecard()` stores the chapter
 record in `novelData`. `nwScoreBook()` awaits each requested chapter in order
-and updates the book summary (`NovelWriter.html:11064-11118`,
-`11120-11150`, `11159-11199`). Timing persistence is independent: successful
+and updates the book summary (`NovelWriter.html:11375-11429`,
+`11431-11461`, `11470-11510`). Timing persistence is independent: successful
 calls update average/min/max while timeout, abort, and error counters are
-tracked separately (`NovelWriter.html:1288-1317`).
+tracked separately (`NovelWriter.html:1295-1324`).
 
 ## Run and call states
 
@@ -268,9 +268,9 @@ stateDiagram-v2
 
 `nwBatchState` tracks active ownership, chapter-in-flight, pause requests, and
 an interrupted checkpoint; `novelData.batchRun` retains run id, range, completed
-chapters, cap, usage, and stop reason (`NovelWriter.html:11794-11797`,
-`12320-12445`). `nwBatchIsResumable()` excludes completed runs and uses the
-stop reason to plan the retry (`NovelWriter.html:12153-12170`).
+chapters, cap, usage, and stop reason (`NovelWriter.html:12106-12133`,
+`12840-13007`). `nwBatchIsResumable()` excludes completed runs and uses the
+stop reason to plan the retry (`NovelWriter.html:12577-12600`).
 
 ```mermaid
 stateDiagram-v2
@@ -286,20 +286,20 @@ stateDiagram-v2
 ```
 
 The call timeout defaults to 300 seconds and is configurable in Setup
-(`NovelWriter.html:1083-1096`). The slow-step UI may continue waiting or cancel;
+(`NovelWriter.html:1090-1103`). The slow-step UI may continue waiting or cancel;
 `callAI()` races the fetch with timeout/cancel and prevents an abandoned
-response from recording usage or returning prose (`NovelWriter.html:2911-2926`,
-`2964-3024`, `3150-3195`).
+response from recording usage or returning prose (`NovelWriter.html:2918-2933`,
+`2971-3031`, `3157-3202`).
 
 ## Concurrency rules mapped to code
 
 | Rule | Shared state | Enforced by (function, file:line on main) | Status |
 |---|---|---|---|
-| Single owner per shared state | Batch writes to `novelData`, batchRun, editors | `nwBatchStart()` run-owner token, `nwBatchIsLocked()`, `nwBatchApplyLock()` (`NovelWriter.html:12320-12445`, `12153-12191`) | GAP — the batch serializes its writers, but standalone AI actions can still overlap against shared `requestLog`/book state. |
-| Per-call IDs | Active call HUD / call lifecycle | `nwCallStart()`, `nwCallEnd()`, `nwActiveCallSeq`, `nwActiveCalls` (`NovelWriter.html:1087-1148`) | OK |
-| Per-run resets | Transient batch flags, logs, completion state | `nwBatchStart()` initializes new-run data and clears transient owner/pause/coverage/log state; resume preserves saved progress (`NovelWriter.html:12320-12445`) | OK |
-| Merge-not-replace for persisted stats | In-memory timing aggregates hydrated from IndexedDB | `nwTimingLoadStats()` merges newly seen keys after load; `nwTimingRecordSettle()` updates and puts a keyed aggregate (`NovelWriter.html:1259-1284`, `1288-1317`) | GAP — separate tabs can update the same key from stale counts; IDB `put` is not a cross-tab read/merge transaction. |
-| UI locked during a batch | Chapter controls, editors, import, scoring, and other writers | `nwBatchApplyLock()` disables the covered controls; guarded writers also check `nwBatchIsLocked()` (`NovelWriter.html:12153-12191`, `7556-7560`, `9559-9577`) | OK |
+| Single owner per shared state | Batch writes to `novelData`, batchRun, editors | `nwBatchStart()` run-owner token, `nwBatchIsLocked()`, `nwBatchApplyLock()` (`NovelWriter.html:12840-13007`, `12577-12626`) | GAP — the batch serializes its writers, but standalone AI actions can still overlap against shared `requestLog`/book state. |
+| Per-call IDs | Active call HUD / call lifecycle | `nwCallStart()`, `nwCallEnd()`, `nwActiveCallSeq`, `nwActiveCalls` (`NovelWriter.html:1094-1155`) | OK |
+| Per-run resets | Transient batch flags, logs, completion state | `nwBatchStart()` initializes new-run data and clears transient owner/pause/coverage/log state; resume preserves saved progress (`NovelWriter.html:12840-13007`) | OK |
+| Merge-not-replace for persisted stats | In-memory timing aggregates hydrated from IndexedDB | `nwTimingLoadStats()` merges newly seen keys after load; `nwTimingRecordSettle()` updates and puts a keyed aggregate (`NovelWriter.html:1266-1291`, `1295-1324`) | GAP — separate tabs can update the same key from stale counts; IDB `put` is not a cross-tab read/merge transaction. |
+| UI locked during a batch | Chapter controls, editors, import, scoring, and other writers | `nwBatchApplyLock()` disables the covered controls; guarded writers also check `nwBatchIsLocked()` (`NovelWriter.html:12577-12626`, `7679-7683`, `9860-9883`) | GAP — the list covers Tab 5/6 chapter controls, Tab 7 Apply, Tab 8 Integrate, import and batch/scoring controls only. AI actions and Setup inputs on Tabs 1-4 and Tab 7 stay enabled and do not check `nwBatchIsLocked()`, and `generateChapter()` re-reads Setup via `collectData()` each chapter, so a mid-run edit changes later prompts. |
 
 ## Validation harness
 
@@ -311,17 +311,17 @@ opt-in and requires `QCAT_LIVE_ACK=1` (`scripts/qcat_harness.mjs:84-156`,
 
 ## Data model and schema (design only)
 
-Status: DESIGN for A1, revision v9.1 (v9.1 applies the CoS scene rulings (a)-(d), confirmed by Fiction: opaque `sc_`/`ch_` ids, `chapterIds`, core source enum, `breakApproved`, minimal required scene fields, plus the S1 merge acceptance in §4.5. Earlier: revision v9 (v9 adds scenes inside S1 per Brian's 11:09 PM CT ruling, no S1b, `nwSchemaVersion` stays 1, plus 6b's `batchRun.priorDrafts`. Earlier: revision v8 (v7 applied the CoS coherence rulings and Fiction's `builtFrom` inputs. v8 folds in Fiction's UI-plan amendment: `worldFrom`, scorecard shapes, `approvedAt` scope and the World panel and gates in the tabs flowchart. Earlier: revision v6 (v4 cleared Reviewer's NO-GO on `ee8a303`. v5 added the decided world-beat fields N15-N24, D1-D10 FINAL 2026-10-10, and Reviewer's v4 follow-ups 3 and 4. v6 clears Reviewer's v5 NO-GO: N20 points into the story ledger, and `normalizeCharacterItem` copies every present key). Engineering owns it. Product needs come from Fiction's `NW_STORY_SCHEMA_NEEDS.md` (written against main `600b35d`). No code changes in this PR. Slot S1 implements it, with a Reviewer GO on the migration trigger. Line numbers are against main `600b35d` (byte-identical to `4a998d6`) and are approximate. The function names are the contract. Every function named here that is not on main is marked S1, 4p or a Q slot.
+Status: DESIGN for A1, revision v9.2 (v9.2 re-checks every as-built claim against main `34a2417` after 6b #154 merged, moves line refs to main, and folds in Fiction's N1-N4/S1 amendments: `origin:'import'`, session-level `ext.novelWriter.migratedBy:'S1'`, scene `onstage[]`/`offstage[]`, stored `bt_` beat ids. Earlier: revision v9.1 (v9.1 applies the CoS scene rulings (a)-(d), confirmed by Fiction: opaque `sc_`/`ch_` ids, `chapterIds`, core source enum, `breakApproved`, minimal required scene fields, plus the S1 merge acceptance in §4.5. Earlier: revision v9 (v9 adds scenes inside S1 per Brian's 11:09 PM CT ruling, no S1b, `nwSchemaVersion` stays 1, plus 6b's `batchRun.priorDrafts`. Earlier: revision v8 (v7 applied the CoS coherence rulings and Fiction's `builtFrom` inputs. v8 folds in Fiction's UI-plan amendment: `worldFrom`, scorecard shapes, `approvedAt` scope and the World panel and gates in the tabs flowchart. Earlier: revision v6 (v4 cleared Reviewer's NO-GO on `ee8a303`. v5 added the decided world-beat fields N15-N24, D1-D10 FINAL 2026-10-10, and Reviewer's v4 follow-ups 3 and 4. v6 clears Reviewer's v5 NO-GO: N20 points into the story ledger, and `normalizeCharacterItem` copies every present key). Engineering owns it. Product needs come from Fiction's `NW_STORY_SCHEMA_NEEDS.md` (written against main `600b35d`). No code changes in this PR. Slot S1 implements it, with a Reviewer GO on the migration trigger. Line numbers are against main `34a2417` (post-6b) and are approximate. The function names are the contract. Every function named here that is not on main is marked S1, 4p or a Q slot.
 
 ### 1. Where the data lives
 - Everything is a **NovelWriter-local extension inside `novelData`**, carried in the existing shared v1.0 envelope. There are **no `schema/` or `docs/architecture/book-tools-contract/` changes**, so Nonfiction's confirm is not triggered. `novel-schema-1.0.json` allows extra properties on the envelope, `novelData` and `characters` items. Because `characters[]` is a shared-schema entity, the new `id`, `voice` and `relationships` fields will be visible to BookEditor and BookDecomposer, so Nonfiction gets an FYI (not a confirm).
 - Promoting any entity (`storyWorld`, `characters[].voice/relationships`, a cross-tool `id` scheme) into the shared book schema is a **separate, later decision** needing Nonfiction's confirm and a Reviewer GO. `chapterFlags.coverageFailed/missing` and `chapterRequirements` must reference, not redefine, the ledger core (`CoverageReport`, obligations) once it lands.
 - **Persistence (corrected in v4, matches "State and persistence" above):**
   - In memory: `novelData`.
-  - Session file: `exportSession()` (~L9325) and `importSession()` (~L9559) through `normalizeImportedSessionData()` (~L9381).
-  - IndexedDB `novelwriter` / `checkpoints`: `nwBatchCheckpoint()` (~L12127) stores the **full `novelData`** (API key deleted) for Generate All. `nwBatchFindInterrupted()` (~L12139) and `nwBatchCheckForInterrupted()` (~L12570) find an active checkpoint after reload, and `restoreInterruptedBatchRun()` (~L12582) replaces `novelData` with it. That path runs `normalizeImportedSessionData()` (~L12587) but **not** `importSession()`, so anything wired only into `importSession()` is skipped. After 6b the checkpoint also persists `batchRun.coverageAck {chapter, decision: accept\|skip\|regenerate, at}` and `batchRun.suggestedCap`, and restore keeps them so Resume honours the decision. `batchRun.rejectedDraft` is **never** checkpointed. `batchRun.priorDrafts[n-1] = {text, at}` (6b re-gate) **is** saved in checkpoints and exports (§2). A coverage decision made mid-run saves an **active** checkpoint, so a reload offers Resume with that decision. Line refs here shift by roughly +230 after 6b and stay approximate.
+  - Session file: `exportSession()` (~L9597) and `importSession()` (~L9860) through `normalizeImportedSessionData()` (~L9654).
+  - IndexedDB `novelwriter` / `checkpoints`: `nwBatchCheckpoint()` (~L12550) stores the **full `novelData`** (API key deleted) for Generate All. `nwBatchFindInterrupted()` (~L12563) and `nwBatchCheckForInterrupted()` (~L13201) find an active checkpoint after reload, and `restoreInterruptedBatchRun()` (~L13213) replaces `novelData` with it. That path runs `normalizeImportedSessionData()` (~L13218) but **not** `importSession()`, so anything wired only into `importSession()` is skipped. After 6b the checkpoint also persists `batchRun.coverageAck {chapter, decision: accept\|skip\|regenerate, at, applied}` and `batchRun.suggestedCap`, and restore keeps them so Resume honours the decision. `applied:true` marks that the decision's side effects already ran; with `NW_6B_COVERAGE_ACK_APPLIED` on (default), `nwBatchApplySkipSideEffectsIfNeeded()` (~L12405) does not re-apply Skip (re-restore the prior draft) on Resume or restore. `batchRun.rejectedDraft` is **never** checkpointed. `batchRun.priorDrafts[n-1] = {text, at}` (6b re-gate) **is** saved in checkpoints and exports (§2). A coverage decision made mid-run (`nwBatchCoverageDecide`, ~L12747) saves an **active** checkpoint, so a reload offers Resume with that decision.
   - IndexedDB `novelwriter-timing` / `nwTimingStats`: timing aggregates only, never story data.
-  - **localStorage holds no book data.** There is no `localStorage.setItem` on main, and there is no autosave. The only `localStorage` mentions are comments (~L13161, ~L13192, ~L13767, ~L13796).
+  - **localStorage holds no book data.** There is no `localStorage.setItem` on main, and there is no autosave. The only `localStorage` mentions are comments (~L13818, ~L13849, ~L14424, ~L14453).
 
 ### 2. Entities and owners per field
 "Owner" is the only code path allowed to write the field. Slots (S1, 4p, Q1-Q5, 6b, 8d) say who builds the owner. Migration (§4) is never an owner. It writes only by calling the owner function.
@@ -329,13 +329,13 @@ Status: DESIGN for A1, revision v9.1 (v9.1 applies the CoS scene rulings (a)-(d)
 | Entity / key | Field(s) | Owner (only writer) | Read-only consumers |
 |---|---|---|---|
 | **storyWorld** (new key, S1) | `storyWorld{version, notes?, locations[]?, rules[]?, concepts[]?, topicTags[]?}` plus the N15-N24 fields in §2a | `nwStoryWorldUpdate(patch, origin)` (S1), called by Tab 1-2 edits and AI-suggest. Enforces the canon lock (§2a) | 4p plan build, 8d, Q5, prompt binders only where they opt in (§3 rule 8) |
-| Legacy world bible | `worldBible`, `world` (string or object) | **none in S1**: read-only inputs, kept byte-for-byte | existing `nd.worldBible \|\| nd.world` readers (~L1940, L2355, L4343, L4548, L4955, L5198, L5814, L6808, L10114, L10240), unchanged |
+| Legacy world bible | `worldBible`, `world` (string or object) | **none in S1**: read-only inputs, kept byte-for-byte | existing `nd.worldBible \|\| nd.world` readers (~L1947, L2355, L4343, L4548, L4955, L5198, L5814, L6808, L10114, L10240), unchanged |
 | Setting | `setting`, `genre` | Tab 1 `collectData()` (existing) | prompts, 4p, 8d |
 | Plot | `storyArc`, `generalPlot`, outlines, `chapterOutlines[]`, `chapterArcs[]`, `chapterBlueprints[]`, `subplots[]` (strings) | user and AI-suggest in Tabs 1-4 (existing) | Generate All, 4p, 8d, Q1-Q3 |
 | Subplot metadata (S1) | `subplotsMeta[i]` (same index as `subplots`) | `normalizeSubplotItem` copy step (S1) | 4p, Q5 |
 | Character | `characters[]{id?, name, backstory, arc, role, goal, flaw, notes, obligations[], voice?, relationships[]?, explainerFor[]?, knows[]?}` | Tab 2 edit and AI-suggest, through `normalizeCharacterItem` only. `knows[]` only through `nwCharacterKnowsUpdate` (§2a) | prompts (bounded, §3 rule 8), 4p, 8d, Q5 |
 | Character id | `characters[].id` | `nwCharacterId(name, taken)` (S1, §4.3), assigned only where absent | `chapterRequirements.cast`, 4p refs |
-| Legacy plan facts | `chapterFactChecks[n-1]` (array of rows `{id,label,kind,match,pattern,beat?}`) | **existing writers, unchanged**: Tab 5 `nwCollectPlanFactsFromUi()` (~L11448) and harness `nwMergeQcatExpect()` (~L11017). See §7.1 | 8d `nwChapterFactEntries()` (~L10506), Tab 5 `nwRenderPlanFactsBox()` (~L11483) |
+| Legacy plan facts | `chapterFactChecks[n-1]` (array of rows `{id,label,kind,match,pattern,beat?}`) | **existing writers, unchanged**: Tab 5 `nwCollectPlanFactsFromUi()` (~L11759) and harness `nwMergeQcatExpect()` (~L11328). See §7.1 | 8d `nwChapterFactEntries()` (~L10817), Tab 5 `nwRenderPlanFactsBox()` (~L11794) |
 | Required facts (new key, S1) | `chapterRequiredFacts[n-1].items[]` | `nwRequiredFactsUpsert(n, items, source)` (S1). Each `source` value has one caller (§7.1) | Q1 prompt, 8d (from Q1), 4p `factId` |
 | Requirements, derived | `chapterRequirements[n-1].cast`, `.setting`, `.derivedFrom` | `nwDeriveChapterRequirements(n)` (S1) | Q1, Q2 prompt, 8d cast and noteLeak |
 | Requirements, user | `chapterRequirements[n-1].mustNotInclude` | Tab 5 user edit via `nwRequirementsSetMustNotInclude(n, list)` (S1) | same |
@@ -344,8 +344,8 @@ Status: DESIGN for A1, revision v9.1 (v9.1 applies the CoS scene rulings (a)-(d)
 | Theme tags (new key, S1) | `chapterThemeTags[n-1]` (N22, §2a) | `nwChapterThemeTagsUpdate(n, patch, origin)` (S1) | 4p, 8d (advisory, later) |
 | Chapter id (new key, S1) | `chapterIds[n-1]` = `'ch_' + random` (§2b, §4.3 `nwOpaqueId`) | `nwChapterIdsUpdate(op, n)` (S1): assigns once where absent, and splices `chapterIds[]` in lockstep with `chapters[]` on every path that inserts, deletes, reorders or **resizes** chapters (resize pads with new `ch_` ids or truncates). **No other code may change `chapters[]` length without calling it.** Migration calls it (§4.2 step 4) | `chapterScenes[].scenes[].chapterId`, export |
 | Scenes (new key, S1) | `chapterScenes[n-1]` (§2b) | `nwChapterScenesUpdate(n, patch, origin)` (S1), refuses while `nwBatchIsLocked()`. Migration calls it (§4.2 step 4) | 4p scene plan, 8d roll-up (advisory), Tab 5 scene panel |
-| Prior drafts (6b) | `batchRun.priorDrafts[n-1] = {text, at}` (whole chapter text, chapter-keyed) | `nwBatchSetPriorDraft(n, text)` (6b), **write-once** per chapter until cleared. Skip restores it as the chapter text. Accept or a coverage pass clears it (through the same helper) | Skip, Resume. Checkpointed and exported |
-| Coverage flags | `chapterFlags[n-1].coverageFailed`, `.missing`, `.at` | 6b, only through `nwSetChapterFlag(n, patch)` (sole writer, key merge). Clear-on-pass: a passing regenerate merges `{coverageFailed:false, missing:[], at}` | `nwRenderChapterFlag` (Tab 5 `#chapterGenFlag{n}`, Tab 6 `#chapterEditFlag{n}`), renders only when `coverageFailed === true`. Resume |
+| Prior drafts (6b) | `batchRun.priorDrafts[n-1] = {text, at}` (whole chapter text, chapter-keyed) | 6b helper family over `br = novelData.batchRun` (~L12330-12360): `nwBatchSetPriorDraft(br, n, text)` is **write-once** per chapter until cleared (`NW_6B_PRIOR_DRAFT_WRITE_ONCE`, default on; the oldest pre-run text wins), called from `nwBatchLoop()` on a coverage failure; `nwBatchClearPriorDraft(br, n)` nulls the slot; `nwBatchRestorePriorDraft(br, n)` writes it back as the chapter text and clears it. Skip restores it (via `nwBatchApplySkipSideEffects`); Skip with no prior keeps the failed draft and lists n in `batchRun.continuitySkip`. Accept clears it; a passing regenerate clears it (~L13078). Regenerate leaves it in place | Skip, Resume. Checkpointed (`nwBatchCheckpoint` keeps it; only `rejectedDraft` is dropped) and exported with `batchRun` |
+| Coverage flags | `chapterFlags[n-1].coverageFailed`, `.missing`, `.at` | 6b, only through `nwSetChapterFlag(n, patch)` (sole writer, key merge). Clear-on-pass: a passing chapter merges `{coverageFailed:false, missing:[], at}` only when the existing flag has `coverageFailed === true` (`NW_6B_CLEAR_FLAG_ONLY_IF_FAILED`, default on), so a clean pass creates no entry | `nwRenderChapterFlag` (~L7319; Tab 5 `#chapterGenFlag{n}`, Tab 6 `#chapterEditFlag{n}`): coverage text only when `coverageFailed === true`, otherwise replay text when `replay` is set, else hidden. Resume |
 | Replay flag | `chapterFlags[n-1].replay{…, at}` | Q3, only through `nwSetChapterFlag` | `nwRenderChapterFlag`, Resume |
 | Fingerprint cache | `chapterFingerprints[n-1]` | `nwBuildChapterFingerprint(n)` (S1). Called by migration and by Q3 | Q3 replay check |
 | Scorecards | `chapterScorecards[n-1]`, incl. three advisory keys, all out of `overall` until CoS promotes each: `planCoverage` (4p). `worldImmersion` = `{score, axes:{culture, science, tech}, beats:[…], method}`, shape owned by W1, `null` when there is no `storyWorld` or no worldBeats. `setupPayoff` = `{score, planted:{hit,total}, paid:{hit,total}, unpaid:[ids], abandoned:[ids], world:{…}, method:'heuristic'}`, shape owned by SC2, **always `null` until ledger L1** (SC2 never creates `storyLedger`). The "no ledger" reason is derived at render, not stored | 8d scorer (`nwWriteChapterScorecard`, existing) is the only writer. W1 and SC2 supply the compute functions | Tab 6, export |
@@ -355,7 +355,7 @@ Status: DESIGN for A1, revision v9.1 (v9.1 applies the CoS scene rulings (a)-(d)
 v4 marked `concepts`, `topicTags`, `explainerFor` and `conceptId` as `[WAIT]`. Brian's decisions D1-D10 (FINAL 2026-10-10) resolve every one, so v5 drops the marker. They are designed in §2a.
 
 ### 2a. Story-world, canon and theme fields (N15-N24, decided)
-All are **NovelWriter-local, optional and additive**. Absent stays absent, and a field is created only when an owner writes a value (no empty shells, no defaults). Product owner for all of them is **Fiction**. The code owner (only writer) is named per field. Readers type-guard and treat a wrong type as absent for that call (§3 rule 7). Every item array keyed by `id` merges by `id`. Unknown keys on an item, and on any nested object, are kept by every writer (shallow copy, then patch). Every `source` field in §2a uses the one enum `ai` or `user`. **Ids:** every new id'd item (concepts, rules, locations, systems, themes) gets `nwItemId(name, taken)`, the §4.3 `nwCharacterId` algorithm with de-dup scoped to its own array. `contradictions[].id` is `'ctr-' + nwTextHash(conceptId + '|' + text + '|' + (chapter ?? ''))`, because a contradiction has no name. **Top-level `themes`:** main already reads `novelData.motifs || novelData.themes` (~L6351). S1 **never writes a top-level `novelData.themes`**, only `storyWorld.themes`, and the L6351 reader does not read `storyWorld.themes` unless Q1 opts it in.
+All are **NovelWriter-local, optional and additive**. Absent stays absent, and a field is created only when an owner writes a value (no empty shells, no defaults). Product owner for all of them is **Fiction**. The code owner (only writer) is named per field. Readers type-guard and treat a wrong type as absent for that call (§3 rule 7). Every item array keyed by `id` merges by `id`. Unknown keys on an item, and on any nested object, are kept by every writer (shallow copy, then patch). Every `source` field in §2a uses the one enum `ai` or `user`. **Ids:** every new id'd item (concepts, rules, locations, systems, themes) gets `nwItemId(name, taken)`, the §4.3 `nwCharacterId` algorithm with de-dup scoped to its own array. `contradictions[].id` is `'ctr-' + nwTextHash(conceptId + '|' + text + '|' + (chapter ?? ''))`, because a contradiction has no name. **Top-level `themes`:** main already reads `novelData.motifs || novelData.themes` (~L6409). S1 **never writes a top-level `novelData.themes`**, only `storyWorld.themes`, and the L6351 reader does not read `storyWorld.themes` unless Q1 opts it in.
 
 | N | Field and shape | Owner (only writer) | Readers | Merge rule |
 |---|---|---|---|---|
@@ -377,9 +377,9 @@ All are **NovelWriter-local, optional and additive**. Absent stays absent, and a
 | N24 | `storyWorld.arc[]{stage, chapterPos, change}` and `storyWorld.subplots[]{index, textHash}` (subplot index plus `nwTextHash(subplots[index])`, so no id has to be written into `subplotsMeta`, which stays owned by the normalizer copy step. A ref whose hash no longer matches is shown as stale. The ledger id is derivable as `subplot-<index+1>`) | `nwStoryWorldUpdate` | 4p plan items, 8d (advisory first) | replace per edit. **Written only while `role.value === 'character'`.** Readers ignore them otherwise |
 
 **Canon lock (N17, D2).**
-- `nwStoryWorldUpdate(patch, origin)` and `nwCharacterKnowsUpdate(..., origin)` take `origin` `user` or `ai`. With `origin:'ai'` they **skip every item whose stored `locked` is true**, matched by `id` (or `conceptId` for `knows`), and never delete an item. Skipped ids are returned so the suggest UI can show them.
+- `nwStoryWorldUpdate(patch, origin)` and `nwCharacterKnowsUpdate(..., origin)` take `origin` `user`, `ai` or `import`. `origin:'import'` is treated like `ai` for the lock (skips locked items; propose-only whole-replace fields are refused) and sets `source:'import'` on created items. With `origin:'ai'` they **skip every item whose stored `locked` is true**, matched by `id` (or `conceptId` for `knows`), and never delete an item. Skipped ids are returned so the suggest UI can show them.
 - A `user` write may edit a locked item and may set or clear `locked`. Approving a concept sets `locked:true` and `approvedAt`. **`approvedAt` is on concepts only.** Approving a rule, location, system or theme sets `locked` (and `source`) only.
-- `source` is set by the helper from `origin` when an item is created. A user edit of an `ai` item sets `source:'user'`.
+- `source` is set by the helper from `origin` (`user`, `ai` or `import`) when an item is created. A user edit of an `ai` item sets `source:'user'`.
 - AI-suggest (D5) for every N15-N24 field goes through these helpers only, so suggestions are edited by the user before they are folded in.
 - **Whole-replace fields are propose-only for AI.** `genreProfiles`, `structureTemplate`, `immersionWeight`, `arc` and `storyWorld.subplots` carry no per-item lock, so the helpers **refuse** an `origin:'ai'` write to them. AI-suggest shows a proposal and writes nothing. Only the user's accept writes it, with `origin:'user'`. `role` follows the same rule (a classifier result is a proposal, accepted by the user).
 
@@ -387,42 +387,42 @@ All are **NovelWriter-local, optional and additive**. Absent stays absent, and a
 
 **Batch lock.** Every new editor and suggest control (genre profile picklist, structure template, concept, location, rule, system, setup, theme and contradiction editors, immersion weight, world role and arc, character knowledge, chapter theme tags) joins the `nwBatchApplyLock()` list, and each helper above refuses to write while `nwBatchIsLocked()` is true (§5).
 
-### 2b. Scenes inside chapters (Brian 11:09 PM CT, decision 11, inside S1)
-Scenes are first-class sub-units of a chapter, bounded by a change of location or of character interaction. Product owner is **Fiction**. Source: `STORY_SCHEMA_CONVERGENCE_PLAN.md` §6a (v2.2) and the scenes addendum of `NW_SLOT_S1_SCHEMA_SPEC.md`.
+### 2b. Scenes inside chapters (Brian 11:09 PM CT, decision 11, inside S1; planned, not on main)
+**Status: planned (S1).** None of `chapterScenes`, `chapterIds`, `nwChapterScenesUpdate`, `nwChapterIdsUpdate` or `nwOpaqueId` exists on main `34a2417`. Scenes are first-class sub-units of a chapter, bounded by a change of location or of character interaction. Product owner is **Fiction**. Source: `STORY_SCHEMA_CONVERGENCE_PLAN.md` §6a (v2.2) and the scenes addendum of `NW_SLOT_S1_SCHEMA_SPEC.md`.
 
 | Field and shape | Owner (only writer) | Readers | Rules |
 |---|---|---|---|
-| `chapterScenes[n-1] = {version, textHash, scenes:[{id, chapterId, order, breakApproved, source?, boundaryReasons[]?, span?{start,end}, pov?, locationId?, time?, cast[]?, goal?, conflict?, outcome?, ext?{novelWriter?{migratedBy?}}}]}`. **Required in core:** `id`, `chapterId`, `order`, `breakApproved` only | `nwChapterScenesUpdate(n, patch, origin)` (S1). Refuses while `nwBatchIsLocked()`. Merges scenes by `id` and keeps unknown keys. Added to `_nwSmokeSnapshot` | 4p (scene plan), 8d (roll-up, advisory), Tab 5 | Sparse, lazily created. Chapters without text get no entry |
+| `chapterScenes[n-1] = {version, textHash, scenes:[{id, chapterId, order, breakApproved, source?, boundaryReasons[]?, span?{start,end}, pov?, locationId?, time?, onstage[]?, offstage[]?, goal?, conflict?, outcome?}]}` (field names match core Scene; no `cast`, no per-scene `migratedBy`). **Required in core:** `id`, `chapterId`, `order`, `breakApproved` only | `nwChapterScenesUpdate(n, patch, origin)` (S1). Refuses while `nwBatchIsLocked()`. Merges scenes by `id` and keeps unknown keys. Added to `_nwSmokeSnapshot` | 4p (scene plan), 8d (roll-up, advisory), Tab 5 | Sparse, lazily created. Chapters without text get no entry |
 
 - **Stable ids (CoS ruling a):** scene `id = 'sc_' + random` (`nwOpaqueId('sc_', taken)`, §4.3), opaque and assigned **once** at creation, never derived from position, title or text, never re-derived. `chapterId` holds the chapter's stable `chapterIds[n-1]` (`'ch_' + random`, assigned once by S1). `order` is the scene's position within the chapter and is stored separately from the id; the chapter's position is its array index, also separate. Renames, chapter insert, delete, reorder and resize (via `nwChapterIdsUpdate`), and scene reorder keep every id. Resize of the chapter count pads `chapterIds[]` with new ids or truncates it in lockstep with `chapters[]`.
 - **Optional fields (CoS ruling c):** `goal`, `conflict` and `outcome` are optional in core. BookDecomposer may require them for approved scenes in its own checks; NovelWriter never schema-requires them.
 - **Dangling refs:** any `sceneId` (blueprint beat, plan item, `chapterFlags[n-1].missing[]` entry, scorecard breakdown) that no longer resolves falls back to **chapter scope**. It is never dropped or repaired.
-- **Provenance (CoS ruling b):** scene `source` uses only the core enum `ai`, `user` or `import`. Scenes created by S1 migration are `source:'import'` with `ext.novelWriter.migratedBy:'S1'`.
+- **Provenance (CoS ruling b):** scene `source` uses only the core enum `ai`, `user` or `import`. Scenes created by S1 migration are `source:'import'`, `breakApproved:false` and have no `span`; that is how a placeholder is recognised. Migration provenance lives in exactly one place, session-level `ext.novelWriter.migratedBy:'S1'`, stamped once by migration. No scene, chapter or other object carries `migratedBy`, internally or in export.
 - **Approval (CoS ruling d):** **Effectively approved** (per Fiction) = `breakApproved === true` **and** the stored `chapterScenes[n-1].textHash` equals the current `nwTextHash` of the chapter text. Only effectively-approved scenes are authoritative. `builtFrom` and every staleness check use this test, never the raw `breakApproved` flag, so a hash-mismatched scene counts as unapproved immediately, before any save persists `breakApproved:false`. No reader treats any other scene as a rule. **Export:** unapproved placeholder or implicit scenes are exported with `breakApproved:false` and their `source`. Receivers treat them as unapproved, never locked and never authoritative.
 - **span** is a character-offset range into the chapter text, valid only for the stored `textHash`. When the chapter's `nwTextHash` differs from `textHash`, every span in that chapter is stale. Spans are **never auto-shifted**. The UI shows those boundaries as proposed again (`breakApproved:false` on the user's next save through the helper, reason `chapter text changed`). No span means the whole chapter.
 - **Chapter keying stays:** `chapterBlueprints` beats, `chapterWritingPlans` (S1 reserves `scenes[]` and `items[].sceneId?`, 4p fills them), `chapterFlags`, `batchRun.priorDrafts` and `chapterScorecards` (optional `scenes[{sceneId, planCoverage}]` from 8d) stay keyed by chapter, with an optional `sceneId` only. `knows[].learnedIn` stays a chapter. `learnedInScene` is not in S1.
 - **Batch lock:** the scene editor joins the `nwBatchApplyLock()` list (§5).
 
 ### 3. Preservation rules (the #141 lesson)
-1. **Absent stays absent.** Import, restore, tab rebuild and save never write a default into a field the session didn't have. Exceptions are only the **existing** coercions on main, listed so S1 doesn't add more: `normalizeImportedSessionData` (~L9414-9448) coerces non-arrays to `[]` for `authors, characters, subplots, chapterOutlines, chapterArcs, chapters, editedChapters, bookImprovements, bookImprovementsWithStatus, chapterImprovements, chapterScorecards, chapterFactChecks, workflowLog, chapterContinuityPackets, continuityFindings` and fills `factChecks` and `continuityTracker` shells. `updateChapterSubpages()` (~L4694) pads the per-chapter arrays it already pads. **No new S1 key is padded or coerced.**
+1. **Absent stays absent.** Import, restore, tab rebuild and save never write a default into a field the session didn't have. Exceptions are only the **existing** coercions on main, listed so S1 doesn't add more: `normalizeImportedSessionData` (~L9687-9721) coerces non-arrays to `[]` for `authors, characters, subplots, chapterOutlines, chapterArcs, chapters, editedChapters, bookImprovements, bookImprovementsWithStatus, chapterImprovements, chapterScorecards, chapterFactChecks, workflowLog, chapterContinuityPackets, continuityFindings` and fills `factChecks` and `continuityTracker` shells. `updateChapterSubpages()` (~L4739) pads the per-chapter arrays it already pads. **No new S1 key is padded or coerced.**
 2. **Unknown keys survive.** The normalizer only adds or validates known keys and never rebuilds `novelData` from a whitelist.
-   - **`chapterFlags` (after 6b):** the import and restore normalizer passes each entry through (shallow copy of an object entry, every key kept, wrong type kept with a warning, absent stays absent). It is not in the defaults and is never padded. `nwSetChapterFlag` creates an entry **lazily on first write** only, with no `null` padding and no fixed-key rebuild. `missing` is a copy of the CoverageReport misses (a reference, not a redefinition). A scene-level miss is a `missing[]` entry carrying `sceneId`. There is no scene-keyed flag store. **Null gaps:** a sparse `chapterFlags` array exports as JSON with `null` at untouched indexes. Every reader treats `null` as absent, and the normalizer keeps the `null` as-is (it does not count as a wrong type).
-3. **One normalizer per entity**, used by import, restore, DOM rebuild and AI-suggest alike. S1 routes the Tab 2 rebuild (~L4042) through `normalizeCharacterItem` (~L2210).
-4. **`normalizeCharacterItem` must be extended so absent stays absent.** Today it invents `obligations: []`, `backstory: ''`, `arc: ''` (~L2213-2223) and drops items with no name, backstory or arc. S1 changes it to **copy every key present on the input, unknown keys included** (a shallow copy, then type-check of known keys), with **no keep-list**. It only validates or normalizes known keys (`name, backstory, arc, role, goal, flaw, notes, obligations, id, voice, relationships, explainerFor, knows`) and never writes a default for an absent key. `knows[]` and its per-entry `locked`/`source` therefore survive every Tab 2 rebuild. It keeps the drop rule. Callers that need a default apply it at read time.
-5. **Subplots:** `normalizeSubplotItem` (~L2227) keeps flattening to the string array for compatibility, but **first** copies object fields to `subplotsMeta[i]`.
+   - **`chapterFlags` (after 6b):** the import and restore normalizer (`NW_6B_FLAGS_PASSTHROUGH`, ~L9725-9750) passes each object entry through as a shallow copy with every key kept; absent stays absent; a non-array `chapterFlags` is kept as-is with a console warning; a non-object **entry** inside the array becomes `null` silently. It is not in the defaults and is never padded; `updateChapterSubpages()` only truncates it when it is longer than `numChapters`. `nwSetChapterFlag` creates an entry **lazily on first write** only, with no `null` padding and no fixed-key rebuild. `missing` is a copy of the CoverageReport misses (a reference, not a redefinition). A scene-level miss is a `missing[]` entry carrying `sceneId`. There is no scene-keyed flag store. **Null gaps:** a sparse `chapterFlags` array exports as JSON with `null` at untouched indexes. Every reader treats `null` as absent, and the normalizer keeps the `null` as-is (it does not count as a wrong type).
+3. **One normalizer per entity**, used by import, restore, DOM rebuild and AI-suggest alike. S1 routes the Tab 2 rebuild (~L4081) through `normalizeCharacterItem` (~L2217).
+4. **`normalizeCharacterItem` must be extended so absent stays absent.** Today it invents `obligations: []`, `backstory: ''`, `arc: ''` (~L2220-2230) and drops items with no name, backstory or arc. S1 changes it to **copy every key present on the input, unknown keys included** (a shallow copy, then type-check of known keys), with **no keep-list**. It only validates or normalizes known keys (`name, backstory, arc, role, goal, flaw, notes, obligations, id, voice, relationships, explainerFor, knows`) and never writes a default for an absent key. `knows[]` and its per-entry `locked`/`source` therefore survive every Tab 2 rebuild. It keeps the drop rule. Callers that need a default apply it at read time.
+5. **Subplots:** `normalizeSubplotItem` (~L2234) keeps flattening to the string array for compatibility, but **first** copies object fields to `subplotsMeta[i]`.
 6. **World:** `worldBible` and `world` are never written by S1. Their existing readers keep working unchanged and never see `storyWorld`. Migration creates `storyWorld` only when it is absent **and** there is a string legacy value to carry, copying it into `storyWorld.notes` (`worldBible` first, else `world`). Otherwise `storyWorld` stays absent until a user edit or an AI-suggest write creates it. An object legacy `world` is not mapped. It stays the bible for existing readers. Inside `storyWorld`, the normalizer and `nwStoryWorldUpdate` keep unknown keys at every level, including nested objects such as `role`, `immersionWeight` and items of `systems[]`.
 7. **Type handling.** For the new S1 keys (`storyWorld, subplotsMeta, chapterFlags, chapterWritingPlans, chapterRequirements, chapterRequiredFacts, chapterFingerprints, chapterThemeTags, chapterScenes, chapterIds, nwSchemaVersion`), `normalizeImportedSessionData` validates type, keeps absent as absent, and keeps a wrong type **as-is with a console warning**, never dropping or coercing it. Every S1 reader type-guards and treats a wrong-type value as absent for that call. Legacy keys keep the existing coercions from rule 1, unchanged.
-8. **Prompts stay bounded.** `normalizeCharacterItem` also feeds `normalizeOutbound` (~L2331) and so every LLM payload. Extending stored fields must not grow prompts: `digestCharacters` (~L4900, capped at 24 entries) and the `normalizeOutbound` payload include a new field only when the prompt builder opts in for that stage. The existing `assertNoFullManuscriptDump` smoke budget (`digestCharactersChars < 2000`, ~L5887) must still pass on the rich fixture after S1.
+8. **Prompts stay bounded.** `normalizeCharacterItem` also feeds `normalizeOutbound` (~L2338) and so every LLM payload. Extending stored fields must not grow prompts: `digestCharacters` (~L4958, capped at 24 entries) and the `normalizeOutbound` payload include a new field only when the prompt builder opts in for that stage. The existing `assertNoFullManuscriptDump` smoke budget (`digestCharactersChars < 2000`, ~L5945) must still pass on the rich fixture after S1.
 
 ### 4. Versioning and migration
 #### 4.1 Version and entry points
-- New `novelData.nwSchemaVersion` (integer). **Absent means legacy (0).** It **stays 1 in v5**: N15-N24 are optional, additive and new in S1 (no shipped build ever wrote v1), so they are part of the v1 definition and need no migration step. **Any future migration step that creates an N15-N24 field bumps `nwSchemaVersion` to 2.** S1 sets it to `1` in the defaults (~L732) and in `resetState()` (~L13129).
+- New `novelData.nwSchemaVersion` (integer). **Absent means legacy (0).** It **stays 1 in v5**: N15-N24 are optional, additive and new in S1 (no shipped build ever wrote v1), so they are part of the v1 definition and need no migration step. **Any future migration step that creates an N15-N24 field bumps `nwSchemaVersion` to 2.** S1 sets it to `1` in the defaults (~L732) and in `resetState()` (~L13786).
 - `nwMigrateSession(nd)` (S1) **runs on every full load and is a no-op at the current version.** It is pure (no DOM, no network, **no AI calls**), **additive**, and **idempotent**: `migrate(migrate(x))` deep-equals `migrate(x)`. It never deletes or renames a key. A version newer than the app knows is loaded read-through, unchanged, with a console warning and a status-line note.
 - Every path that installs a full `novelData` calls it after normalize and before `applySessionDataToUI`:
-  1. `importSession()` (~L9581-9586): after `normalizeImportedSessionData`, before `novelData = importedNovelData`.
-  2. `restoreInterruptedBatchRun()` (~L12587): after `normalizeImportedSessionData` on the checkpoint copy, before `applySessionDataToUI()`. A pre-S1 checkpoint is therefore migrated like a pre-S1 file.
-  3. `resetState()` (~L13129) and the defaults (~L732) build a fresh v1 object, so they need no migration.
-  - Not a load path: `_nwSmokeSnapshot` restore (`Object.assign(novelData, saved)`, ~L5890) puts back the same in-memory object a smoke test borrowed.
+  1. `importSession()` (~L9887-9892): after `normalizeImportedSessionData`, before `novelData = importedNovelData`.
+  2. `restoreInterruptedBatchRun()` (~L13218): after `normalizeImportedSessionData` on the checkpoint copy, before `applySessionDataToUI()`. A pre-S1 checkpoint is therefore migrated like a pre-S1 file.
+  3. `resetState()` (~L13786) and the defaults (~L732) build a fresh v1 object, so they need no migration.
+  - Not a load path: `_nwSmokeSnapshot` restore (`Object.assign(novelData, saved)`, ~L5948) puts back the same in-memory object a smoke test borrowed.
 - Checkpoint restore replaces the whole of `novelData`. This is intentional: the checkpoint is the book. Merge-not-replace (§5) governs writes to a loaded session, not the load itself. Restore is only offered when no run is active, and `nwBatchApplyLock()` keeps the UI locked until restore or discard.
 - **Writer lock states (6b):** `nwBatchIsLocked()` is true while the batch is **running**, **interrupted** (a checkpoint awaits restore or discard), **importing** or **integrating** (Tab 8). Import and Integrate are lock holders, so S1's migration on the import path runs inside the import lock.
 
@@ -430,7 +430,7 @@ Scenes are first-class sub-units of a chapter, bounded by a change of location o
 1. Copy subplot objects to `subplotsMeta` (normalizer copy step).
 2. `storyWorld`: only if absent **and** `worldBible` (else `world`) is a string, create `{version:1, notes}` via `nwStoryWorldUpdate`. No empty `locations`, `rules` or other arrays. With no legacy string, `storyWorld` stays absent. Legacy keys untouched.
 3. `characters[].id`: `nwCharacterId` only where `id` is absent.
-4. `chapterScenes[n-1]`: for each chapter **with text** and **no existing entry**, first ensure `chapterIds[n-1]` via `nwChapterIdsUpdate('assign', n)` (every chapter, with or without text, only where absent), then call `nwChapterScenesUpdate(n, {version:1, textHash, scenes:[one scene]}, 'migration')`: id `nwOpaqueId('sc_', taken)`, `chapterId: chapterIds[n-1]`, `order:1`, `breakApproved:false`, `source:'import'`, `ext:{novelWriter:{migratedBy:'S1'}}`, `boundaryReasons:[]`, **no span** (whole chapter), shown as "proposed, split or confirm". A placeholder, not a rule that chapter = scene. Chapters without text get no entry. Never overwrites an existing entry, so re-running is a no-op. Part of the single v0-to-v1 migration, so `nwSchemaVersion` stays 1.
+4. `chapterScenes[n-1]`: for each chapter **with text** and **no existing entry**, first ensure `chapterIds[n-1]` via `nwChapterIdsUpdate('assign', n)` (every chapter, with or without text, only where absent), then call `nwChapterScenesUpdate(n, {version:1, textHash, scenes:[one scene]}, 'import')`: id `nwOpaqueId('sc_', taken)`, `chapterId: chapterIds[n-1]`, `order:1`, `breakApproved:false`, `source:'import'`, `boundaryReasons:[]`, **no span** (whole chapter), shown as "proposed, split or confirm". A placeholder, not a rule that chapter = scene. Chapters without text get no entry. Never overwrites an existing entry, so re-running is a no-op. Part of the single v0-to-v1 migration, so `nwSchemaVersion` stays 1. Migration then stamps session-level `ext.novelWriter.migratedBy:'S1'` once (never on a scene).
 5. `chapterRequiredFacts[n-1]`: **only for chapters that have no entry** (a present entry, of any type, is never touched) and where legacy `chapterFactChecks[n-1]` is a non-empty array or string, call `nwRequiredFactsUpsert(n, nwRequiredFactsFromLegacy(n), 'user')` (mapping in §7.1). Legacy untouched.
 6. `chapterRequirements[n-1]`: `nwDeriveChapterRequirements(n)` for every chapter that has a blueprint. Names that don't resolve stay as text. It never touches `mustNotInclude`.
 7. `chapterFingerprints[n-1]`: `nwBuildChapterFingerprint(n)` for every chapter with saved text.
@@ -442,7 +442,8 @@ Export always writes the current `nwSchemaVersion`. Older builds keep the new ke
 #### 4.3 Algorithms (pure JS, no crypto API)
 - **Text hash `nwTextHash(s)`:** normalize with `String(s).replace(/\s+/g, ' ').trim()`, then FNV-1a 32-bit over the UTF-16 code units (offset basis `0x811c9dc5`, prime `0x01000193`, `Math.imul`, `>>> 0`), output as 8-char lowercase hex. One function serves `textHash`, `openingShingles`, `derivedFrom` and Q5 `auditedTextHash`.
 - **Character id `nwCharacterId(name, taken)`:** `name.normalize('NFKD')`, strip combining marks (`/[\u0300-\u036f]/g`), lowercase, replace each run of non `[a-z0-9]` with `-`, trim leading and trailing `-`. An empty result becomes `char`. If the slug is already taken, append `-2`, `-3` and so on. Ids are assigned in `characters[]` array order, and existing ids are reserved first, so re-running never renumbers.
-- **Opaque id `nwOpaqueId(prefix, taken, rng = Math.random)` (scenes, chapters):** `prefix + ` 10 chars of lowercase base36 from `rng()` (no crypto API), regenerated on the rare collision with `taken` (all ids of that kind in the session). `rng` defaults to `Math.random`, so production and migration need no argument. S1 fixtures and smokes inject a seeded deterministic `rng`, so ids become exact and fixture `expected` values can be asserted exactly; the pattern `/^sc_[a-z0-9]{10}$/` (or `ch_`) stays as a fallback when a seed is not supplied. Called only when an id is absent, so existing ids are never touched and re-running migration assigns nothing new.
+- **Opaque id `nwOpaqueId(prefix, taken, rng = Math.random)` (scenes, chapters, beats):** `prefix + ` 10 chars of lowercase base36 from `rng()` (no crypto API), regenerated on the rare collision with `taken` (all ids of that kind in the session). `rng` defaults to `Math.random`, so production and migration need no argument. S1 fixtures and smokes inject a seeded deterministic `rng`, so ids become exact and fixture `expected` values can be asserted exactly; the pattern `/^sc_[a-z0-9]{10}$/` (or `ch_`) stays as a fallback when a seed is not supplied. Called only when an id is absent, so existing ids are never touched and re-running migration assigns nothing new.
+- **Beat ids (`bt_`, N1-N4):** every `chapterBlueprints[n-1]` beat and every `chapterWritingPlans[n-1].items` entry of `kind` beat/worldBeat carries a stored `id = nwOpaqueId('bt_', taken, rng)`, assigned once when absent and stored on the beat, never re-derived, so re-export does not churn `story.beats[].id`. Blueprint and plan objects stay in `ext.novelWriter`; migration assigns none (export or the owner assigns on first need).
 - **Item id `nwItemId(name, taken)`:** the same algorithm, with de-dup scoped to the item's own array (`concepts`, `rules`, `locations`, `systems`, `themes`), and an empty slug becoming `item`. Applied only by the §2a helpers when an item without an `id` is created. Migration assigns none.
 - **Fingerprint `nwBuildChapterFingerprint(n)`:** `{textHash, tailWindowWords:250, openingShingles}`. `textHash` is over the chapter's saved text. `openingShingles` are `nwTextHash` of each 8-word window over the first 200 words, step 4 (at most 49 entries). It holds no text. Skip when the stored `textHash` already matches.
 - **Requirements freshness:** `chapterRequirements[n-1].derivedFrom = nwTextHash(JSON.stringify(chapterBlueprints[n-1]))`. There is **no timestamp**. A re-derive is skipped when `derivedFrom` matches, so migration is deterministic.
@@ -479,7 +480,7 @@ Path: `NovelWriter/fixtures/nw-migration/<case>.json` (beside the existing `Nove
 | `v1-plan-stale.json` | 5 chapters with plans built from the current inputs, then: ch1 unchanged, ch2 blueprint edited, ch3 a `chapterRequiredFacts` item text edited, ch4 `mustNotInclude` edited, ch5 plan with no `builtFrom`. Also ch1 re-ordered required-facts items and a changed `derivedFrom` only | none. Stale check returns ch2-ch5, ch1 stays fresh (sort by id and `derivedFrom` exclusion), migration writes no `builtFrom`, and no rebuild is triggered |
 | `v1-flags-passthrough.json` | sparse `chapterFlags` with an unknown key, `coverageFailed:false`, a `replay` object and a wrong-type entry | none. Every entry deep-equal after import and restore, no padding, one warning |
 | `v1-plan-world-stale.json` | plans built with `worldFrom`, plus a pre-W1 plan with no worldBeat items and no `worldFrom`, and a plan with worldBeat items and no `worldFrom`. Then: lock an already-approved concept, approve a new used concept, accept a role change | helper test. Locking alone leaves every plan fresh. Approve and role accept make the affected plans stale with `builtFrom` unchanged. The pre-W1 plan without worldBeats stays fresh, and the worldBeat plan without `worldFrom` is stale |
-| `v0-chapters-to-proposed-scenes.json` | 3 chapters, 2 with text | `nwSchemaVersion` 1, `chapterScenes[0]`, `chapterScenes[1]`, each one scene with no `span`, `breakApproved:false`, `source:'import'`, `ext.novelWriter.migratedBy:'S1'`, `id` equal to the seeded `nwOpaqueId` value (exact assert; pattern `/^sc_[a-z0-9]{10}$/` is the fallback), `chapterId` equal to `chapterIds[n-1]`. `chapterIds[0..2]` all set to the seeded `ch_` values (exact; pattern fallback `/^ch_[a-z0-9]{10}$/`), including the chapter with no text. A plan's `builtFrom` is unchanged. Rerun is a no-op (ids unchanged) |
+| `v0-chapters-to-proposed-scenes.json` | 3 chapters, 2 with text | `nwSchemaVersion` 1, `chapterScenes[0]`, `chapterScenes[1]`, each one scene with no `span`, `breakApproved:false`, `source:'import'`, no scene-level `migratedBy` key, session-level `ext.novelWriter.migratedBy === 'S1'` (only occurrence), `id` equal to the seeded `nwOpaqueId` value (exact assert; pattern `/^sc_[a-z0-9]{10}$/` is the fallback), `chapterId` equal to `chapterIds[n-1]`. `chapterIds[0..2]` all set to the seeded `ch_` values (exact; pattern fallback `/^ch_[a-z0-9]{10}$/`), including the chapter with no text. A plan's `builtFrom` is unchanged. Rerun is a no-op (ids unchanged) |
 | `v1-no-text-no-scenes.json` | chapters with no text | `chapterIds` assigned. No `chapterScenes` |
 | `v1-scenes-approved-untouched.json` | an existing approved `chapterScenes` entry with an unknown key | none. Entry deep-equal after migrate and round-trip |
 | `v1-text-hash-change-reproposes.json` | approved scenes with spans, a plan built with them, then the chapter text edited (no save) | helper test. Before any save: the scenes are not effectively approved, the plan is **stale** (its `builtFrom` no longer matches), spans are stale with offsets unchanged (no auto-shift), boundaries shown as proposed with reason `chapter text changed`, stored `breakApproved` still `true`. After the next user save: `breakApproved:false` persisted, plan still stale |
@@ -500,10 +501,10 @@ Path: `NovelWriter/fixtures/nw-migration/<case>.json` (beside the existing `Nove
 | Rule | Applies to | Enforcement (S1 or existing) |
 |---|---|---|
 | Single writer per field | §2 table | owner functions. Migration calls them and writes nothing directly |
-| Story entities locked during a batch | storyWorld (incl. every N15-N24 editor in §2a), Plot, Character (incl. `knows`), required facts, mustNotInclude, chapter theme tags, scene edits and AI-suggest | `nwBatchIsLocked()` (~L12154, true while running, interrupted, importing or integrating) plus the `nwBatchApplyLock()` list (~L12172). S1 adds each new control to that list |
+| Story entities locked during a batch | storyWorld (incl. every N15-N24 editor in §2a), Plot, Character (incl. `knows`), required facts, mustNotInclude, chapter theme tags, scene edits and AI-suggest | `nwBatchIsLocked()` (~L12578, true while running, interrupted, importing or integrating) plus the `nwBatchApplyLock()` list (~L12602). S1 adds each new control to that list |
 | Per-chapter records merge, never replace | `chapterFlags`, `chapterWritingPlans`, `chapterScorecards`, `chapterRequirements`, `chapterRequiredFacts`, `chapterThemeTags`, `chapterScenes` (all **objects** per chapter) | `Object.assign({}, existing, patch)` keyed by chapter index. Q3 and 6b share `chapterFlags[n-1]`. A re-derive of `chapterRequirements` replaces only `cast`, `setting`, `derivedFrom` and never touches `mustNotInclude`. `nwRequiredFactsUpsert(n, items, source)` replaces only items whose `source` equals its argument, matched by `id`, so user items survive a 4p or migration call |
 | Legacy arrays keep main's semantics | `chapterFactChecks` (array per chapter) | not merged with `Object.assign`. Existing writers keep `concat` (harness) and replace-rows (Tab 5) |
-| Await load before write | IndexedDB `nwTimingStats` | existing: `nwTimingLoadStats()` (~L1259) and the record path (8b) |
+| Await load before write | IndexedDB `nwTimingStats` | existing: `nwTimingLoadStats()` (~L1266) and the record path (8b) |
 | Canon lock (N17) | `storyWorld` concepts, rules, locations, systems, themes and `characters[].knows` | `nwStoryWorldUpdate` and `nwCharacterKnowsUpdate` skip locked items for `origin:'ai'` and never delete (§2a) |
 | Per-call / per-run identity | AI calls, Generate All runs | existing: per-call `nwActiveCalls` Map. Per-run reset of batch state |
 | Migration runs on every load | import and checkpoint restore | `nwMigrateSession` between normalize and apply on both paths (§4.1) |
@@ -511,10 +512,10 @@ Path: `NovelWriter/fixtures/nw-migration/<case>.json` (beside the existing `Nove
 
 ### 6. Gaps on main that S1 must close
 1. `worldBible`/`world` aren't in the `novelData` defaults (~L732) or the import normalizer, and only survive through the spread. S1 keeps that behavior for them (no defaults) and adds explicit handling for `storyWorld`.
-2. The Tab 2 character DOM rebuild (~L4042) drops `obligations`, `goal` and `flaw`.
-3. `normalizeCharacterItem` (~L2210) keeps only `name, backstory, arc, obligations` and writes defaults (§3 rule 4).
-4. `normalizeSubplotItem` (~L2227) flattens objects to strings with no copy.
-5. Checkpoint restore (`restoreInterruptedBatchRun`, ~L12582) has no migration hook (§4.1).
+2. The Tab 2 character DOM rebuild (~L4081) drops `obligations`, `goal` and `flaw`.
+3. `normalizeCharacterItem` (~L2217) keeps only `name, backstory, arc, obligations` and writes defaults (§3 rule 4).
+4. `normalizeSubplotItem` (~L2234) flattens objects to strings with no copy.
+5. Checkpoint restore (`restoreInterruptedBatchRun`, ~L13213) has no migration hook (§4.1).
 
 All are the same class of data loss as #141. S1 closes them before Q1-Q3 and 4p build on the schema.
 
@@ -540,15 +541,15 @@ Engineering confirms the names `chapterRequirements` and `chapterFingerprints`. 
 #### 7.1 Legacy `chapterFactChecks` on main: every reader and writer
 | Site (main) | Kind | S1 | Q1 |
 |---|---|---|---|
-| defaults `chapterFactChecks: []` (~L767), `resetState` (~L13147) | init | legacy, unchanged | unchanged |
-| `updateChapterSubpages()` pad (~L4694) | writer (resize) | legacy, unchanged. Does **not** pad `chapterRequiredFacts` | unchanged |
-| `_nwSmokeSnapshot` extra keys (~L5990) | snapshot | legacy, plus add `chapterRequiredFacts`, `chapterRequirements`, `chapterFingerprints`, `storyWorld` to the list | unchanged |
-| `normalizeImportedSessionData` coercion (~L9431) | writer (coerce) | legacy, unchanged | unchanged |
-| `nwEnsureScorecardArrays()` (~L10405) | writer (init) | legacy, unchanged | unchanged |
-| `nwChapterFactEntries()` (~L10506), the 8d scorer input | reader | legacy only | also reads `chapterRequiredFacts` items, de-duplicated by `legacyId` |
-| `nwMergeQcatExpect()` (~L10999-11017), qcat harness | writer (`concat`) | legacy, unchanged | stays legacy (harness expectations, not story data) |
-| `nwCollectPlanFactsFromUi()` (~L11424-11449), Tab 5 plan-facts table | writer (replace rows) | legacy, unchanged | Tab 5 required-fact rows write `chapterRequiredFacts` via `nwRequiredFactsUpsert(...,'user')`. The legacy plan-facts table stays for probes |
-| `nwRenderPlanFactsBox()` (~L11483) | reader | legacy, unchanged | unchanged, plus a new required-facts box |
+| defaults `chapterFactChecks: []` (~L767), `resetState` (~L13804) | init | legacy, unchanged | unchanged |
+| `updateChapterSubpages()` pad (~L4739) | writer (resize) | legacy, unchanged. Does **not** pad `chapterRequiredFacts` | unchanged |
+| `_nwSmokeSnapshot` extra keys (~L6048) | snapshot | legacy, plus add `chapterRequiredFacts`, `chapterRequirements`, `chapterFingerprints`, `storyWorld` to the list | unchanged |
+| `normalizeImportedSessionData` coercion (~L9704) | writer (coerce) | legacy, unchanged | unchanged |
+| `nwEnsureScorecardArrays()` (~L10716) | writer (init) | legacy, unchanged | unchanged |
+| `nwChapterFactEntries()` (~L10817), the 8d scorer input | reader | legacy only | also reads `chapterRequiredFacts` items, de-duplicated by `legacyId` |
+| `nwMergeQcatExpect()` (~L11310-11328), qcat harness | writer (`concat`) | legacy, unchanged | stays legacy (harness expectations, not story data) |
+| `nwCollectPlanFactsFromUi()` (~L11735-11760), Tab 5 plan-facts table | writer (replace rows) | legacy, unchanged | Tab 5 required-fact rows write `chapterRequiredFacts` via `nwRequiredFactsUpsert(...,'user')`. The legacy plan-facts table stays for probes |
+| `nwRenderPlanFactsBox()` (~L11794) | reader | legacy, unchanged | unchanged, plus a new required-facts box |
 
 `nwRequiredFactsFromLegacy(n)` (S1) maps legacy rows: `kind:'include'` gives `mustInclude:true`, `kind:'exclude'` gives `mustInclude:false`, and `kind:'probe'` is not mapped (probes stay legacy-only for 8d). `text = label || pattern`, `id = 'lf-' + (row.id || index)`, `legacyId = row.id`, `source:'user'`. A string entry becomes one `mustInclude:true` item with `id:'lf-0'`.
 
