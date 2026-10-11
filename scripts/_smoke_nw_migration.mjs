@@ -276,6 +276,56 @@ for (const file of fixtureFiles) {
       };
     }, fx.inputSceneChapterIds);
     check(id, 'wrong-typed chapterIds skips scene chapterId write; warn', scCase.hasScene === true && scCase.ids === 'not-an-array' && scCase.chapterId == null && (scCase.warns || []).some((w) => /skipping scene chapterId/i.test(w)), JSON.stringify(scCase));
+    const rfCase = await page.evaluate((nd) => {
+      const warns = [];
+      const orig = console.warn;
+      console.warn = function () { warns.push(Array.from(arguments).map(String).join(' ')); return orig.apply(console, arguments); };
+      const once = nwMigrateSession(JSON.parse(JSON.stringify(nd)));
+      const help = { numChapters: 1, chapterRequiredFacts: 5 };
+      const upsert = nwRequiredFactsUpsert(1, [{ text: 'x' }], 'user', help);
+      console.warn = orig;
+      return {
+        rf: once.chapterRequiredFacts,
+        warns,
+        helpRf: help.chapterRequiredFacts,
+        upsertOk: upsert && upsert.ok,
+        upsertReason: upsert && upsert.reason
+      };
+    }, fx.inputRequiredFacts);
+    check(id, 'wrong-typed chapterRequiredFacts kept with legacy factChecks; warn; helper refuses', rfCase.rf === 5 && (rfCase.warns || []).some((w) => /chapterRequiredFacts has wrong type; keeping as-is/.test(w)) && rfCase.helpRf === 5 && rfCase.upsertOk === false && rfCase.upsertReason === 'wrong-type', JSON.stringify(rfCase));
+    const reqCase = await page.evaluate((nd) => {
+      const warns = [];
+      const orig = console.warn;
+      console.warn = function () { warns.push(Array.from(arguments).map(String).join(' ')); return orig.apply(console, arguments); };
+      const once = nwMigrateSession(JSON.parse(JSON.stringify(nd)));
+      const help = JSON.parse(JSON.stringify(nd));
+      const derived = nwDeriveChapterRequirements(1, help);
+      console.warn = orig;
+      return {
+        req: once.chapterRequirements,
+        warns,
+        helpReq: help.chapterRequirements,
+        derivedOk: derived && derived.ok,
+        derivedReason: derived && derived.reason
+      };
+    }, fx.inputRequirements);
+    check(id, 'wrong-typed chapterRequirements kept with blueprints; warn; helper refuses', eq(reqCase.req, {}) && (reqCase.warns || []).some((w) => /chapterRequirements has wrong type; keeping as-is/.test(w)) && eq(reqCase.helpReq, {}) && reqCase.derivedOk === false && reqCase.derivedReason === 'wrong-type', JSON.stringify(reqCase));
+    const fpCase = await page.evaluate((nd) => {
+      const warns = [];
+      const orig = console.warn;
+      console.warn = function () { warns.push(Array.from(arguments).map(String).join(' ')); return orig.apply(console, arguments); };
+      const once = nwMigrateSession(JSON.parse(JSON.stringify(nd)));
+      const help = JSON.parse(JSON.stringify(nd));
+      const built = nwBuildChapterFingerprint(1, help);
+      console.warn = orig;
+      return {
+        fp: once.chapterFingerprints,
+        warns,
+        helpFp: help.chapterFingerprints,
+        built
+      };
+    }, fx.inputFingerprints);
+    check(id, 'wrong-typed chapterFingerprints kept with chapter text; warn; helper refuses', fpCase.fp === 'not-an-array' && (fpCase.warns || []).some((w) => /chapterFingerprints has wrong type; keeping as-is/.test(w)) && fpCase.helpFp === 'not-an-array' && fpCase.built == null, JSON.stringify(fpCase));
   }
   if (file === 'v1-n-wrong-types.json') {
     check(id, 'chapterThemeTags string and systems {} kept', result.once.chapterThemeTags === 'x' && result.once.storyWorld && eq(result.once.storyWorld.systems, {}), JSON.stringify({ tags: result.once.chapterThemeTags, sys: result.once.storyWorld && result.once.storyWorld.systems }));
@@ -704,6 +754,21 @@ await page.close();
   check('MIG:rng-restore', 'opaque-id RNG restored in finally after migration', r.after === r.expectedMarker, JSON.stringify(r));
 }
 
+{
+  const pId = await openPage();
+  const r = await pId.evaluate(() => {
+    const taken = new Set(['xx_0000000000']);
+    try {
+      const id = nwOpaqueId('xx_', taken, function () { return 0; });
+      return { threw: false, id, taken: Array.from(taken) };
+    } catch (e) {
+      return { threw: true, message: String(e && e.message || e), taken: Array.from(taken) };
+    }
+  });
+  await pId.close();
+  check('MIG:opaque-id-collision', 'stuck RNG throws after 50 collisions instead of returning a duplicate', r.threw === true && /too many collisions/i.test(r.message || '') && r.taken.length === 1 && r.taken[0] === 'xx_0000000000', JSON.stringify(r));
+}
+
 // SCH-01 mutation: whitelist rebuild turns v1-unknown-nested red
 {
   const mut = mutateCopy('var NW_S1_NORMALIZER_PASSTHROUGH = true;', 'var NW_S1_NORMALIZER_PASSTHROUGH = false;');
@@ -774,6 +839,80 @@ await page.close();
     }, fx.inputSceneChapterIds);
     console.log('MIG:scene-chapterId-mutation red-run ' + JSON.stringify(r));
     check('MIG:v1-wrong-types:scene-chapterId-mutation', 'writing junk scene chapterId from wrong-typed chapterIds turns skip-write green red', r.hasScene === true && r.ids === 'not-an-array' && typeof r.chapterId === 'string' && r.chapterId.length === 1, JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_KEEP_WRONG_REQUIRED_FACTS = true;', 'var NW_S1_KEEP_WRONG_REQUIRED_FACTS = false;');
+  check('MIG:v1-wrong-types:requiredFacts-mutation-flag', 'keep-wrong-requiredFacts flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-wrong-types.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      const once = nwMigrateSession(JSON.parse(JSON.stringify(nd)));
+      const help = { numChapters: 1, chapterRequiredFacts: 5 };
+      const upsert = nwRequiredFactsUpsert(1, [{ text: 'x' }], 'user', help);
+      return { rf: once.chapterRequiredFacts, helpRf: help.chapterRequiredFacts, upsertOk: upsert && upsert.ok };
+    }, fx.inputRequiredFacts);
+    console.log('MIG:requiredFacts-mutation red-run ' + JSON.stringify(r));
+    check('MIG:v1-wrong-types:requiredFacts-mutation', 'overwriting wrong-typed chapterRequiredFacts turns keep-as-is red', Array.isArray(r.rf) && Array.isArray(r.helpRf) && r.upsertOk === true, JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_KEEP_WRONG_REQUIREMENTS = true;', 'var NW_S1_KEEP_WRONG_REQUIREMENTS = false;');
+  check('MIG:v1-wrong-types:requirements-mutation-flag', 'keep-wrong-requirements flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-wrong-types.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      const once = nwMigrateSession(JSON.parse(JSON.stringify(nd)));
+      const help = JSON.parse(JSON.stringify(nd));
+      const derived = nwDeriveChapterRequirements(1, help);
+      return { req: once.chapterRequirements, helpReq: help.chapterRequirements, derivedOk: derived && derived.ok };
+    }, fx.inputRequirements);
+    console.log('MIG:requirements-mutation red-run ' + JSON.stringify(r));
+    check('MIG:v1-wrong-types:requirements-mutation', 'overwriting wrong-typed chapterRequirements turns keep-as-is red', Array.isArray(r.req) && Array.isArray(r.helpReq) && r.derivedOk === true, JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_KEEP_WRONG_FINGERPRINTS = true;', 'var NW_S1_KEEP_WRONG_FINGERPRINTS = false;');
+  check('MIG:v1-wrong-types:fingerprints-mutation-flag', 'keep-wrong-fingerprints flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-wrong-types.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      const once = nwMigrateSession(JSON.parse(JSON.stringify(nd)));
+      const help = JSON.parse(JSON.stringify(nd));
+      const built = nwBuildChapterFingerprint(1, help);
+      return { fp: once.chapterFingerprints, helpFp: help.chapterFingerprints, built: built && built.textHash };
+    }, fx.inputFingerprints);
+    console.log('MIG:fingerprints-mutation red-run ' + JSON.stringify(r));
+    check('MIG:v1-wrong-types:fingerprints-mutation', 'overwriting wrong-typed chapterFingerprints turns keep-as-is red', Array.isArray(r.fp) && Array.isArray(r.helpFp) && typeof r.built === 'string', JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_OPAQUE_ID_THROW_ON_COLLISION = true;', 'var NW_S1_OPAQUE_ID_THROW_ON_COLLISION = false;');
+  check('MIG:opaque-id-collision:mutation-flag', 'opaque-id-throw flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const r = await p.evaluate(() => {
+      const taken = new Set(['xx_0000000000']);
+      try {
+        const id = nwOpaqueId('xx_', taken, function () { return 0; });
+        return { threw: false, id, taken: Array.from(taken) };
+      } catch (e) {
+        return { threw: true, message: String(e && e.message || e), taken: Array.from(taken) };
+      }
+    });
+    console.log('MIG:opaque-id-collision-mutation red-run ' + JSON.stringify(r));
+    check('MIG:opaque-id-collision:mutation', 'returning a duplicate after 50 collisions turns throw green red', r.threw === false && r.id === 'xx_0000000000', JSON.stringify(r));
     await p.close();
   }
 }

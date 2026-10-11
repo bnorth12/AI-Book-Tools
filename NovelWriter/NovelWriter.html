@@ -2226,6 +2226,10 @@ let activeAICallCount = 0;
 		var NW_S1_KEEP_WRONG_TYPES = true;
 		var NW_S1_KEEP_WRONG_SUBPLOTS_META = true;
 		var NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS = true;
+		var NW_S1_KEEP_WRONG_REQUIRED_FACTS = true;
+		var NW_S1_KEEP_WRONG_REQUIREMENTS = true;
+		var NW_S1_KEEP_WRONG_FINGERPRINTS = true;
+		var NW_S1_OPAQUE_ID_THROW_ON_COLLISION = true;
 		var NW_S1_RESIZE_SPLICE_ALL = true;
 		var NW_S1_RESIZE_CHAPTERS = true;
 		var NW_S1_RESTORE_OPAQUE_RNG = true;
@@ -2328,6 +2332,9 @@ let activeAICallCount = 0;
 				id = String(prefix || '') + chars;
 				guard++;
 			} while (set.has(id) && guard < 50);
+			if (set.has(id) && (typeof NW_S1_OPAQUE_ID_THROW_ON_COLLISION === 'undefined' || NW_S1_OPAQUE_ID_THROW_ON_COLLISION)) {
+				throw new Error('nwOpaqueId: too many collisions');
+			}
 			if (taken instanceof Set) taken.add(id);
 			else if (Array.isArray(taken)) taken.push(id);
 			return id;
@@ -2665,6 +2672,14 @@ let activeAICallCount = 0;
 			if (nwOwnerLocked()) return { ok: false, reason: 'locked' };
 			if (!(n >= 1)) return { ok: false, reason: 'bad-n' };
 			source = source || 'user';
+			if (nwHasOwn(target, 'chapterRequiredFacts') && !Array.isArray(target.chapterRequiredFacts)) {
+				if ((typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES)
+					&& (typeof NW_S1_KEEP_WRONG_REQUIRED_FACTS === 'undefined' || NW_S1_KEEP_WRONG_REQUIRED_FACTS)) {
+					console.warn('nwRequiredFactsUpsert: chapterRequiredFacts has wrong type; keeping as-is', target.chapterRequiredFacts);
+					return { ok: false, reason: 'wrong-type' };
+				}
+				target.chapterRequiredFacts = [];
+			}
 			if (!Array.isArray(target.chapterRequiredFacts)) target.chapterRequiredFacts = [];
 			var prev = target.chapterRequiredFacts[n - 1];
 			if (prev != null && typeof prev !== 'object') return { ok: false, reason: 'wrong-type' };
@@ -2705,6 +2720,14 @@ let activeAICallCount = 0;
 			var bp = nwReadBlueprint(n, target);
 			if (!bp || typeof bp !== 'object') return { ok: false, reason: 'no-blueprint' };
 			var derivedFrom = nwTextHash(JSON.stringify(target.chapterBlueprints[n - 1]));
+			if (nwHasOwn(target, 'chapterRequirements') && !Array.isArray(target.chapterRequirements)) {
+				if ((typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES)
+					&& (typeof NW_S1_KEEP_WRONG_REQUIREMENTS === 'undefined' || NW_S1_KEEP_WRONG_REQUIREMENTS)) {
+					console.warn('nwDeriveChapterRequirements: chapterRequirements has wrong type; keeping as-is', target.chapterRequirements);
+					return { ok: false, reason: 'wrong-type' };
+				}
+				target.chapterRequirements = [];
+			}
 			if (!Array.isArray(target.chapterRequirements)) target.chapterRequirements = [];
 			var prev = target.chapterRequirements[n - 1];
 			if (prev && typeof prev === 'object' && prev.derivedFrom === derivedFrom) return { ok: true, skipped: true, rec: prev };
@@ -2766,6 +2789,14 @@ let activeAICallCount = 0;
 			var text = String((target.chapters || [])[n - 1] || '');
 			if (!text.replace(/\s+/g, ' ').trim()) return null;
 			var textHash = nwTextHash(text);
+			if (nwHasOwn(target, 'chapterFingerprints') && !Array.isArray(target.chapterFingerprints)) {
+				if ((typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES)
+					&& (typeof NW_S1_KEEP_WRONG_FINGERPRINTS === 'undefined' || NW_S1_KEEP_WRONG_FINGERPRINTS)) {
+					console.warn('nwBuildChapterFingerprint: chapterFingerprints has wrong type; keeping as-is', target.chapterFingerprints);
+					return null;
+				}
+				target.chapterFingerprints = [];
+			}
 			if (!Array.isArray(target.chapterFingerprints)) target.chapterFingerprints = [];
 			var existing = target.chapterFingerprints[n - 1];
 			if (existing && typeof existing === 'object' && existing.textHash === textHash) return existing;
@@ -3120,7 +3151,17 @@ let activeAICallCount = 0;
 					}, 'import', nd);
 				}
 				nwStampMigratedBy(nd);
+				var factsWrong = nwHasOwn(nd, 'chapterRequiredFacts') && !Array.isArray(nd.chapterRequiredFacts);
+				var keepWrongFacts = keepWrong && (typeof NW_S1_KEEP_WRONG_REQUIRED_FACTS === 'undefined' || NW_S1_KEEP_WRONG_REQUIRED_FACTS);
+				var reqsWrong = nwHasOwn(nd, 'chapterRequirements') && !Array.isArray(nd.chapterRequirements);
+				var keepWrongReqs = keepWrong && (typeof NW_S1_KEEP_WRONG_REQUIREMENTS === 'undefined' || NW_S1_KEEP_WRONG_REQUIREMENTS);
+				var fpsWrong = nwHasOwn(nd, 'chapterFingerprints') && !Array.isArray(nd.chapterFingerprints);
+				var keepWrongFps = keepWrong && (typeof NW_S1_KEEP_WRONG_FINGERPRINTS === 'undefined' || NW_S1_KEEP_WRONG_FINGERPRINTS);
 				for (i = 1; i <= nCh; i++) {
+					if (factsWrong && keepWrongFacts) {
+						if (i === 1) console.warn('nwMigrateSession: chapterRequiredFacts has wrong type; keeping as-is', nd.chapterRequiredFacts);
+						continue;
+					}
 					if (Array.isArray(nd.chapterRequiredFacts) && nd.chapterRequiredFacts.length > (i - 1) && nd.chapterRequiredFacts[i - 1] != null) continue;
 					var legacyFacts = (nd.chapterFactChecks || [])[i - 1];
 					var hasLegacy = (Array.isArray(legacyFacts) && legacyFacts.length) || (typeof legacyFacts === 'string' && legacyFacts.trim());
@@ -3128,11 +3169,19 @@ let activeAICallCount = 0;
 					nwRequiredFactsUpsert(i, nwRequiredFactsFromLegacy(i, nd), 'user', nd);
 				}
 				for (i = 1; i <= nCh; i++) {
+					if (reqsWrong && keepWrongReqs) {
+						if (i === 1) console.warn('nwMigrateSession: chapterRequirements has wrong type; keeping as-is', nd.chapterRequirements);
+						continue;
+					}
 					var bp = Array.isArray(nd.chapterBlueprints) ? nd.chapterBlueprints[i - 1] : null;
 					if (bp == null || bp === '') continue;
 					nwDeriveChapterRequirements(i, nd);
 				}
 				for (i = 1; i <= nCh; i++) {
+					if (fpsWrong && keepWrongFps) {
+						if (i === 1) console.warn('nwMigrateSession: chapterFingerprints has wrong type; keeping as-is', nd.chapterFingerprints);
+						continue;
+					}
 					if (nwChapterHasText(nd, i - 1)) nwBuildChapterFingerprint(i, nd);
 				}
 				if (!keepWrongVersion) nd.nwSchemaVersion = NW_S1_SCHEMA_VERSION;

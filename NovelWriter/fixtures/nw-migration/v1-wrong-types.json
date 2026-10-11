@@ -46,6 +46,73 @@
     "chapterRequiredFacts": 5,
     "chapterIds": "not-an-array"
   },
+  "inputRequiredFacts": {
+    "title": "WT",
+    "genre": "scifi",
+    "numChapters": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed."
+      }
+    ],
+    "chapterRequiredFacts": 5,
+    "chapterFactChecks": [
+      "relay clicks"
+    ]
+  },
+  "inputRequirements": {
+    "title": "WT",
+    "genre": "scifi",
+    "numChapters": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed."
+      }
+    ],
+    "chapterRequirements": {},
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ]
+      }
+    ]
+  },
+  "inputFingerprints": {
+    "title": "WT",
+    "genre": "scifi",
+    "numChapters": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed."
+      }
+    ],
+    "chapterFingerprints": "not-an-array"
+  },
   "expectedAddedKeys": [
     "nwSchemaVersion",
     "chapterFingerprints[0]",
@@ -60,5 +127,5 @@
     "chapterScenes",
     "subplotsMeta"
   ],
-  "notes": "wrong types kept as-is (including chapterIds, chapterScenes, subplotsMeta); migration skips owner write; scene chapterId skipped when chapterIds is wrong-typed"
+  "notes": "wrong types kept as-is (including chapterIds, chapterScenes, subplotsMeta); migration skips owner write; scene chapterId skipped when chapterIds is wrong-typed; wrong-typed chapterRequiredFacts/chapterRequirements/chapterFingerprints kept when legacy facts, blueprints, or chapter text would otherwise overwrite"
 }
