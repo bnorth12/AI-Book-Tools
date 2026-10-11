@@ -1,0 +1,45 @@
+{
+  "_fixture": {
+    "id": "v0-pre6b-no-flags",
+    "source": "Synthetic pre-6b NovelWriter session: no chapterFlags key. After load, import, and checkpoint restore, novelData must still have no chapterFlags key (lazy; created only by nwSetChapterFlag).",
+    "spec": "NW_SLOT_6B_INTEGRATE_SPEC fix round 2; S1 fixture v0-pre6b-no-flags"
+  },
+  "schemaVersion": "1.0",
+  "sourceTool": "NovelWriter",
+  "sourceVersion": "pre-6b",
+  "exportedAt": "2026-09-01T00:00:00.000Z",
+  "novelData": {
+    "title": "Pre-6b No Flags",
+    "genre": "scifi",
+    "numChapters": 2,
+    "chapterLength": 2000,
+    "storyArc": "A two-chapter dock-clock observation.",
+    "generalPlot": "Mira names the mismatch, then pays for it.",
+    "setting": "Wet dock, failing lights.",
+    "novelOutline": "Two chapters; clock mismatch; cost.",
+    "plotOutline": "Observe, then pay.",
+    "storyArcOutline": "Guarded to committed.",
+    "chapterOutlines": [
+      "Mira must name the dock-clock mismatch before the telemetry window closes.",
+      "The delayed cost of that observation lands and narrows the next options."
+    ],
+    "chapterArcs": [
+      "Mira shifts from guarded procedure toward open doubt.",
+      "Mira stops looking back and commits to the observation."
+    ],
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 2 original prose. The dock clock disagreed with the log after the first choice."
+    ],
+    "chapterImprovements": ["", ""],
+    "bookImprovements": [],
+    "bookImprovementsWithStatus": [],
+    "authors": [],
+    "characters": [{ "name": "Mira", "role": "lead", "backstory": "Dock tech.", "arc": "Guarded to committed." }],
+    "subplots": ["The dock clock vs the relay log."],
+    "continuityStrictMode": true,
+    "autoContinuityAudit": true,
+    "skipAutoRevision": false,
+    "aiBeatCheck": false
+  }
+}

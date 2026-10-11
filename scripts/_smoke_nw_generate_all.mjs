@@ -26,8 +26,8 @@
  *   E3  real usage 3x the estimate: stop after ch1 by real usage (estimate under cap); no usage -> estimate + usageEstimated
  *   E4  zero alert/confirm/prompt in batches; quality-gate error -> status line, run continues; coverage and gate stop with
  *       reason; Part 1 parse failure on ch3 stops at 3 (reason parse, no retry) and Resume regenerates ch3 (same for a
- *       Part 2 parse stop on ch2); coverage resume needs a second click; coverage stop with regenerate on restores the old
- *       text and keeps batchRun.rejectedDraft {chapter,text,detail} in the session export but never in a checkpoint
+ *       Part 2 parse stop on ch2); coverage resume needs a second click; coverage stop with regenerate on keeps the NEW
+ *       draft in chapters[n-1] (both modes) and flags it; checkpointed (not parked-only in rejectedDraft)
  *   M1  must-fix 1: callAI's real malformed-JSON shape ({chapter, _jsonParseError} + valid HTTP envelope in returnedInfo)
  *       on Part 1 (ch3) and Part 2 (ch2): reason parse, no retry, Part 1 never continues to Part 2, nothing completed
  *   M2  must-fix 2: HTTP 400 / 401 / 403 / "API Key is missing" -> reason provider, 0 retries, no usageEstimated entry;
@@ -261,6 +261,7 @@ async function installHarness(page) {
       novelData.chapters = Array.from({ length: nd.numChapters }, () => '');
       novelData.chapterImprovements = Array.from({ length: nd.numChapters }, () => '');
       novelData.chapterContinuityPackets = [];
+      novelData.chapterFlags = [];
       novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
       novelData.autoContinuityAudit = false;
       novelData.apiKey = 'smoke-placeholder-not-a-key';
@@ -585,8 +586,8 @@ const batchDialogTotals = [];
   check('E4', 'coverage resume: first Resume asks for confirmation on the status line (no modal, no calls)', c1.r.started === false && c1.r.reason === 'confirm-coverage' && /ch2 failed obligation coverage and needs review/.test(c1.status) && c1.calls.length === 0 && c1.dialogs.length === 0, JSON.stringify(c1.r));
   const c2 = await batch(page, { resume: true, resetCounters: true });
   check('E4', 'coverage resume: second Resume continues from ch3; ch2 text kept and still not completed', c2.r.started && c2.calls[0].ch === 3 && callsFor(c2, 2) === 0 && eq(c2.br.completed, [1, 3, 4]) && /^Chapter 2 part 1/.test(c2.chapters[1]) && c2.br.reason === 'done', JSON.stringify(c2.br));
-  // coverage stop with regenerate on: old text restored, rejected draft kept aside (export only, never checkpointed)
-  const OLD2 = 'Hand-written chapter two that must be restored after a coverage failure.';
+  // coverage stop with regenerate on: NEW draft kept in chapters[n-1] and flagged (both modes)
+  const OLD2 = 'Hand-written chapter two that must not remain after a coverage failure.';
   const putsRejBefore = await page.evaluate(() => window.__h.putsWithRejected);
   const cr = await batch(page, { nd: ND, prefill: { 2: OLD2 }, regenerate: true, cfg: { coverageFail: 2 }, resetCounters: true });
   const crx = await page.evaluate(async (id) => {
@@ -598,14 +599,25 @@ const batchDialogTotals = [];
       q.onerror = () => res([]);
     });
     const rec = recs.find((x) => x.key === id) || null;
-    return { exp: exp && exp.novelData && exp.novelData.batchRun ? exp.novelData.batchRun.rejectedDraft || null : 'no-export', recBr: rec ? rec.batchRun : null, recNdHasBr: !!(rec && rec.novelData && rec.novelData.batchRun), putsWithRejected: h.putsWithRejected };
+    const elG = document.getElementById('chapterGenFlag2');
+    return {
+      expCh2: exp && exp.novelData && Array.isArray(exp.novelData.chapters) ? exp.novelData.chapters[1] : null,
+      expRejected: exp && exp.novelData && exp.novelData.batchRun ? exp.novelData.batchRun.rejectedDraft || null : 'no-export',
+      recBr: rec ? rec.batchRun : null,
+      recNdHasBr: !!(rec && rec.novelData && rec.novelData.batchRun),
+      recCh2: rec && rec.novelData && rec.novelData.chapters ? rec.novelData.chapters[1] : null,
+      recFlag: rec && rec.novelData && rec.novelData.chapterFlags ? rec.novelData.chapterFlags[1] : null,
+      putsWithRejected: h.putsWithRejected,
+      flag: (novelData.chapterFlags || [])[1] || null,
+      flagDomGen: elG ? elG.textContent : '',
+      flagHidden: elG ? !!elG.hidden : null
+    };
   }, cr.br.id);
-  const rd = cr.br.rejectedDraft || {};
-  check('E4', 'coverage stop (regenerate on): reason coverage at ch2, OLD ch2 text restored in novelData + Tab 5', cr.br.reason === 'coverage' && cr.br.stoppedAt === 2 && cr.chapters[1] === OLD2 && cr.genDom[1] === OLD2 && eq(cr.br.completed, [1]), JSON.stringify({ br: cr.br, ch2: cr.chapters[1] }));
-  check('E4', 'coverage stop (regenerate on): batchRun.rejectedDraft = {chapter 2, rejected new text, coverage detail}', rd.chapter === 2 && /^Chapter 2 part 1/.test(rd.text || '') && /^OBLIGATION COVERAGE FAIL-CLOSED \[chapter 2\]/.test(rd.detail || '') && eq(Object.keys(rd).sort(), ['chapter', 'detail', 'text']), JSON.stringify(rd));
-  check('E4', 'coverage stop status says the rejected draft was kept aside in the session export', /Stopped at ch2 \(coverage\): .*Old ch2 text restored; rejected draft kept aside in session export/.test(cr.status), cr.status);
+  check('E4', 'coverage stop (regenerate on): reason coverage at ch2, NEW ch2 draft kept in novelData + Tab 5 (not old text)', cr.br.reason === 'coverage' && cr.br.stoppedAt === 2 && /^Chapter 2 part 1/.test(cr.chapters[1] || '') && cr.chapters[1] !== OLD2 && cr.genDom[1] === cr.chapters[1] && eq(cr.br.completed, [1]), JSON.stringify({ br: cr.br, ch2: cr.chapters[1] }));
+  check('E4', 'coverage stop (regenerate on): chapterFlags[1] coverageFailed===true and Tab 5 renders the flag', !!(crx.flag && crx.flag.coverageFailed === true && /Coverage failed/.test(crx.flagDomGen) && crx.flagHidden === false), JSON.stringify({ flag: crx.flag, gen: crx.flagDomGen, hidden: crx.flagHidden }));
+  check('E4', 'coverage stop (regenerate on): checkpoint has the NEW draft and the fail flag (not rejectedDraft-only)', /^Chapter 2 part 1/.test(crx.recCh2 || '') && crx.recCh2 !== OLD2 && crx.recFlag && crx.recFlag.coverageFailed === true && !(cr.br && cr.br.rejectedDraft), JSON.stringify({ recCh2: crx.recCh2, recFlag: crx.recFlag, rejectedDraft: cr.br && cr.br.rejectedDraft }));
   check('E4', 'rejectedDraft is never written to an IndexedDB checkpoint (no put carried it; stored record has none)', crx.putsWithRejected === putsRejBefore && crx.recBr && !('rejectedDraft' in crx.recBr) && !crx.recNdHasBr, JSON.stringify({ before: putsRejBefore, after: crx.putsWithRejected, recBrKeys: crx.recBr && Object.keys(crx.recBr) }));
-  check('E4', 'session export (1 download) contains batchRun.rejectedDraft for ch2', sessionDl(cr) === 1 && crx.exp && crx.exp.chapter === 2 && crx.exp.text === rd.text && crx.exp.detail === rd.detail, JSON.stringify({ dl: cr.downloads, exp: crx.exp }));
+  check('E4', 'session export (1 download) contains the NEW ch2 draft', sessionDl(cr) === 1 && /^Chapter 2 part 1/.test(crx.expCh2 || '') && crx.expCh2 === cr.chapters[1], JSON.stringify({ dl: cr.downloads, expCh2: crx.expCh2 }));
   const g = await batch(page, { nd: ND, cfg: { blankBeatAt: '1:2', blankBeatTarget: 2 }, resetCounters: true });
   check('E4', 'gate failure stops with reason gate recorded in batchRun.stoppedAt/reason, 0 dialogs', g.br.reason === 'gate' && g.br.stoppedAt === 2 && g.dialogs.length === 0 && eq(g.br.completed, [1]), JSON.stringify(g.br));
   const p = await batch(page, { nd: ND, cfg: { parseFail: '3:1' }, resetCounters: true });
