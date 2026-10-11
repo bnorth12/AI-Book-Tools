@@ -253,26 +253,26 @@ Relevance legend: **W**orld · **C**haracter · **S**tory · **A**rc · **CTR** 
 
 ## Sites missing from this inventory (as of main `600b35d`)
 
-Skill ids from `defaultSkillCatalog`; all route through `callAI()`.
+Rows are `defaultSkillCatalog` skill ids, except where marked as a taskType. All route through `callAI()`.
 
-| Skill id | Binders | Notes |
+| Skill id / taskType | Binders | Notes |
 |----------|---------|-------|
 | `tab2.enrichCharacters` | charactersDigest, subplotsDigest, storyArcDigest, plotDigest, settingDigest, worldBibleDigest, densityFloors | Cast densifier |
 | `tab3.enrichSubplots` | subplotsDigest, charactersDigest, plotDigest, worldBibleDigest, densityFloors | Throughline densifier |
 | `tab4.enrichChapterBlueprints` | chapterBlueprints, charactersDigest, subplotsDigest, novelOutline, settingDigest | Six-beat blueprint densifier |
 | `tab5.reviseChapterForQuality` | chapterNum, chapterText, qualityReviseBrief, chapterBlueprint | Quality-gate revise pass |
-| `scorecardBeat` (taskType) | chapter text, blueprint beats | 8d scorecard beat check |
+| `scorecardBeat` (timing taskType, **not** a catalog skill) | chapter text, blueprint beats | The 8d scorer's AI call for the beat check; no `defaultSkillCatalog` entry |
 
 ## Story data model reads (A1, design only)
 
-A1 (`NovelWriter/docs/ARCHITECTURE.md` "Data model and schema") defines the stored story data that prompts read. No prompt text changes in A1 or S1; S1 makes the data exist and survive. Per-prompt mapping, slot, and expected chapter-quality effect: `NW_PROMPT_SKILL_SCHEMA_MAP.md` (plans folder). Summary:
+A1 (`NovelWriter/docs/ARCHITECTURE.md` "Data model and schema") defines the stored story data that prompts read. No prompt text changes in A1 or S1; S1 makes the data exist and survive. The full per-prompt mapping (slot and expected chapter-quality effect) is kept in an external planning doc outside this repo; the summary below is the in-repo record.
 
 | Prompt | New A1 reads | Slot |
 |--------|--------------|------|
-| generateChapter | `chapterRequirements[n-1]` (cast, setting, mustNotInclude), `chapterFactChecks[n-1].items`, `chapterWritingPlans[n-1]`, `chapterFingerprints[n-2]` (prev ending), character `goal/flaw/obligations` | Q1, Q2, Q3, 4p |
+| generateChapter | `chapterRequirements[n-1]` (cast, setting, mustNotInclude, `derivedFrom` hash), `chapterRequiredFacts[n-1].items`, `chapterWritingPlans[n-1]`, previous ending = last ~250 words of saved `chapters[n-2]` (Q3; `chapterFingerprints` hold hashes only, never text), character `goal/flaw/obligations` | Q1, Q2, Q3, 4p |
 | reviseChapterForQuality / updateChapter / integrateBreakdown | hard-requirements block as a must-preserve list | Q1 |
-| continuityAudit | final text, tracker `auditedTextHash`, `world.rules`, `characters[].relationships` (read-only) | Q5 |
-| scorecardBeat / 8d | `nwDeriveChapterRequirements`, `chapterFactChecks` (legacy + items), `chapterWritingPlans` (advisory planCoverage) | S1, 4p |
-| Character / subplot / world suggest and enrich | write through `normalizeCharacterItem`, `subplotsMeta`, `nwWorldUpdate` so fields survive | S1 |
+| continuityAudit | final text, tracker `auditedTextHash`, `storyWorld.rules`, `characters[].relationships` (read-only) | Q5 |
+| 8d scorer (incl. its `scorecardBeat` AI call) | `nwDeriveChapterRequirements`, `chapterRequiredFacts[n-1].items` (legacy `chapterFactChecks` stays untouched; probes read there), `chapterWritingPlans` (advisory planCoverage) | S1, 4p |
+| Character / subplot / world suggest and enrich | write through `normalizeCharacterItem`, `subplotsMeta`, `nwStoryWorldUpdate` (writes `storyWorld`; legacy `world`/`worldBible` kept byte-for-byte) so fields survive | S1 |
 
-`[WAIT]` fields (`world.concepts`, `world.topicTags`, `explainerFor`, worldBeat) are not read by any prompt until the world-beats decision.
+`[WAIT]` fields (`storyWorld.concepts`, `storyWorld.topicTags`, `explainerFor`, worldBeat) are not read by any prompt until the world-beats decision.
