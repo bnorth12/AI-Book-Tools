@@ -12125,6 +12125,7 @@ return c && c.name && c.backstory && c.arc; });
         var NW_6B_RESTORE_KEEP_COVERAGE = true;
         var NW_6B_START_REFUSES_LOCK = true;
         var NW_6B_LAST_CHAPTER_FINALIZE = true;
+        var NW_6B_COVERAGE_DECIDE_ACTIVE_CHECKPOINT = true;
         var NW_6B_INTEGRATE_KEY_NORMALIZE = true;
         var NW_6B_MANUAL_ONLY_STAYS = true;
         window.NW_BATCH = NW_BATCH;
@@ -12790,7 +12791,8 @@ return c && c.name && c.backstory && c.arc; });
                         finalized = true;
                     }
                 }
-                try { await nwBatchCheckpoint(false); } catch (e) { console.warn('[batch] coverageAck checkpoint', e); }
+                var keepActive = !finalized && (typeof NW_6B_COVERAGE_DECIDE_ACTIVE_CHECKPOINT === 'undefined' || NW_6B_COVERAGE_DECIDE_ACTIVE_CHECKPOINT);
+                try { await nwBatchCheckpoint(keepActive); } catch (e) { console.warn('[batch] coverageAck checkpoint', e); }
                 nwBatchApplyLock();
                 if (finalized) {
                     nwBatchSetStatus('Done: ch' + br.range.from + '-' + br.range.to + '. Coverage ' + decision + ' recorded for ch' + n + '. Completed: ' + ((br.completed || []).join(', ') || 'none') + '.', 'done');

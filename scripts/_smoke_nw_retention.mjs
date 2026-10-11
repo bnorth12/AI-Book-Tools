@@ -27,6 +27,8 @@
  *   R15 restoreInterruptedBatchRun keeps reason coverage + coverageAck; decision box shows again
  *   R16 nwBatchStart refuses while importing (zero provider calls)
  *   R17 last planned chapter Accept/Skip finalizes the run (no Click Resume)
+ *   R18 mid-run coverage Accept/Regenerate checkpoints ACTIVE so reload offers restore
+ *       with coverageAck and priorDrafts intact (N1)
  *
  * Mutations (TEMP copy, flags flipped false; each must turn a core assertion red):
  *   M3  drop packet rollback -> R2 red
@@ -43,6 +45,7 @@
  *   M14 Accept still completes after audit fail -> R14 red
  *   M15 restore forces reason user on coverage stop -> R15 red
  *   M16 Start during import is not refused -> R16 red
+ *   M18 coverage decide always checkpoints inactive -> R18 red
  *
  * Usage: node scripts/_smoke_nw_retention.mjs
  * Env:   NW_HTML_PATH (default this checkout's NovelWriter/NovelWriter.html), NW_OUT_DIR (default out/nw-smoke)
@@ -103,7 +106,8 @@ const FLAGS = {
   decideGuard: 'var NW_6B_COVERAGE_DECIDE_GUARD = true;',
   acceptAudit: 'var NW_6B_ACCEPT_AUDIT_ABORT = true;',
   restoreCoverage: 'var NW_6B_RESTORE_KEEP_COVERAGE = true;',
-  startLock: 'var NW_6B_START_REFUSES_LOCK = true;'
+  startLock: 'var NW_6B_START_REFUSES_LOCK = true;',
+  decideActiveCk: 'var NW_6B_COVERAGE_DECIDE_ACTIVE_CHECKPOINT = true;'
 };
 function mutateCopy(flagFrom) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-6b-ret-'));
@@ -267,6 +271,66 @@ async function coverageStop(page, extra) {
       expPrior: expBr && expBr.priorDrafts ? JSON.parse(JSON.stringify(expBr.priorDrafts)) : null
     };
   }, extra || { nd: ND });
+}
+
+async function decideReloadRestore(page, decision) {
+  const decided = await page.evaluate(async (d) => {
+    const ok = await nwBatchCoverageDecide(d);
+    const rec = novelData.batchRun ? await window.__h.idbGet(novelData.batchRun.id) : null;
+    return {
+      ok,
+      id: novelData.batchRun && novelData.batchRun.id,
+      recActive: rec ? rec.active : null,
+      recAck: rec && rec.batchRun ? JSON.parse(JSON.stringify(rec.batchRun.coverageAck || null)) : null,
+      recPrior: rec && rec.batchRun && rec.batchRun.priorDrafts ? JSON.parse(JSON.stringify(rec.batchRun.priorDrafts[1] || null)) : null,
+      recCompleted: rec && rec.batchRun && rec.batchRun.completed ? rec.batchRun.completed.slice() : [],
+      reason: novelData.batchRun && novelData.batchRun.reason
+    };
+  }, decision);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => typeof generateAllChapters === 'function' && window.__nwBatchRestoreCheck, null, { timeout: 30000 });
+  await page.evaluate(() => window.__nwBatchRestoreCheck);
+  await installHarness(page);
+  const after = await page.evaluate(async () => {
+    const rec = await nwBatchFindInterrupted();
+    const box = document.getElementById('batchRestoreBox');
+    const offered = !!(rec && rec.active && nwBatchState.interrupted);
+    const restoreBox = box ? !box.hidden : null;
+    const status = (document.getElementById('batchRunStatus') || {}).textContent || '';
+    const recAck = rec && rec.batchRun ? JSON.parse(JSON.stringify(rec.batchRun.coverageAck || null)) : null;
+    const recPrior = rec && rec.batchRun && rec.batchRun.priorDrafts ? JSON.parse(JSON.stringify(rec.batchRun.priorDrafts[1] || null)) : null;
+    const restoredOk = nwBatchState.interrupted ? await restoreInterruptedBatchRun() : false;
+    return {
+      offered,
+      restoreBox,
+      status,
+      recActive: rec ? rec.active : null,
+      recAck,
+      recPrior,
+      restoredOk,
+      restoredAck: novelData.batchRun && novelData.batchRun.coverageAck ? JSON.parse(JSON.stringify(novelData.batchRun.coverageAck)) : null,
+      restoredPrior: novelData.batchRun && novelData.batchRun.priorDrafts ? JSON.parse(JSON.stringify(novelData.batchRun.priorDrafts[1] || null)) : null,
+      restoredReason: novelData.batchRun && novelData.batchRun.reason
+    };
+  });
+  return { decided, after };
+}
+
+function r18Ok(s, decision, priorText) {
+  const ack = s.after && s.after.recAck;
+  const prior = s.after && s.after.recPrior;
+  const restoredAck = s.after && s.after.restoredAck;
+  const restoredPrior = s.after && s.after.restoredPrior;
+  const priorOk = priorText
+    ? !!(prior && prior.text === priorText && restoredPrior && restoredPrior.text === priorText)
+    : true;
+  return !!(s.decided && s.decided.ok === true && s.decided.recActive === true
+    && s.after && s.after.offered === true && s.after.restoreBox === true && s.after.recActive === true
+    && /Interrupted batch run found/.test(s.after.status || '')
+    && ack && ack.decision === decision && ack.chapter === 2
+    && restoredAck && restoredAck.decision === decision && restoredAck.chapter === 2
+    && s.after.restoredOk === true && s.after.restoredReason === 'coverage'
+    && priorOk);
 }
 
 // ---------------- R1 keep and flag ----------------
@@ -494,6 +558,9 @@ async function coverageStop(page, extra) {
     novelData.apiKey = apiKey || 'smoke-placeholder-not-a-key';
     novelData.batchRun = JSON.parse(JSON.stringify(rec.batchRun));
     applySessionDataToUI();
+    // Mid-run Skip now checkpoints ACTIVE, so reload offers restore. R4 reconstructs from the
+    // checkpoint by id (not the restore UI); clear the lock so Resume is not refused.
+    nwBatchState.interrupted = null;
     nwBatchState.coverageAck = null;
     window.__h.cfg = {};
     window.__h.calls.length = 0;
@@ -932,6 +999,7 @@ async function runPre6bNoFlags(page, raw) {
   const acc = await page.evaluate(async () => {
     const ok = await nwBatchCoverageDecide('accept');
     const resume = document.getElementById('batchResumeBtn');
+    const rec = novelData.batchRun ? await window.__h.idbGet(novelData.batchRun.id) : null;
     return {
       ok,
       reason: novelData.batchRun && novelData.batchRun.reason,
@@ -939,26 +1007,44 @@ async function runPre6bNoFlags(page, raw) {
       completed: (novelData.batchRun && novelData.batchRun.completed) || [],
       status: (document.getElementById('batchRunStatus') || {}).textContent || '',
       resumeDisabled: resume ? !!resume.disabled : null,
-      box: !document.getElementById('batchCoverageBox').hidden
+      box: !document.getElementById('batchCoverageBox').hidden,
+      recActive: rec ? rec.active : null
     };
   });
-  check('R17', 'Accept on last planned chapter finalizes: reason done, no Click Resume', !!(acc.ok === true && acc.reason === 'done' && acc.stoppedAt == null && (acc.completed || []).indexOf(2) >= 0 && /Coverage accept recorded for ch2/.test(acc.status || '') && !/Click Resume/.test(acc.status || '') && acc.resumeDisabled === true && acc.box === false), JSON.stringify(acc));
+  check('R17', 'Accept on last planned chapter finalizes: reason done, no Click Resume', !!(acc.ok === true && acc.reason === 'done' && acc.stoppedAt == null && (acc.completed || []).indexOf(2) >= 0 && /Coverage accept recorded for ch2/.test(acc.status || '') && !/Click Resume/.test(acc.status || '') && acc.resumeDisabled === true && acc.box === false && acc.recActive === false), JSON.stringify(acc));
   await page.close();
   const page2 = await openPage();
   await coverageStop(page2, { nd: ND, to: 2, coverageFail: 2 });
   const sk = await page2.evaluate(async () => {
     const ok = await nwBatchCoverageDecide('skip');
     const resume = document.getElementById('batchResumeBtn');
+    const rec = novelData.batchRun ? await window.__h.idbGet(novelData.batchRun.id) : null;
     return {
       ok,
       reason: novelData.batchRun && novelData.batchRun.reason,
       stoppedAt: novelData.batchRun && novelData.batchRun.stoppedAt,
       completed: (novelData.batchRun && novelData.batchRun.completed) || [],
       status: (document.getElementById('batchRunStatus') || {}).textContent || '',
-      resumeDisabled: resume ? !!resume.disabled : null
+      resumeDisabled: resume ? !!resume.disabled : null,
+      recActive: rec ? rec.active : null
     };
   });
-  check('R17', 'Skip on last planned chapter finalizes: reason done, no Click Resume', !!(sk.ok === true && sk.reason === 'done' && sk.stoppedAt == null && (sk.completed || []).indexOf(2) < 0 && /Coverage skip recorded for ch2/.test(sk.status || '') && !/Click Resume/.test(sk.status || '') && sk.resumeDisabled === true), JSON.stringify(sk));
+  check('R17', 'Skip on last planned chapter finalizes: reason done, no Click Resume', !!(sk.ok === true && sk.reason === 'done' && sk.stoppedAt == null && (sk.completed || []).indexOf(2) < 0 && /Coverage skip recorded for ch2/.test(sk.status || '') && !/Click Resume/.test(sk.status || '') && sk.resumeDisabled === true && sk.recActive === false), JSON.stringify(sk));
+  await page2.close();
+}
+
+// ---------------- R18 mid-run coverage decide checkpoints ACTIVE; reload offers restore ----------------
+{
+  const OLD2 = 'Hand-written chapter two ORIGINAL prior text that must survive reload after regenerate.';
+  const page = await openPage();
+  await coverageStop(page, { nd: ND, regenerate: true, prefill: { 2: OLD2 } });
+  const regen = await decideReloadRestore(page, 'regenerate');
+  check('R18', 'mid-run Regenerate checkpoints ACTIVE; reload offers restore with coverageAck and priorDrafts intact', r18Ok(regen, 'regenerate', OLD2), JSON.stringify(regen));
+  await page.close();
+  const page2 = await openPage();
+  await coverageStop(page2, { nd: ND, regenerate: true, prefill: { 2: OLD2 } });
+  const acc = await decideReloadRestore(page2, 'accept');
+  check('R18', 'mid-run Accept checkpoints ACTIVE; reload offers restore with coverageAck intact', r18Ok(acc, 'accept', null) && acc.decided.recCompleted.indexOf(2) >= 0, JSON.stringify(acc));
   await page2.close();
 }
 
@@ -1230,6 +1316,17 @@ async function runPre6bNoFlags(page, raw) {
     check('M16', 'dropping START_REFUSES_LOCK lets Start run during import (R16 red)', refused === false, JSON.stringify(r));
     await page.close();
     try { fs.rmSync(m16.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m18 = mutateCopy(FLAGS.decideActiveCk);
+  check('M18', 'flag NW_6B_COVERAGE_DECIDE_ACTIVE_CHECKPOINT present', m18.ok, m18.detail);
+  if (m18.ok) {
+    const page = await openPage(m18.copy);
+    const OLD2 = 'Hand-written chapter two ORIGINAL prior text that must survive reload after regenerate.';
+    await coverageStop(page, { nd: ND, regenerate: true, prefill: { 2: OLD2 } });
+    const regen = await decideReloadRestore(page, 'regenerate');
+    check('M18', 'forcing checkpoint(false) after mid-run coverage decide turns R18 red', r18Ok(regen, 'regenerate', OLD2) === false, JSON.stringify(regen));
+    await page.close();
+    try { fs.rmSync(m18.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
   }
 }
 
