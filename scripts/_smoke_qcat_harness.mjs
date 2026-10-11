@@ -831,6 +831,35 @@ async function loadEnvelope(page, envelope) {
   await page.close();
 }
 
+// ---------------- 23. Post-S1 calibration pin: migrate then score; numbers must not move ----
+{
+  const pinPath = path.join(FIX, 'calibration-post-s1.json');
+  const page = await openPage();
+  const scored = await page.evaluate(async (book) => {
+    const n = normalizeImportedSessionData(book);
+    novelData = (typeof nwMigrateSession === 'function') ? nwMigrateSession(n.novelData) : n.novelData;
+    applySessionDataToUI();
+    const s = await nwScoreBook({ trigger: 'harness' });
+    return (s.chapters || []).map((c) => ({
+      chapter: c.chapter,
+      overall: c.overall,
+      words: c.length && c.length.words,
+      replayInternal: c.replay && c.replay.internal && c.replay.internal.shared,
+      factsStatus: c.facts && c.facts.status,
+      noteLeak: c.noteLeak && c.noteLeak.status,
+      cast: c.cast && c.cast.status,
+      repetition: c.repetition && c.repetition.score
+    }));
+  }, BOOK3);
+  await page.close();
+  if (!fs.existsSync(pinPath)) {
+    check('23', 'post-S1 calibration pin file present', false, 'missing ' + pinPath);
+  } else {
+    const pin = JSON.parse(fs.readFileSync(pinPath, 'utf8'));
+    check('23', 'post-S1 calibration pin deep-equal (migrated then scored)', JSON.stringify(scored) === JSON.stringify(pin.book3ch), JSON.stringify({ scored, pin: pin.book3ch }).slice(0, 1400));
+  }
+}
+
 await browser.close();
 
 // ---------------- 14. Harness bad input is exit 2 ----------------
