@@ -748,6 +748,12 @@
         let goalsListenersBound = false;
         let previewListenersBound = false;
 
+        function getStoredProject() {
+            const { setup, ...projectData } = project;
+            const { apiKey: _apiKey, ...safeSetup } = setup;
+            return stripSecretFields({ ...projectData, setup: safeSetup });
+        }
+
         function escapeHtml(text) {
             return String(text)
                 .replace(/&/g, "&amp;")
@@ -840,7 +846,7 @@
             if (!Array.isArray(project.setup.collectionIds)) {
                 project.setup.collectionIds = ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"];
             }
-            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(stripSecretFields(project)));
+            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject()));
             ['v0.14.0', 'v0.11.0', 'v0.10.0', 'v0.9.5', 'v0.9.3'].forEach(version => {
                 localStorage.removeItem(`herbalBookForgeProject_${version}`);
             });
@@ -864,7 +870,7 @@
 
         function saveProject() {
             project.meta.lastEdited = new Date().toISOString();
-            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(stripSecretFields(project)));
+            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject()));
             const status = document.getElementById('save-status');
             if (status) {
                 status.innerHTML = `Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
