@@ -11,10 +11,12 @@
  *   R5  revise cap = max(6000, 2 x target)
  *   R6  #139 (a) import-in-progress writer lock: nwBatchIsLocked() true during applySessionDataToUI
  *   R7  #139 (b) regression: stoppedAt/reason/detail are in the checkpoint written after a coverage stop
+ *       plus: failing the final inactive checkpoint write still restores stop fields from the preceding active checkpoint
  *   R8  #139 (c) nwBatchForgetRun toast when nwBatchIdbDelete fails
  *   R9  chapterFlags import pass-through: absent stays absent; object entries keep unknown keys
- *       (round-trip through import AND checkpoint restore)
+ *       (round-trip through import AND checkpoint restore); key name is replay (not replayFail)
  *   R10 chapter fails then passes: nwSetChapterFlag merge {coverageFailed:false}; Tab 5/6 do not render
+ *   R11 v0-pre6b-no-flags: after load, import, and checkpoint restore, novelData has NO chapterFlags key
  *
  * Mutations (TEMP copy, flags flipped false; each must turn a core assertion red):
  *   M3  drop packet rollback -> R2 red
@@ -23,6 +25,7 @@
  *   M6  strip chapterFlags on import -> R9 extraKey red
  *   M7  skip clear-flag-on-pass -> R10 still rendered
  *   M8  restore old regenerate-on coverage path -> R1 regenerate-on keeps old text
+ *   M9  default-fill chapterFlags on load -> R11 red
  *
  * Usage: node scripts/_smoke_nw_retention.mjs
  * Env:   NW_HTML_PATH (default this checkout's NovelWriter/NovelWriter.html), NW_OUT_DIR (default out/nw-smoke)
@@ -38,6 +41,7 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 const HTML_PATH = path.resolve(process.env.NW_HTML_PATH || path.join(REPO_ROOT, 'NovelWriter', 'NovelWriter.html'));
 const OUT_DIR = path.resolve(process.env.NW_OUT_DIR || path.join(REPO_ROOT, 'out', 'nw-smoke'));
 const FIXTURE = path.join(REPO_ROOT, 'NovelWriter', 'fixtures', 'beat-gate-old-shape-v1', 'novelData.json');
+const PRE6B_PATH = path.join(REPO_ROOT, 'NovelWriter', 'fixtures', 'v0-pre6b-no-flags', 'session.json');
 
 for (const k of ['XAI_API_KEY', 'GROK_API_KEY', 'NW_E2E_LIVE']) delete process.env[k];
 
@@ -47,6 +51,7 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 const HTML = fs.readFileSync(HTML_PATH, 'utf8');
 const FX = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
 delete FX._fixture;
+const PRE6B = JSON.parse(fs.readFileSync(PRE6B_PATH, 'utf8'));
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 function enriched(base) {
@@ -73,7 +78,8 @@ const FLAGS = {
   stopped: 'var NW_6B_STOPPEDAT_BEFORE_CHECKPOINT = true;',
   passthrough: 'var NW_6B_FLAGS_PASSTHROUGH = true;',
   clearOnPass: 'var NW_6B_CLEAR_FLAG_ON_PASS = true;',
-  keepNewDraft: 'var NW_6B_KEEP_NEW_DRAFT_BOTH_MODES = true;'
+  keepNewDraft: 'var NW_6B_KEEP_NEW_DRAFT_BOTH_MODES = true;',
+  lazyFlags: 'var NW_6B_LAZY_CHAPTER_FLAGS = true;'
 };
 function mutateCopy(flagFrom) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-6b-ret-'));
@@ -427,6 +433,45 @@ async function coverageStop(page, extra) {
   await page.close();
 }
 
+// ---------------- R7 #139 (b) inactive final checkpoint write fails; restore preceding active ----------------
+{
+  const page = await openPage();
+  const s = await page.evaluate(async (nd) => {
+    const h = window.__h;
+    h.load(nd);
+    h.seedContinuity();
+    h.cfg = { coverageFail: 2 };
+    const orig = nwBatchCheckpoint;
+    nwBatchCheckpoint = function (active) {
+      if (active === false) return Promise.reject(new Error('smoke: inactive checkpoint write fail'));
+      return orig.apply(this, arguments);
+    };
+    let r;
+    try {
+      r = await generateAllChapters();
+    } finally {
+      nwBatchCheckpoint = orig;
+    }
+    const rec = novelData.batchRun ? await h.idbGet(novelData.batchRun.id) : null;
+    nwBatchState.interrupted = rec;
+    const restoredOk = rec ? await restoreInterruptedBatchRun() : false;
+    return {
+      r,
+      recActive: rec ? rec.active : null,
+      recBr: rec && rec.batchRun ? JSON.parse(JSON.stringify(rec.batchRun)) : null,
+      restoredOk,
+      restoredBr: novelData.batchRun ? JSON.parse(JSON.stringify({
+        stoppedAt: novelData.batchRun.stoppedAt,
+        reason: novelData.batchRun.reason,
+        detail: novelData.batchRun.detail
+      })) : null
+    };
+  }, ND);
+  check('R7', 'inactive checkpoint write fail: preceding active record still has stop fields', !!(s.recActive === true && s.recBr && s.recBr.stoppedAt === 2 && s.recBr.reason === 'coverage' && s.recBr.detail), JSON.stringify({ recActive: s.recActive, recBr: s.recBr, r: s.r }));
+  check('R7', 'reload/restore from that active checkpoint keeps stoppedAt', !!(s.restoredOk === true && s.restoredBr && s.restoredBr.stoppedAt === 2), JSON.stringify({ restoredOk: s.restoredOk, restoredBr: s.restoredBr }));
+  await page.close();
+}
+
 // ---------------- R8 #139 (c) forget-run toast on delete fail ----------------
 {
   const page = await openPage();
@@ -462,7 +507,7 @@ async function coverageStop(page, extra) {
     delete base.chapterFlags;
     const absent = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: base });
     const wrong = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: Object.assign({}, base, { chapterFlags: 'not-an-array' }) });
-    const flagObj = { coverageFailed: false, missing: ['kept-miss'], at: 12345, extraKey: 'keep-me', replayFail: true };
+    const flagObj = { coverageFailed: false, missing: ['kept-miss'], at: 12345, extraKey: 'keep-me', replay: true };
     const withUnknown = normalizeImportedSessionData({
       schemaVersion: '1.0',
       novelData: Object.assign({}, base, { chapterFlags: [null, flagObj, 'skip-me'] })
@@ -504,7 +549,7 @@ async function coverageStop(page, extra) {
   const fRec = (r.recFlags || [])[1] || {};
   check('R9', 'absent chapterFlags stays absent (do not create [])', r.absentHas === false, JSON.stringify({ absentHas: r.absentHas }));
   check('R9', 'wrong-type chapterFlags kept as-is with console.warn', r.wrongType === 'not-an-array' && (r.warns || []).some((w) => /chapterFlags is not an array/.test(w)), JSON.stringify({ wrongType: r.wrongType, warns: r.warns }));
-  check('R9', 'object entry passes through whole (unknown key, coverageFailed:false, non-string at)', fImp.extraKey === 'keep-me' && fImp.coverageFailed === false && fImp.at === 12345 && eq(fImp.missing, ['kept-miss']) && fImp.replayFail === true && (r.imported || [])[0] === null && (r.imported || [])[2] === null, JSON.stringify(r.imported));
+  check('R9', 'object entry passes through whole (unknown key, coverageFailed:false, non-string at, replay)', fImp.extraKey === 'keep-me' && fImp.coverageFailed === false && fImp.at === 12345 && eq(fImp.missing, ['kept-miss']) && fImp.replay === true && !Object.prototype.hasOwnProperty.call(fImp, 'replayFail') && (r.imported || [])[0] === null && (r.imported || [])[2] === null, JSON.stringify(r.imported));
   check('R9', 'unknown key round-trips through import AND checkpoint restore', fImp.extraKey === 'keep-me' && fRec.extraKey === 'keep-me' && fRest.extraKey === 'keep-me' && fRest.coverageFailed === false && fRest.at === 12345, JSON.stringify({ imported: fImp, rec: fRec, restored: fRest }));
   await page.close();
 }
@@ -534,6 +579,71 @@ async function coverageStop(page, extra) {
     };
   });
   check('R10', 'after pass: merge {coverageFailed:false, missing:[], at:ISO} and Tab 5/6 do not render', !!(pass.flag && pass.flag.coverageFailed === false && eq(pass.flag.missing, []) && typeof pass.flag.at === 'string' && pass.flag.at && pass.genHidden === true && !/Coverage failed/.test(pass.genText || '') && pass.editHidden === true && pass.editText === pass.genText), JSON.stringify(pass));
+  await page.close();
+}
+
+async function runPre6bNoFlags(page, raw) {
+  return page.evaluate(async (session) => {
+    const has = (nd) => !!(nd && Object.prototype.hasOwnProperty.call(nd, 'chapterFlags'));
+    const loaded = normalizeImportedSessionData(session);
+    novelData = loaded.novelData;
+    novelData.apiKey = 'smoke-placeholder-not-a-key';
+    applySessionDataToUI();
+    const afterLoad = has(novelData);
+    document.getElementById('title').value = 'WAITING-IMPORT';
+    novelData.title = 'WAITING-IMPORT';
+    const payload = JSON.stringify(session);
+    const realRead = FileReader.prototype.readAsText;
+    FileReader.prototype.readAsText = function (f) {
+      const reader = this;
+      f.text().then((t) => reader.onload({ target: { result: t } }));
+    };
+    importSession({ target: { files: [new File([payload], 'pre6b.json')], value: 'pre6b.json' } });
+    for (let i = 0; i < 80 && (document.getElementById('title').value !== 'Pre-6b No Flags' || !!(nwBatchState && nwBatchState.importing)); i++) await new Promise((x) => setTimeout(x, 25));
+    FileReader.prototype.readAsText = realRead;
+    const afterImport = has(novelData);
+    novelData.batchRun = {
+      id: 'pre6b-rt|2026-10-10T00:00:00.000Z',
+      startedAt: '2026-10-10T00:00:00.000Z',
+      updatedAt: '2026-10-10T00:00:00.000Z',
+      range: { from: 1, to: 2 },
+      regenerateExisting: false,
+      perChapterDownload: false,
+      completed: [],
+      inFlight: null,
+      stoppedAt: 1,
+      reason: 'paused',
+      detail: 'pre6b',
+      tokensUsed: 0,
+      estimate: { perChapter: 1, total: 2, source: 'fallback' },
+      cap: 10,
+      usageEstimated: []
+    };
+    await nwBatchCheckpoint(true);
+    const rec = await window.__h.idbGet(novelData.batchRun.id);
+    const recHas = !!(rec && rec.novelData && has(rec.novelData));
+    nwBatchState.interrupted = rec;
+    const restoredOk = rec ? await restoreInterruptedBatchRun() : false;
+    const afterRestore = has(novelData);
+    return {
+      afterLoad,
+      afterImport,
+      recHas,
+      afterRestore,
+      restoredOk,
+      title: document.getElementById('title').value,
+      flagsType: !has(novelData) ? 'absent' : (Array.isArray(novelData.chapterFlags) ? 'array:' + novelData.chapterFlags.length : typeof novelData.chapterFlags)
+    };
+  }, raw);
+}
+
+// ---------------- R11 v0-pre6b-no-flags: no chapterFlags after load/import/restore ----------------
+{
+  check('R11', 'fixture v0-pre6b-no-flags has no chapterFlags key', !!(PRE6B && PRE6B.novelData && !Object.prototype.hasOwnProperty.call(PRE6B.novelData, 'chapterFlags')), JSON.stringify({ keys: PRE6B && PRE6B.novelData ? Object.keys(PRE6B.novelData) : null }));
+  const page = await openPage();
+  const r = await runPre6bNoFlags(page, PRE6B);
+  const absent = r.afterLoad === false && r.afterImport === false && r.recHas === false && r.afterRestore === false;
+  check('R11', 'after load/import/checkpoint-restore, novelData has NO chapterFlags key', absent && r.title === 'Pre-6b No Flags' && r.restoredOk === true, JSON.stringify(r));
   await page.close();
 }
 
@@ -648,6 +758,16 @@ async function coverageStop(page, extra) {
     check('M8', 'dropping KEEP_NEW_DRAFT_BOTH_MODES restores old text on regenerate-on (R1 regen red)', keptNew === false, JSON.stringify({ ch2: s.chapters[1], old: OLD2, rejectedDraft: s.br && s.br.rejectedDraft }));
     await page.close();
     try { fs.rmSync(m8.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m9 = mutateCopy(FLAGS.lazyFlags);
+  check('M9', 'flag NW_6B_LAZY_CHAPTER_FLAGS present', m9.ok, m9.detail);
+  if (m9.ok) {
+    const page = await openPage(m9.copy);
+    const r = await runPre6bNoFlags(page, PRE6B);
+    const absent = r.afterLoad === false && r.afterImport === false && r.recHas === false && r.afterRestore === false;
+    check('M9', 'default-fill on load turns R11 red (chapterFlags created without a write)', absent === false, JSON.stringify(r));
+    await page.close();
+    try { fs.rmSync(m9.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
   }
 }
 

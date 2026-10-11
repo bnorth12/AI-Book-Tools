@@ -776,7 +776,6 @@ Synced: 2026-04-19
 	        workflowStage: '',
 	        workflowLog: [],
 	        chapterContinuityPackets: [],
-	        chapterFlags: [],
 	        continuityTracker: { chapters: [], characterArcProgress: [], storyArcProgress: {} },
 	        continuityFindings: [],
 	        // Book-level token rollup (PRODUCT RULE #120 C3) — exported with session
@@ -4730,7 +4729,12 @@ const messages = [
 		    novelData.chapters = novelData.chapters.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapters.length)).fill(''));
 		    novelData.chapterImprovements = novelData.chapterImprovements.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapterImprovements.length)).fill(''));
 		    novelData.chapterContinuityPackets = (novelData.chapterContinuityPackets || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterContinuityPackets || []).length)).fill(null));
-		    novelData.chapterFlags = (novelData.chapterFlags || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterFlags || []).length)).fill(null));
+		    // chapterFlags: lazy (created only by nwSetChapterFlag). Do not default-fill or null-pad on load/import/restore/rebuild.
+		    if (typeof NW_6B_LAZY_CHAPTER_FLAGS !== 'undefined' && !NW_6B_LAZY_CHAPTER_FLAGS) {
+		        novelData.chapterFlags = (novelData.chapterFlags || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterFlags || []).length)).fill(null));
+		    } else if (Array.isArray(novelData.chapterFlags) && novelData.chapterFlags.length > numChapters) {
+		        novelData.chapterFlags.length = numChapters;
+		    }
 		    novelData.chapterScorecards = (novelData.chapterScorecards || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterScorecards || []).length)).fill(null));
 		    novelData.chapterFactChecks = (novelData.chapterFactChecks || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterFactChecks || []).length)).fill(null));
 		    if (!novelData.continuityTracker || typeof novelData.continuityTracker !== 'object') {
@@ -7293,12 +7297,14 @@ return c && c.name && c.backstory && c.arc; });
 		}
 		window.nwReviseMaxTokens = nwReviseMaxTokens;
 
-		/** Single owner for novelData.chapterFlags[] (Q3 reuses this; merge-not-replace). */
+		/** Single owner for novelData.chapterFlags[] (Q3 reuses this; merge-not-replace). Created lazily on write only. */
 		function nwEnsureChapterFlags() {
 			var n = Number(novelData && novelData.numChapters) || (novelData && novelData.chapters && novelData.chapters.length) || 0;
 			if (!Array.isArray(novelData.chapterFlags)) novelData.chapterFlags = [];
-			while (novelData.chapterFlags.length < n) novelData.chapterFlags.push(null);
-			if (n >= 0 && novelData.chapterFlags.length > n) novelData.chapterFlags.length = n;
+			if (typeof NW_6B_LAZY_CHAPTER_FLAGS !== 'undefined' && !NW_6B_LAZY_CHAPTER_FLAGS) {
+				while (novelData.chapterFlags.length < n) novelData.chapterFlags.push(null);
+				if (n >= 0 && novelData.chapterFlags.length > n) novelData.chapterFlags.length = n;
+			}
 			return novelData.chapterFlags;
 		}
 		function nwSetChapterFlag(n, patch) {
@@ -7316,7 +7322,7 @@ return c && c.name && c.backstory && c.arc; });
 			if (flag && flag.coverageFailed === true) {
 				var miss = Array.isArray(flag.missing) ? flag.missing.filter(Boolean).join(', ') : '';
 				text = 'Coverage failed' + (miss ? ': missing ' + miss : '') + '. Kept for review.';
-			} else if (flag && (flag.replayFail || flag.replay)) {
+			} else if (flag && flag.replay) {
 				text = 'Replay check flagged this chapter.';
 			}
 			['chapterGenFlag', 'chapterEditFlag'].forEach(function (p) {
@@ -7327,8 +7333,13 @@ return c && c.name && c.backstory && c.arc; });
 			});
 		}
 		function nwRenderAllChapterFlags() {
-			nwEnsureChapterFlags();
-			var n = novelData.chapterFlags.length;
+			var n;
+			if (typeof NW_6B_LAZY_CHAPTER_FLAGS !== 'undefined' && !NW_6B_LAZY_CHAPTER_FLAGS) {
+				nwEnsureChapterFlags();
+				n = novelData.chapterFlags.length;
+			} else {
+				n = Number(novelData && novelData.numChapters) || (novelData && novelData.chapters && novelData.chapters.length) || 0;
+			}
 			for (var i = 1; i <= n; i++) nwRenderChapterFlag(i);
 		}
 		window.nwSetChapterFlag = nwSetChapterFlag;
@@ -9164,11 +9175,15 @@ return c && c.name && c.backstory && c.arc; });
 		        }
 
 		        function nwIntegrateParseResponse(response, fallback) {
-		            if (typeof response === 'string') return response.trim();
-		            if (response && response.content) return String(response.content).trim();
-		            if (response && response.revised_chapter) return String(response.revised_chapter).trim();
-		            if (response && response.chapter) return String(response.chapter).trim();
-		            return fallback;
+		            var treatParseFail = (typeof NW_6B_PARSE_FAIL_AS_FAILURE === 'undefined' || NW_6B_PARSE_FAIL_AS_FAILURE);
+		            if (treatParseFail && response && typeof response === 'object' && response._jsonParseError) return null;
+		            var text = null;
+		            if (typeof response === 'string') text = response.trim();
+		            else if (response && response.content) text = String(response.content).trim();
+		            else if (response && response.revised_chapter) text = String(response.revised_chapter).trim();
+		            else if (response && response.chapter) text = String(response.chapter).trim();
+		            if (treatParseFail) return text || null;
+		            return text || fallback;
 		        }
 		        function nwIntegrateItemSucceeded(item) {
 		            const chMap = (item.breakdown && item.breakdown.chapters) || {};
@@ -9662,7 +9677,6 @@ return c && c.name && c.backstory && c.arc; });
 		                if (f.coverageFailed) out.coverageFailed = true;
 		                if (Array.isArray(f.missing)) out.missing = f.missing.slice();
 		                if (typeof f.at === 'string') out.at = f.at;
-		                if (f.replayFail != null) out.replayFail = f.replayFail;
 		                if (f.replay != null) out.replay = f.replay;
 		                return Object.keys(out).length ? out : null;
 		            })
@@ -12032,6 +12046,8 @@ return c && c.name && c.backstory && c.arc; });
         var NW_6B_FLAGS_PASSTHROUGH = true;
         var NW_6B_CLEAR_FLAG_ON_PASS = true;
         var NW_6B_KEEP_NEW_DRAFT_BOTH_MODES = true;
+        var NW_6B_LAZY_CHAPTER_FLAGS = true;
+        var NW_6B_PARSE_FAIL_AS_FAILURE = true;
         window.NW_BATCH = NW_BATCH;
         window.nwBatchState = nwBatchState;
 
@@ -12830,12 +12846,22 @@ return c && c.name && c.backstory && c.arc; });
                 }
                 if (outcome.ok) br.completed.push(n);
                 br.inFlight = null;
+                // #139 (b): stamp stop fields onto the last ACTIVE checkpoint so a failed inactive final write still restores them.
+                if (!outcome.ok) {
+                    stop = { reason: outcome.reason, at: n, detail: outcome.detail, noRetry: !!outcome.noRetry, timeoutInfo: outcome.timeoutInfo || null, keptDraft: !!outcome.keepDraft };
+                    if (typeof NW_6B_STOPPEDAT_BEFORE_CHECKPOINT === 'undefined' || NW_6B_STOPPEDAT_BEFORE_CHECKPOINT) {
+                        br.stoppedAt = stop.at;
+                        br.reason = stop.reason;
+                        br.detail = nwBatchShort(stop.detail, 300);
+                        br.updatedAt = new Date().toISOString();
+                    }
+                }
                 try {
                     await nwBatchCheckpoint(true);
                 } catch (e) {
                     checkpointFailed = nwBatchErrText(e);
                 }
-                if (!outcome.ok) { stop = { reason: outcome.reason, at: n, detail: outcome.detail, noRetry: !!outcome.noRetry, timeoutInfo: outcome.timeoutInfo || null, keptDraft: !!outcome.keepDraft }; break; }
+                if (!outcome.ok) { break; }
                 if (checkpointFailed) { stop = { reason: 'checkpoint', at: n, detail: 'checkpoint write failed after ch' + n + ': ' + checkpointFailed }; break; }
                 if (br.perChapterDownload) {
                     try { nwBatchDownloadText((novelData.title || 'Untitled_Novel') + '_ch' + n + '.txt', novelData.chapters[n - 1]); } catch (e) { console.warn('[batch] chapter download', e); }
@@ -13500,7 +13526,6 @@ return c && c.name && c.backstory && c.arc; });
 				workflowStage: '',
 				workflowLog: [],
 				chapterContinuityPackets: [],
-				chapterFlags: [],
 				continuityTracker: { chapters: [], characterArcProgress: [], storyArcProgress: {} },
 				continuityFindings: [],
 				tokenUsage: null,

@@ -14,11 +14,14 @@
  *   I4  only items whose chapters all succeeded flip to Incorporated; the ch2 item stays To Incorporate
  *   I5  ch3 (no breakdown) untouched byte-for-byte; novelOutline gets one [Integration Notes] block
  *   I6  batch lock: nwBatchIsLocked() true -> Integrate returns false and changes nothing
+ *   I7  callAI {chapter, _jsonParseError} (or no usable prose) is a FAILED revision: chapters[] unchanged,
+ *       counted in "M failed", item stays To Incorporate
  *
  * Mutations (TEMP copy, flags flipped false; each must turn a core assertion red):
  *   M1  wrong prose target (write to #chapterContent{n}) -> I1 red
  *   M2  missing reject path -> I3 red
  *   M3  status flip-all -> I4 red
+ *   M4  ignore _jsonParseError and write chapter field -> I7 red
  *
  * I3 uses an in-page hard timeout (I3_TIMEOUT_MS) plus a Node-side backup so a hang is FAIL, not a
  * stuck process. The ch2 stub rejects without invoking the callback, which hangs the main-branch
@@ -191,7 +194,8 @@ async function installHarness(page) {
         loadingDisplay: loading ? String(loading.style.display || '') : '',
         calls: h.calls.slice(),
         rejected: h.rejected.slice(),
-        dialogs: h.dialogs.slice()
+        dialogs: h.dialogs.slice(),
+        toasts: h.toasts.slice()
       };
     };
   });
@@ -222,8 +226,10 @@ const HTML = fs.readFileSync(HTML_PATH, 'utf8');
 const FLAGS = {
   prose: 'var NW_6B_WRITE_PROSE_TO_GEN = true;',
   reject: 'var NW_6B_CALLAI_REJECT_PATH = true;',
-  status: 'var NW_6B_STATUS_PER_ITEM = true;'
+  status: 'var NW_6B_STATUS_PER_ITEM = true;',
+  parseFail: 'var NW_6B_PARSE_FAIL_AS_FAILURE = true;'
 };
+const PARSE_GARBAGE = '{broken-json-not-prose chapter ';
 function mutateCopy(flagFrom) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-6b-'));
   const copy = path.join(dir, 'NovelWriter.html');
@@ -397,6 +403,75 @@ async function runI1I5(htmlPath) {
   await page.close();
 }
 
+async function runParseFail(htmlPath) {
+  const page = await openPage(htmlPath);
+  const r = await page.evaluate(async (fix) => {
+    const h = window.__h;
+    await h.load(fix);
+    window.callAI = function (messages, tabElement, callbackOrOptions, options) {
+      const isCallback = typeof callbackOrOptions === 'function';
+      const callback = isCallback ? callbackOrOptions : null;
+      const opts = isCallback ? (options || {}) : (callbackOrOptions || {});
+      const op = String(opts.operationName || '');
+      const m = /Integrate Ch\.(\d+)/.exec(op);
+      const ch = m ? Number(m[1]) : 0;
+      h.calls.push({ operationName: op, ch: ch, parse: true });
+      const resp = {
+        chapter: '{broken-json-not-prose chapter ' + ch,
+        _jsonParseError: 'SyntaxError: Unexpected end of JSON input'
+      };
+      if (typeof callback === 'function') callback(resp);
+      return Promise.resolve(resp);
+    };
+    h.toasts.length = 0;
+    await integrateBreakdownSuggestions();
+    if (typeof collectData === 'function') collectData();
+    const parseAfter = h.snap();
+    const parseToasts = h.toasts.slice();
+    const fix2 = JSON.parse(JSON.stringify(fix));
+    fix2.bookImprovementsWithStatus = [fix.bookImprovementsWithStatus[0]];
+    await h.load(fix2);
+    window.callAI = function (messages, tabElement, callbackOrOptions, options) {
+      const isCallback = typeof callbackOrOptions === 'function';
+      const callback = isCallback ? callbackOrOptions : null;
+      const opts = isCallback ? (options || {}) : (callbackOrOptions || {});
+      const op = String(opts.operationName || '');
+      const m = /Integrate Ch\.(\d+)/.exec(op);
+      const ch = m ? Number(m[1]) : 0;
+      h.calls.push({ operationName: op, ch: ch, empty: true });
+      const resp = {};
+      if (typeof callback === 'function') callback(resp);
+      return Promise.resolve(resp);
+    };
+    h.toasts.length = 0;
+    await integrateBreakdownSuggestions();
+    if (typeof collectData === 'function') collectData();
+    return { after: parseAfter, toasts: parseToasts, empty: { after: h.snap(), toasts: h.toasts.slice() } };
+  }, clone(FIX));
+  await page.close();
+  return r;
+}
+
+// ---------------- I7: _jsonParseError / no usable prose is a FAILED revision ----------------
+{
+  const r = await runParseFail();
+  const after = (r && r.after) || { chapters: [], genDom: ['', '', ''], statuses: [], toasts: [] };
+  const toast = (after.toasts || r.toasts || []).join(' ');
+  const ch1Unchanged = after.chapters[0] === CH1 && after.genDom[0] === CH1;
+  const ch2Unchanged = after.chapters[1] === CH2 && after.genDom[1] === CH2;
+  const notIncorporated = after.statuses[0] === 'To Incorporate' && after.statuses[1] === 'To Incorporate';
+  const failedNotice = /0 revised, 2 failed/.test(toast);
+  const noGarbage = String(after.chapters[0] || '').indexOf(PARSE_GARBAGE) < 0 && String(after.chapters[1] || '').indexOf(PARSE_GARBAGE) < 0;
+  check('I7', 'callAI _jsonParseError does not write chapters[], counts as failed, items stay To Incorporate',
+    ch1Unchanged && ch2Unchanged && notIncorporated && failedNotice && noGarbage,
+    JSON.stringify({ chapters: after.chapters, gen: after.genDom, statuses: after.statuses, toast: toast }));
+  const emptyAfter = (r && r.empty && r.empty.after) || { chapters: [], genDom: ['', '', ''], statuses: [], toasts: [] };
+  const emptyToast = (emptyAfter.toasts || (r.empty && r.empty.toasts) || []).join(' ');
+  check('I7', 'no usable prose ({}) does not write chapters[], counts as failed, item stays To Incorporate',
+    emptyAfter.chapters[0] === CH1 && emptyAfter.genDom[0] === CH1 && emptyAfter.statuses[0] === 'To Incorporate' && /0 revised, 1 failed/.test(emptyToast),
+    JSON.stringify({ chapters: emptyAfter.chapters, gen: emptyAfter.genDom, statuses: emptyAfter.statuses, toast: emptyToast }));
+}
+
 // ---------------- Mutations: TEMP copy, flags flipped false ----------------
 {
   const m1 = mutateCopy(FLAGS.prose);
@@ -419,6 +494,15 @@ async function runI1I5(htmlPath) {
     const r = await runI1I5(m3.copy);
     check('M3', 'status flip-all turns I4 red', r.verdict.I4 === false, JSON.stringify({ I4: r.verdict.I4, statuses: r.after.statuses }));
     try { fs.rmSync(m3.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m4 = mutateCopy(FLAGS.parseFail);
+  check('M4', 'flag NW_6B_PARSE_FAIL_AS_FAILURE present', m4.ok, m4.detail);
+  if (m4.ok) {
+    const r = await runParseFail(m4.copy);
+    const after = (r && r.after) || { chapters: [], genDom: ['', '', ''], statuses: [] };
+    const keptOriginal = after.chapters[0] === CH1 && after.genDom[0] === CH1 && after.statuses[0] === 'To Incorporate';
+    check('M4', 'dropping PARSE_FAIL_AS_FAILURE writes parse-error chapter (I7 red)', keptOriginal === false, JSON.stringify({ chapter0: after.chapters[0], gen1: after.genDom[0], statuses: after.statuses }));
+    try { fs.rmSync(m4.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
   }
 }
 
