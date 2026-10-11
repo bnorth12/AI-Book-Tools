@@ -820,16 +820,16 @@
             if (tabId === 'preview') renderPreviewTab();
         }
 
-        function loadProject() {
-            const saved = localStorage.getItem('herbalBookForgeProject_v1.0.0')
+        function loadProject(importedProject) {
+            const saved = importedProject ? null : localStorage.getItem('herbalBookForgeProject_v1.0.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.14.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.11.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.10.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.9.5')
                 || localStorage.getItem('herbalBookForgeProject_v0.9.3');
-            if (saved) {
+            if (importedProject || saved) {
                 try {
-                    const parsed = stripSecretFields(JSON.parse(saved));
+                    const parsed = stripSecretFields(importedProject || JSON.parse(saved));
                     project = {
                         ...project,
                         ...parsed,
@@ -934,8 +934,7 @@
                         preview: normalizePreviewState(parsed.preview)
                     };
                     project.meta.version = "1.0.0";
-                    localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject()));
-                    loadProject();
+                    loadProject(project);
                     saveProject();
                     alert(secretsRemoved
                         ? 'Project imported successfully. Sensitive fields were removed. If the file was shared, rotate your API key at console.x.ai.'
