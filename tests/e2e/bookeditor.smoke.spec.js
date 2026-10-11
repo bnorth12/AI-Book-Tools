@@ -39,8 +39,10 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
     await dialog.accept();
   });
   const secret = 'xai-TESTKEY-123';
-  const exportedJson = await page.evaluate((apiKey) => new Promise((resolve) => {
+  const proseFixture = 'She kept the #secret close. Who holds the key?key=yes. The word password stayed in the sentence.';
+  const exportedJson = await page.evaluate(({ apiKey, prose }) => new Promise((resolve) => {
     document.getElementById('apiKey').value = apiKey;
+    document.getElementById('bookText').value = prose;
     const originalCreateObjectURL = URL.createObjectURL;
     URL.createObjectURL = function (blob) {
       const reader = new FileReader();
@@ -52,18 +54,25 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
       return 'blob:mock';
     };
     exportSession();
-  }), secret);
+  }), { apiKey: secret, prose: proseFixture });
 
   expect(exportedJson).not.toContain(secret);
   expect(JSON.parse(exportedJson)).not.toHaveProperty('apiKey');
+  expect(JSON.parse(exportedJson).bookText).toBe(proseFixture);
+  expect(await page.evaluate((prose) => {
+    const url = new URL(prose, window.location.href);
+    const fragment = url.hash.slice(1);
+    const params = new URLSearchParams(fragment.includes('?') ? fragment.slice(fragment.indexOf('?') + 1) : fragment);
+    return params.has('key');
+  }, proseFixture)).toBe(true);
 
   await page.locator('#apiKey').fill('');
   await page.locator('#importFile').setInputFiles({
     name: 'session.json',
     mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify({ apiKey: secret, genre: 'fantasy', bookText: 'Imported text.' })),
+    buffer: Buffer.from(JSON.stringify({ apiKey: secret, genre: 'fantasy', bookText: proseFixture })),
   });
-  await expect(page.locator('#bookText')).toHaveValue('Imported text.');
+  await expect(page.locator('#bookText')).toHaveValue(proseFixture);
   await expect(page.locator('#apiKey')).toHaveValue('');
   expect(importNotices.some(message => message.includes('apiKey') && message.includes('console.x.ai'))).toBe(true);
 
@@ -107,6 +116,7 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
   expect(exportedBook).not.toContain('token=hidden');
   expect(exportedBook).not.toContain('access_token=hidden');
   expect(parsedBook.novelData).toMatchObject({
+    bookText: proseFixture,
     key: 'chapter-key',
     token: 'ordinary-token',
     tokenUsage: { calls: 2, promptTokens: 17 },
@@ -150,6 +160,7 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
       },
     })),
   });
+  await expect(page.locator('#bookText')).toHaveValue(proseFixture);
   await expect.poll(() => page.evaluate(() => ({
     tokenUsage: novelData.tokenUsage,
     key: novelData.key,

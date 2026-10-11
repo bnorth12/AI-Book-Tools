@@ -97,14 +97,16 @@ test.describe('HerbalBookForge Smoke Test', () => {
   test('HBF-SEC-01 project export, storage, and import omit API keys', async ({ page }) => {
     await page.goto('/HerbalBookForge/HerbalBookForge.html');
     const secret = 'xai-TESTKEY-123';
+    const proseFixture = 'She kept the #secret close. Who holds the key?key=yes. The word password stayed in the sentence.';
     const importNotices = [];
     page.on('dialog', async dialog => {
       importNotices.push(dialog.message());
       await dialog.accept();
     });
 
-    const { exportedJson, storedProject } = await page.evaluate((apiKey) => new Promise((resolve) => {
+    const { exportedJson, storedProject } = await page.evaluate(({ apiKey, prose }) => new Promise((resolve) => {
       document.getElementById('api-key').value = apiKey;
+      project.outline = prose;
       project.setup.apiKey = apiKey;
       project.setup.authorization = apiKey;
       project.setup.API_KEY = apiKey;
@@ -138,10 +140,18 @@ test.describe('HerbalBookForge Smoke Test', () => {
       };
       saveProject();
       exportProject();
-    }), secret);
+    }), { apiKey: secret, prose: proseFixture });
 
     expect(exportedJson).not.toContain(secret);
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('apiKey');
+    expect(JSON.parse(exportedJson).outline).toBe(proseFixture);
+    expect(JSON.parse(storedProject).outline).toBe(proseFixture);
+    expect(await page.evaluate((prose) => {
+      const url = new URL(prose, window.location.href);
+      const fragment = url.hash.slice(1);
+      const params = new URLSearchParams(fragment.includes('?') ? fragment.slice(fragment.indexOf('?') + 1) : fragment);
+      return params.has('key');
+    }, proseFixture)).toBe(true);
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('authorization');
     expect(exportedJson).not.toContain('user:pass@');
     expect(exportedJson).not.toContain('token=hidden');
@@ -192,6 +202,7 @@ test.describe('HerbalBookForge Smoke Test', () => {
           bearerToken: 'hidden-bearer',
         },
         meta: { name: 'Imported project' },
+        outline: proseFixture,
         key: 'sort-key',
         token: 'ordinary-token',
         tokenUsage: { calls: 3, promptTokens: 19 },
@@ -203,6 +214,8 @@ test.describe('HerbalBookForge Smoke Test', () => {
     await expect(page.locator('#api-key')).toHaveValue('existing-user-key');
     expect(await page.evaluate(() => project.setup.apiKey)).toBe('existing-user-key');
     await expect(page.locator('#project-name')).toHaveValue('Imported project');
+    await expect(page.locator('#outline-editor')).toHaveValue(proseFixture);
+    expect(await page.evaluate(() => project.outline)).toBe(proseFixture);
     await expect.poll(() => page.evaluate(() => ({
       metaName: project.meta.name,
       key: project.key,
@@ -234,6 +247,7 @@ test.describe('HerbalBookForge Smoke Test', () => {
     await expect.poll(() => page.evaluate(() => localStorage.getItem('herbalBookForgeProject_v1.0.0'))).not.toContain(secret);
     expect(JSON.parse(await page.evaluate(() => localStorage.getItem('herbalBookForgeProject_v1.0.0')))).toMatchObject({
       meta: { name: 'Imported project' },
+      outline: proseFixture,
       key: 'sort-key',
       token: 'ordinary-token',
       tokenUsage: { calls: 3, promptTokens: 19 },

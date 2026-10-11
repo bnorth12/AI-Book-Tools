@@ -37,14 +37,16 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
   await page.goto(APP_URL);
   await page.locator('.tab button:has-text("Output JSON")').click();
   const secret = 'xai-TESTKEY-123';
+  const proseFixture = 'She kept the #secret close. Who holds the key?key=yes. The word password stayed in the sentence.';
   const importNotices = [];
   page.on('dialog', async dialog => {
     importNotices.push(dialog.message());
     await dialog.accept();
   });
 
-  const exportedJson = await page.evaluate((apiKey) => new Promise((resolve) => {
+  const exportedJson = await page.evaluate(({ apiKey, prose }) => new Promise((resolve) => {
     novelData.apiKey = apiKey;
+    novelData.chapters = [prose];
     novelData.nested = { accessToken: apiKey, bearer: apiKey, title: 'Safe content' };
     novelData.API_KEY = apiKey;
     novelData.privateKey = apiKey;
@@ -73,12 +75,13 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
       return 'blob:mock';
     };
     exportJSON();
-  }), secret);
+  }), { apiKey: secret, prose: proseFixture });
   expect(exportedJson).not.toContain(secret);
   expect(exportedJson).not.toContain('user:pass@');
   expect(exportedJson).not.toContain('token=hidden');
   expect(exportedJson).not.toContain('access_token=hidden');
   expect(JSON.parse(exportedJson).novelData).toMatchObject({
+    chapters: [proseFixture],
     key: 'sort-key',
     token: 'ordinary-token',
     tokenUsage: { calls: 2, promptTokens: 17 },
@@ -86,6 +89,12 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     promptTokens: 17,
     agentKey: 'fetchAuthors',
   });
+  expect(await page.evaluate((prose) => {
+    const url = new URL(prose, window.location.href);
+    const fragment = url.hash.slice(1);
+    const params = new URLSearchParams(fragment.includes('?') ? fragment.slice(fragment.indexOf('?') + 1) : fragment);
+    return params.has('key');
+  }, proseFixture)).toBe(true);
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('API_KEY');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('privateKey');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('endpointWithCredentials');
@@ -109,6 +118,7 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
       sourceTool: 'BookDecomposer',
       novelData: {
         title: 'Imported safely',
+        chapters: [proseFixture],
         apiKey: secret,
         API_KEY: secret,
         privateKey: secret,
@@ -131,6 +141,7 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
   });
 
   await expect(page.locator('#jsonOutput')).toContainText('Imported safely');
+  await expect(page.locator('#jsonOutput')).toContainText(proseFixture);
   await expect(page.locator('#jsonOutput')).not.toContainText(secret);
   expect(await page.evaluate(() => ({
     hasApiKey: Object.hasOwn(novelData, 'apiKey'),
@@ -151,6 +162,7 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     maxTokens: novelData.maxTokens,
     promptTokens: novelData.promptTokens,
     agentKey: novelData.agentKey,
+    chapters: novelData.chapters,
   }))).toEqual({
     hasApiKey: false,
     hasAuthorization: false,
@@ -170,6 +182,7 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     maxTokens: 4321,
     promptTokens: 17,
     agentKey: 'fetchAuthors',
+    chapters: [proseFixture],
   });
   await expect(page.locator('#apiKey')).toHaveValue('');
   expect(importNotices.some(message => message.includes('apiKey') && message.includes('endpoint') && message.includes('console.x.ai'))).toBe(true);

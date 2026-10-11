@@ -297,10 +297,11 @@ test('NW-REG-07 Update Chapter revises chapter content via mocked API', async ({
 test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive fields', async ({ page }) => {
   await gotoApp(page);
 
-  await page.evaluate(() => {
+  const proseFixture = 'She kept the #secret close. Who holds the key?key=yes. The word password stayed in the sentence.';
+  await page.evaluate((prose) => {
     document.getElementById('apiKey').value = 'xai-TESTKEY-123';
     document.getElementById('title').value = 'Schema Validation Novel';
-    document.getElementById('storyArc').value = 'A test of schema compliance.';
+    document.getElementById('storyArc').value = prose;
     document.getElementById('genre').value = 'scifi';
     document.getElementById('maxTokens').value = '4321';
     novelData.tokenUsage = { calls: 2, promptTokens: 17 };
@@ -320,7 +321,7 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
     novelData.agentKey = 'fetchAuthors';
     requestLog.tokenUsage = '17 tokens';
     requestLog.tokenUsageDetail = { promptTokens: 17 };
-  });
+  }, proseFixture);
 
   // Intercept the download by patching Blob/URL.createObjectURL in-page
   const exportedJson = await page.evaluate(() => {
@@ -355,6 +356,13 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
   expect(parsed.novelData).toHaveProperty('title', 'Schema Validation Novel');
   expect(parsed.novelData).toHaveProperty('genre');
   expect(parsed.novelData).toHaveProperty('storyArc');
+  expect(parsed.novelData.storyArc).toBe(proseFixture);
+  expect(await page.evaluate((prose) => {
+    const url = new URL(prose, window.location.href);
+    const fragment = url.hash.slice(1);
+    const params = new URLSearchParams(fragment.includes('?') ? fragment.slice(fragment.indexOf('?') + 1) : fragment);
+    return params.has('key');
+  }, proseFixture)).toBe(true);
   expect(Array.isArray(parsed.novelData.characters)).toBe(true);
   expect(Array.isArray(parsed.novelData.subplots)).toBe(true);
   expect(Array.isArray(parsed.novelData.chapters)).toBe(true);
@@ -399,6 +407,7 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
 
 test('NW-REG-10 Import Session ignores an API key in the file', async ({ page }) => {
   await gotoApp(page);
+  const proseFixture = 'She kept the #secret close. Who holds the key?key=yes. The word password stayed in the sentence.';
   const importNotices = [];
   page.on('dialog', async dialog => {
     importNotices.push(dialog.message());
@@ -416,6 +425,7 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
       novelData: {
         title: 'Imported without credentials',
         genre: 'scifi',
+        storyArc: proseFixture,
         chapters: [],
         apiKey: 'xai-TESTKEY-123',
         bearer: 'xai-TESTKEY-123',
@@ -445,6 +455,7 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
   });
 
   await expect(page.locator('#title')).toHaveValue('Imported without credentials');
+  await expect(page.locator('#storyArc')).toHaveValue(proseFixture);
   await expect(page.locator('#apiKey')).toHaveValue('existing-user-key');
   await expect(page.locator('#maxTokens')).toHaveValue('4321');
   expect(await page.evaluate(() => ({
@@ -490,6 +501,12 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
     },
   });
   expect(importNotices.some(message => message.includes('apiKey') && message.includes('endpoint') && message.includes('console.x.ai'))).toBe(true);
+  const checkpoint = await page.evaluate(async () => {
+    novelData.batchRun = { id: 'prose-retention-smoke' };
+    await nwBatchCheckpoint(true);
+    return nwBatchFindInterrupted();
+  });
+  expect(checkpoint.novelData.storyArc).toBe(proseFixture);
 });
 
 // --- Execution HUD state transitions ---
