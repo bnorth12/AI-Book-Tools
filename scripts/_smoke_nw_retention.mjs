@@ -5,6 +5,9 @@
  *
  *   R1  coverage fail keeps text and sets novelData.chapterFlags[n-1] {coverageFailed, missing, at}
  *       R1 regenerate-on: same keep+flag with batchRegenerate checked (new draft stays in chapters[n-1])
+ *       R1 regenerate-on two coverage fails in a row: original text survives in priorDrafts + checkpoint; Skip restores it
+ *       R1 two chapters failing in one run each keep their own prior text
+ *       R1 clean run leaves no chapterFlags at all
  *   R2  continuity packet and tracker rolled back so unaccepted text never feeds n+1
  *   R3  Accept rebuilds packet/tracker from the kept text
  *   R4  acknowledged skip survives checkpoint, reload and Resume (no second confirm)
@@ -26,6 +29,8 @@
  *   M7  skip clear-flag-on-pass -> R10 still rendered
  *   M8  restore old regenerate-on coverage path -> R1 regenerate-on keeps old text
  *   M9  default-fill chapterFlags on load -> R11 red
+ *   M10 overwrite priorDraft on 2nd coverage fail -> original does not survive
+ *   M11 unconditional clear-on-pass -> clean run creates chapterFlags
  *
  * Usage: node scripts/_smoke_nw_retention.mjs
  * Env:   NW_HTML_PATH (default this checkout's NovelWriter/NovelWriter.html), NW_OUT_DIR (default out/nw-smoke)
@@ -79,7 +84,9 @@ const FLAGS = {
   passthrough: 'var NW_6B_FLAGS_PASSTHROUGH = true;',
   clearOnPass: 'var NW_6B_CLEAR_FLAG_ON_PASS = true;',
   keepNewDraft: 'var NW_6B_KEEP_NEW_DRAFT_BOTH_MODES = true;',
-  lazyFlags: 'var NW_6B_LAZY_CHAPTER_FLAGS = true;'
+  lazyFlags: 'var NW_6B_LAZY_CHAPTER_FLAGS = true;',
+  priorWriteOnce: 'var NW_6B_PRIOR_DRAFT_WRITE_ONCE = true;',
+  clearOnlyIfFailed: 'var NW_6B_CLEAR_FLAG_ONLY_IF_FAILED = true;'
 };
 function mutateCopy(flagFrom) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-6b-ret-'));
@@ -107,7 +114,8 @@ async function installHarness(page) {
     window.collectData = function () {};
     window.ensureQualityAfterGenerate = async function () {};
     window.scoreObligationCoverage = function (text, n) {
-      const bad = h.cfg && h.cfg.coverageFail === n;
+      const failAt = h.cfg && h.cfg.coverageFail;
+      const bad = failAt === n || (Array.isArray(failAt) && failAt.indexOf(n) >= 0);
       return { covered: bad ? 0 : 6, total: 6, ratio: bad ? 0 : 1, words: 120, passed: !bad, failures: bad ? ['smoke: obligations not dramatized'] : [], misses: bad ? ['smoke-obligation'] : [] };
     };
     h.idbGet = function (key) {
@@ -202,7 +210,7 @@ async function coverageStop(page, extra) {
     if (o.prefill) Object.keys(o.prefill).forEach((n) => nwBatchSetChapterText(Number(n), o.prefill[n]));
     if (o.regenerate != null) document.getElementById('batchRegenerate').checked = !!o.regenerate;
     h.seedContinuity();
-    h.cfg = { coverageFail: 2 };
+    h.cfg = { coverageFail: o.coverageFail != null ? o.coverageFail : 2 };
     const t0 = Date.now();
     const r = await generateAllChapters();
     const flag = (novelData.chapterFlags || [])[1];
@@ -211,6 +219,8 @@ async function coverageStop(page, extra) {
     const rec = novelData.batchRun ? await h.idbGet(novelData.batchRun.id) : null;
     const elG = document.getElementById('chapterGenFlag2');
     const elE = document.getElementById('chapterEditFlag2');
+    const exp = h.lastExport ? JSON.parse(await h.lastExport.text()) : null;
+    const expBr = exp && exp.novelData && exp.novelData.batchRun ? exp.novelData.batchRun : null;
     return {
       r, ms: Date.now() - t0,
       br: novelData.batchRun ? JSON.parse(JSON.stringify(novelData.batchRun)) : null,
@@ -231,7 +241,10 @@ async function coverageStop(page, extra) {
       coverageBox: !document.getElementById('batchCoverageBox').hidden,
       coverageMsg: (document.getElementById('batchCoverageMsg') || {}).textContent || '',
       dialogs: h.dialogs.slice(),
-      toasts: h.toasts.slice()
+      toasts: h.toasts.slice(),
+      priorDrafts: novelData.batchRun && Array.isArray(novelData.batchRun.priorDrafts) ? JSON.parse(JSON.stringify(novelData.batchRun.priorDrafts)) : null,
+      recPrior: rec && rec.batchRun && rec.batchRun.priorDrafts ? JSON.parse(JSON.stringify(rec.batchRun.priorDrafts)) : null,
+      expPrior: expBr && expBr.priorDrafts ? JSON.parse(JSON.stringify(expBr.priorDrafts)) : null
     };
   }, extra || { nd: ND });
 }
@@ -259,6 +272,128 @@ async function coverageStop(page, extra) {
   check('R1', 'batchRegenerate on: coverage fail keeps NEW ch2 draft (not old text) and stops at 2', s.br && s.br.reason === 'coverage' && s.br.stoppedAt === 2 && keptNew && s.chapters[1] !== OLD2 && (s.br.completed || []).indexOf(2) < 0, JSON.stringify({ br: s.br, ch2: s.chapters[1], old: OLD2 }));
   check('R1', 'batchRegenerate on: chapterFlags[1] coverageFailed and Tab 5/6 render the flag', !!(s.flag && s.flag.coverageFailed === true && /Coverage failed/.test(s.flagDomGen) && s.flagDomEdit === s.flagDomGen && s.flagHiddenGen === false), JSON.stringify({ flag: s.flag, gen: s.flagDomGen, hidden: s.flagHiddenGen }));
   check('R1', 'batchRegenerate on: checkpoint has the NEW draft (not parked-only in rejectedDraft)', /KEPT-DRAFT-CH2/.test(s.recCh2 || '') && !(s.br && s.br.rejectedDraft), JSON.stringify({ recCh2: s.recCh2, rejectedDraft: s.br && s.br.rejectedDraft }));
+  const prior1 = s.priorDrafts && s.priorDrafts[1];
+  const recPrior1 = s.recPrior && s.recPrior[1];
+  const expPrior1 = s.expPrior && s.expPrior[1];
+  check('R1', 'batchRegenerate on: priorDrafts[1] = {text: original, at} (new draft kept separately)', !!(prior1 && prior1.text === OLD2 && typeof prior1.at === 'string' && prior1.at && s.chapters[1] !== OLD2), JSON.stringify({ prior: prior1, ch2: s.chapters[1] }));
+  check('R1', 'batchRegenerate on: checkpoint and export include priorDrafts original text', !!(recPrior1 && recPrior1.text === OLD2 && expPrior1 && expPrior1.text === OLD2), JSON.stringify({ recPrior: recPrior1, expPrior: expPrior1 }));
+  check('R1', 'batchRegenerate on: coverage box shows "Your previous text is saved; Skip restores it."', (s.coverageMsg || '').indexOf('Your previous text is saved; Skip restores it.') >= 0, s.coverageMsg);
+  await page.close();
+}
+
+// ---------------- R1 regenerate-on: two coverage failures in a row; Skip restores original ----------------
+{
+  const page = await openPage();
+  const OLD2 = 'Hand-written chapter two ORIGINAL prior text that must survive two coverage failures.';
+  const s1 = await coverageStop(page, { nd: ND, regenerate: true, prefill: { 2: OLD2 } });
+  const firstPrior = s1.priorDrafts && s1.priorDrafts[1];
+  check('R1', 'two-fail: first coverage fail stores original in priorDrafts and checkpoint', !!(firstPrior && firstPrior.text === OLD2 && s1.recPrior && s1.recPrior[1] && s1.recPrior[1].text === OLD2 && /KEPT-DRAFT-CH2/.test(s1.chapters[1] || '')), JSON.stringify({ prior: firstPrior, recPrior: s1.recPrior && s1.recPrior[1], ch2: s1.chapters[1] }));
+  const s2 = await page.evaluate(async () => {
+    await nwBatchCoverageDecide('regenerate');
+    window.__h.cfg = { coverageFail: 2 };
+    const r = await resumeBatchRun();
+    const rec = novelData.batchRun ? await window.__h.idbGet(novelData.batchRun.id) : null;
+    const exp = window.__h.lastExport ? JSON.parse(await window.__h.lastExport.text()) : null;
+    const prior = novelData.batchRun && novelData.batchRun.priorDrafts ? novelData.batchRun.priorDrafts[1] : null;
+    const recPrior = rec && rec.batchRun && rec.batchRun.priorDrafts ? rec.batchRun.priorDrafts[1] : null;
+    const expPrior = exp && exp.novelData && exp.novelData.batchRun && exp.novelData.batchRun.priorDrafts ? exp.novelData.batchRun.priorDrafts[1] : null;
+    nwBatchState.interrupted = rec;
+    const restoredOk = rec ? await restoreInterruptedBatchRun() : false;
+    const restoredPrior = novelData.batchRun && novelData.batchRun.priorDrafts ? novelData.batchRun.priorDrafts[1] : null;
+    return {
+      r,
+      ch2: (novelData.chapters || [])[1] || '',
+      prior,
+      recPrior,
+      expPrior,
+      restoredOk,
+      restoredPrior,
+      coverageMsg: (document.getElementById('batchCoverageMsg') || {}).textContent || '',
+      reason: novelData.batchRun && novelData.batchRun.reason,
+      stoppedAt: novelData.batchRun && novelData.batchRun.stoppedAt
+    };
+  });
+  check('R1', 'two-fail: second coverage fail does not overwrite original in priorDrafts', !!(s2.prior && s2.prior.text === OLD2 && /KEPT-DRAFT-CH2/.test(s2.ch2) && s2.ch2 !== OLD2), JSON.stringify({ prior: s2.prior, ch2: s2.ch2 }));
+  check('R1', 'two-fail: original survives in checkpoint and export after 2nd fail', !!(s2.recPrior && s2.recPrior.text === OLD2 && s2.expPrior && s2.expPrior.text === OLD2), JSON.stringify({ recPrior: s2.recPrior, expPrior: s2.expPrior }));
+  check('R1', 'two-fail: restore from checkpoint keeps original priorDrafts', !!(s2.restoredOk === true && s2.restoredPrior && s2.restoredPrior.text === OLD2), JSON.stringify({ restoredOk: s2.restoredOk, restoredPrior: s2.restoredPrior }));
+  const skipped = await page.evaluate(async () => {
+    // restoreInterruptedBatchRun rewrites reason to 'user'; re-stamp coverage so Skip is valid.
+    if (novelData.batchRun) {
+      novelData.batchRun.reason = 'coverage';
+      novelData.batchRun.stoppedAt = 2;
+    }
+    const ok = await nwBatchCoverageDecide('skip');
+    return {
+      ok,
+      ch2: (novelData.chapters || [])[1] || '',
+      gen: (document.getElementById('chapterGenContent2') || {}).value || '',
+      edit: (document.getElementById('chapterEditContent2') || {}).value || '',
+      prior: novelData.batchRun && novelData.batchRun.priorDrafts ? novelData.batchRun.priorDrafts[1] : null
+    };
+  });
+  check('R1', 'two-fail: Skip restores original text and clears priorDrafts slot', !!(skipped.ok === true && skipped.ch2 === OLD2 && skipped.gen === OLD2 && skipped.edit === OLD2 && !skipped.prior), JSON.stringify(skipped));
+  await page.close();
+}
+
+// ---------------- R1 two chapters failing in one run each keep their own prior text ----------------
+{
+  const page = await openPage();
+  const OLD2 = 'Chapter two ORIGINAL prior text unique to ch2.';
+  const OLD3 = 'Chapter three ORIGINAL prior text unique to ch3.';
+  const s1 = await coverageStop(page, { nd: ND, regenerate: true, prefill: { 2: OLD2, 3: OLD3 }, coverageFail: [2, 3] });
+  check('R1', 'two-ch: ch2 fail stores only ch2 original in priorDrafts[1]', !!(s1.priorDrafts && s1.priorDrafts[1] && s1.priorDrafts[1].text === OLD2 && !s1.priorDrafts[2] && s1.chapters[1] !== OLD2), JSON.stringify({ prior: s1.priorDrafts, ch2: s1.chapters[1] }));
+  const s2 = await page.evaluate(async (olds) => {
+    const okSkip = await nwBatchCoverageDecide('skip');
+    window.__h.cfg = { coverageFail: [2, 3] };
+    const r = await resumeBatchRun();
+    const rec = novelData.batchRun ? await window.__h.idbGet(novelData.batchRun.id) : null;
+    return {
+      okSkip,
+      r,
+      ch2: (novelData.chapters || [])[1] || '',
+      ch3: (novelData.chapters || [])[2] || '',
+      prior2: novelData.batchRun && novelData.batchRun.priorDrafts ? novelData.batchRun.priorDrafts[1] : null,
+      prior3: novelData.batchRun && novelData.batchRun.priorDrafts ? novelData.batchRun.priorDrafts[2] : null,
+      recPrior2: rec && rec.batchRun && rec.batchRun.priorDrafts ? rec.batchRun.priorDrafts[1] : null,
+      recPrior3: rec && rec.batchRun && rec.batchRun.priorDrafts ? rec.batchRun.priorDrafts[2] : null,
+      reason: novelData.batchRun && novelData.batchRun.reason,
+      stoppedAt: novelData.batchRun && novelData.batchRun.stoppedAt
+    };
+  }, { OLD2, OLD3 });
+  check('R1', 'two-ch: after Skip ch2 + fail ch3, ch2 keeps its original and ch3 has its own prior', !!(s2.okSkip === true && s2.ch2 === OLD2 && s2.prior3 && s2.prior3.text === OLD3 && !s2.prior2 && s2.ch3 !== OLD3 && /KEPT-DRAFT-CH3/.test(s2.ch3 || '') && s2.stoppedAt === 3), JSON.stringify(s2));
+  check('R1', 'two-ch: checkpoint has ch3 original in priorDrafts[2] (not ch2 text)', !!(s2.recPrior3 && s2.recPrior3.text === OLD3 && s2.recPrior3.text !== OLD2 && !s2.recPrior2), JSON.stringify({ recPrior2: s2.recPrior2, recPrior3: s2.recPrior3 }));
+  const skipped3 = await page.evaluate(async () => {
+    const ok = await nwBatchCoverageDecide('skip');
+    return {
+      ok,
+      ch3: (novelData.chapters || [])[2] || '',
+      prior3: novelData.batchRun && novelData.batchRun.priorDrafts ? novelData.batchRun.priorDrafts[2] : null
+    };
+  });
+  check('R1', 'two-ch: Skip restores ch3 original (independent of ch2)', !!(skipped3.ok === true && skipped3.ch3 === OLD3 && !skipped3.prior3), JSON.stringify(skipped3));
+  await page.close();
+}
+
+// ---------------- R1 clean run leaves no chapterFlags at all ----------------
+{
+  const page = await openPage();
+  const clean = await page.evaluate(async (nd) => {
+    const h = window.__h;
+    h.load(nd);
+    delete novelData.chapterFlags;
+    h.cfg = {};
+    const r = await generateAllChapters();
+    return {
+      r,
+      reason: novelData.batchRun && novelData.batchRun.reason,
+      completed: (novelData.batchRun && novelData.batchRun.completed) || [],
+      hasFlags: Object.prototype.hasOwnProperty.call(novelData, 'chapterFlags'),
+      flags: novelData.chapterFlags,
+      rec: novelData.batchRun ? await h.idbGet(novelData.batchRun.id) : null
+    };
+  }, ND);
+  const recHas = !!(clean.rec && clean.rec.novelData && Object.prototype.hasOwnProperty.call(clean.rec.novelData, 'chapterFlags'));
+  check('R1', 'clean run creates no chapterFlags entries (key absent)', clean.reason === 'done' && (clean.completed || []).length === 4 && clean.hasFlags === false && recHas === false, JSON.stringify({ reason: clean.reason, completed: clean.completed, hasFlags: clean.hasFlags, flags: clean.flags, recHas }));
   await page.close();
 }
 
@@ -768,6 +903,45 @@ async function runPre6bNoFlags(page, raw) {
     check('M9', 'default-fill on load turns R11 red (chapterFlags created without a write)', absent === false, JSON.stringify(r));
     await page.close();
     try { fs.rmSync(m9.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m10 = mutateCopy(FLAGS.priorWriteOnce);
+  check('M10', 'flag NW_6B_PRIOR_DRAFT_WRITE_ONCE present', m10.ok, m10.detail);
+  if (m10.ok) {
+    const page = await openPage(m10.copy);
+    const OLD2 = 'Hand-written chapter two ORIGINAL prior text that must survive two coverage failures.';
+    await coverageStop(page, { nd: ND, regenerate: true, prefill: { 2: OLD2 } });
+    const s2 = await page.evaluate(async () => {
+      await nwBatchCoverageDecide('regenerate');
+      window.__h.cfg = { coverageFail: 2 };
+      await resumeBatchRun();
+      const prior = novelData.batchRun && novelData.batchRun.priorDrafts ? novelData.batchRun.priorDrafts[1] : null;
+      return { prior, ch2: (novelData.chapters || [])[1] || '' };
+    });
+    const originalSurvives = !!(s2.prior && s2.prior.text === OLD2);
+    check('M10', 'overwriting priorDraft on 2nd failure turns two-fail original-survives red', originalSurvives === false, JSON.stringify(s2));
+    await page.close();
+    try { fs.rmSync(m10.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m11 = mutateCopy(FLAGS.clearOnlyIfFailed);
+  check('M11', 'flag NW_6B_CLEAR_FLAG_ONLY_IF_FAILED present', m11.ok, m11.detail);
+  if (m11.ok) {
+    const page = await openPage(m11.copy);
+    const clean = await page.evaluate(async (nd) => {
+      const h = window.__h;
+      h.load(nd);
+      delete novelData.chapterFlags;
+      h.cfg = {};
+      await generateAllChapters();
+      return {
+        reason: novelData.batchRun && novelData.batchRun.reason,
+        hasFlags: Object.prototype.hasOwnProperty.call(novelData, 'chapterFlags'),
+        flags: novelData.chapterFlags
+      };
+    }, ND);
+    const absent = clean.hasFlags === false;
+    check('M11', 'unconditional clear-on-pass turns clean-run no-chapterFlags red', absent === false, JSON.stringify(clean));
+    await page.close();
+    try { fs.rmSync(m11.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
   }
 }
 

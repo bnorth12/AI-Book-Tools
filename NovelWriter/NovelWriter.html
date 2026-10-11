@@ -12014,7 +12014,8 @@ return c && c.name && c.backstory && c.arc; });
         //          the batch cleanly and records batchRun.stoppedAt / reason / detail. No alert/confirm/prompt during a batch
         //          (nwNotify). Resume after a parse (or provider) stop regenerates the stopped chapter; only a coverage stop
         //          is skipped on Resume. A coverage stop keeps the NEW draft in chapters[n-1] in both regenerate modes
-        //          and flags it (nwSetChapterFlag merge). The session auto-export runs only when the
+        //          and flags it (nwSetChapterFlag merge). With regenerate-on, the pre-run text is stored write-once in
+        //          batchRun.priorDrafts[n-1]; Skip restores it. The session auto-export runs only when the
         //          run stops (or a checkpoint write fails), not after a clean finish.
         // Must-fix (#134): failures are classified by type (nwClassifyError): 'retryable' (HTTP 429/5xx, network; one retry),
         //          'provider' (other HTTP status incl. 400/401/403, "API Key is missing"; no retry, no estimated usage) and
@@ -12048,6 +12049,8 @@ return c && c.name && c.backstory && c.arc; });
         var NW_6B_KEEP_NEW_DRAFT_BOTH_MODES = true;
         var NW_6B_LAZY_CHAPTER_FLAGS = true;
         var NW_6B_PARSE_FAIL_AS_FAILURE = true;
+        var NW_6B_PRIOR_DRAFT_WRITE_ONCE = true;
+        var NW_6B_CLEAR_FLAG_ONLY_IF_FAILED = true;
         window.NW_BATCH = NW_BATCH;
         window.nwBatchState = nwBatchState;
 
@@ -12244,6 +12247,38 @@ return c && c.name && c.backstory && c.arc; });
                 var el = nwBatchEl(p + n);
                 if (el) el.value = text || '';
             });
+        }
+
+        /** Single owner for batchRun.priorDrafts[] (write-once; oldest pre-run text wins). */
+        function nwBatchEnsurePriorDrafts(br) {
+            if (!br) return null;
+            if (!Array.isArray(br.priorDrafts)) br.priorDrafts = [];
+            return br.priorDrafts;
+        }
+        function nwBatchGetPriorDraft(br, n) {
+            var slot = br && Array.isArray(br.priorDrafts) ? br.priorDrafts[n - 1] : null;
+            return slot && typeof slot === 'object' ? slot : null;
+        }
+        function nwBatchSetPriorDraft(br, n, text) {
+            if (!(n >= 1) || !br) return null;
+            nwBatchEnsurePriorDrafts(br);
+            var prev = nwBatchGetPriorDraft(br, n);
+            var writeOnce = (typeof NW_6B_PRIOR_DRAFT_WRITE_ONCE === 'undefined' || NW_6B_PRIOR_DRAFT_WRITE_ONCE);
+            if (writeOnce && prev) return prev;
+            var next = { text: String(text == null ? '' : text), at: new Date().toISOString() };
+            br.priorDrafts[n - 1] = next;
+            return next;
+        }
+        function nwBatchClearPriorDraft(br, n) {
+            if (!br || !Array.isArray(br.priorDrafts) || !(n >= 1)) return;
+            br.priorDrafts[n - 1] = null;
+        }
+        function nwBatchRestorePriorDraft(br, n) {
+            var slot = nwBatchGetPriorDraft(br, n);
+            if (!slot || typeof slot.text !== 'string') return false;
+            nwBatchSetChapterText(n, slot.text);
+            nwBatchClearPriorDraft(br, n);
+            return true;
         }
 
         function nwBatchUsageMark() { return ensureBookTokenUsage().calls.length; }
@@ -12566,7 +12601,11 @@ return c && c.name && c.backstory && c.arc; });
 
         function nwBatchShowCoverageReview(n) {
             var msg = nwBatchEl('batchCoverageMsg');
-            if (msg) msg.textContent = 'Chapter ' + n + ' is missing required story points. Accept keeps the draft and rebuilds continuity from it. Regenerate retries this chapter. Skip continues without feeding this draft into later chapters.';
+            if (msg) {
+                var text = 'Chapter ' + n + ' is missing required story points. Accept keeps the draft and rebuilds continuity from it. Regenerate retries this chapter. Skip continues without feeding this draft into later chapters.';
+                if (nwBatchGetPriorDraft(novelData && novelData.batchRun, n)) text += ' Your previous text is saved; Skip restores it.';
+                msg.textContent = text;
+            }
             nwBatchShow('batchCoverageBox', true);
         }
 
@@ -12585,7 +12624,9 @@ return c && c.name && c.backstory && c.arc; });
                 }
                 if ((br.completed || []).indexOf(n) < 0) br.completed.push(n);
                 br.coverageAck = { chapter: n, decision: 'accept', at: now };
+                nwBatchClearPriorDraft(br, n);
             } else if (decision === 'skip') {
+                nwBatchRestorePriorDraft(br, n);
                 br.coverageAck = { chapter: n, decision: 'skip', at: now };
                 nwBatchState.coverageAck = br.id + ':' + n;
             } else if (decision === 'regenerate') {
@@ -12655,6 +12696,7 @@ return c && c.name && c.backstory && c.arc; });
                             forceChapter = br.stoppedAt;
                         } else if (persisted && (persisted.decision === 'skip' || persisted.decision === 'accept')) {
                             skipChapter = br.stoppedAt;
+                            if (persisted.decision === 'skip') nwBatchRestorePriorDraft(br, br.stoppedAt);
                         } else {
                             var ackKey = br.id + ':' + br.stoppedAt;
                             if (nwBatchState.coverageAck !== ackKey) {
@@ -12665,6 +12707,7 @@ return c && c.name && c.backstory && c.arc; });
                             }
                             skipChapter = br.stoppedAt;
                             br.coverageAck = { chapter: br.stoppedAt, decision: 'skip', at: new Date().toISOString() };
+                            nwBatchRestorePriorDraft(br, br.stoppedAt);
                         }
                     }
                     range = { from: br.range.from, to: br.range.to };
@@ -12727,10 +12770,12 @@ return c && c.name && c.backstory && c.arc; });
                         suggestedCap: null,
                         coverageAck: null,
                         chapterUsage: [],
-                        usageEstimated: []
+                        usageEstimated: [],
+                        priorDrafts: []
                     };
                 }
                 if (!Array.isArray(br.chapterUsage)) br.chapterUsage = [];
+                if (!Array.isArray(br.priorDrafts)) br.priorDrafts = [];
                 var capEl = nwBatchEl('batchTokenCap');
                 if (capEl) capEl.value = String(cap);
                 nwBatchState.running = true;
@@ -12811,16 +12856,23 @@ return c && c.name && c.backstory && c.arc; });
                             at: new Date().toISOString()
                         });
                     }
+                    // N1: keep the new draft; write-once snapshot of the pre-run text (oldest wins).
+                    if (old) nwBatchSetPriorDraft(br, n, old);
                 }
                 if (outcome.ok && (typeof NW_6B_CLEAR_FLAG_ON_PASS === 'undefined' || NW_6B_CLEAR_FLAG_ON_PASS)) {
-                    if (typeof nwSetChapterFlag === 'function') {
-                        nwSetChapterFlag(n, {
-                            coverageFailed: false,
-                            missing: [],
-                            at: new Date().toISOString()
-                        });
+                    var existingFlag = (novelData.chapterFlags || [])[n - 1];
+                    var onlyIfFailed = (typeof NW_6B_CLEAR_FLAG_ONLY_IF_FAILED === 'undefined' || NW_6B_CLEAR_FLAG_ONLY_IF_FAILED);
+                    if (!onlyIfFailed || (existingFlag && existingFlag.coverageFailed === true)) {
+                        if (typeof nwSetChapterFlag === 'function') {
+                            nwSetChapterFlag(n, {
+                                coverageFailed: false,
+                                missing: [],
+                                at: new Date().toISOString()
+                            });
+                        }
                     }
                 }
+                if (outcome.ok && nwBatchGetPriorDraft(br, n)) nwBatchClearPriorDraft(br, n);
                 if (typeof NW_6B_KEEP_NEW_DRAFT_BOTH_MODES !== 'undefined' && !NW_6B_KEEP_NEW_DRAFT_BOTH_MODES) {
                     if (!outcome.ok && outcome.reason === 'coverage' && br.regenerateExisting) {
                         br.rejectedDraft = { chapter: n, text: String((novelData.chapters || [])[n - 1] || ''), detail: nwBatchShort(outcome.detail, 300) };
