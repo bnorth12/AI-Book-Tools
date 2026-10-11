@@ -248,3 +248,31 @@ Relevance legend: **W**orld · **C**haracter · **S**tory · **A**rc · **CTR** 
 | integrateBreakdown | ○ | ○ | ● | ○ | ● |
 
 ● = primary · ○ = secondary · — = N/A
+
+---
+
+## Sites missing from this inventory (as of main `600b35d`)
+
+Skill ids from `defaultSkillCatalog`; all route through `callAI()`.
+
+| Skill id | Binders | Notes |
+|----------|---------|-------|
+| `tab2.enrichCharacters` | charactersDigest, subplotsDigest, storyArcDigest, plotDigest, settingDigest, worldBibleDigest, densityFloors | Cast densifier |
+| `tab3.enrichSubplots` | subplotsDigest, charactersDigest, plotDigest, worldBibleDigest, densityFloors | Throughline densifier |
+| `tab4.enrichChapterBlueprints` | chapterBlueprints, charactersDigest, subplotsDigest, novelOutline, settingDigest | Six-beat blueprint densifier |
+| `tab5.reviseChapterForQuality` | chapterNum, chapterText, qualityReviseBrief, chapterBlueprint | Quality-gate revise pass |
+| `scorecardBeat` (taskType) | chapter text, blueprint beats | 8d scorecard beat check |
+
+## Story data model reads (A1, design only)
+
+A1 (`NovelWriter/docs/ARCHITECTURE.md` "Data model and schema") defines the stored story data that prompts read. No prompt text changes in A1 or S1; S1 makes the data exist and survive. Per-prompt mapping, slot, and expected chapter-quality effect: `NW_PROMPT_SKILL_SCHEMA_MAP.md` (plans folder). Summary:
+
+| Prompt | New A1 reads | Slot |
+|--------|--------------|------|
+| generateChapter | `chapterRequirements[n-1]` (cast, setting, mustNotInclude), `chapterFactChecks[n-1].items`, `chapterWritingPlans[n-1]`, `chapterFingerprints[n-2]` (prev ending), character `goal/flaw/obligations` | Q1, Q2, Q3, 4p |
+| reviseChapterForQuality / updateChapter / integrateBreakdown | hard-requirements block as a must-preserve list | Q1 |
+| continuityAudit | final text, tracker `auditedTextHash`, `world.rules`, `characters[].relationships` (read-only) | Q5 |
+| scorecardBeat / 8d | `nwDeriveChapterRequirements`, `chapterFactChecks` (legacy + items), `chapterWritingPlans` (advisory planCoverage) | S1, 4p |
+| Character / subplot / world suggest and enrich | write through `normalizeCharacterItem`, `subplotsMeta`, `nwWorldUpdate` so fields survive | S1 |
+
+`[WAIT]` fields (`world.concepts`, `world.topicTags`, `explainerFor`, worldBeat) are not read by any prompt until the world-beats decision.
