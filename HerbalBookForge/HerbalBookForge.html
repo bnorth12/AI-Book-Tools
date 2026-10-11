@@ -689,13 +689,23 @@
             };
         }
 
+        function isSecretField(name) {
+            const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return normalized === 'authorization'
+                || /secret|password|apikey|accesstoken|authtoken|refreshtoken|bearer/i.test(normalized);
+        }
+
+        function containsSecretFields(value) {
+            if (Array.isArray(value)) return value.some(containsSecretFields);
+            if (!value || typeof value !== 'object') return false;
+            return Object.entries(value).some(([name, nested]) => isSecretField(name) || containsSecretFields(nested));
+        }
+
         function stripSecretFields(value) {
             if (Array.isArray(value)) return value.map(stripSecretFields);
             if (!value || typeof value !== 'object') return value;
             return Object.fromEntries(Object.entries(value)
-                .filter(([name]) => !/\b(?:api\s*)?key\b|\btoken\b|\bsecret\b|\bpassword\b|\bauthorization\b/i.test(
-                    name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ')
-                ))
+                .filter(([name]) => !isSecretField(name))
                 .map(([name, nested]) => [name, stripSecretFields(nested)]));
         }
 
@@ -909,7 +919,9 @@
             const reader = new FileReader();
             reader.onload = e => {
                 try {
-                    const parsed = stripSecretFields(JSON.parse(e.target.result));
+                    const rawProject = JSON.parse(e.target.result);
+                    const secretsRemoved = containsSecretFields(rawProject);
+                    const parsed = stripSecretFields(rawProject);
                     project = {
                         ...project,
                         ...parsed,
@@ -922,9 +934,12 @@
                         preview: normalizePreviewState(parsed.preview)
                     };
                     project.meta.version = "1.0.0";
+                    localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject()));
                     loadProject();
                     saveProject();
-                    alert('Project imported successfully.');
+                    alert(secretsRemoved
+                        ? 'Project imported successfully. Sensitive fields were removed. If the file was shared, rotate your API key at console.x.ai.'
+                        : 'Project imported successfully.');
                 } catch (err) {
                     alert(`Import failed: ${err.message}`);
                 }

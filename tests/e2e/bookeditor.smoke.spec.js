@@ -33,6 +33,11 @@ test('BE-SMOKE-01 tab shell and core controls render', async ({ page }) => {
 test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
   await page.goto(APP_URL);
 
+  const importNotices = [];
+  page.on('dialog', async dialog => {
+    importNotices.push(dialog.message());
+    await dialog.accept();
+  });
   const secret = 'xai-TESTKEY-123';
   const exportedJson = await page.evaluate((apiKey) => new Promise((resolve) => {
     document.getElementById('apiKey').value = apiKey;
@@ -60,4 +65,66 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
   });
   await expect(page.locator('#bookText')).toHaveValue('Imported text.');
   await expect(page.locator('#apiKey')).toHaveValue('');
+  expect(importNotices.some(message => message.includes('Sensitive fields were removed') && message.includes('console.x.ai'))).toBe(true);
+
+  const exportedBook = await page.evaluate((apiKey) => new Promise((resolve) => {
+    novelData = {
+      ...novelData,
+      apiKey,
+      bearer: apiKey,
+      tokenUsage: { calls: 2, promptTokens: 17 },
+      maxTokens: 4321,
+      promptTokens: 17,
+      agentKey: 'fetchAuthors',
+    };
+    const originalCreateObjectURL = URL.createObjectURL;
+    URL.createObjectURL = function (blob) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        URL.createObjectURL = originalCreateObjectURL;
+        resolve(reader.result);
+      };
+      reader.readAsText(blob);
+      return 'blob:mock';
+    };
+    exportBook();
+  }), secret);
+  const parsedBook = JSON.parse(exportedBook);
+  expect(exportedBook).not.toContain(secret);
+  expect(parsedBook.novelData).toMatchObject({
+    tokenUsage: { calls: 2, promptTokens: 17 },
+    maxTokens: 4321,
+    promptTokens: 17,
+    agentKey: 'fetchAuthors',
+  });
+
+  await page.evaluate(() => { delete novelData.apiKey; });
+  const [fileChooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.evaluate(() => importBook()),
+  ]);
+  await fileChooser.setFiles({
+    name: 'book-with-secret.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      ...parsedBook,
+      novelData: { ...parsedBook.novelData, apiKey: secret, authorization: secret },
+    })),
+  });
+  await expect.poll(() => page.evaluate(() => ({
+    tokenUsage: novelData.tokenUsage,
+    maxTokens: novelData.maxTokens,
+    promptTokens: novelData.promptTokens,
+    agentKey: novelData.agentKey,
+    hasApiKey: Object.hasOwn(novelData, 'apiKey'),
+    hasAuthorization: Object.hasOwn(novelData, 'authorization'),
+  }))).toEqual({
+    tokenUsage: { calls: 2, promptTokens: 17 },
+    maxTokens: 4321,
+    promptTokens: 17,
+    agentKey: 'fetchAuthors',
+    hasApiKey: false,
+    hasAuthorization: false,
+  });
+  expect(importNotices.some(message => message.includes('rotate your API key') && message.includes('console.x.ai'))).toBe(true);
 });

@@ -37,10 +37,19 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
   await page.goto(APP_URL);
   await page.locator('.tab button:has-text("Output JSON")').click();
   const secret = 'xai-TESTKEY-123';
+  const importNotices = [];
+  page.on('dialog', async dialog => {
+    importNotices.push(dialog.message());
+    await dialog.accept();
+  });
 
   const exportedJson = await page.evaluate((apiKey) => new Promise((resolve) => {
     novelData.apiKey = apiKey;
-    novelData.nested = { accessToken: apiKey, title: 'Safe content' };
+    novelData.nested = { accessToken: apiKey, bearer: apiKey, title: 'Safe content' };
+    novelData.tokenUsage = { calls: 2, promptTokens: 17 };
+    novelData.maxTokens = 4321;
+    novelData.promptTokens = 17;
+    novelData.agentKey = 'fetchAuthors';
     const originalCreateObjectURL = URL.createObjectURL;
     URL.createObjectURL = function (blob) {
       const reader = new FileReader();
@@ -54,6 +63,12 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     exportJSON();
   }), secret);
   expect(exportedJson).not.toContain(secret);
+  expect(JSON.parse(exportedJson).novelData).toMatchObject({
+    tokenUsage: { calls: 2, promptTokens: 17 },
+    maxTokens: 4321,
+    promptTokens: 17,
+    agentKey: 'fetchAuthors',
+  });
 
   const [fileChooser] = await Promise.all([
     page.waitForEvent('filechooser'),
@@ -65,12 +80,37 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     buffer: Buffer.from(JSON.stringify({
       schemaVersion: '1.0',
       sourceTool: 'BookDecomposer',
-      novelData: { title: 'Imported safely', apiKey: secret, nested: { authorization: secret } },
+      novelData: {
+        title: 'Imported safely',
+        apiKey: secret,
+        nested: { authorization: secret, bearer: secret },
+        tokenUsage: { calls: 2, promptTokens: 17 },
+        maxTokens: 4321,
+        promptTokens: 17,
+        agentKey: 'fetchAuthors',
+      },
     })),
   });
 
   await expect(page.locator('#jsonOutput')).toContainText('Imported safely');
   await expect(page.locator('#jsonOutput')).not.toContainText(secret);
-  expect(await page.evaluate(() => Object.hasOwn(novelData, 'apiKey'))).toBe(false);
+  expect(await page.evaluate(() => ({
+    hasApiKey: Object.hasOwn(novelData, 'apiKey'),
+    hasAuthorization: Object.hasOwn(novelData.nested, 'authorization'),
+    hasBearer: Object.hasOwn(novelData.nested, 'bearer'),
+    tokenUsage: novelData.tokenUsage,
+    maxTokens: novelData.maxTokens,
+    promptTokens: novelData.promptTokens,
+    agentKey: novelData.agentKey,
+  }))).toEqual({
+    hasApiKey: false,
+    hasAuthorization: false,
+    hasBearer: false,
+    tokenUsage: { calls: 2, promptTokens: 17 },
+    maxTokens: 4321,
+    promptTokens: 17,
+    agentKey: 'fetchAuthors',
+  });
   await expect(page.locator('#apiKey')).toHaveValue('');
+  expect(importNotices.some(message => message.includes('Sensitive fields were removed') && message.includes('console.x.ai'))).toBe(true);
 });

@@ -9321,13 +9321,23 @@ return c && c.name && c.backstory && c.arc; });
 		    // ---- NW.GEN: Session Import/Export Functions ----
 		    // NW.GEN.SES.1: exportSession() SHALL serialise novelData into a schema-versioned JSON envelope (schemaVersion: '1.0') and trigger a file download.
 		    // NW.GEN.SES.2: importSession() SHALL accept a JSON file, detect whether it is an envelope or bare novelData, normalise it, and restore the full UI state.
+		    function isSecretField(name) {
+		        const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+		        return normalized === 'authorization'
+		            || /secret|password|apikey|accesstoken|authtoken|refreshtoken|bearer/i.test(normalized);
+		    }
+
+		    function containsSecretFields(value) {
+		        if (Array.isArray(value)) return value.some(containsSecretFields);
+		        if (!value || typeof value !== 'object') return false;
+		        return Object.entries(value).some(([name, nested]) => isSecretField(name) || containsSecretFields(nested));
+		    }
+
 		    function stripSecretFields(value) {
 		        if (Array.isArray(value)) return value.map(stripSecretFields);
 		        if (!value || typeof value !== 'object') return value;
 		        return Object.fromEntries(Object.entries(value)
-		            .filter(([name]) => !/\b(?:api\s*)?key\b|\btoken\b|\bsecret\b|\bpassword\b|\bauthorization\b/i.test(
-		                name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ')
-		            ))
+		            .filter(([name]) => !isSecretField(name))
 		            .map(([name, nested]) => [name, stripSecretFields(nested)]));
 		    }
 
@@ -9354,7 +9364,6 @@ return c && c.name && c.backstory && c.arc; });
 		    const {
 		        apiKey: _apiKey,
 		        model: _model,
-		        maxTokens: _maxTokens,
 		        authors: _authors,
 		        bookImprovements: _bookImprovements,
 		        chapterImprovements: _chapterImprovements,
@@ -9390,6 +9399,9 @@ return c && c.name && c.backstory && c.arc; });
 		// Validate and normalize incoming session payloads.
 		function normalizeImportedSessionData(rawData) {
 		    const warnings = [];
+		    if (containsSecretFields(rawData)) {
+		        warnings.push('Sensitive fields were removed from the imported file. If it was shared, rotate your API key at console.x.ai.');
+		    }
 		    const isSchemaEnvelope = rawData && typeof rawData === 'object' && rawData.schemaVersion === '1.0' && rawData.novelData && typeof rawData.novelData === 'object';
 		    const isLegacyEnvelope = rawData && typeof rawData === 'object' && rawData.novelData && typeof rawData.novelData === 'object';
 		    const isBareLegacy = rawData && typeof rawData === 'object' && typeof rawData.genre === 'string' && Array.isArray(rawData.chapters);
@@ -9590,6 +9602,7 @@ return c && c.name && c.backstory && c.arc; });
 		        try {
 		            const rawSessionData = JSON.parse(e.target.result);
 		            const { novelData: importedNovelData, requestLog: importedRequestLog, importMode, warnings } = normalizeImportedSessionData(rawSessionData);
+		            const existingApiKey = document.getElementById('apiKey').value;
 		            // Slot 8b: nwTiming is envelope-level, display-only. Never merge into IndexedDB stats.
 		            if (typeof nwTimingState !== 'undefined') {
 		                nwTimingState.imported = rawSessionData && rawSessionData.nwTiming ? stripSecretFields(rawSessionData.nwTiming) : null;
@@ -9602,6 +9615,8 @@ return c && c.name && c.backstory && c.arc; });
 		            if (!novelData.batchRun && typeof nwBatchForgetRun === 'function') await nwBatchForgetRun(priorRunId);
 
 		            applySessionDataToUI();
+		            document.getElementById('apiKey').value = existingApiKey;
+		            novelData.apiKey = existingApiKey;
 
 		            // Run-less import: drop the previous book's custom cap so Generate All uses a fresh estimate.
 		            if (!novelData.batchRun) {
@@ -13826,4 +13841,3 @@ return c && c.name && c.backstory && c.arc; });
 	    <div id="nwToast" role="status" aria-live="polite" data-testid="nw-toast" hidden style="position: fixed; right: 1em; bottom: 1em; max-width: 32em; padding: 0.6em 0.9em; background: #333; color: #fff; border-radius: 4px; z-index: 10000;"></div>
 	</body>
 </html>
-

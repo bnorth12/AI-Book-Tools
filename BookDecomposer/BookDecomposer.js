@@ -31,13 +31,23 @@ let novelData = {
 };
 let isBookProcessed = false;
 
+function isSecretField(name) {
+    const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return normalized === "authorization"
+        || /secret|password|apikey|accesstoken|authtoken|refreshtoken|bearer/i.test(normalized);
+}
+
+function containsSecretFields(value) {
+    if (Array.isArray(value)) return value.some(containsSecretFields);
+    if (!value || typeof value !== "object") return false;
+    return Object.entries(value).some(([name, nested]) => isSecretField(name) || containsSecretFields(nested));
+}
+
 function stripSecretFields(value) {
     if (Array.isArray(value)) return value.map(stripSecretFields);
     if (!value || typeof value !== "object") return value;
     return Object.fromEntries(Object.entries(value)
-        .filter(([name]) => !/\b(?:api\s*)?key\b|\btoken\b|\bsecret\b|\bpassword\b|\bauthorization\b/i.test(
-            name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[^a-z0-9]+/gi, " ")
-        ))
+        .filter(([name]) => !isSecretField(name))
         .map(([name, nested]) => [name, stripSecretFields(nested)]));
 }
 
@@ -443,6 +453,7 @@ window.importJSON = function() {
             try {
                 const raw = JSON.parse(e.target.result);
                 const incomingData = raw && raw.novelData && typeof raw.novelData === "object" ? raw.novelData : raw;
+                const secretsRemoved = containsSecretFields(raw);
                 const incoming = stripSecretFields(incomingData);
                 if (!incoming || typeof incoming !== "object") {
                     throw new Error("Invalid JSON structure.");
@@ -472,6 +483,9 @@ window.importJSON = function() {
                 generateJSON();
                 isBookProcessed = true;
                 showTab(4);
+                if (secretsRemoved) {
+                    alert("Sensitive fields were removed from the imported file. If it was shared, rotate your API key at console.x.ai.");
+                }
             } catch (error) {
                 alert("Error importing JSON: " + error.message);
             }

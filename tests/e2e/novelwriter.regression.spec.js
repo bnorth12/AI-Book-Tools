@@ -302,6 +302,12 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
     document.getElementById('title').value = 'Schema Validation Novel';
     document.getElementById('storyArc').value = 'A test of schema compliance.';
     document.getElementById('genre').value = 'scifi';
+    document.getElementById('maxTokens').value = '4321';
+    novelData.tokenUsage = { calls: 2, promptTokens: 17 };
+    novelData.promptTokens = 17;
+    novelData.agentKey = 'fetchAuthors';
+    requestLog.tokenUsage = '17 tokens';
+    requestLog.tokenUsageDetail = { promptTokens: 17 };
   });
 
   // Intercept the download by patching Blob/URL.createObjectURL in-page
@@ -338,11 +344,20 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
   expect(Array.isArray(parsed.novelData.subplots)).toBe(true);
   expect(Array.isArray(parsed.novelData.chapters)).toBe(true);
   expect(parsed.novelData).toHaveProperty('requestLog');
+  expect(parsed.novelData).toMatchObject({
+    tokenUsage: { calls: 2, promptTokens: 17 },
+    maxTokens: 4321,
+    promptTokens: 17,
+    agentKey: 'fetchAuthors',
+    requestLog: {
+      tokenUsage: '17 tokens',
+      tokenUsageDetail: { promptTokens: 17 },
+    },
+  });
 
   // Sensitive and operational fields must NOT be present in novelData
   expect(parsed.novelData).not.toHaveProperty('apiKey');
   expect(parsed.novelData).not.toHaveProperty('model');
-  expect(parsed.novelData).not.toHaveProperty('maxTokens');
   expect(parsed.novelData).not.toHaveProperty('chapterImprovements');
   expect(parsed.novelData).not.toHaveProperty('bookImprovements');
   expect(parsed.novelData).not.toHaveProperty('authors');
@@ -357,7 +372,12 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
 
 test('NW-REG-10 Import Session ignores an API key in the file', async ({ page }) => {
   await gotoApp(page);
-  page.on('dialog', dialog => dialog.accept());
+  const importNotices = [];
+  page.on('dialog', async dialog => {
+    importNotices.push(dialog.message());
+    await dialog.accept();
+  });
+  await page.locator('#apiKey').fill('existing-user-key');
 
   await page.locator('#importFile').setInputFiles({
     name: 'session-with-key.json',
@@ -366,12 +386,50 @@ test('NW-REG-10 Import Session ignores an API key in the file', async ({ page })
       schemaVersion: '1.0',
       sourceTool: 'NovelWriter',
       sourceVersion: '1.0.0',
-      novelData: { title: 'Imported without credentials', genre: 'scifi', chapters: [], apiKey: 'xai-TESTKEY-123' }
+      novelData: {
+        title: 'Imported without credentials',
+        genre: 'scifi',
+        chapters: [],
+        apiKey: 'xai-TESTKEY-123',
+        bearer: 'xai-TESTKEY-123',
+        tokenUsage: { calls: 2, promptTokens: 17 },
+        maxTokens: 4321,
+        promptTokens: 17,
+        agentKey: 'fetchAuthors',
+      },
+      requestLog: {
+        apiKey: 'xai-TESTKEY-123',
+        authorization: 'xai-TESTKEY-123',
+        tokenUsage: '17 tokens',
+        tokenUsageDetail: { promptTokens: 17 },
+      },
     })),
   });
 
   await expect(page.locator('#title')).toHaveValue('Imported without credentials');
-  await expect(page.locator('#apiKey')).toHaveValue('');
+  await expect(page.locator('#apiKey')).toHaveValue('existing-user-key');
+  await expect(page.locator('#maxTokens')).toHaveValue('4321');
+  expect(await page.evaluate(() => ({
+    hasApiKey: Object.hasOwn(novelData, 'apiKey'),
+    apiKey: novelData.apiKey,
+    hasBearer: Object.hasOwn(novelData, 'bearer'),
+    tokenUsage: novelData.tokenUsage,
+    promptTokens: novelData.promptTokens,
+    agentKey: novelData.agentKey,
+    requestLog,
+  }))).toMatchObject({
+    hasApiKey: true,
+    apiKey: 'existing-user-key',
+    hasBearer: false,
+    tokenUsage: { calls: 2, promptTokens: 17 },
+    promptTokens: 17,
+    agentKey: 'fetchAuthors',
+    requestLog: {
+      tokenUsage: '17 tokens',
+      tokenUsageDetail: { promptTokens: 17 },
+    },
+  });
+  expect(importNotices.some(message => message.includes('Sensitive fields were removed') && message.includes('console.x.ai'))).toBe(true);
 });
 
 // --- Execution HUD state transitions ---
