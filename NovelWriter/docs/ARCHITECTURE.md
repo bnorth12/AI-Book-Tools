@@ -344,3 +344,102 @@ Status: DESIGN for A1. Engineering owns it. Product needs come from Fiction's `N
 4. `normalizeSubplotItem` (~L2227) flattens objects to strings with no copy.
 
 All four are the same class of data loss as #141. S1 closes them before Q1-Q3 and 4p build on the schema.
+
+
+### 7. Per-chapter requirement and replay records (N9-N14)
+Engineering confirms the names `chapterRequirements` and `chapterFingerprints`. Both are NovelWriter-local and indexed by `n-1`, like the other per-chapter arrays.
+
+| Key | Shape | Owner (only writer) | Readers | Notes |
+|---|---|---|---|---|
+| `chapterFactChecks[n-1]` (N9) | `{items:[{id,text,mustInclude:true,source:'blueprint'\|'user'\|'plan'}]}` | user (Tab 5) and the 4p plan build | Q1, 8d | Migration is **additive**: it adds `items` built from legacy string/array forms (text unchanged) and keeps the legacy value as is. S1 readers (8d included) accept both forms until a later version drops legacy, which is out of scope. |
+| `chapterRequirements[n-1]` (N10, N11) | `{cast:[charId\|text], setting:[locationId\|text], mustNotInclude:[string], derivedAt}` | one extractor `nwDeriveChapterRequirements(n)` (S1), also used by 8d `cast`. User edits only `mustNotInclude`. | Q1, Q2 prompt, 8d cast/noteLeak | Built at migration and whenever the blueprint changes. Names that don't resolve stay as text. `mustNotInclude` is merged with the code constant `NW_NOTE_LEAK_TERMS` at read time, never written into it. |
+| `chapterFlags[n-1].replay` (N12) | `{internal,prev,openingCopy,at}` | Q3 (merged key in 6b's `chapterFlags`) | Tab 6, Resume | Merges keys only, per §5. |
+| `chapterFingerprints[n-1]` (N12) | `{textHash,tailWords:250,openingShingles:[hash]}` | Q3 | Q3 replay check | **A derived cache, never authoritative.** It's rebuilt from saved chapter text whenever `textHash` doesn't match, and it's safe to drop. |
+| tracker row `auditedTextHash` (N13) | string | Q5 | Q5 | It's checked against the current text hash, and a mismatch marks the row stale. Q5 reads `world.rules` and `relationships` and never writes them. |
+| `chapterWritingPlans` item refs (N14) | optional `charId`, `locationId`, `factId`, `conceptId`* | 4p | 8d planCoverage | These are references only. If a referenced id is missing, the item keeps its `label` text. |
+
+One hash function serves `textHash` and `auditedTextHash`: a stable hash of the normalized text with whitespace collapsed. S1 defines it once, and it must not call the network or an AI.
+
+### 8. Schema diagrams
+Entities and the derived per-chapter records (design target after S1; `*` marks fields reserved for Brian's world-beats talk):
+
+```mermaid
+erDiagram
+    NOVELDATA ||--o| WORLD : "world (setting, genre, legacy worldBible)"
+    NOVELDATA ||--o{ CHARACTER : "characters[]"
+    NOVELDATA ||--o{ SUBPLOT : "subplots[] + subplotsMeta[]"
+    NOVELDATA ||--o{ CHAPTER : "index n-1"
+    WORLD ||--o{ LOCATION : "locations[]"
+    WORLD ||--o{ RULE : "rules[]"
+    WORLD ||--o{ CONCEPT : "concepts[]*"
+    CHARACTER ||--o{ RELATIONSHIP : "relationships[]"
+    CHAPTER ||--|| BLUEPRINT : "chapterBlueprints"
+    CHAPTER ||--o| FACTCHECKS : "chapterFactChecks.items"
+    CHAPTER ||--o| REQUIREMENTS : "chapterRequirements"
+    CHAPTER ||--o| WRITINGPLAN : "chapterWritingPlans"
+    CHAPTER ||--o| FLAGS : "chapterFlags"
+    CHAPTER ||--o| FINGERPRINT : "chapterFingerprints (cache)"
+    CHAPTER ||--o| SCORECARD : "chapterScorecards"
+    REQUIREMENTS }o--o{ CHARACTER : "cast charId"
+    REQUIREMENTS }o--o{ LOCATION : "setting locationId"
+    WRITINGPLAN }o--o{ CHARACTER : "item charId"
+    WRITINGPLAN }o--o{ LOCATION : "item locationId"
+    WRITINGPLAN }o--o{ FACTCHECKS : "item factId"
+    WRITINGPLAN }o--o{ CONCEPT : "item conceptId*"
+```
+
+How the entities feed the writing plan, the chapter prompt and the scorecard (solid arrows are writes by the single owner, dotted arrows are reads):
+
+```mermaid
+flowchart LR
+    subgraph SE["Story entities: user and AI-suggest, Tabs 1-5"]
+        W["World: setting, locations, rules, concepts*"]
+        C["Characters: goal, flaw, voice, relationships"]
+        P["Plot: outlines, blueprints, subplots"]
+        F[chapterFactChecks.items]
+    end
+    X[nwDeriveChapterRequirements] --> R["chapterRequirements: cast, setting, mustNotInclude"]
+    P -.-> X
+    C -.-> X
+    W -.-> X
+    B["4p plan build or edit"] --> WP[chapterWritingPlans]
+    P -.-> B
+    C -.-> B
+    W -.-> B
+    F -.-> B
+    R -.-> B
+    WP -.-> PR["Chapter prompt: Generate or Generate All"]
+    P -.-> PR
+    C -.-> PR
+    W -.-> PR
+    R -.-> PR
+    PR --> T["chapters[n-1] text"]
+    T -.-> S[8d scorer] --> SC["chapterScorecards incl. planCoverage"]
+    WP -.-> S
+    R -.-> S
+    F -.-> S
+    T -.-> Q3[Q3 replay] --> FP[chapterFingerprints cache]
+    Q3 --> FL[chapterFlags.replay]
+    G[6b coverage] --> FL
+    T -.-> Q5[Q5 tracker] --> CT["continuityTracker + auditedTextHash"]
+    W -.-> Q5
+    C -.-> Q5
+```
+
+Migration on import runs once, as a fixed sequence:
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant I as importSession
+    participant N as normalizeImportedSessionData
+    participant M as nwMigrateSession (S1)
+    participant A as applySessionDataToUI
+    U->>I: choose session file
+    I->>N: raw envelope
+    N-->>I: novelData (absent stays absent, unknown keys kept)
+    I->>M: novelData
+    Note over M: pure, additive, idempotent, no AI or network calls
+    M-->>I: nwSchemaVersion=1, subplotsMeta, world.notes, characters[].id, chapterFactChecks.items, chapterRequirements
+    I->>A: render with textContent and .value only
+```
