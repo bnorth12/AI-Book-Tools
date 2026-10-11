@@ -60,6 +60,7 @@ It reads `XAI_API_KEY` (with `GROK_API_KEY` as a fallback) from the dotenv file 
 
 | Variable | Default | Used by | Meaning |
 |---|---|---|---|
+| `NW_HTML` | `<repo>/NovelWriter/NovelWriter.html` | QE5 and B2 lean smokes | HTML file under test; override with an absolute path or `file:` URL |
 | `NW_HTML_PATH` | `<repo>/NovelWriter/NovelWriter.html` | quality HTML smoke, B4 prove | HTML file under test |
 | `NW_FIXTURES_DIR` | `<repo>/scripts/fixtures/nw_slop` | slop tells, B5-0, B4 prove | Vendored seed, annex chapters and inject spans |
 | `NW_OUT_DIR` | `<repo>/out/nw-smoke` | all four | Report/evidence output (gitignored) |
