@@ -20,6 +20,13 @@
  *       (round-trip through import AND checkpoint restore); key name is replay (not replayFail)
  *   R10 chapter fails then passes: nwSetChapterFlag merge {coverageFailed:false}; Tab 5/6 do not render
  *   R11 v0-pre6b-no-flags: after load, import, and checkpoint restore, novelData has NO chapterFlags key
+ *   R12 Skip with prior restores it into later packets; Skip with no prior keeps the failed draft
+ *       but excludes it from buildChapterContinuityPacket
+ *   R13 coverage decide in-progress guard: buttons disabled; double-click makes no extra audit/checkpoint
+ *   R14 Accept: failing continuity audit leaves the decision pending (no complete / prior clear / ack)
+ *   R15 restoreInterruptedBatchRun keeps reason coverage + coverageAck; decision box shows again
+ *   R16 nwBatchStart refuses while importing (zero provider calls)
+ *   R17 last planned chapter Accept/Skip finalizes the run (no Click Resume)
  *
  * Mutations (TEMP copy, flags flipped false; each must turn a core assertion red):
  *   M3  drop packet rollback -> R2 red
@@ -31,6 +38,11 @@
  *   M9  default-fill chapterFlags on load -> R11 red
  *   M10 overwrite priorDraft on 2nd coverage fail -> original does not survive
  *   M11 unconditional clear-on-pass -> clean run creates chapterFlags
+ *   M12 skip does not exclude failed draft from later packets -> R12 red
+ *   M13 no decide-in-progress guard -> double Accept extra audit/checkpoint
+ *   M14 Accept still completes after audit fail -> R14 red
+ *   M15 restore forces reason user on coverage stop -> R15 red
+ *   M16 Start during import is not refused -> R16 red
  *
  * Usage: node scripts/_smoke_nw_retention.mjs
  * Env:   NW_HTML_PATH (default this checkout's NovelWriter/NovelWriter.html), NW_OUT_DIR (default out/nw-smoke)
@@ -86,7 +98,12 @@ const FLAGS = {
   keepNewDraft: 'var NW_6B_KEEP_NEW_DRAFT_BOTH_MODES = true;',
   lazyFlags: 'var NW_6B_LAZY_CHAPTER_FLAGS = true;',
   priorWriteOnce: 'var NW_6B_PRIOR_DRAFT_WRITE_ONCE = true;',
-  clearOnlyIfFailed: 'var NW_6B_CLEAR_FLAG_ONLY_IF_FAILED = true;'
+  clearOnlyIfFailed: 'var NW_6B_CLEAR_FLAG_ONLY_IF_FAILED = true;',
+  skipExclude: 'var NW_6B_SKIP_EXCLUDE_CONTINUITY = true;',
+  decideGuard: 'var NW_6B_COVERAGE_DECIDE_GUARD = true;',
+  acceptAudit: 'var NW_6B_ACCEPT_AUDIT_ABORT = true;',
+  restoreCoverage: 'var NW_6B_RESTORE_KEEP_COVERAGE = true;',
+  startLock: 'var NW_6B_START_REFUSES_LOCK = true;'
 };
 function mutateCopy(flagFrom) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-6b-ret-'));
@@ -132,6 +149,8 @@ async function installHarness(page) {
       if (am) {
         const an = Number(am[1]);
         h.calls.push({ kind: 'audit', ch: an });
+        if (cfg.auditDelayMs) await new Promise((r) => setTimeout(r, cfg.auditDelayMs));
+        if (cfg.auditFail) throw new Error('smoke: audit fail');
         recordBookTokenUsage({ operationName: opName, originTab: 'tab5', model: 'smoke-stub', prompt_tokens: 60, completion_tokens: 40, total_tokens: 100 });
         return {
           chapterSummary: 'smoke audit ch' + an,
@@ -210,6 +229,7 @@ async function coverageStop(page, extra) {
     if (o.prefill) Object.keys(o.prefill).forEach((n) => nwBatchSetChapterText(Number(n), o.prefill[n]));
     if (o.regenerate != null) document.getElementById('batchRegenerate').checked = !!o.regenerate;
     h.seedContinuity();
+    if (o.to != null) document.getElementById('batchTo').value = String(o.to);
     h.cfg = { coverageFail: o.coverageFail != null ? o.coverageFail : 2 };
     const t0 = Date.now();
     const r = await generateAllChapters();
@@ -317,21 +337,21 @@ async function coverageStop(page, extra) {
   check('R1', 'two-fail: original survives in checkpoint and export after 2nd fail', !!(s2.recPrior && s2.recPrior.text === OLD2 && s2.expPrior && s2.expPrior.text === OLD2), JSON.stringify({ recPrior: s2.recPrior, expPrior: s2.expPrior }));
   check('R1', 'two-fail: restore from checkpoint keeps original priorDrafts', !!(s2.restoredOk === true && s2.restoredPrior && s2.restoredPrior.text === OLD2), JSON.stringify({ restoredOk: s2.restoredOk, restoredPrior: s2.restoredPrior }));
   const skipped = await page.evaluate(async () => {
-    // restoreInterruptedBatchRun rewrites reason to 'user'; re-stamp coverage so Skip is valid.
-    if (novelData.batchRun) {
-      novelData.batchRun.reason = 'coverage';
-      novelData.batchRun.stoppedAt = 2;
-    }
     const ok = await nwBatchCoverageDecide('skip');
+    const p3 = typeof buildChapterContinuityPacket === 'function' ? buildChapterContinuityPacket(3) : null;
     return {
       ok,
       ch2: (novelData.chapters || [])[1] || '',
       gen: (document.getElementById('chapterGenContent2') || {}).value || '',
       edit: (document.getElementById('chapterEditContent2') || {}).value || '',
-      prior: novelData.batchRun && novelData.batchRun.priorDrafts ? novelData.batchRun.priorDrafts[1] : null
+      prior: novelData.batchRun && novelData.batchRun.priorDrafts ? novelData.batchRun.priorDrafts[1] : null,
+      reason: novelData.batchRun && novelData.batchRun.reason,
+      p3: p3 ? JSON.parse(JSON.stringify(p3)) : null,
+      skipList: novelData.batchRun && novelData.batchRun.continuitySkip
     };
   });
   check('R1', 'two-fail: Skip restores original text and clears priorDrafts slot', !!(skipped.ok === true && skipped.ch2 === OLD2 && skipped.gen === OLD2 && skipped.edit === OLD2 && !skipped.prior), JSON.stringify(skipped));
+  check('R12', 'Skip with prior: restored original is fed to later packets (not the failed draft)', !!(skipped.p3 && JSON.stringify(skipped.p3).indexOf(OLD2) >= 0 && JSON.stringify(skipped.p3).indexOf('KEPT-DRAFT-CH2') < 0 && !(skipped.skipList || []).includes(2)), JSON.stringify({ p3: skipped.p3, skipList: skipped.skipList, reason: skipped.reason }));
   await page.close();
 }
 
@@ -447,15 +467,21 @@ async function coverageStop(page, extra) {
   const skipped = await page.evaluate(async () => {
     const ok = await nwBatchCoverageDecide('skip');
     const rec = novelData.batchRun ? await window.__h.idbGet(novelData.batchRun.id) : null;
+    const p3 = typeof buildChapterContinuityPacket === 'function' ? buildChapterContinuityPacket(3) : null;
     return {
       ok,
       ack: novelData.batchRun && novelData.batchRun.coverageAck,
       recAck: rec && rec.batchRun && rec.batchRun.coverageAck,
       recBr: rec && rec.batchRun ? { reason: rec.batchRun.reason, stoppedAt: rec.batchRun.stoppedAt, coverageAck: rec.batchRun.coverageAck } : null,
-      id: novelData.batchRun && novelData.batchRun.id
+      id: novelData.batchRun && novelData.batchRun.id,
+      ch2: (novelData.chapters || [])[1] || '',
+      p3: p3 ? JSON.parse(JSON.stringify(p3)) : null,
+      skipList: (novelData.batchRun && novelData.batchRun.continuitySkip) || [],
+      recSkip: rec && rec.batchRun && rec.batchRun.continuitySkip
     };
   });
   check('R4', 'Skip persists coverageAck skip on batchRun and checkpoint', skipped.ok === true && skipped.ack && skipped.ack.decision === 'skip' && skipped.ack.chapter === 2 && skipped.recAck && skipped.recAck.decision === 'skip', JSON.stringify(skipped));
+  check('R12', 'Skip with no prior: failed draft kept but excluded from later continuity packets', !!(/KEPT-DRAFT-CH2/.test(skipped.ch2 || '') && skipped.p3 && JSON.stringify(skipped.p3).indexOf('KEPT-DRAFT-CH2') < 0 && (skipped.skipList || []).indexOf(2) >= 0 && (skipped.recSkip || []).indexOf(2) >= 0), JSON.stringify({ ch2: skipped.ch2, p3: skipped.p3, skipList: skipped.skipList, recSkip: skipped.recSkip }));
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => typeof generateAllChapters === 'function' && window.__nwBatchRestoreCheck, null, { timeout: 30000 });
@@ -531,10 +557,19 @@ async function coverageStop(page, extra) {
     h.load(nd);
     let lockedDuring = false;
     let integrateP = null;
+    let startP = null;
+    window.__h.calls.length = 0;
     const orig = applySessionDataToUI;
+    let startStatus = '';
     applySessionDataToUI = function () {
       lockedDuring = typeof nwBatchIsLocked === 'function' && nwBatchIsLocked();
       try { integrateP = Promise.resolve(integrateBreakdownSuggestions()); } catch (e) { integrateP = Promise.resolve(String(e && e.message || e)); }
+      try {
+        startP = Promise.resolve(generateAllChapters()).then(function (r) {
+          startStatus = (document.getElementById('batchRunStatus') || {}).textContent || '';
+          return r;
+        });
+      } catch (e) { startP = Promise.resolve(String(e && e.message || e)); }
       return orig.apply(this, arguments);
     };
     const payload = JSON.stringify({ schemaVersion: '1.0', sourceTool: 'NovelWriter', novelData: Object.assign({}, nd, { title: 'Imported Lock Book', chapters: ['x'] }) });
@@ -546,9 +581,13 @@ async function coverageStop(page, extra) {
     FileReader.prototype.readAsText = realRead;
     applySessionDataToUI = orig;
     const integrateDuring = integrateP ? await integrateP : null;
+    const startDuring = startP ? await startP : null;
     return {
       lockedDuring,
       integrateDuring,
+      startDuring,
+      startCalls: window.__h.calls.slice(),
+      status: startStatus,
       importingAfter: !!(nwBatchState && nwBatchState.importing),
       lockedAfter: nwBatchIsLocked(),
       title: document.getElementById('title').value
@@ -556,6 +595,7 @@ async function coverageStop(page, extra) {
   }, ND);
   check('R6', 'import-in-progress lock is held during applySessionDataToUI', r.lockedDuring === true && r.title === 'Imported Lock Book', JSON.stringify(r));
   check('R6', 'Integrate during import returns false; lock released after apply', r.integrateDuring === false && r.importingAfter === false && r.lockedAfter === false, JSON.stringify(r));
+  check('R16', 'Start during pending import refuses with status and makes zero provider calls', !!(r.startDuring && r.startDuring.started === false && r.startDuring.reason === 'importing' && (r.startCalls || []).length === 0 && /locked \(importing\)/.test(r.status || '')), JSON.stringify({ startDuring: r.startDuring, calls: r.startCalls, status: r.status }));
   await page.close();
 }
 
@@ -590,6 +630,8 @@ async function coverageStop(page, extra) {
     const rec = novelData.batchRun ? await h.idbGet(novelData.batchRun.id) : null;
     nwBatchState.interrupted = rec;
     const restoredOk = rec ? await restoreInterruptedBatchRun() : false;
+    const box = document.getElementById('batchCoverageBox');
+    const acceptBtn = document.getElementById('batchCoverageAcceptBtn');
     return {
       r,
       recActive: rec ? rec.active : null,
@@ -598,12 +640,17 @@ async function coverageStop(page, extra) {
       restoredBr: novelData.batchRun ? JSON.parse(JSON.stringify({
         stoppedAt: novelData.batchRun.stoppedAt,
         reason: novelData.batchRun.reason,
-        detail: novelData.batchRun.detail
-      })) : null
+        detail: novelData.batchRun.detail,
+        coverageAck: novelData.batchRun.coverageAck
+      })) : null,
+      coverageBox: box ? !box.hidden : null,
+      acceptDisabled: acceptBtn ? !!acceptBtn.disabled : null,
+      status: (document.getElementById('batchRunStatus') || {}).textContent || ''
     };
   }, ND);
   check('R7', 'inactive checkpoint write fail: preceding active record still has stop fields', !!(s.recActive === true && s.recBr && s.recBr.stoppedAt === 2 && s.recBr.reason === 'coverage' && s.recBr.detail), JSON.stringify({ recActive: s.recActive, recBr: s.recBr, r: s.r }));
   check('R7', 'reload/restore from that active checkpoint keeps stoppedAt', !!(s.restoredOk === true && s.restoredBr && s.restoredBr.stoppedAt === 2), JSON.stringify({ restoredOk: s.restoredOk, restoredBr: s.restoredBr }));
+  check('R15', 'restore of coverage stop keeps reason coverage and saved coverageAck; decision box shows again', !!(s.restoredOk === true && s.restoredBr && s.restoredBr.reason === 'coverage' && s.restoredBr.stoppedAt === 2 && s.restoredBr.coverageAck == null && s.coverageBox === true && /coverage/.test(s.status || '') && !/stopped at ch2, user/.test(s.status || '')), JSON.stringify({ restoredBr: s.restoredBr, box: s.coverageBox, status: s.status }));
   await page.close();
 }
 
@@ -782,6 +829,139 @@ async function runPre6bNoFlags(page, raw) {
   await page.close();
 }
 
+// ---------------- R13 coverage decide in-progress guard (double-click) ----------------
+{
+  const page = await openPage();
+  await coverageStop(page);
+  const d = await page.evaluate(async () => {
+    const h = window.__h;
+    h.cfg = { auditDelayMs: 150 };
+    h.calls.length = 0;
+    let ck = 0;
+    const origCk = nwBatchCheckpoint;
+    nwBatchCheckpoint = function () { ck += 1; return origCk.apply(this, arguments); };
+    const p1 = nwBatchCoverageDecide('accept');
+    await new Promise((r) => setTimeout(r, 30));
+    const mid = {
+      acceptDisabled: !!(document.getElementById('batchCoverageAcceptBtn') || {}).disabled,
+      skipDisabled: !!(document.getElementById('batchCoverageSkipBtn') || {}).disabled,
+      regenDisabled: !!(document.getElementById('batchCoverageRegenerateBtn') || {}).disabled,
+      owner: !!(nwBatchState && nwBatchState.coverageDecideOwner)
+    };
+    const second = await nwBatchCoverageDecide('accept');
+    const first = await p1;
+    nwBatchCheckpoint = origCk;
+    return {
+      first,
+      second,
+      mid,
+      audits: h.calls.filter((c) => c.kind === 'audit').length,
+      ck,
+      ack: novelData.batchRun && novelData.batchRun.coverageAck,
+      completed: (novelData.batchRun && novelData.batchRun.completed) || []
+    };
+  });
+  check('R13', 'coverage decide in-progress disables Accept/Skip/Regenerate', !!(d.mid && d.mid.acceptDisabled && d.mid.skipDisabled && d.mid.regenDisabled && d.mid.owner), JSON.stringify(d.mid));
+  check('R13', 'double-click Accept: second call is refused; one audit and one coverage checkpoint', !!(d.first === true && d.second === false && d.audits === 1 && d.ck === 1 && d.ack && d.ack.decision === 'accept' && (d.completed || []).indexOf(2) >= 0), JSON.stringify(d));
+  await page.close();
+}
+
+// ---------------- R14 Accept aborts when continuity audit fails ----------------
+{
+  const page = await openPage();
+  const OLD2 = 'Hand-written chapter two ORIGINAL prior text kept while accept is pending.';
+  await coverageStop(page, { nd: ND, regenerate: true, prefill: { 2: OLD2 } });
+  const a = await page.evaluate(async () => {
+    window.__h.cfg = { auditFail: true };
+    const before = {
+      completed: ((novelData.batchRun && novelData.batchRun.completed) || []).slice(),
+      ack: novelData.batchRun && novelData.batchRun.coverageAck,
+      prior: novelData.batchRun && novelData.batchRun.priorDrafts ? JSON.parse(JSON.stringify(novelData.batchRun.priorDrafts[1] || null)) : null,
+      reason: novelData.batchRun && novelData.batchRun.reason,
+      stoppedAt: novelData.batchRun && novelData.batchRun.stoppedAt
+    };
+    const recBefore = novelData.batchRun ? await window.__h.idbGet(novelData.batchRun.id) : null;
+    const ok = await nwBatchCoverageDecide('accept');
+    const recAfter = novelData.batchRun ? await window.__h.idbGet(novelData.batchRun.id) : null;
+    const box = document.getElementById('batchCoverageBox');
+    return {
+      ok,
+      before,
+      after: {
+        completed: ((novelData.batchRun && novelData.batchRun.completed) || []).slice(),
+        ack: novelData.batchRun && novelData.batchRun.coverageAck,
+        prior: novelData.batchRun && novelData.batchRun.priorDrafts ? JSON.parse(JSON.stringify(novelData.batchRun.priorDrafts[1] || null)) : null,
+        reason: novelData.batchRun && novelData.batchRun.reason,
+        stoppedAt: novelData.batchRun && novelData.batchRun.stoppedAt
+      },
+      recAckAfter: recAfter && recAfter.batchRun && recAfter.batchRun.coverageAck,
+      recAckBefore: recBefore && recBefore.batchRun && recBefore.batchRun.coverageAck,
+      box: box ? !box.hidden : null,
+      status: (document.getElementById('batchRunStatus') || {}).textContent || ''
+    };
+  });
+  const pending = a.ok === false
+    && JSON.stringify(a.after.completed) === JSON.stringify(a.before.completed)
+    && (a.after.completed || []).indexOf(2) < 0
+    && !a.after.ack
+    && a.after.prior && a.after.prior.text === OLD2
+    && a.after.reason === 'coverage'
+    && a.after.stoppedAt === 2
+    && !a.recAckAfter
+    && a.box === true
+    && /Decision still pending/.test(a.status || '');
+  check('R14', 'Accept with failing audit does not complete/clear prior/checkpoint ack; decision stays pending', pending, JSON.stringify(a));
+  const retry = await page.evaluate(async () => {
+    window.__h.cfg = {};
+    const ok = await nwBatchCoverageDecide('accept');
+    return {
+      ok,
+      ack: novelData.batchRun && novelData.batchRun.coverageAck,
+      completed: (novelData.batchRun && novelData.batchRun.completed) || [],
+      prior: novelData.batchRun && novelData.batchRun.priorDrafts ? novelData.batchRun.priorDrafts[1] : null
+    };
+  });
+  check('R14', 'Accept retry after audit works (decision was left pending)', !!(retry.ok === true && retry.ack && retry.ack.decision === 'accept' && (retry.completed || []).indexOf(2) >= 0 && !retry.prior), JSON.stringify(retry));
+  await page.close();
+}
+
+// ---------------- R17 last planned chapter Accept/Skip finalizes (no Click Resume) ----------------
+{
+  const page = await openPage();
+  await coverageStop(page, { nd: ND, to: 2, coverageFail: 2 });
+  const acc = await page.evaluate(async () => {
+    const ok = await nwBatchCoverageDecide('accept');
+    const resume = document.getElementById('batchResumeBtn');
+    return {
+      ok,
+      reason: novelData.batchRun && novelData.batchRun.reason,
+      stoppedAt: novelData.batchRun && novelData.batchRun.stoppedAt,
+      completed: (novelData.batchRun && novelData.batchRun.completed) || [],
+      status: (document.getElementById('batchRunStatus') || {}).textContent || '',
+      resumeDisabled: resume ? !!resume.disabled : null,
+      box: !document.getElementById('batchCoverageBox').hidden
+    };
+  });
+  check('R17', 'Accept on last planned chapter finalizes: reason done, no Click Resume', !!(acc.ok === true && acc.reason === 'done' && acc.stoppedAt == null && (acc.completed || []).indexOf(2) >= 0 && /Coverage accept recorded for ch2/.test(acc.status || '') && !/Click Resume/.test(acc.status || '') && acc.resumeDisabled === true && acc.box === false), JSON.stringify(acc));
+  await page.close();
+  const page2 = await openPage();
+  await coverageStop(page2, { nd: ND, to: 2, coverageFail: 2 });
+  const sk = await page2.evaluate(async () => {
+    const ok = await nwBatchCoverageDecide('skip');
+    const resume = document.getElementById('batchResumeBtn');
+    return {
+      ok,
+      reason: novelData.batchRun && novelData.batchRun.reason,
+      stoppedAt: novelData.batchRun && novelData.batchRun.stoppedAt,
+      completed: (novelData.batchRun && novelData.batchRun.completed) || [],
+      status: (document.getElementById('batchRunStatus') || {}).textContent || '',
+      resumeDisabled: resume ? !!resume.disabled : null
+    };
+  });
+  check('R17', 'Skip on last planned chapter finalizes: reason done, no Click Resume', !!(sk.ok === true && sk.reason === 'done' && sk.stoppedAt == null && (sk.completed || []).indexOf(2) < 0 && /Coverage skip recorded for ch2/.test(sk.status || '') && !/Click Resume/.test(sk.status || '') && sk.resumeDisabled === true), JSON.stringify(sk));
+  await page2.close();
+}
+
 // ---------------- Mutations ----------------
 {
   const m3 = mutateCopy(FLAGS.packet);
@@ -942,6 +1122,114 @@ async function runPre6bNoFlags(page, raw) {
     check('M11', 'unconditional clear-on-pass turns clean-run no-chapterFlags red', absent === false, JSON.stringify(clean));
     await page.close();
     try { fs.rmSync(m11.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m12 = mutateCopy(FLAGS.skipExclude);
+  check('M12', 'flag NW_6B_SKIP_EXCLUDE_CONTINUITY present', m12.ok, m12.detail);
+  if (m12.ok) {
+    const page = await openPage(m12.copy);
+    await coverageStop(page);
+    const skipped = await page.evaluate(async () => {
+      await nwBatchCoverageDecide('skip');
+      const p3 = typeof buildChapterContinuityPacket === 'function' ? buildChapterContinuityPacket(3) : null;
+      return { ch2: (novelData.chapters || [])[1] || '', p3, skipList: (novelData.batchRun && novelData.batchRun.continuitySkip) || [] };
+    });
+    const excluded = /KEPT-DRAFT-CH2/.test(skipped.ch2 || '') && skipped.p3 && JSON.stringify(skipped.p3).indexOf('KEPT-DRAFT-CH2') < 0;
+    check('M12', 'dropping SKIP_EXCLUDE_CONTINUITY feeds skipped failed draft into later packets (R12 red)', excluded === false, JSON.stringify(skipped));
+    await page.close();
+    try { fs.rmSync(m12.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m13 = mutateCopy(FLAGS.decideGuard);
+  check('M13', 'flag NW_6B_COVERAGE_DECIDE_GUARD present', m13.ok, m13.detail);
+  if (m13.ok) {
+    const page = await openPage(m13.copy);
+    await coverageStop(page);
+    const d = await page.evaluate(async () => {
+      const h = window.__h;
+      h.cfg = { auditDelayMs: 150 };
+      h.calls.length = 0;
+      let ck = 0;
+      const origCk = nwBatchCheckpoint;
+      nwBatchCheckpoint = function () { ck += 1; return origCk.apply(this, arguments); };
+      const p1 = nwBatchCoverageDecide('accept');
+      await new Promise((r) => setTimeout(r, 30));
+      const second = await nwBatchCoverageDecide('accept');
+      const first = await p1;
+      nwBatchCheckpoint = origCk;
+      return { first, second, audits: h.calls.filter((c) => c.kind === 'audit').length, ck };
+    });
+    const guarded = d.first === true && d.second === false && d.audits === 1 && d.ck === 1;
+    check('M13', 'dropping COVERAGE_DECIDE_GUARD allows double Accept (R13 red)', guarded === false, JSON.stringify(d));
+    await page.close();
+    try { fs.rmSync(m13.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m14 = mutateCopy(FLAGS.acceptAudit);
+  check('M14', 'flag NW_6B_ACCEPT_AUDIT_ABORT present', m14.ok, m14.detail);
+  if (m14.ok) {
+    const page = await openPage(m14.copy);
+    const OLD2 = 'Hand-written chapter two ORIGINAL prior text kept while accept is pending.';
+    await coverageStop(page, { nd: ND, regenerate: true, prefill: { 2: OLD2 } });
+    const a = await page.evaluate(async () => {
+      window.__h.cfg = { auditFail: true };
+      const ok = await nwBatchCoverageDecide('accept');
+      return {
+        ok,
+        completed: (novelData.batchRun && novelData.batchRun.completed) || [],
+        ack: novelData.batchRun && novelData.batchRun.coverageAck,
+        prior: novelData.batchRun && novelData.batchRun.priorDrafts ? novelData.batchRun.priorDrafts[1] : null
+      };
+    });
+    const aborted = a.ok === false && (a.completed || []).indexOf(2) < 0 && !a.ack && a.prior && a.prior.text === OLD2;
+    check('M14', 'dropping ACCEPT_AUDIT_ABORT still accepts after audit fail (R14 red)', aborted === false, JSON.stringify(a));
+    await page.close();
+    try { fs.rmSync(m14.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m15 = mutateCopy(FLAGS.restoreCoverage);
+  check('M15', 'flag NW_6B_RESTORE_KEEP_COVERAGE present', m15.ok, m15.detail);
+  if (m15.ok) {
+    const page = await openPage(m15.copy);
+    const s = await page.evaluate(async (nd) => {
+      const h = window.__h;
+      h.load(nd);
+      h.seedContinuity();
+      h.cfg = { coverageFail: 2 };
+      const orig = nwBatchCheckpoint;
+      nwBatchCheckpoint = function (active) {
+        if (active === false) return Promise.reject(new Error('smoke: inactive checkpoint write fail'));
+        return orig.apply(this, arguments);
+      };
+      try { await generateAllChapters(); } finally { nwBatchCheckpoint = orig; }
+      const rec = novelData.batchRun ? await h.idbGet(novelData.batchRun.id) : null;
+      nwBatchState.interrupted = rec;
+      const restoredOk = rec ? await restoreInterruptedBatchRun() : false;
+      const box = document.getElementById('batchCoverageBox');
+      return {
+        restoredOk,
+        reason: novelData.batchRun && novelData.batchRun.reason,
+        coverageBox: box ? !box.hidden : null
+      };
+    }, ND);
+    const kept = s.restoredOk === true && s.reason === 'coverage' && s.coverageBox === true;
+    check('M15', 'dropping RESTORE_KEEP_COVERAGE forces reason user (R15 red)', kept === false, JSON.stringify(s));
+    await page.close();
+    try { fs.rmSync(m15.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m16 = mutateCopy(FLAGS.startLock);
+  check('M16', 'flag NW_6B_START_REFUSES_LOCK present', m16.ok, m16.detail);
+  if (m16.ok) {
+    const page = await openPage(m16.copy);
+    const r = await page.evaluate(async (nd) => {
+      const h = window.__h;
+      h.load(nd);
+      h.calls.length = 0;
+      nwBatchState.importing = true;
+      const start = await generateAllChapters();
+      nwBatchState.importing = false;
+      return { start, calls: h.calls.slice(), status: (document.getElementById('batchRunStatus') || {}).textContent || '' };
+    }, ND);
+    const refused = r.start && r.start.started === false && r.start.reason === 'importing' && (r.calls || []).length === 0;
+    check('M16', 'dropping START_REFUSES_LOCK lets Start run during import (R16 red)', refused === false, JSON.stringify(r));
+    await page.close();
+    try { fs.rmSync(m16.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
   }
 }
 

@@ -8411,7 +8411,9 @@ return c && c.name && c.backstory && c.arc; });
 		}
 
 		function buildChapterContinuityPacket(chapterNum) {
-			const prevChapterText = chapterNum > 1 ? (novelData.chapters[chapterNum - 2] || '') : '';
+			const prevChapterText = chapterNum > 1
+				? (typeof nwBatchPrevChapterTextForPacket === 'function' ? nwBatchPrevChapterTextForPacket(chapterNum) : (novelData.chapters[chapterNum - 2] || ''))
+				: '';
 			const nextChapterOutline = chapterNum < novelData.numChapters ? (novelData.chapterOutlines[chapterNum] || '') : '';
 			const priorAuditThreads = (novelData.continuityTracker?.chapters || [])
 				.slice(0, Math.max(0, chapterNum - 1))
@@ -8856,11 +8858,16 @@ return c && c.name && c.backstory && c.arc; });
 			            breakdownTextarea.style.display = 'block';
 			        }
 			    });
-			    novelData.bookImprovementsWithStatus = improvements.map((improvement, index) => ({
-			        text: improvement,
-			        status: statusMap.get(improvement) || 'To Incorporate',
-			        breakdown: novelData.bookImprovementsWithStatus[index]?.breakdown || null
-			    }));
+			    novelData.bookImprovementsWithStatus = improvements.map((improvement, index) => {
+			        var prev = (novelData.bookImprovementsWithStatus && novelData.bookImprovementsWithStatus[index]) || {};
+			        var rec = {
+			            text: improvement,
+			            status: statusMap.get(improvement) || prev.status || 'To Incorporate',
+			            breakdown: prev.breakdown || null
+			        };
+			        if (prev.note) rec.note = prev.note;
+			        return rec;
+			    });
 			    console.log('Updated improvements table with:', novelData.bookImprovementsWithStatus);
 }
 
@@ -9185,11 +9192,61 @@ return c && c.name && c.backstory && c.arc; });
 		            if (treatParseFail) return text || null;
 		            return text || fallback;
 		        }
+		        function nwIntegrateChapterNumFromKey(k) {
+		            if (typeof NW_6B_INTEGRATE_KEY_NORMALIZE !== 'undefined' && !NW_6B_INTEGRATE_KEY_NORMALIZE) {
+		                var old = /Chapter\s+(\d+)/i.exec(String(k == null ? '' : k));
+		                return old ? Number(old[1]) : 0;
+		            }
+		            if (k == null || k === '') return 0;
+		            if (typeof k === 'number' && isFinite(k) && k > 0 && Math.floor(k) === k) return k;
+		            var s = String(k).trim();
+		            if (/^\d+$/.test(s)) return Number(s);
+		            var m = /^(?:ch(?:apter)?\.?\s*)(\d+)$/i.exec(s);
+		            return m ? Number(m[1]) : 0;
+		        }
+		        function nwIntegrateLookupByChapter(map, chNum) {
+		            if (!map || typeof map !== 'object') return '';
+		            var parts = [];
+		            Object.keys(map).forEach(function (k) {
+		                if (nwIntegrateChapterNumFromKey(k) === chNum) {
+		                    var v = map[k];
+		                    if (v != null && String(v).trim()) parts.push(String(v));
+		                }
+		            });
+		            return parts.join('\n');
+		        }
+		        function nwIntegrateHasAppliedTargets(item) {
+		            var bd = item && item.breakdown;
+		            if (!bd || typeof bd !== 'object') return false;
+		            var chMap = bd.chapters;
+		            if (chMap && typeof chMap === 'object') {
+		                var chKeys = Object.keys(chMap);
+		                for (var i = 0; i < chKeys.length; i++) {
+		                    if (nwIntegrateChapterNumFromKey(chKeys[i]) > 0 && String(chMap[chKeys[i]] || '').trim()) return true;
+		                }
+		            }
+		            var olMap = bd.chapterOutlines;
+		            if (olMap && typeof olMap === 'object') {
+		                var olKeys = Object.keys(olMap);
+		                for (var j = 0; j < olKeys.length; j++) {
+		                    if (nwIntegrateChapterNumFromKey(olKeys[j]) > 0 && String(olMap[olKeys[j]] || '').trim()) return true;
+		                }
+		            }
+		            if (bd.novelOutlines) {
+		                if (typeof bd.novelOutlines === 'string') return !!String(bd.novelOutlines).trim();
+		                if (Array.isArray(bd.novelOutlines)) return bd.novelOutlines.some(function (x) { return String(x || '').trim(); });
+		                if (typeof bd.novelOutlines === 'object') return Object.keys(bd.novelOutlines).some(function (k) { return String(bd.novelOutlines[k] || '').trim(); });
+		                return true;
+		            }
+		            return false;
+		        }
 		        function nwIntegrateItemSucceeded(item) {
+		            if (typeof NW_6B_MANUAL_ONLY_STAYS === 'undefined' || NW_6B_MANUAL_ONLY_STAYS) {
+		                if (!nwIntegrateHasAppliedTargets(item)) return false;
+		            }
 		            const chMap = (item.breakdown && item.breakdown.chapters) || {};
 		            const nums = Object.keys(chMap).map(function (k) {
-		                const m = /Chapter\s+(\d+)/i.exec(k);
-		                return m ? Number(m[1]) : 0;
+		                return nwIntegrateChapterNumFromKey(k);
 		            }).filter(function (n) { return n > 0; });
 		            if (!nums.length) return true;
 		            return nums.every(function (n) { return chapterOk[n] === true; });
@@ -9200,8 +9257,11 @@ return c && c.name && c.backstory && c.arc; });
 		            for (let chNum = 1; chNum <= numChapters; chNum++) {
 		                const chKey = 'Chapter ' + chNum;
 		                const chapterInstructions = toIntegrate
-		                    .filter(item => item.breakdown.chapters && item.breakdown.chapters[chKey])
-		                    .map(item => '- ' + item.text + ':\n  ' + item.breakdown.chapters[chKey])
+		                    .map(function (item) {
+		                        const instr = nwIntegrateLookupByChapter(item.breakdown && item.breakdown.chapters, chNum);
+		                        return instr ? ('- ' + item.text + ':\n  ' + instr) : '';
+		                    })
+		                    .filter(Boolean)
 		                    .join('\n');
 
 		                if (!chapterInstructions) continue;
@@ -9270,11 +9330,10 @@ return c && c.name && c.backstory && c.arc; });
 
 		            // Append chapter outline notes by rebuilding Tab 4 #chapterContent{n} (never write prose there)
 		            for (let chNum = 1; chNum <= numChapters; chNum++) {
-		                const chKey = 'Chapter ' + chNum;
 		                const outlineNotes = toIntegrate
-		                    .filter(item => item.breakdown.chapterOutlines && item.breakdown.chapterOutlines[chKey])
 		                    .filter(item => !perItem || nwIntegrateItemSucceeded(item))
-		                    .map(item => item.breakdown.chapterOutlines[chKey])
+		                    .map(function (item) { return nwIntegrateLookupByChapter(item.breakdown && item.breakdown.chapterOutlines, chNum); })
+		                    .filter(Boolean)
 		                    .join('\n');
 		                if (!outlineNotes) continue;
 		                const existingOutline = novelData.chapterOutlines[chNum - 1] || '';
@@ -9307,7 +9366,14 @@ return c && c.name && c.backstory && c.arc; });
 
 		            if (perItem) {
 		                toIntegrate.forEach(item => {
-		                    if (nwIntegrateItemSucceeded(item)) novelData.bookImprovementsWithStatus[item._idx].status = 'Incorporated';
+		                    var rec = novelData.bookImprovementsWithStatus[item._idx];
+		                    if (!rec) return;
+		                    if ((typeof NW_6B_MANUAL_ONLY_STAYS === 'undefined' || NW_6B_MANUAL_ONLY_STAYS) && !nwIntegrateHasAppliedTargets(item)) {
+		                        rec.status = 'To Incorporate';
+		                        rec.note = 'manual';
+		                        return;
+		                    }
+		                    if (nwIntegrateItemSucceeded(item)) rec.status = 'Incorporated';
 		                });
 		            } else {
 		                toIntegrate.forEach(item => { novelData.bookImprovementsWithStatus[item._idx].status = 'Incorporated'; });
@@ -9537,13 +9603,14 @@ return c && c.name && c.backstory && c.arc; });
 			    novelData.bookImprovementsWithStatus = mainRows.map((row, index) => {
 			        const status = row.querySelector('select').value;
 			        const improvementText = novelData.bookImprovements[index] || '';
-			        // Preserve existing breakdown if it exists, or null if not
-			        const existingBreakdown = novelData.bookImprovementsWithStatus[index]?.breakdown || null;
-			        return {
+			        const existing = novelData.bookImprovementsWithStatus[index] || {};
+			        const rec = {
 			            text: improvementText,
 			            status: status,
-			            breakdown: existingBreakdown
+			            breakdown: existing.breakdown || null
 			        };
+			        if (existing.note) rec.note = existing.note;
+			        return rec;
 			    });
 			    // Build clean novelData: exclude sensitive and operational fields not part of the shared schema
 		    // NW.GEN5: novelOutline, plotOutline, storyArcOutline are preserved to prevent round-trip data loss.
@@ -12015,7 +12082,8 @@ return c && c.name && c.backstory && c.arc; });
         //          (nwNotify). Resume after a parse (or provider) stop regenerates the stopped chapter; only a coverage stop
         //          is skipped on Resume. A coverage stop keeps the NEW draft in chapters[n-1] in both regenerate modes
         //          and flags it (nwSetChapterFlag merge). With regenerate-on, the pre-run text is stored write-once in
-        //          batchRun.priorDrafts[n-1]; Skip restores it. The session auto-export runs only when the
+        //          batchRun.priorDrafts[n-1]; Skip restores it. Skip with no prior keeps the failed draft but lists n in
+        //          batchRun.continuitySkip so buildChapterContinuityPacket never feeds it to later chapters. The session auto-export runs only when the
         //          run stops (or a checkpoint write fails), not after a clean finish.
         // Must-fix (#134): failures are classified by type (nwClassifyError): 'retryable' (HTTP 429/5xx, network; one retry),
         //          'provider' (other HTTP status incl. 400/401/403, "API Key is missing"; no retry, no estimated usage) and
@@ -12036,7 +12104,7 @@ return c && c.name && c.backstory && c.arc; });
         //          estimate is used only when that delta is 0 (chapter listed in batchRun.usageEstimated).
         // novelData.batchRun is NovelWriter-only (schema/ allows additional properties; no schema edit).
         var NW_BATCH = { retryDelayMs: 2000, idbName: 'novelwriter', idbStore: 'checkpoints', minOutlineWords: 80, capFactor: 1.25 };
-        var nwBatchState = { running: false, owner: null, chapterInFlight: null, subStep: null, quiet: false, pauseRequested: false, interrupted: null, windows: [], coverageAck: null, log: [], lastStatus: '', lastPromise: null, importing: false, integrating: false };
+        var nwBatchState = { running: false, owner: null, chapterInFlight: null, subStep: null, quiet: false, pauseRequested: false, interrupted: null, windows: [], coverageAck: null, log: [], lastStatus: '', lastPromise: null, importing: false, integrating: false, coverageDecideOwner: null };
         // NW_SLOT_6B_INTEGRATE feature flags (smoke mutations flip these to false)
         var NW_6B_WRITE_PROSE_TO_GEN = true;
         var NW_6B_CALLAI_REJECT_PATH = true;
@@ -12051,6 +12119,14 @@ return c && c.name && c.backstory && c.arc; });
         var NW_6B_PARSE_FAIL_AS_FAILURE = true;
         var NW_6B_PRIOR_DRAFT_WRITE_ONCE = true;
         var NW_6B_CLEAR_FLAG_ONLY_IF_FAILED = true;
+        var NW_6B_SKIP_EXCLUDE_CONTINUITY = true;
+        var NW_6B_COVERAGE_DECIDE_GUARD = true;
+        var NW_6B_ACCEPT_AUDIT_ABORT = true;
+        var NW_6B_RESTORE_KEEP_COVERAGE = true;
+        var NW_6B_START_REFUSES_LOCK = true;
+        var NW_6B_LAST_CHAPTER_FINALIZE = true;
+        var NW_6B_INTEGRATE_KEY_NORMALIZE = true;
+        var NW_6B_MANUAL_ONLY_STAYS = true;
         window.NW_BATCH = NW_BATCH;
         window.nwBatchState = nwBatchState;
 
@@ -12281,6 +12357,49 @@ return c && c.name && c.backstory && c.arc; });
             return true;
         }
 
+        /** Single owner for batchRun.continuitySkip[]: skipped failed drafts never feed later packets. */
+        function nwBatchEnsureContinuitySkip(br) {
+            if (!br) return null;
+            if (!Array.isArray(br.continuitySkip)) br.continuitySkip = [];
+            return br.continuitySkip;
+        }
+        function nwBatchChapterFeedsContinuity(chapterNum) {
+            if (typeof NW_6B_SKIP_EXCLUDE_CONTINUITY !== 'undefined' && !NW_6B_SKIP_EXCLUDE_CONTINUITY) return true;
+            var br = novelData && novelData.batchRun;
+            if (!br || !Array.isArray(br.continuitySkip)) return true;
+            return br.continuitySkip.indexOf(chapterNum) < 0;
+        }
+        function nwBatchMarkContinuitySkip(br, n) {
+            if (!(n >= 1) || !br) return;
+            if (typeof NW_6B_SKIP_EXCLUDE_CONTINUITY !== 'undefined' && !NW_6B_SKIP_EXCLUDE_CONTINUITY) return;
+            nwBatchEnsureContinuitySkip(br);
+            if (br.continuitySkip.indexOf(n) < 0) br.continuitySkip.push(n);
+        }
+        function nwBatchClearContinuitySkip(br, n) {
+            if (!br || !Array.isArray(br.continuitySkip) || !(n >= 1)) return;
+            br.continuitySkip = br.continuitySkip.filter(function (x) { return x !== n; });
+        }
+        function nwBatchPrevChapterTextForPacket(chapterNum) {
+            for (var p = chapterNum - 1; p >= 1; p--) {
+                if (!nwBatchChapterFeedsContinuity(p)) continue;
+                var t = (novelData.chapters || [])[p - 1] || '';
+                if (t) return t;
+            }
+            return '';
+        }
+        /** Skip side effects: restore prior if any, else keep failed draft and exclude it from later packets. */
+        function nwBatchApplySkipSideEffects(br, n) {
+            var hadPrior = !!nwBatchGetPriorDraft(br, n);
+            if (hadPrior) {
+                nwBatchRestorePriorDraft(br, n);
+                nwBatchClearContinuitySkip(br, n);
+            } else {
+                nwBatchMarkContinuitySkip(br, n);
+            }
+            if (typeof refreshContinuityAfterChapter === 'function') refreshContinuityAfterChapter(n);
+            return hadPrior;
+        }
+
         function nwBatchUsageMark() { return ensureBookTokenUsage().calls.length; }
 
         function nwBatchUsageSince(idx) {
@@ -12477,9 +12596,14 @@ return c && c.name && c.backstory && c.arc; });
             document.querySelectorAll('#tab7 button[onclick*="applyTopBookCritiques"], #improvementsTableBody button[onclick*="applyBookCritiqueItem"], #tab8 button[onclick*="integrateBreakdownSuggestions"]').forEach(function (b) { b.disabled = locked; });
             // #134 follow-up 4: the Tab 5 continuity writers are locked the same way.
             document.querySelectorAll('#tab5 button[onclick*="rebuildContinuityPackets"], #tab5 button[onclick*="runContinuityAuditAll"]').forEach(function (b) { b.disabled = locked; });
-            ['importFile', 'numChapters', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap', 'skipAutoRevision', 'aiBeatCheck', 'scoreAllChaptersBtn', 'batchCoverageAcceptBtn', 'batchCoverageRegenerateBtn', 'batchCoverageSkipBtn'].forEach(function (id) {
+            ['importFile', 'numChapters', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap', 'skipAutoRevision', 'aiBeatCheck', 'scoreAllChaptersBtn'].forEach(function (id) {
                 var el = nwBatchEl(id);
                 if (el) el.disabled = locked;
+            });
+            var decideBusy = !!nwBatchState.coverageDecideOwner;
+            ['batchCoverageAcceptBtn', 'batchCoverageRegenerateBtn', 'batchCoverageSkipBtn'].forEach(function (id) {
+                var el = nwBatchEl(id);
+                if (el) el.disabled = locked || decideBusy;
             });
             var pause = nwBatchEl('batchPauseBtn');
             if (pause) pause.disabled = !nwBatchState.running;
@@ -12611,34 +12735,75 @@ return c && c.name && c.backstory && c.arc; });
 
         async function nwBatchCoverageDecide(decision) {
             if (nwBatchState.running) return false;
+            var guardOn = (typeof NW_6B_COVERAGE_DECIDE_GUARD === 'undefined' || NW_6B_COVERAGE_DECIDE_GUARD);
+            if (guardOn && nwBatchState.coverageDecideOwner) return false;
             var br = novelData.batchRun;
             if (!br || br.reason !== 'coverage' || br.stoppedAt == null) return false;
             var n = br.stoppedAt;
+            if (br.coverageAck && br.coverageAck.chapter === n && (br.coverageAck.decision === 'accept' || br.coverageAck.decision === 'skip')) return false;
             var now = new Date().toISOString();
             decision = String(decision || '');
-            if (decision === 'accept') {
-                if (typeof buildChapterContinuityPacket === 'function') buildChapterContinuityPacket(n);
-                if (typeof refreshContinuityAfterChapter === 'function') refreshContinuityAfterChapter(n);
-                if (novelData.autoContinuityAudit && typeof runChapterContinuityAudit === 'function') {
-                    try { await runChapterContinuityAudit(n, { silent: true }); } catch (e) { console.warn('[batch] coverage accept audit', e); }
-                }
-                if ((br.completed || []).indexOf(n) < 0) br.completed.push(n);
-                br.coverageAck = { chapter: n, decision: 'accept', at: now };
-                nwBatchClearPriorDraft(br, n);
-            } else if (decision === 'skip') {
-                nwBatchRestorePriorDraft(br, n);
-                br.coverageAck = { chapter: n, decision: 'skip', at: now };
-                nwBatchState.coverageAck = br.id + ':' + n;
-            } else if (decision === 'regenerate') {
-                br.coverageAck = { chapter: n, decision: 'regenerate', at: now };
-            } else {
-                return false;
+            if (decision !== 'accept' && decision !== 'skip' && decision !== 'regenerate') return false;
+            var myId = {};
+            if (guardOn) {
+                nwBatchState.coverageDecideOwner = myId;
+                nwBatchApplyLock();
             }
-            nwBatchShow('batchCoverageBox', false);
-            try { await nwBatchCheckpoint(false); } catch (e) { console.warn('[batch] coverageAck checkpoint', e); }
-            nwBatchApplyLock();
-            nwBatchSetStatus('Coverage ' + decision + ' recorded for ch' + n + '. Click Resume to continue.', 'stopped');
-            return true;
+            try {
+                if (decision === 'accept') {
+                    if (novelData.autoContinuityAudit && typeof runChapterContinuityAudit === 'function') {
+                        try {
+                            await runChapterContinuityAudit(n, { silent: true, throwOnParseError: true });
+                        } catch (e) {
+                            if (typeof NW_6B_ACCEPT_AUDIT_ABORT === 'undefined' || NW_6B_ACCEPT_AUDIT_ABORT) {
+                                nwBatchSetStatus('Coverage accept failed: continuity audit error for ch' + n + '. ' + nwBatchEndSentence(nwBatchShort(nwBatchErrText(e), 240)) + ' Decision still pending.', 'stopped');
+                                nwBatchShowCoverageReview(n);
+                                return false;
+                            }
+                            console.warn('[batch] coverage accept audit', e);
+                        }
+                    }
+                    if (typeof buildChapterContinuityPacket === 'function') buildChapterContinuityPacket(n);
+                    if (typeof refreshContinuityAfterChapter === 'function') refreshContinuityAfterChapter(n);
+                    if ((br.completed || []).indexOf(n) < 0) br.completed.push(n);
+                    br.coverageAck = { chapter: n, decision: 'accept', at: now };
+                    nwBatchClearPriorDraft(br, n);
+                    nwBatchClearContinuitySkip(br, n);
+                } else if (decision === 'skip') {
+                    nwBatchApplySkipSideEffects(br, n);
+                    br.coverageAck = { chapter: n, decision: 'skip', at: now };
+                    nwBatchState.coverageAck = br.id + ':' + n;
+                } else {
+                    br.coverageAck = { chapter: n, decision: 'regenerate', at: now };
+                }
+                nwBatchShow('batchCoverageBox', false);
+                var finalized = false;
+                if (decision !== 'regenerate' && (typeof NW_6B_LAST_CHAPTER_FINALIZE === 'undefined' || NW_6B_LAST_CHAPTER_FINALIZE)) {
+                    var skipChapter = n;
+                    var remaining = nwBatchPlan(br.range, br.regenerateExisting, br.completed || [], skipChapter, null).planned.length;
+                    if (remaining === 0) {
+                        br.reason = 'done';
+                        br.stoppedAt = null;
+                        br.detail = null;
+                        br.inFlight = null;
+                        br.updatedAt = new Date().toISOString();
+                        finalized = true;
+                    }
+                }
+                try { await nwBatchCheckpoint(false); } catch (e) { console.warn('[batch] coverageAck checkpoint', e); }
+                nwBatchApplyLock();
+                if (finalized) {
+                    nwBatchSetStatus('Done: ch' + br.range.from + '-' + br.range.to + '. Coverage ' + decision + ' recorded for ch' + n + '. Completed: ' + ((br.completed || []).join(', ') || 'none') + '.', 'done');
+                } else {
+                    nwBatchSetStatus('Coverage ' + decision + ' recorded for ch' + n + '. Click Resume to continue.', 'stopped');
+                }
+                return true;
+            } finally {
+                if (guardOn && nwBatchState.coverageDecideOwner === myId) {
+                    nwBatchState.coverageDecideOwner = null;
+                    nwBatchApplyLock();
+                }
+            }
         }
         window.nwBatchCoverageDecide = nwBatchCoverageDecide;
 
@@ -12661,10 +12826,27 @@ return c && c.name && c.backstory && c.arc; });
         }
 
         async function nwBatchStart(resume) {
-            if (nwBatchState.running) return { started: false, reason: 'already-running' };
-            if (nwBatchState.interrupted) {
-                nwBatchSetStatus('Restore or discard the interrupted batch run first.', 'interrupted');
-                return { started: false, reason: 'interrupted' };
+            if (typeof NW_6B_START_REFUSES_LOCK === 'undefined' || NW_6B_START_REFUSES_LOCK) {
+                if (nwBatchIsLocked()) {
+                    if (nwBatchState.running) return { started: false, reason: 'already-running' };
+                    if (nwBatchState.interrupted) {
+                        nwBatchSetStatus('Restore or discard the interrupted batch run first.', 'interrupted');
+                        return { started: false, reason: 'interrupted' };
+                    }
+                    var lockWhy = nwBatchState.importing ? 'importing' : (nwBatchState.integrating ? 'integrating' : 'locked');
+                    nwBatchSetStatus('Generate All is locked (' + lockWhy + '). Wait for it to finish, then ' + (resume ? 'Resume' : 'start Generate All') + '.', 'blocked');
+                    return { started: false, reason: lockWhy };
+                }
+            } else {
+                if (nwBatchState.running) return { started: false, reason: 'already-running' };
+                if (nwBatchState.interrupted) {
+                    nwBatchSetStatus('Restore or discard the interrupted batch run first.', 'interrupted');
+                    return { started: false, reason: 'interrupted' };
+                }
+            }
+            if (nwBatchState.coverageDecideOwner) {
+                nwBatchSetStatus('A coverage decision is still in progress. Wait for it to finish.', 'blocked');
+                return { started: false, reason: 'coverage-decide' };
             }
             if (typeof activeAICallCount !== 'undefined' && activeAICallCount > 0) {
                 nwBatchSetStatus('Another AI request is still running (' + activeAICallCount + ' in flight). Wait for it to finish, then ' + (resume ? 'Resume' : 'start Generate All') + '.', 'blocked');
@@ -12696,7 +12878,7 @@ return c && c.name && c.backstory && c.arc; });
                             forceChapter = br.stoppedAt;
                         } else if (persisted && (persisted.decision === 'skip' || persisted.decision === 'accept')) {
                             skipChapter = br.stoppedAt;
-                            if (persisted.decision === 'skip') nwBatchRestorePriorDraft(br, br.stoppedAt);
+                            if (persisted.decision === 'skip') nwBatchApplySkipSideEffects(br, br.stoppedAt);
                         } else {
                             var ackKey = br.id + ':' + br.stoppedAt;
                             if (nwBatchState.coverageAck !== ackKey) {
@@ -12707,7 +12889,7 @@ return c && c.name && c.backstory && c.arc; });
                             }
                             skipChapter = br.stoppedAt;
                             br.coverageAck = { chapter: br.stoppedAt, decision: 'skip', at: new Date().toISOString() };
-                            nwBatchRestorePriorDraft(br, br.stoppedAt);
+                            nwBatchApplySkipSideEffects(br, br.stoppedAt);
                         }
                     }
                     range = { from: br.range.from, to: br.range.to };
@@ -12771,17 +12953,20 @@ return c && c.name && c.backstory && c.arc; });
                         coverageAck: null,
                         chapterUsage: [],
                         usageEstimated: [],
-                        priorDrafts: []
+                        priorDrafts: [],
+                        continuitySkip: []
                     };
                 }
                 if (!Array.isArray(br.chapterUsage)) br.chapterUsage = [];
                 if (!Array.isArray(br.priorDrafts)) br.priorDrafts = [];
+                if (!Array.isArray(br.continuitySkip)) br.continuitySkip = [];
                 var capEl = nwBatchEl('batchTokenCap');
                 if (capEl) capEl.value = String(cap);
                 nwBatchState.running = true;
                 nwBatchState.owner = myRun;
                 nwBatchState.pauseRequested = false;
                 nwBatchState.coverageAck = null;
+                nwBatchState.coverageDecideOwner = null;
                 nwBatchState.log = [];
                 nwBatchShow('batchCoverageBox', false);
                 if (typeof nwTimingStartChain === 'function') {
@@ -12901,6 +13086,7 @@ return c && c.name && c.backstory && c.arc; });
                 // #139 (b): stamp stop fields onto the last ACTIVE checkpoint so a failed inactive final write still restores them.
                 if (!outcome.ok) {
                     stop = { reason: outcome.reason, at: n, detail: outcome.detail, noRetry: !!outcome.noRetry, timeoutInfo: outcome.timeoutInfo || null, keptDraft: !!outcome.keepDraft };
+                    if (outcome.reason === 'coverage') br.coverageAck = null;
                     if (typeof NW_6B_STOPPEDAT_BEFORE_CHECKPOINT === 'undefined' || NW_6B_STOPPEDAT_BEFORE_CHECKPOINT) {
                         br.stoppedAt = stop.at;
                         br.reason = stop.reason;
@@ -13015,24 +13201,45 @@ return c && c.name && c.backstory && c.arc; });
             novelData.apiKey = apiKey;
             var br = novelData.batchRun = JSON.parse(JSON.stringify(rec.batchRun));
             var was = br.inFlight;
+            var savedReason = br.reason;
+            var savedAck = br.coverageAck;
+            var savedStoppedAt = br.stoppedAt;
+            var savedDetail = br.detail;
             br.completed = (br.completed || []).filter(function (c) { return c !== was; });
             br.inFlight = null;
-            br.reason = 'user';
-            if (was != null) {
-                br.stoppedAt = was;
-                br.detail = 'restored after reload; ch' + was + ' was in flight and is not done';
-                // the checkpoint was written before ch<was> started, so its text is the pre-chapter snapshot (or empty)
+            var keepCoverage = (typeof NW_6B_RESTORE_KEEP_COVERAGE === 'undefined' || NW_6B_RESTORE_KEEP_COVERAGE)
+                && was == null && savedReason === 'coverage';
+            if (keepCoverage) {
+                br.reason = 'coverage';
+                br.stoppedAt = savedStoppedAt;
+                br.coverageAck = savedAck;
+                br.detail = savedDetail || 'restored after reload';
             } else {
-                br.detail = 'restored after reload';
+                br.reason = 'user';
+                if (was != null) {
+                    br.stoppedAt = was;
+                    br.detail = 'restored after reload; ch' + was + ' was in flight and is not done';
+                    // the checkpoint was written before ch<was> started, so its text is the pre-chapter snapshot (or empty)
+                } else {
+                    br.detail = 'restored after reload';
+                }
             }
             if (!Array.isArray(br.usageEstimated)) br.usageEstimated = [];
+            if (!Array.isArray(br.continuitySkip)) br.continuitySkip = [];
             nwBatchState.interrupted = null;
             try { applySessionDataToUI(); } catch (e) { console.warn('[batch] restore UI', e); }
             nwBatchSyncCapFromRun();
             try { await nwBatchCheckpoint(false); } catch (e) { console.warn('[batch] restore checkpoint', e); }
             nwBatchShow('batchRestoreBox', false);
+            var pendingCoverage = keepCoverage && br.stoppedAt != null && !(br.coverageAck && br.coverageAck.chapter === br.stoppedAt && br.coverageAck.decision);
+            if (pendingCoverage) nwBatchShowCoverageReview(br.stoppedAt);
+            else nwBatchShow('batchCoverageBox', false);
             nwBatchApplyLock();
-            nwBatchSetStatus('Restored interrupted batch run (stopped at ch' + br.stoppedAt + ', user). Completed: ' + (br.completed.join(', ') || 'none') + '. Click Resume to continue.', 'stopped');
+            if (keepCoverage) {
+                nwBatchSetStatus('Restored interrupted batch run (stopped at ch' + br.stoppedAt + ', coverage). Completed: ' + (br.completed.join(', ') || 'none') + (pendingCoverage ? '. Review the coverage decision to continue.' : '. Click Resume to continue.'), 'stopped');
+            } else {
+                nwBatchSetStatus('Restored interrupted batch run (stopped at ch' + br.stoppedAt + ', user). Completed: ' + (br.completed.join(', ') || 'none') + '. Click Resume to continue.', 'stopped');
+            }
             return true;
         }
 

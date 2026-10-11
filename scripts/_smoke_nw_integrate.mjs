@@ -16,6 +16,8 @@
  *   I6  batch lock: nwBatchIsLocked() true -> Integrate returns false and changes nothing
  *   I7  callAI {chapter, _jsonParseError} (or no usable prose) is a FAILED revision: chapters[] unchanged,
  *       counted in "M failed", item stays To Incorporate
+ *   I8  breakdown chapter keys 'Ch. 1' / 'ch1' / numeric '1' / 'Chapter 1' all map to the chapter number
+ *   I9  breakdown items with only character/subplot content stay To Incorporate with note 'manual'
  *
  * Mutations (TEMP copy, flags flipped false; each must turn a core assertion red):
  *   M1  wrong prose target (write to #chapterContent{n}) -> I1 red
@@ -187,6 +189,7 @@ async function installHarness(page) {
         chapterArcs: (novelData.chapterArcs || []).slice(),
         novelOutline: String(novelData.novelOutline || ''),
         statuses: (novelData.bookImprovementsWithStatus || []).map((it) => it && it.status),
+        notes: (novelData.bookImprovementsWithStatus || []).map((it) => it && it.note),
         genDom: [1, 2, 3].map((n) => (el('chapterGenContent' + n) || {}).value || ''),
         editDom: [1, 2, 3].map((n) => (el('chapterEditContent' + n) || {}).value || ''),
         contentDom: [1, 2, 3].map((n) => (el('chapterContent' + n) || {}).value || ''),
@@ -227,7 +230,9 @@ const FLAGS = {
   prose: 'var NW_6B_WRITE_PROSE_TO_GEN = true;',
   reject: 'var NW_6B_CALLAI_REJECT_PATH = true;',
   status: 'var NW_6B_STATUS_PER_ITEM = true;',
-  parseFail: 'var NW_6B_PARSE_FAIL_AS_FAILURE = true;'
+  parseFail: 'var NW_6B_PARSE_FAIL_AS_FAILURE = true;',
+  keyNorm: 'var NW_6B_INTEGRATE_KEY_NORMALIZE = true;',
+  manualOnly: 'var NW_6B_MANUAL_ONLY_STAYS = true;'
 };
 const PARSE_GARBAGE = '{broken-json-not-prose chapter ';
 function mutateCopy(flagFrom) {
@@ -472,6 +477,102 @@ async function runParseFail(htmlPath) {
     JSON.stringify({ chapters: emptyAfter.chapters, gen: emptyAfter.genDom, statuses: emptyAfter.statuses, toast: emptyToast }));
 }
 
+async function runKeyNormalize(htmlPath) {
+  const page = await openPage(htmlPath);
+  const fix = clone(FIX);
+  fix.bookImprovementsWithStatus = [
+    {
+      text: 'Tighten Mira dock-clock beat in chapter 1 (Ch. 1 key).',
+      status: 'To Incorporate',
+      breakdown: {
+        chapters: { 'Ch. 1': 'Revise ch1 so Mira names the clock mismatch aloud.' },
+        chapterOutlines: { 'Chapter 1': NOTE1 }
+      }
+    },
+    {
+      text: 'Carry the dock-clock disagreement into chapter 2 (ch2 key).',
+      status: 'To Incorporate',
+      breakdown: {
+        chapters: { ch2: 'Revise ch2 so the log and clock still disagree after the first choice.' },
+        chapterOutlines: { 'ch2': NOTE2 }
+      }
+    },
+    {
+      text: 'Land the delayed cost in chapter 3 (numeric 3 key).',
+      status: 'To Incorporate',
+      breakdown: {
+        chapters: { 3: 'Revise ch3 so the delayed consequence is named.' },
+        chapterOutlines: { '3': 'Note: delayed cost is visible.' }
+      }
+    }
+  ];
+  const r = await page.evaluate(async (nd) => {
+    const h = window.__h;
+    await h.load(nd);
+    window.callAI = function (messages, tabElement, callbackOrOptions, options) {
+      const isCallback = typeof callbackOrOptions === 'function';
+      const callback = isCallback ? callbackOrOptions : null;
+      const opts = isCallback ? (options || {}) : (callbackOrOptions || {});
+      const op = String(opts.operationName || '');
+      const m = /Integrate Ch\.(\d+)/.exec(op);
+      const ch = m ? Number(m[1]) : 0;
+      h.calls.push({ operationName: op, ch: ch });
+      const text = 'REVISED ch' + (ch || 'N');
+      if (typeof callback === 'function') callback(text);
+      return Promise.resolve(text);
+    };
+    await integrateBreakdownSuggestions();
+    if (typeof collectData === 'function') collectData();
+    return h.snap();
+  }, fix);
+  await page.close();
+  const chOk = r.chapters[0] === 'REVISED ch1' && r.chapters[1] === 'REVISED ch2' && r.chapters[2] === 'REVISED ch3'
+    && r.genDom[0] === 'REVISED ch1' && r.genDom[1] === 'REVISED ch2' && r.genDom[2] === 'REVISED ch3';
+  const outOk = String(r.chapterOutlines[0] || '').indexOf(NOTE1) >= 0
+    && String(r.chapterOutlines[1] || '').indexOf(NOTE2) >= 0
+    && String(r.chapterOutlines[2] || '').indexOf('delayed cost is visible') >= 0;
+  const stOk = r.statuses[0] === 'Incorporated' && r.statuses[1] === 'Incorporated' && r.statuses[2] === 'Incorporated';
+  const calls = (r.calls || []).map((c) => c.ch);
+  return { ok: !!(chOk && outOk && stOk && calls.indexOf(1) >= 0 && calls.indexOf(2) >= 0 && calls.indexOf(3) >= 0), after: r, chOk, outOk, stOk, calls };
+}
+
+async function runManualOnly(htmlPath) {
+  const page = await openPage(htmlPath);
+  const fix = clone(FIX);
+  fix.bookImprovementsWithStatus.push({
+    text: 'Give Mira a visible limp in the character bible.',
+    status: 'To Incorporate',
+    breakdown: {
+      characters: { Mira: 'Add a limp she earned on the dock.' },
+      subplots: { clock: 'The limp is a reminder of the clock choice.' }
+    }
+  });
+  const r = await page.evaluate(async (nd) => {
+    const h = window.__h;
+    await h.load(nd);
+    await integrateBreakdownSuggestions();
+    if (typeof collectData === 'function') collectData();
+    return h.snap();
+  }, fix);
+  await page.close();
+  const manual = r.statuses[2] === 'To Incorporate' && r.notes[2] === 'manual';
+  const others = r.statuses[0] === 'Incorporated' && r.statuses[1] === 'To Incorporate';
+  const notInChapters = String(r.chapters[0] || '').indexOf('limp') < 0 && String(r.chapters[1] || '').indexOf('limp') < 0;
+  return { ok: !!(manual && others && notInChapters), after: r, manual, others };
+}
+
+// ---------------- I8: normalize breakdown chapter keys ----------------
+{
+  const r = await runKeyNormalize();
+  check('I8', "breakdown keys 'Ch. 1', 'ch2', numeric '3' all apply to the matching chapter", r.ok === true, JSON.stringify({ chOk: r.chOk, outOk: r.outOk, stOk: r.stOk, calls: r.calls, chapters: r.after && r.after.chapters, statuses: r.after && r.after.statuses, outlines: r.after && r.after.chapterOutlines }));
+}
+
+// ---------------- I9: character/subplot-only items stay To Incorporate with manual note ----------------
+{
+  const r = await runManualOnly();
+  check('I9', "character/subplot-only breakdown stays To Incorporate with note 'manual'; never Incorporated", r.ok === true, JSON.stringify({ statuses: r.after && r.after.statuses, notes: r.after && r.after.notes, chapters: r.after && r.after.chapters }));
+}
+
 // ---------------- Mutations: TEMP copy, flags flipped false ----------------
 {
   const m1 = mutateCopy(FLAGS.prose);
@@ -503,6 +604,20 @@ async function runParseFail(htmlPath) {
     const keptOriginal = after.chapters[0] === CH1 && after.genDom[0] === CH1 && after.statuses[0] === 'To Incorporate';
     check('M4', 'dropping PARSE_FAIL_AS_FAILURE writes parse-error chapter (I7 red)', keptOriginal === false, JSON.stringify({ chapter0: after.chapters[0], gen1: after.genDom[0], statuses: after.statuses }));
     try { fs.rmSync(m4.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m5 = mutateCopy(FLAGS.keyNorm);
+  check('M5', 'flag NW_6B_INTEGRATE_KEY_NORMALIZE present', m5.ok, m5.detail);
+  if (m5.ok) {
+    const r = await runKeyNormalize(m5.copy);
+    check('M5', 'dropping KEY_NORMALIZE leaves Ch./ch1/numeric keys unapplied (I8 red)', r.ok === false, JSON.stringify(r));
+    try { fs.rmSync(m5.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m6 = mutateCopy(FLAGS.manualOnly);
+  check('M6', 'flag NW_6B_MANUAL_ONLY_STAYS present', m6.ok, m6.detail);
+  if (m6.ok) {
+    const r = await runManualOnly(m6.copy);
+    check('M6', 'dropping MANUAL_ONLY_STAYS marks character/subplot-only item Incorporated (I9 red)', r.ok === false, JSON.stringify(r));
+    try { fs.rmSync(m6.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
   }
 }
 
