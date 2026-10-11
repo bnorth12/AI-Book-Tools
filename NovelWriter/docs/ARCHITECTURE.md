@@ -65,10 +65,20 @@ flowchart TD
     RF["chapterRequiredFacts, S1 (planned)<br/>Tab 5 user items"]
     REQ["chapterRequirements, S1 (planned)<br/>cast, setting, mustNotInclude"]
     PLAN["chapterWritingPlans, 4p (planned)"]
+    WORLD["Tab 1 · World panel (W1, planned)<br/>genre profiles, template, canon, role, weight"]
+    GATEA{"Gate A (W1, planned)<br/>unapproved concepts?<br/>soft block, Continue anyway"}
+    RECHK{"Role re-check after outline (W1, planned)<br/>user confirms"}
+    GATEB{"Gate B · plans fresh?<br/>builtFrom (4p) and worldFrom (W1)"}
 
-    T1 --> T2 --> T3 --> T4 --> READY
+    T1 --> WORLD --> T2 --> T3 --> T4 --> GATEA
+    GATEA -- "approve on Tab 1" --> WORLD
+    GATEA -- "continue anyway or all approved" --> READY
     READY -- no --> FIX --> T4
-    READY -- yes --> T5 --> MODE
+    READY -- yes --> RECHK --> T5
+    T5 --> GATEB
+    GATEB -- "stale or missing, Build plans first" --> PLAN
+    GATEB -- "fresh, or run on blueprint" --> MODE
+    WORLD -. write .-> STORY
     MODE -- single chapter --> ONE --> DRAFT
     MODE -- batch --> ALL --> DRAFT
     DRAFT -- yes --> DRAFTGEN --> COVER
@@ -301,7 +311,7 @@ opt-in and requires `QCAT_LIVE_ACK=1` (`scripts/qcat_harness.mjs:84-156`,
 
 ## Data model and schema (design only)
 
-Status: DESIGN for A1, revision v6 (v4 cleared Reviewer's NO-GO on `ee8a303`. v5 added the decided world-beat fields N15-N24, D1-D10 FINAL 2026-10-10, and Reviewer's v4 follow-ups 3 and 4. v6 clears Reviewer's v5 NO-GO: N20 points into the story ledger, and `normalizeCharacterItem` copies every present key). Engineering owns it. Product needs come from Fiction's `NW_STORY_SCHEMA_NEEDS.md` (written against main `600b35d`). No code changes in this PR. Slot S1 implements it, with a Reviewer GO on the migration trigger. Line numbers are against main `600b35d` (byte-identical to `4a998d6`) and are approximate. The function names are the contract. Every function named here that is not on main is marked S1, 4p or a Q slot.
+Status: DESIGN for A1, revision v8 (v7 applied the CoS coherence rulings and Fiction's `builtFrom` inputs. v8 folds in Fiction's UI-plan amendment: `worldFrom`, scorecard shapes, `approvedAt` scope and the World panel and gates in the tabs flowchart. Earlier: revision v6 (v4 cleared Reviewer's NO-GO on `ee8a303`. v5 added the decided world-beat fields N15-N24, D1-D10 FINAL 2026-10-10, and Reviewer's v4 follow-ups 3 and 4. v6 clears Reviewer's v5 NO-GO: N20 points into the story ledger, and `normalizeCharacterItem` copies every present key). Engineering owns it. Product needs come from Fiction's `NW_STORY_SCHEMA_NEEDS.md` (written against main `600b35d`). No code changes in this PR. Slot S1 implements it, with a Reviewer GO on the migration trigger. Line numbers are against main `600b35d` (byte-identical to `4a998d6`) and are approximate. The function names are the contract. Every function named here that is not on main is marked S1, 4p or a Q slot.
 
 ### 1. Where the data lives
 - Everything is a **NovelWriter-local extension inside `novelData`**, carried in the existing shared v1.0 envelope. There are **no `schema/` or `docs/architecture/book-tools-contract/` changes**, so Nonfiction's confirm is not triggered. `novel-schema-1.0.json` allows extra properties on the envelope, `novelData` and `characters` items. Because `characters[]` is a shared-schema entity, the new `id`, `voice` and `relationships` fields will be visible to BookEditor and BookDecomposer, so Nonfiction gets an FYI (not a confirm).
@@ -330,11 +340,12 @@ Status: DESIGN for A1, revision v6 (v4 cleared Reviewer's NO-GO on `ee8a303`. v5
 | Requirements, derived | `chapterRequirements[n-1].cast`, `.setting`, `.derivedFrom` | `nwDeriveChapterRequirements(n)` (S1) | Q1, Q2 prompt, 8d cast and noteLeak |
 | Requirements, user | `chapterRequirements[n-1].mustNotInclude` | Tab 5 user edit via `nwRequirementsSetMustNotInclude(n, list)` (S1) | same |
 | Writing plan | `chapterWritingPlans[n-1]`, incl. `kind:'worldBeat'` items (N16, §2a) and `builtFrom` (hash of blueprint, requirements and required facts, §7.2) | 4p plan build or edit, **before** a batch starts. Read-only during a run. Rebuild is always a user action | 8d `planCoverage`, Generate All prompt |
+| Plan world hash (W1) | `chapterWritingPlans[n-1].worldFrom` (string, `nwTextHash`, §7.2) | plan build (4p path with W1 inputs), beside `builtFrom` | Tab 5 stale banner, Generate All preflight (Gate B) |
 | Theme tags (new key, S1) | `chapterThemeTags[n-1]` (N22, §2a) | `nwChapterThemeTagsUpdate(n, patch, origin)` (S1) | 4p, 8d (advisory, later) |
 | Coverage flags | `chapterFlags[n-1].coverageFailed`, `.missing`, `.at` | 6b, only through `nwSetChapterFlag(n, patch)` (sole writer, key merge). Clear-on-pass: a passing regenerate merges `{coverageFailed:false, missing:[], at}` | `nwRenderChapterFlag` (Tab 5 `#chapterGenFlag{n}`, Tab 6 `#chapterEditFlag{n}`), renders only when `coverageFailed === true`. Resume |
 | Replay flag | `chapterFlags[n-1].replay{…, at}` | Q3, only through `nwSetChapterFlag` | `nwRenderChapterFlag`, Resume |
 | Fingerprint cache | `chapterFingerprints[n-1]` | `nwBuildChapterFingerprint(n)` (S1). Called by migration and by Q3 | Q3 replay check |
-| Scorecards | `chapterScorecards[n-1]` (incl. advisory `planCoverage`, null `worldImmersion`) | 8d scorer (`nwWriteChapterScorecard`, existing) | Tab 6, export |
+| Scorecards | `chapterScorecards[n-1]`, incl. three advisory keys, all out of `overall` until CoS promotes each: `planCoverage` (4p). `worldImmersion` = `{score, axes:{culture, science, tech}, beats:[…], method}`, shape owned by W1, `null` when there is no `storyWorld` or no worldBeats. `setupPayoff` = `{score, planted:{hit,total}, paid:{hit,total}, unpaid:[ids], abandoned:[ids], world:{…}, method:'heuristic'}`, shape owned by SC2, **always `null` until ledger L1** (SC2 never creates `storyLedger`). The "no ledger" reason is derived at render, not stored | 8d scorer (`nwWriteChapterScorecard`, existing) is the only writer. W1 and SC2 supply the compute functions | Tab 6, export |
 | Continuity | `continuityTracker` | Q5 (final text only) | prompts. Per-chapter character state lives here and is **never duplicated** on Character |
 | Version | `nwSchemaVersion` | `nwMigrateSession` stamp step and the new-session defaults (S1) | load paths |
 
@@ -364,7 +375,7 @@ All are **NovelWriter-local, optional and additive**. Absent stays absent, and a
 
 **Canon lock (N17, D2).**
 - `nwStoryWorldUpdate(patch, origin)` and `nwCharacterKnowsUpdate(..., origin)` take `origin` `user` or `ai`. With `origin:'ai'` they **skip every item whose stored `locked` is true**, matched by `id` (or `conceptId` for `knows`), and never delete an item. Skipped ids are returned so the suggest UI can show them.
-- A `user` write may edit a locked item and may set or clear `locked`. Approving a concept sets `locked:true` and `approvedAt`.
+- A `user` write may edit a locked item and may set or clear `locked`. Approving a concept sets `locked:true` and `approvedAt`. **`approvedAt` is on concepts only.** Approving a rule, location, system or theme sets `locked` (and `source`) only.
 - `source` is set by the helper from `origin` when an item is created. A user edit of an `ai` item sets `source:'user'`.
 - AI-suggest (D5) for every N15-N24 field goes through these helpers only, so suggestions are edited by the user before they are folded in.
 - **Whole-replace fields are propose-only for AI.** `genreProfiles`, `structureTemplate`, `immersionWeight`, `arc` and `storyWorld.subplots` carry no per-item lock, so the helpers **refuse** an `origin:'ai'` write to them. AI-suggest shows a proposal and writes nothing. Only the user's accept writes it, with `origin:'user'`. `role` follows the same rule (a classifier result is a proposal, accepted by the user).
@@ -446,6 +457,7 @@ Path: `NovelWriter/fixtures/nw-migration/<case>.json` (beside the existing `Nove
 | `v1-ai-propose-only.json` | user-set `genreProfiles` and `immersionWeight`, then `origin:'ai'` patches to both | helper test. Both refused, values deep-equal, a proposal is returned. A following `origin:'user'` accept writes it |
 | `v1-plan-stale.json` | 5 chapters with plans built from the current inputs, then: ch1 unchanged, ch2 blueprint edited, ch3 a `chapterRequiredFacts` item text edited, ch4 `mustNotInclude` edited, ch5 plan with no `builtFrom`. Also ch1 re-ordered required-facts items and a changed `derivedFrom` only | none. Stale check returns ch2-ch5, ch1 stays fresh (sort by id and `derivedFrom` exclusion), migration writes no `builtFrom`, and no rebuild is triggered |
 | `v1-flags-passthrough.json` | sparse `chapterFlags` with an unknown key, `coverageFailed:false`, a `replay` object and a wrong-type entry | none. Every entry deep-equal after import and restore, no padding, one warning |
+| `v1-plan-world-stale.json` | plans built with `worldFrom`, plus a pre-W1 plan with no worldBeat items and no `worldFrom`, and a plan with worldBeat items and no `worldFrom`. Then: lock an already-approved concept, approve a new used concept, accept a role change | helper test. Locking alone leaves every plan fresh. Approve and role accept make the affected plans stale with `builtFrom` unchanged. The pre-W1 plan without worldBeats stays fresh, and the worldBeat plan without `worldFrom` is stale |
 | `v1-batch-locked.json` | `nwBatchIsLocked()` stubbed true, then one `user` write each to `nwStoryWorldUpdate`, `nwCharacterKnowsUpdate`, `nwChapterThemeTagsUpdate` | helper test. All three refused, `novelData` deep-equal |
 
 ### 5. Write-concurrency rules
@@ -484,7 +496,8 @@ Engineering confirms the names `chapterRequirements` and `chapterFingerprints`. 
 
 #### 7.2 Plan freshness and precedence (CoS ruling)
 - **`chapterWritingPlans[n-1].builtFrom`** = `nwTextHash` of a canonical join of three inputs, taken at build time: `JSON.stringify([chapterBlueprints[n-1], {cast, setting, mustNotInclude} of chapterRequirements[n-1] (derivedFrom excluded), chapterRequiredFacts[n-1].items mapped to {id, text, mustInclude} and sorted by id])`. An absent input is written as `null` in its slot, and object keys are serialized in that fixed order. Only 4p writes `builtFrom`, on every plan build or rebuild. Migration never writes it.
-- **Stale triggers:** when the current hash differs, the plan is **stale**. That happens on a blueprint change, a required-facts edit or a `mustNotInclude` edit alike (a re-derive of `cast`/`setting` that changes them counts too). Tab 5 and Generate All's pre-run step warn and offer a rebuild. A plan with no `builtFrom` (built before S1) is treated as stale. **Rebuild is always a user action.** It never happens automatically, and never during a batch (plans are read-only while `nwBatchIsLocked()`).
+- **`chapterWritingPlans[n-1].worldFrom`** (W1) = `nwTextHash(JSON.stringify([approvedConcepts, storyWorld.role.value, storyWorld.genreProfiles, storyWorld.structureTemplate.id, storyWorld.immersionWeight]))`. `approvedConcepts` = the `storyWorld.concepts[]` with `approvedAt` set that the plan build used, mapped to `{id, mustExplain, familiarity}` and sorted by `id`. **`locked` and `source` are not hash inputs**, so locking or unlocking an already-approved concept does not change `worldFrom`. An absent input is `null` in its slot, with fixed key order. Written only by the plan build (4p path, W1 inputs) on every build or rebuild, beside `builtFrom`. Migration never writes it. Optional, absent before W1.
+- **Stale triggers:** a plan is **stale if `builtFrom` OR `worldFrom` mismatches** its current hash. `worldFrom` triggers: approving a concept, changing `mustExplain` or `familiarity` of a used concept, accepting a new `role`, and changing genre profiles, template or immersion weight. A plan **with** worldBeat items and no `worldFrom` is stale. A pre-W1 plan with **no** worldBeat items and no `worldFrom` is **not** stale on the world side. For `builtFrom`, when the current hash differs, the plan is stale. That happens on a blueprint change, a required-facts edit or a `mustNotInclude` edit alike (a re-derive of `cast`/`setting` that changes them counts too). Tab 5 and Generate All's pre-run step warn and offer a rebuild. A plan with no `builtFrom` (built before S1) is treated as stale. **Rebuild is always a user action.** It never happens automatically, and never during a batch (plans are read-only while `nwBatchIsLocked()`).
 - **Precedence, stated once (agreed with Fiction): the blueprint outranks the writing plan.** The plan is derived from the blueprint. When they conflict, the user sees a warning, `builtFrom` marks the plan stale (also when required facts or `mustNotInclude` change after the build), and the prompt and 8d both follow the blueprint. The user decides when to rebuild.
 - **Order:** 4p plans are built **before** a batch starts and are read-only during it. Q5 audits **after** revise, on final text only. Q3 writes through `nwSetChapterFlag`, with `at` inside `replay`.
 
