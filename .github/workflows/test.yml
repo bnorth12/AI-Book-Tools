@@ -38,6 +38,9 @@ jobs:
       - name: NovelWriter retention smoke
         run: npm run test:smoke:nw-retention
 
+      - name: "CI guard: XAI smoke dispatch-only"
+        run: npm run test:ci:xai-guard
+
       - name: Lint HTML files
         run: |
           npx htmlhint "**/*.html"
@@ -61,7 +64,7 @@ jobs:
           echo "OK: All JSON files are valid"
 
       - name: Grok endpoint smoke test
-        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch'
         env:
           XAI_API_KEY: '${{ secrets.XAI_API_KEY }}'
           XAI_SMOKE_MODEL: '${{ vars.XAI_SMOKE_MODEL }}'
