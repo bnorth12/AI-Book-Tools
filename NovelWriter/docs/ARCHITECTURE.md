@@ -299,7 +299,7 @@ opt-in and requires `QCAT_LIVE_ACK=1` (`scripts/qcat_harness.mjs:84-156`,
 
 ## Data model and schema (design only)
 
-Status: DESIGN for A1, revision v4 (clears Reviewer's NO-GO on `ee8a303`). Engineering owns it. Product needs come from Fiction's `NW_STORY_SCHEMA_NEEDS.md` (written against main `600b35d`). No code changes in this PR. Slot S1 implements it, with a Reviewer GO on the migration trigger. Line numbers are against main `600b35d` (byte-identical to `4a998d6`) and are approximate. The function names are the contract. Every function named here that is not on main is marked S1, 4p or a Q slot.
+Status: DESIGN for A1, revision v5 (v4 cleared Reviewer's NO-GO on `ee8a303`. v5 adds the decided world-beat fields N15-N24, D1-D10 FINAL 2026-10-10, and Reviewer's v4 follow-ups 3 and 4). Engineering owns it. Product needs come from Fiction's `NW_STORY_SCHEMA_NEEDS.md` (written against main `600b35d`). No code changes in this PR. Slot S1 implements it, with a Reviewer GO on the migration trigger. Line numbers are against main `600b35d` (byte-identical to `4a998d6`) and are approximate. The function names are the contract. Every function named here that is not on main is marked S1, 4p or a Q slot.
 
 ### 1. Where the data lives
 - Everything is a **NovelWriter-local extension inside `novelData`**, carried in the existing shared v1.0 envelope. There are **no `schema/` or `docs/architecture/book-tools-contract/` changes**, so Nonfiction's confirm is not triggered. `novel-schema-1.0.json` allows extra properties on the envelope, `novelData` and `characters` items. Because `characters[]` is a shared-schema entity, the new `id`, `voice` and `relationships` fields will be visible to BookEditor and BookDecomposer, so Nonfiction gets an FYI (not a confirm).
@@ -316,18 +316,19 @@ Status: DESIGN for A1, revision v4 (clears Reviewer's NO-GO on `ee8a303`). Engin
 
 | Entity / key | Field(s) | Owner (only writer) | Read-only consumers |
 |---|---|---|---|
-| **storyWorld** (new key, S1) | `storyWorld{version, locations[], rules[], concepts[]*, topicTags[]*, notes?}` | `nwStoryWorldUpdate(patch)` (S1), called by Tab 1-2 edits and AI-suggest | 4p plan build, 8d, Q5, prompt binders only where they opt in (§3 rule 8) |
+| **storyWorld** (new key, S1) | `storyWorld{version, notes?, locations[]?, rules[]?, concepts[]?, topicTags[]?}` plus the N15-N24 fields in §2a | `nwStoryWorldUpdate(patch, origin)` (S1), called by Tab 1-2 edits and AI-suggest. Enforces the canon lock (§2a) | 4p plan build, 8d, Q5, prompt binders only where they opt in (§3 rule 8) |
 | Legacy world bible | `worldBible`, `world` (string or object) | **none in S1**: read-only inputs, kept byte-for-byte | existing `nd.worldBible \|\| nd.world` readers (~L1940, L2355, L4343, L4548, L4955, L5198, L5814, L6808, L10114, L10240), unchanged |
 | Setting | `setting`, `genre` | Tab 1 `collectData()` (existing) | prompts, 4p, 8d |
 | Plot | `storyArc`, `generalPlot`, outlines, `chapterOutlines[]`, `chapterArcs[]`, `chapterBlueprints[]`, `subplots[]` (strings) | user and AI-suggest in Tabs 1-4 (existing) | Generate All, 4p, 8d, Q1-Q3 |
 | Subplot metadata (S1) | `subplotsMeta[i]` (same index as `subplots`) | `normalizeSubplotItem` copy step (S1) | 4p, Q5 |
-| Character | `characters[]{id?, name, backstory, arc, role, goal, flaw, notes, obligations[], voice?, relationships[]?, explainerFor[]*}` | Tab 2 edit and AI-suggest, through `normalizeCharacterItem` only | prompts (bounded, §3 rule 8), 4p, 8d, Q5 |
+| Character | `characters[]{id?, name, backstory, arc, role, goal, flaw, notes, obligations[], voice?, relationships[]?, explainerFor[]?, knows[]?}` | Tab 2 edit and AI-suggest, through `normalizeCharacterItem` only. `knows[]` only through `nwCharacterKnowsUpdate` (§2a) | prompts (bounded, §3 rule 8), 4p, 8d, Q5 |
 | Character id | `characters[].id` | `nwCharacterId(name, taken)` (S1, §4.3), assigned only where absent | `chapterRequirements.cast`, 4p refs |
 | Legacy plan facts | `chapterFactChecks[n-1]` (array of rows `{id,label,kind,match,pattern,beat?}`) | **existing writers, unchanged**: Tab 5 `nwCollectPlanFactsFromUi()` (~L11448) and harness `nwMergeQcatExpect()` (~L11017). See §7.1 | 8d `nwChapterFactEntries()` (~L10506), Tab 5 `nwRenderPlanFactsBox()` (~L11483) |
 | Required facts (new key, S1) | `chapterRequiredFacts[n-1].items[]` | `nwRequiredFactsUpsert(n, items, source)` (S1). Each `source` value has one caller (§7.1) | Q1 prompt, 8d (from Q1), 4p `factId` |
 | Requirements, derived | `chapterRequirements[n-1].cast`, `.setting`, `.derivedFrom` | `nwDeriveChapterRequirements(n)` (S1) | Q1, Q2 prompt, 8d cast and noteLeak |
 | Requirements, user | `chapterRequirements[n-1].mustNotInclude` | Tab 5 user edit via `nwRequirementsSetMustNotInclude(n, list)` (S1) | same |
-| Writing plan | `chapterWritingPlans[n-1]` | 4p plan build or edit | 8d `planCoverage`, Generate All prompt |
+| Writing plan | `chapterWritingPlans[n-1]`, incl. `kind:'worldBeat'` items (N16, §2a) | 4p plan build or edit | 8d `planCoverage`, Generate All prompt |
+| Theme tags (new key, S1) | `chapterThemeTags[n-1]` (N22, §2a) | `nwChapterThemeTagsUpdate(n, patch, origin)` (S1) | 4p, 8d (advisory, later) |
 | Coverage flags | `chapterFlags[n-1].coverageFailed`, `.missing`, `.at` | 6b | Tab 6, Resume |
 | Replay flag | `chapterFlags[n-1].replay` | Q3 | Tab 6, Resume |
 | Fingerprint cache | `chapterFingerprints[n-1]` | `nwBuildChapterFingerprint(n)` (S1). Called by migration and by Q3 | Q3 replay check |
@@ -335,7 +336,39 @@ Status: DESIGN for A1, revision v4 (clears Reviewer's NO-GO on `ee8a303`). Engin
 | Continuity | `continuityTracker` | Q5 (final text only) | prompts. Per-chapter character state lives here and is **never duplicated** on Character |
 | Version | `nwSchemaVersion` | `nwMigrateSession` stamp step and the new-session defaults (S1) | load paths |
 
-`*` marks fields reserved for Brian's world-beats talk (`[WAIT]`). S1 accepts and preserves them as optional and does nothing else with them.
+v4 marked `concepts`, `topicTags`, `explainerFor` and `conceptId` as `[WAIT]`. Brian's decisions D1-D10 (FINAL 2026-10-10) resolve every one, so v5 drops the marker. They are designed in §2a.
+
+### 2a. Story-world, canon and theme fields (N15-N24, decided)
+All are **NovelWriter-local, optional and additive**. Absent stays absent, and a field is created only when an owner writes a value (no empty shells, no defaults). Product owner for all of them is **Fiction**. The code owner (only writer) is named per field. Readers type-guard and treat a wrong type as absent for that call (§3 rule 7). Every item array keyed by `id` merges by `id`. Unknown keys on an item, and on any nested object, are kept by every writer (shallow copy, then patch).
+
+| N | Field and shape | Owner (only writer) | Readers | Merge rule |
+|---|---|---|---|---|
+| N15 | `storyWorld.genreProfiles[]` (profile ids, multi-select, blends allowed) | `nwStoryWorldUpdate` (Tab 1 picklist, AI-suggest) | 4p budget, 8d immersion weight default, N23 classifier | replace the whole array per edit. Legacy `genre` stays the single-select summary, owned by `collectData()`, never derived from or written by this |
+| N15 | `storyWorld.structureTemplate{id, beats[{name, pct}]}`, `id` in `threeAct, saveTheCat, herosJourney, storyCircle, sevenPoint, kishotenketsu, custom` | `nwStoryWorldUpdate` | 4p beat placement | replace per edit. `pct` is 0-100 |
+| N16 | `storyWorld.concepts[].mustExplain` (boolean), `.familiarity` (curve stage `new, introduced, familiar`) | `nwStoryWorldUpdate` | 4p budget | per-item key merge |
+| N16 | worldBeat items in `chapterWritingPlans[n-1].items[]`: `{kind:'worldBeat', conceptId?, deliveryMode, via?, who?, where?}` with `deliveryMode` in `dialogue, action, interiority, artifact, staging, narration` | 4p (plan build or edit) | Generate All prompt, 8d `planCoverage` | 4p item rules. **The per-chapter budget is derived at plan build and never stored.** worldBeats live in the plan, never in `chapterBlueprints` |
+| N17 | `locked` (boolean) and `source` (`ai` or `user`) on `storyWorld.concepts[]`, `.rules[]`, `.locations[]`, `.systems[]` and `characters[].knows[]` | the owning helper of each array (this table) | all editors, AI-suggest | see lock rules below |
+| N17 | `storyWorld.concepts[].approvedAt` (ISO string) | `nwStoryWorldUpdate`, user approve action only | 4p (only approved concepts are used) | per-item key merge |
+| N17 | `storyWorld.conceptsExtractedFrom` (`nwTextHash` of the extract inputs) | `nwStoryWorldUpdate`, called by the extract call `nwConceptsExtract()` (planned) | extract trigger | replace. A mismatch with the current source hash offers a re-run, never an automatic one |
+| N17 | `storyWorld.contradictions[]{conceptId, text, chapter?, at}` | `nwStoryWorldUpdate`, called by the check call `nwCanonCheck()` (planned) | Tab 1-2 World editor, Tab 6 | append, de-duplicated by `conceptId + text + chapter`. Cleared only by user dismiss |
+| N18 | `storyWorld.immersionWeight{culture, science, tech}`, each a number 0-1 | `nwStoryWorldUpdate` (user, or AI-suggest from genre profiles) | 8d `worldImmersion` (when built) | per-axis key merge. 8d `worldImmersion` stays **null** until the scorer is built |
+| N19 | `characters[].knows[]{conceptId, learnedIn, locked?, source?}`, `learnedIn` a chapter number | `nwCharacterKnowsUpdate(charId, entries, origin)` (S1), which writes through `normalizeCharacterItem` | 4p explainer choice, Q5 | merge by `conceptId`. D6 option C `chapterReveals` is **not** in v5 |
+| N20 | `storyWorld.setups[]{id, text, plantedIn, payoffIn?, status}`, `status` in `planted, paid, dropped` | `nwStoryWorldUpdate` | 4p, 8d (advisory later) | merge by `id`. Links to `subplotsMeta` by id when one applies |
+| N21 | `storyWorld.systems[]{id, name, kind, hardness, powerSource, costs[], limits[], users[], ruleIds[], locked?, source?}`, `kind` `magic` or `tech`, `hardness` `hard` or `soft` | `nwStoryWorldUpdate` | 4p budget (hard systems raise the must-explain floor), Q2, Q5 | merge by `id`. `users[]` are character ids or text, `ruleIds[]` are `rules[].id` |
+| N22 | `storyWorld.themes[]{id, text, locked?, source?}` | `nwStoryWorldUpdate` | 4p, 8d (advisory later) | merge by `id` |
+| N22 | **new key** `chapterThemeTags[n-1]{tags[], source}` (theme ids or text) | `nwChapterThemeTagsUpdate(n, patch, origin)` (S1) | 4p, 8d (advisory later) | per-chapter object, `Object.assign` (§5). Separate from `chapterRequirements`, so that record's merge rule is unchanged. Sparse, never padded |
+| N23 | `storyWorld.role{value, source, evidence[], decidedAt}`, `value` in `backdrop, rules, character`, `source` `agent` or `user` | `nwStoryWorldUpdate`, called by the user or the classifier `nwClassifyWorldRole()` (planned) | 4p, N24 gate, 8d weight | replace. The classifier never overwrites `source:'user'`, it can only propose (D10 C: user confirms any change) |
+| N24 | `storyWorld.arc[]{stage, chapterPos, change}` and `storyWorld.subplots[]` (`subplotsMeta` ids) | `nwStoryWorldUpdate` | 4p plan items, 8d (advisory first) | replace per edit. **Written only while `role.value === 'character'`.** Readers ignore them otherwise |
+
+**Canon lock (N17, D2).**
+- `nwStoryWorldUpdate(patch, origin)` and `nwCharacterKnowsUpdate(..., origin)` take `origin` `user` or `ai`. With `origin:'ai'` they **skip every item whose stored `locked` is true**, matched by `id` (or `conceptId` for `knows`), and never delete an item. Skipped ids are returned so the suggest UI can show them.
+- A `user` write may edit a locked item and may set or clear `locked`. Approving a concept sets `locked:true` and `approvedAt`.
+- `source` is set by the helper from `origin` when an item is created. A user edit of an `ai` item sets `source:'user'`.
+- AI-suggest (D5) for every N15-N24 field goes through these helpers only, so suggestions are edited by the user before they are folded in.
+
+**AI-call budget.** One extract call (`nwConceptsExtract`) and one check call (`nwCanonCheck`) per book, plus D10's one small classifier call (`nwClassifyWorldRole`, at planning and once after outline). Each is counted in `nwBatchEstimate` and the ledger before it merges. None runs during migration or during a batch. Re-runs are user-triggered only, when `conceptsExtractedFrom` no longer matches the source hash.
+
+**Batch lock.** Every new editor and suggest control (genre profile picklist, structure template, concept, location, rule, system, setup, theme and contradiction editors, immersion weight, world role and arc, character knowledge, chapter theme tags) joins the `nwBatchApplyLock()` list, and each helper above refuses to write while `nwBatchIsLocked()` is true (§5).
 
 ### 3. Preservation rules (the #141 lesson)
 1. **Absent stays absent.** Import, restore, tab rebuild and save never write a default into a field the session didn't have. Exceptions are only the **existing** coercions on main, listed so S1 doesn't add more: `normalizeImportedSessionData` (~L9414-9448) coerces non-arrays to `[]` for `authors, characters, subplots, chapterOutlines, chapterArcs, chapters, editedChapters, bookImprovements, bookImprovementsWithStatus, chapterImprovements, chapterScorecards, chapterFactChecks, workflowLog, chapterContinuityPackets, continuityFindings` and fills `factChecks` and `continuityTracker` shells. `updateChapterSubpages()` (~L4694) pads the per-chapter arrays it already pads. **No new S1 key is padded or coerced.**
@@ -343,13 +376,13 @@ Status: DESIGN for A1, revision v4 (clears Reviewer's NO-GO on `ee8a303`). Engin
 3. **One normalizer per entity**, used by import, restore, DOM rebuild and AI-suggest alike. S1 routes the Tab 2 rebuild (~L4042) through `normalizeCharacterItem` (~L2210).
 4. **`normalizeCharacterItem` must be extended so absent stays absent.** Today it invents `obligations: []`, `backstory: ''`, `arc: ''` (~L2213-2223) and drops items with no name, backstory or arc. S1 changes it to copy only keys present on the input (`role, goal, flaw, notes, obligations, id, voice, relationships, explainerFor` included), to stop writing defaults for absent keys, and to keep the drop rule. Callers that need a default apply it at read time.
 5. **Subplots:** `normalizeSubplotItem` (~L2227) keeps flattening to the string array for compatibility, but **first** copies object fields to `subplotsMeta[i]`.
-6. **World:** `worldBible` and `world` are never written by S1. Their existing readers keep working unchanged and never see `storyWorld`. Migration creates `storyWorld` only when it is absent, and copies a **string** legacy value into `storyWorld.notes` (`worldBible` first, else `world`). An object legacy `world` is not mapped. It stays the bible for existing readers.
-7. **Type handling.** For the new S1 keys (`storyWorld, subplotsMeta, chapterFlags, chapterWritingPlans, chapterRequirements, chapterRequiredFacts, chapterFingerprints, nwSchemaVersion`), `normalizeImportedSessionData` validates type, keeps absent as absent, and keeps a wrong type **as-is with a console warning**, never dropping or coercing it. Every S1 reader type-guards and treats a wrong-type value as absent for that call. Legacy keys keep the existing coercions from rule 1, unchanged.
+6. **World:** `worldBible` and `world` are never written by S1. Their existing readers keep working unchanged and never see `storyWorld`. Migration creates `storyWorld` only when it is absent **and** there is a string legacy value to carry, copying it into `storyWorld.notes` (`worldBible` first, else `world`). Otherwise `storyWorld` stays absent until a user edit or an AI-suggest write creates it. An object legacy `world` is not mapped. It stays the bible for existing readers. Inside `storyWorld`, the normalizer and `nwStoryWorldUpdate` keep unknown keys at every level, including nested objects such as `role`, `immersionWeight` and items of `systems[]`.
+7. **Type handling.** For the new S1 keys (`storyWorld, subplotsMeta, chapterFlags, chapterWritingPlans, chapterRequirements, chapterRequiredFacts, chapterFingerprints, chapterThemeTags, nwSchemaVersion`), `normalizeImportedSessionData` validates type, keeps absent as absent, and keeps a wrong type **as-is with a console warning**, never dropping or coercing it. Every S1 reader type-guards and treats a wrong-type value as absent for that call. Legacy keys keep the existing coercions from rule 1, unchanged.
 8. **Prompts stay bounded.** `normalizeCharacterItem` also feeds `normalizeOutbound` (~L2331) and so every LLM payload. Extending stored fields must not grow prompts: `digestCharacters` (~L4900, capped at 24 entries) and the `normalizeOutbound` payload include a new field only when the prompt builder opts in for that stage. The existing `assertNoFullManuscriptDump` smoke budget (`digestCharactersChars < 2000`, ~L5887) must still pass on the rich fixture after S1.
 
 ### 4. Versioning and migration
 #### 4.1 Version and entry points
-- New `novelData.nwSchemaVersion` (integer). **Absent means legacy (0).** S1 sets it to `1` in the defaults (~L732) and in `resetState()` (~L13129).
+- New `novelData.nwSchemaVersion` (integer). **Absent means legacy (0).** It **stays 1 in v5**: N15-N24 are optional, additive and new in S1 (no shipped build ever wrote v1), so they are part of the v1 definition and need no migration step. S1 sets it to `1` in the defaults (~L732) and in `resetState()` (~L13129).
 - `nwMigrateSession(nd)` (S1) **runs on every full load and is a no-op at the current version.** It is pure (no DOM, no network, **no AI calls**), **additive**, and **idempotent**: `migrate(migrate(x))` deep-equals `migrate(x)`. It never deletes or renames a key. A version newer than the app knows is loaded read-through, unchanged, with a console warning and a status-line note.
 - Every path that installs a full `novelData` calls it after normalize and before `applySessionDataToUI`:
   1. `importSession()` (~L9581-9586): after `normalizeImportedSessionData`, before `novelData = importedNovelData`.
@@ -360,12 +393,12 @@ Status: DESIGN for A1, revision v4 (clears Reviewer's NO-GO on `ee8a303`). Engin
 
 #### 4.2 v0 to v1 steps (in order, each calls the owner function)
 1. Copy subplot objects to `subplotsMeta` (normalizer copy step).
-2. `storyWorld`: only if absent, create `{version:1, locations:[], rules:[]}` via `nwStoryWorldUpdate`, adding `notes` from a string `worldBible`, else a string `world`. Legacy keys untouched.
+2. `storyWorld`: only if absent **and** `worldBible` (else `world`) is a string, create `{version:1, notes}` via `nwStoryWorldUpdate`. No empty `locations`, `rules` or other arrays. With no legacy string, `storyWorld` stays absent. Legacy keys untouched.
 3. `characters[].id`: `nwCharacterId` only where `id` is absent.
-4. `chapterRequiredFacts[n-1]`: only where absent and legacy `chapterFactChecks[n-1]` is a non-empty array or string, call `nwRequiredFactsUpsert(n, nwRequiredFactsFromLegacy(n), 'user')` (mapping in §7.1). Legacy untouched.
+4. `chapterRequiredFacts[n-1]`: **only for chapters that have no entry** (a present entry, of any type, is never touched) and where legacy `chapterFactChecks[n-1]` is a non-empty array or string, call `nwRequiredFactsUpsert(n, nwRequiredFactsFromLegacy(n), 'user')` (mapping in §7.1). Legacy untouched.
 5. `chapterRequirements[n-1]`: `nwDeriveChapterRequirements(n)` for every chapter that has a blueprint. Names that don't resolve stay as text. It never touches `mustNotInclude`.
 6. `chapterFingerprints[n-1]`: `nwBuildChapterFingerprint(n)` for every chapter with saved text.
-7. Leave every `[WAIT]` field untouched. **Never create a `chapterFlags` entry**: flags come only from 6b and Q3 at run time.
+7. **Create none of the N15-N24 fields** (§2a) and leave any that are present untouched, including `chapterThemeTags`. **Never create a `chapterFlags` entry**: flags come only from 6b and Q3 at run time.
 8. Stamp `nwSchemaVersion = 1` last.
 
 Export always writes the current `nwSchemaVersion`. Older builds keep the new keys through the existing spread, and their only coercion of a key S1 touches is legacy `chapterFactChecks`, which S1 never changes shape.
@@ -382,9 +415,10 @@ Path: `NovelWriter/fixtures/nw-migration/<case>.json` (beside the existing `Nove
 | Case file | Input | expectedAddedKeys |
 |---|---|---|
 | `v0-pre6b-no-flags.json` | chapters and blueprints, no `chapterFlags` | `nwSchemaVersion`, `chapterRequirements[*]`, `chapterFingerprints[*]` (no `chapterFlags`) |
-| `v0-worldbible-string.json` | string `worldBible` | `storyWorld` (with `notes`), version, derived records |
+| `v0-worldbible-string.json` | string `worldBible` | `storyWorld` = `{version, notes}` only, version, derived records |
 | `v0-world-string.json` | string legacy `world`, no `worldBible` | `storyWorld` (with `notes` from `world`), version |
-| `v0-world-object.json` | object `world` copied from `rich-scifi-v1/novelData.seed.json` | `storyWorld` without `notes`, version. `world` byte-equal |
+| `v0-world-object.json` | object `world` copied from `rich-scifi-v1/novelData.seed.json` | version only. **No `storyWorld`** (v5). `world` byte-equal |
+| `v0-no-world.json` | no `worldBible`, no `world`, no `storyWorld` | version, derived records. **No `storyWorld`** |
 | `v0-characters-rich.json` | characters with `obligations, goal, flaw`, a duplicate name, a diacritic name | `characters[*].id` (e.g. `ana`, `ana-2`, `zoe`) |
 | `v0-subplot-objects.json` | object subplots | `subplotsMeta[*]` |
 | `v0-partial-writing-plans.json` | `chapterWritingPlans` for 2 of 4 chapters, one with an unknown field | version, derived records. Plans untouched, no padding |
@@ -395,18 +429,26 @@ Path: `NovelWriter/fixtures/nw-migration/<case>.json` (beside the existing `Nove
 | `v1-current.json` | output of a migrated fixture | none (idempotence) |
 | `v2-newer-version.json` | `nwSchemaVersion: 2`, unknown keys | none, warning expected |
 | `v1-wrong-types.json` | `storyWorld: "text"`, `chapterRequirements: {}`, `chapterRequiredFacts: 5` | none, three warnings, values kept as-is |
+| `v0-required-facts-present.json` | legacy `chapterFactChecks` rows for ch1-2, and an existing `chapterRequiredFacts[0]` | `chapterRequiredFacts[1]` only. Entry `[0]` deep-equal |
+| `v1-world-full.json` | `storyWorld` with every N15-N24 field, `characters[].knows[]`, `chapterThemeTags`, worldBeat plan items | none. Every key deep-equal after migrate and round-trip |
+| `v1-locked-canon.json` | locked and unlocked concepts, rules, locations, systems and `knows` entries, driven through `nwStoryWorldUpdate` and `nwCharacterKnowsUpdate` with `origin:'ai'` patches for all of them | helper test, not migrate. Expected: locked items deep-equal, unlocked items patched, skipped ids returned, no item deleted |
+| `v1-role-character.json` | `role.value:'character'` with `arc[]` and `subplots[]` | none. Then an `ai` patch to `role.value:'backdrop'` over `source:'user'` is refused, and a `user` downgrade keeps `arc`/`subplots` stored and readers ignore them |
+| `v1-role-backdrop.json` | `role.value:'backdrop'`, an `arc` patch | helper refuses the write. `arc` stays absent |
+| `v1-unknown-nested.json` | unknown keys on `storyWorld`, `role`, `immersionWeight`, `structureTemplate.beats[0]`, `systems[0]`, `knows[0]`, `chapterThemeTags[0]` | none. Every unknown key survives migrate, import, restore and one `nwStoryWorldUpdate` call |
+| `v1-n-wrong-types.json` | `chapterThemeTags: "x"`, `storyWorld.systems: {}` | none, warnings, kept as-is, readers treat them as absent |
 
 ### 5. Write-concurrency rules
 | Rule | Applies to | Enforcement (S1 or existing) |
 |---|---|---|
 | Single writer per field | §2 table | owner functions. Migration calls them and writes nothing directly |
-| Story entities locked during a batch | storyWorld, Plot, Character, required facts, mustNotInclude edits and AI-suggest | `nwBatchIsLocked()` (~L12154) plus the `nwBatchApplyLock()` list (~L12172). S1 adds each new control to that list |
-| Per-chapter records merge, never replace | `chapterFlags`, `chapterWritingPlans`, `chapterScorecards`, `chapterRequirements`, `chapterRequiredFacts` (all **objects** per chapter) | `Object.assign({}, existing, patch)` keyed by chapter index. Q3 and 6b share `chapterFlags[n-1]`. A re-derive of `chapterRequirements` replaces only `cast`, `setting`, `derivedFrom` and never touches `mustNotInclude`. `nwRequiredFactsUpsert(n, items, source)` replaces only items whose `source` equals its argument, matched by `id`, so user items survive a 4p or migration call |
+| Story entities locked during a batch | storyWorld (incl. every N15-N24 editor in §2a), Plot, Character (incl. `knows`), required facts, mustNotInclude, chapter theme tags edits and AI-suggest | `nwBatchIsLocked()` (~L12154) plus the `nwBatchApplyLock()` list (~L12172). S1 adds each new control to that list |
+| Per-chapter records merge, never replace | `chapterFlags`, `chapterWritingPlans`, `chapterScorecards`, `chapterRequirements`, `chapterRequiredFacts`, `chapterThemeTags` (all **objects** per chapter) | `Object.assign({}, existing, patch)` keyed by chapter index. Q3 and 6b share `chapterFlags[n-1]`. A re-derive of `chapterRequirements` replaces only `cast`, `setting`, `derivedFrom` and never touches `mustNotInclude`. `nwRequiredFactsUpsert(n, items, source)` replaces only items whose `source` equals its argument, matched by `id`, so user items survive a 4p or migration call |
 | Legacy arrays keep main's semantics | `chapterFactChecks` (array per chapter) | not merged with `Object.assign`. Existing writers keep `concat` (harness) and replace-rows (Tab 5) |
 | Await load before write | IndexedDB `nwTimingStats` | existing: `nwTimingLoadStats()` (~L1259) and the record path (8b) |
+| Canon lock (N17) | `storyWorld` concepts, rules, locations, systems, themes and `characters[].knows` | `nwStoryWorldUpdate` and `nwCharacterKnowsUpdate` skip locked items for `origin:'ai'` and never delete (§2a) |
 | Per-call / per-run identity | AI calls, Generate All runs | existing: per-call `nwActiveCalls` Map. Per-run reset of batch state |
 | Migration runs on every load | import and checkpoint restore | `nwMigrateSession` between normalize and apply on both paths (§4.1) |
-| **Safe in-app editing (N8)** | storyWorld and Character editors (and new Tab 5 fact or mustNotInclude rows) | Render user and AI text only via `textContent` and input `.value`. **No `innerHTML`, `insertAdjacentHTML` or `outerHTML` with story data.** Editors are disabled while `nwBatchIsLocked()` is true, and every save handler re-checks it. How much is editable stays `[WAIT]` |
+| **Safe in-app editing (N8)** | storyWorld and Character editors (and new Tab 5 fact or mustNotInclude rows) | Render user and AI text only via `textContent` and input `.value`. **No `innerHTML`, `insertAdjacentHTML` or `outerHTML` with story data.** Editors are disabled while `nwBatchIsLocked()` is true, and every save handler re-checks it. Scope is decided (D5): every N15-N24 field is user-editable, and every AI suggestion is editable before it is folded in |
 
 ### 6. Gaps on main that S1 must close
 1. `worldBible`/`world` aren't in the `novelData` defaults (~L732) or the import normalizer, and only survive through the spread. S1 keeps that behavior for them (no defaults) and adds explicit handling for `storyWorld`.
@@ -427,7 +469,7 @@ Engineering confirms the names `chapterRequirements` and `chapterFingerprints`. 
 | `chapterFlags[n-1].replay` (N12) | `{internal, prev, openingCopy, at}` | Q3 | Tab 6, Resume | merges keys only (§5) |
 | `chapterFingerprints[n-1]` (N12) | `{textHash, tailWindowWords:250, openingShingles:[hash]}` | `nwBuildChapterFingerprint(n)` (S1), called by migration and Q3 | Q3 replay check | **A derived cache, never authoritative.** Holds hashes, not text. Rebuilt when `textHash` doesn't match, safe to drop |
 | tracker row `auditedTextHash` (N13) | string (`nwTextHash`) | Q5 | Q5 | A mismatch marks the row stale. Q5 reads `storyWorld.rules` and `relationships` and never writes them |
-| `chapterWritingPlans` item refs (N14) | optional `charId`, `locationId`, `factId` (a `chapterRequiredFacts` item id), `conceptId`* | 4p | 8d planCoverage | References only. A missing id keeps the item's `label` text |
+| `chapterWritingPlans` item refs (N14) | optional `charId`, `locationId`, `factId` (a `chapterRequiredFacts` item id), `conceptId` (a `storyWorld.concepts[].id`) | 4p | 8d planCoverage | References only. A missing id keeps the item's `label` text |
 
 #### 7.1 Legacy `chapterFactChecks` on main: every reader and writer
 | Site (main) | Kind | S1 | Q1 |
@@ -445,7 +487,7 @@ Engineering confirms the names `chapterRequirements` and `chapterFingerprints`. 
 `nwRequiredFactsFromLegacy(n)` (S1) maps legacy rows: `kind:'include'` gives `mustInclude:true`, `kind:'exclude'` gives `mustInclude:false`, and `kind:'probe'` is not mapped (probes stay legacy-only for 8d). `text = label || pattern`, `id = 'lf-' + (row.id || index)`, `legacyId = row.id`, `source:'user'`. A string entry becomes one `mustInclude:true` item with `id:'lf-0'`.
 
 ### 8. Schema diagrams
-Entities and the derived per-chapter records. Everything here is **S1 (planned)** except the keys marked "main". `*` marks `[WAIT]` fields.
+Entities and the derived per-chapter records. Everything here is **S1 (planned)** except the keys marked "main". N15-N24 entities are optional (§2a).
 
 ```mermaid
 erDiagram
@@ -456,7 +498,22 @@ erDiagram
     NOVELDATA ||--o{ CHAPTER : "index n-1"
     STORYWORLD ||--o{ LOCATION : "locations[]"
     STORYWORLD ||--o{ RULE : "rules[]"
-    STORYWORLD ||--o{ CONCEPT : "concepts[]*"
+    STORYWORLD ||--o{ CONCEPT : "concepts[], N16 N17"
+    STORYWORLD ||--o{ SYSTEM : "systems[], N21"
+    STORYWORLD ||--o{ SETUP : "setups[], N20"
+    STORYWORLD ||--o{ THEME : "themes[], N22"
+    STORYWORLD ||--o{ CONTRADICTION : "contradictions[], N17"
+    STORYWORLD ||--o| GENREPROFILE : "genreProfiles[] and structureTemplate, N15"
+    STORYWORLD ||--o| IMMERSION : "immersionWeight, N18"
+    STORYWORLD ||--o| WORLDROLE : "role, N23"
+    STORYWORLD ||--o{ WORLDARC : "arc[] if role is character, N24"
+    STORYWORLD }o--o{ SUBPLOT : "subplots[] ids if role is character, N24"
+    SYSTEM }o--o{ RULE : "ruleIds"
+    SYSTEM }o--o{ CHARACTER : "users"
+    SETUP }o--o| SUBPLOT : "subplotsMeta id"
+    CONTRADICTION }o--|| CONCEPT : "conceptId"
+    CHARACTER ||--o{ KNOWS : "knows[], N19"
+    KNOWS }o--|| CONCEPT : "conceptId"
     CHARACTER ||--o{ RELATIONSHIP : "relationships[]"
     CHAPTER ||--|| BLUEPRINT : "chapterBlueprints, main"
     CHAPTER ||--o{ LEGACYFACT : "chapterFactChecks rows, main"
@@ -466,13 +523,17 @@ erDiagram
     CHAPTER ||--o| FLAGS : "chapterFlags, 6b and Q3"
     CHAPTER ||--o| FINGERPRINT : "chapterFingerprints cache, S1"
     CHAPTER ||--o| SCORECARD : "chapterScorecards, main"
+    CHAPTER ||--o| THEMETAGS : "chapterThemeTags, N22"
+    THEMETAGS }o--o{ THEME : "tags"
+    WRITINGPLAN ||--o{ WORLDBEAT : "worldBeat items, N16"
+    WORLDBEAT }o--o| CONCEPT : "conceptId"
     LEGACYFACT ||--o| REQUIREDFACTS : "migration seeds once"
     REQUIREMENTS }o--o{ CHARACTER : "cast charId"
     REQUIREMENTS }o--o{ LOCATION : "setting locationId"
     WRITINGPLAN }o--o{ CHARACTER : "item charId"
     WRITINGPLAN }o--o{ LOCATION : "item locationId"
     WRITINGPLAN }o--o{ REQUIREDFACTS : "item factId"
-    WRITINGPLAN }o--o{ CONCEPT : "item conceptId*"
+    WRITINGPLAN }o--o{ CONCEPT : "item conceptId"
 ```
 
 How the entities feed the writing plan, the chapter prompt and the scorecard (solid arrows are writes by the owner, dotted arrows are reads):
@@ -480,17 +541,25 @@ How the entities feed the writing plan, the chapter prompt and the scorecard (so
 ```mermaid
 flowchart LR
     subgraph SE["Story entities, user and AI-suggest, Tabs 1-5"]
-        W["storyWorld, S1 (planned): locations, rules, concepts*"]
+        W["storyWorld, S1 (planned): locations, rules, concepts, systems, setups, themes, genre profiles, structure template, immersion weight, role, arc"]
         LW["legacy worldBible or world (main, read-only)"]
-        C["Characters: goal, flaw, voice, relationships"]
+        C["Characters: goal, flaw, voice, relationships, knows"]
         P["Plot: outlines, blueprints, subplots"]
         LF["chapterFactChecks rows (main)"]
         F["chapterRequiredFacts, S1 (planned)"]
     end
     U5["Tab 5 user edit"] --> F
+    UW["Tabs 1-2 user edit"] --> SWU["nwStoryWorldUpdate and nwCharacterKnowsUpdate, lock-aware"]
+    AIS["AI-suggest, extract, canon check, role classifier (counted calls)"] --> SWU
+    SWU --> W
+    SWU --> C
+    U5 --> TT["chapterThemeTags"]
+    TT -.-> B
+    WP -.-> WB["worldBeat items, budget derived at build"]
     U5 --> MN["mustNotInclude"]
     X["nwDeriveChapterRequirements, S1 (planned)"] --> R["chapterRequirements: cast, setting, derivedFrom"]
     MN --> R
+    W -.-> IM["8d worldImmersion, null until built"]
     P -.-> X
     C -.-> X
     W -.-> X
@@ -551,7 +620,30 @@ sequenceDiagram
     M->>O: subplotsMeta copy, nwStoryWorldUpdate, nwCharacterId
     M->>O: nwRequiredFactsUpsert from legacy chapterFactChecks
     M->>O: nwDeriveChapterRequirements, nwBuildChapterFingerprint
-    O-->>M: storyWorld, characters[].id, chapterRequiredFacts, chapterRequirements, chapterFingerprints
-    M-->>A: nwSchemaVersion 1, legacy world, worldBible, chapterFactChecks unchanged
+    O-->>M: storyWorld only if a legacy string exists, characters[].id, chapterRequiredFacts, chapterRequirements, chapterFingerprints
+    M-->>A: nwSchemaVersion 1, legacy world, worldBible, chapterFactChecks unchanged, no N15-N24 field created
     A->>A: render with textContent and .value only
 ```
+
+### 9. N-mapping (needs to sections)
+| Need | Where in this section |
+|---|---|
+| N1 location | §1 |
+| N2 shared-schema confirm | §1 bullet 2 |
+| N3 single owner | §2, §2a |
+| N4 preservation | §3, §6 |
+| N5 versioning | §4 |
+| N6 fixtures | §4.4 |
+| N7 concurrency | §5 |
+| N8 safe editing | §5 last row |
+| N9-N14 | §7, §7.1 |
+| N15 genre profiles, structure template | §2a, §8 ER |
+| N16 mustExplain, familiarity, worldBeat deliveryMode | §2a, §7 N14 row, §8 |
+| N17 canon lock, extraction hash, contradictions | §2a (incl. canon lock and AI-call budget), §5 canon-lock row, §4.4 `v1-locked-canon` |
+| N18 immersion weight | §2a, §8 |
+| N19 POV knowledge | §2 Character row, §2a, §8 ER |
+| N20 setup and payoff ledger | §2a, §8 ER |
+| N21 system cards | §2a, §8 ER |
+| N22 themes, chapterThemeTags | §2, §2a, §3 rule 7, §5, §8 |
+| N23 world role | §2a, §4.4 `v1-role-*`, §8 |
+| N24 world arc and subplots | §2a, §4.4 `v1-role-*`, §8 |
