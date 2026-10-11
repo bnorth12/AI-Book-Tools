@@ -4,6 +4,7 @@
  * Nothing here needs XAI_API_KEY.
  *
  *   R1  coverage fail keeps text and sets novelData.chapterFlags[n-1] {coverageFailed, missing, at}
+ *       R1 regenerate-on: same keep+flag with batchRegenerate checked (new draft stays in chapters[n-1])
  *   R2  continuity packet and tracker rolled back so unaccepted text never feeds n+1
  *   R3  Accept rebuilds packet/tracker from the kept text
  *   R4  acknowledged skip survives checkpoint, reload and Resume (no second confirm)
@@ -11,11 +12,17 @@
  *   R6  #139 (a) import-in-progress writer lock: nwBatchIsLocked() true during applySessionDataToUI
  *   R7  #139 (b) regression: stoppedAt/reason/detail are in the checkpoint written after a coverage stop
  *   R8  #139 (c) nwBatchForgetRun toast when nwBatchIdbDelete fails
+ *   R9  chapterFlags import pass-through: absent stays absent; object entries keep unknown keys
+ *       (round-trip through import AND checkpoint restore)
+ *   R10 chapter fails then passes: nwSetChapterFlag merge {coverageFailed:false}; Tab 5/6 do not render
  *
  * Mutations (TEMP copy, flags flipped false; each must turn a core assertion red):
  *   M3  drop packet rollback -> R2 red
  *   M4  drop coverageAck from checkpoint -> R4 red
  *   M5  move stoppedAt after the checkpoint write -> R7 red
+ *   M6  strip chapterFlags on import -> R9 extraKey red
+ *   M7  skip clear-flag-on-pass -> R10 still rendered
+ *   M8  restore old regenerate-on coverage path -> R1 regenerate-on keeps old text
  *
  * Usage: node scripts/_smoke_nw_retention.mjs
  * Env:   NW_HTML_PATH (default this checkout's NovelWriter/NovelWriter.html), NW_OUT_DIR (default out/nw-smoke)
@@ -63,7 +70,10 @@ const ND = enriched(FX);
 const FLAGS = {
   packet: 'var NW_6B_PACKET_ROLLBACK = true;',
   ack: 'var NW_6B_CHECKPOINT_COVERAGE_ACK = true;',
-  stopped: 'var NW_6B_STOPPEDAT_BEFORE_CHECKPOINT = true;'
+  stopped: 'var NW_6B_STOPPEDAT_BEFORE_CHECKPOINT = true;',
+  passthrough: 'var NW_6B_FLAGS_PASSTHROUGH = true;',
+  clearOnPass: 'var NW_6B_CLEAR_FLAG_ON_PASS = true;',
+  keepNewDraft: 'var NW_6B_KEEP_NEW_DRAFT_BOTH_MODES = true;'
 };
 function mutateCopy(flagFrom) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-6b-ret-'));
@@ -183,6 +193,8 @@ async function coverageStop(page, extra) {
   return page.evaluate(async (o) => {
     const h = window.__h;
     if (o.nd) h.load(o.nd);
+    if (o.prefill) Object.keys(o.prefill).forEach((n) => nwBatchSetChapterText(Number(n), o.prefill[n]));
+    if (o.regenerate != null) document.getElementById('batchRegenerate').checked = !!o.regenerate;
     h.seedContinuity();
     h.cfg = { coverageFail: 2 };
     const t0 = Date.now();
@@ -191,21 +203,27 @@ async function coverageStop(page, extra) {
     const packets = JSON.parse(JSON.stringify(novelData.chapterContinuityPackets || []));
     const tracker = JSON.parse(JSON.stringify((novelData.continuityTracker && novelData.continuityTracker.chapters) || []));
     const rec = novelData.batchRun ? await h.idbGet(novelData.batchRun.id) : null;
+    const elG = document.getElementById('chapterGenFlag2');
+    const elE = document.getElementById('chapterEditFlag2');
     return {
       r, ms: Date.now() - t0,
       br: novelData.batchRun ? JSON.parse(JSON.stringify(novelData.batchRun)) : null,
       chapters: (novelData.chapters || []).slice(),
       flag,
-      flagDomGen: (document.getElementById('chapterGenFlag2') || {}).textContent || '',
-      flagDomEdit: (document.getElementById('chapterEditFlag2') || {}).textContent || '',
+      flagDomGen: (elG || {}).textContent || '',
+      flagDomEdit: (elE || {}).textContent || '',
+      flagHiddenGen: elG ? !!elG.hidden : null,
+      flagHiddenEdit: elE ? !!elE.hidden : null,
       packets,
       tracker,
       recBr: rec && rec.batchRun ? JSON.parse(JSON.stringify(rec.batchRun)) : null,
       recActive: rec ? rec.active : null,
       recNdFlags: rec && rec.novelData ? rec.novelData.chapterFlags : null,
+      recCh2: rec && rec.novelData && rec.novelData.chapters ? rec.novelData.chapters[1] : null,
       chapterUsage: (novelData.batchRun && novelData.batchRun.chapterUsage) || [],
       windows: (nwBatchState.windows || []).slice(),
       coverageBox: !document.getElementById('batchCoverageBox').hidden,
+      coverageMsg: (document.getElementById('batchCoverageMsg') || {}).textContent || '',
       dialogs: h.dialogs.slice(),
       toasts: h.toasts.slice()
     };
@@ -222,6 +240,19 @@ async function coverageStop(page, extra) {
   check('R1', 'Tab 5 and Tab 6 show the coverage-failed flag via textContent', /Coverage failed/.test(s.flagDomGen) && /smoke-obligation/.test(s.flagDomGen) && s.flagDomEdit === s.flagDomGen, JSON.stringify({ gen: s.flagDomGen, edit: s.flagDomEdit }));
   check('R1', 'coverage-failed chapter does not push chapterUsage or nwBatchState.windows', (s.chapterUsage || []).every((x) => x.chapter !== 2) && (s.windows || []).every((x) => x.chapter !== 2), JSON.stringify({ chapterUsage: s.chapterUsage, windows: s.windows }));
   check('R1', 'Accept/Regenerate/Skip box is shown; 0 dialogs', s.coverageBox === true && s.dialogs.length === 0, JSON.stringify({ box: s.coverageBox, dialogs: s.dialogs }));
+  check('R1', 'coverage box wording: is missing required story points', /is missing required story points/.test(s.coverageMsg || ''), s.coverageMsg);
+  await page.close();
+}
+
+// ---------------- R1 regenerate-on: keep NEW draft in both modes ----------------
+{
+  const page = await openPage();
+  const OLD2 = 'Hand-written chapter two that must not remain after a coverage failure.';
+  const s = await coverageStop(page, { nd: ND, regenerate: true, prefill: { 2: OLD2 } });
+  const keptNew = /^Chapter 2 part 1/.test(s.chapters[1] || '') && /KEPT-DRAFT-CH2/.test(s.chapters[1] || '');
+  check('R1', 'batchRegenerate on: coverage fail keeps NEW ch2 draft (not old text) and stops at 2', s.br && s.br.reason === 'coverage' && s.br.stoppedAt === 2 && keptNew && s.chapters[1] !== OLD2 && (s.br.completed || []).indexOf(2) < 0, JSON.stringify({ br: s.br, ch2: s.chapters[1], old: OLD2 }));
+  check('R1', 'batchRegenerate on: chapterFlags[1] coverageFailed and Tab 5/6 render the flag', !!(s.flag && s.flag.coverageFailed === true && /Coverage failed/.test(s.flagDomGen) && s.flagDomEdit === s.flagDomGen && s.flagHiddenGen === false), JSON.stringify({ flag: s.flag, gen: s.flagDomGen, hidden: s.flagHiddenGen }));
+  check('R1', 'batchRegenerate on: checkpoint has the NEW draft (not parked-only in rejectedDraft)', /KEPT-DRAFT-CH2/.test(s.recCh2 || '') && !(s.br && s.br.rejectedDraft), JSON.stringify({ recCh2: s.recCh2, rejectedDraft: s.br && s.br.rejectedDraft }));
   await page.close();
 }
 
@@ -417,6 +448,95 @@ async function coverageStop(page, extra) {
   await page.close();
 }
 
+// ---------------- R9 chapterFlags import pass-through + checkpoint restore ----------------
+{
+  const page = await openPage();
+  const r = await page.evaluate(async (nd) => {
+    const warns = [];
+    const orig = console.warn;
+    console.warn = function () {
+      warns.push(Array.from(arguments).map(String).join(' '));
+      return orig.apply(console, arguments);
+    };
+    const base = JSON.parse(JSON.stringify(nd));
+    delete base.chapterFlags;
+    const absent = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: base });
+    const wrong = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: Object.assign({}, base, { chapterFlags: 'not-an-array' }) });
+    const flagObj = { coverageFailed: false, missing: ['kept-miss'], at: 12345, extraKey: 'keep-me', replayFail: true };
+    const withUnknown = normalizeImportedSessionData({
+      schemaVersion: '1.0',
+      novelData: Object.assign({}, base, { chapterFlags: [null, flagObj, 'skip-me'] })
+    });
+    novelData = JSON.parse(JSON.stringify(withUnknown.novelData));
+    novelData.apiKey = 'smoke-placeholder-not-a-key';
+    novelData.batchRun = {
+      id: 'flags-rt|2026-10-10T00:00:00.000Z',
+      startedAt: '2026-10-10T00:00:00.000Z',
+      updatedAt: '2026-10-10T00:00:00.000Z',
+      range: { from: 1, to: 4 },
+      regenerateExisting: false,
+      perChapterDownload: false,
+      completed: [],
+      inFlight: null,
+      stoppedAt: null,
+      reason: 'paused',
+      detail: 'smoke flags round-trip',
+      tokensUsed: 0,
+      estimate: { perChapter: 1, total: 4, source: 'fallback' },
+      cap: 10,
+      usageEstimated: []
+    };
+    await nwBatchCheckpoint(false);
+    const rec = await window.__h.idbGet(novelData.batchRun.id);
+    const restored = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: JSON.parse(JSON.stringify(rec.novelData)) });
+    console.warn = orig;
+    return {
+      absentHas: Object.prototype.hasOwnProperty.call(absent.novelData, 'chapterFlags'),
+      wrongType: wrong.novelData.chapterFlags,
+      warns: warns.slice(),
+      imported: withUnknown.novelData.chapterFlags,
+      restored: restored.novelData.chapterFlags,
+      recFlags: rec && rec.novelData ? rec.novelData.chapterFlags : null
+    };
+  }, ND);
+  const fImp = (r.imported || [])[1] || {};
+  const fRest = (r.restored || [])[1] || {};
+  const fRec = (r.recFlags || [])[1] || {};
+  check('R9', 'absent chapterFlags stays absent (do not create [])', r.absentHas === false, JSON.stringify({ absentHas: r.absentHas }));
+  check('R9', 'wrong-type chapterFlags kept as-is with console.warn', r.wrongType === 'not-an-array' && (r.warns || []).some((w) => /chapterFlags is not an array/.test(w)), JSON.stringify({ wrongType: r.wrongType, warns: r.warns }));
+  check('R9', 'object entry passes through whole (unknown key, coverageFailed:false, non-string at)', fImp.extraKey === 'keep-me' && fImp.coverageFailed === false && fImp.at === 12345 && eq(fImp.missing, ['kept-miss']) && fImp.replayFail === true && (r.imported || [])[0] === null && (r.imported || [])[2] === null, JSON.stringify(r.imported));
+  check('R9', 'unknown key round-trips through import AND checkpoint restore', fImp.extraKey === 'keep-me' && fRec.extraKey === 'keep-me' && fRest.extraKey === 'keep-me' && fRest.coverageFailed === false && fRest.at === 12345, JSON.stringify({ imported: fImp, rec: fRec, restored: fRest }));
+  await page.close();
+}
+
+// ---------------- R10 fail then pass: flag clears and is not rendered ----------------
+{
+  const page = await openPage();
+  const s = await coverageStop(page);
+  check('R10', 'after fail: coverageFailed===true and Tab 5/6 render the flag', !!(s.flag && s.flag.coverageFailed === true && /Coverage failed/.test(s.flagDomGen) && s.flagHiddenGen === false && s.flagDomEdit === s.flagDomGen), JSON.stringify({ flag: s.flag, gen: s.flagDomGen, hidden: s.flagHiddenGen }));
+  const pass = await page.evaluate(async () => {
+    const ok = await nwBatchCoverageDecide('regenerate');
+    window.__h.cfg = {};
+    const r = await resumeBatchRun();
+    const flag = (novelData.chapterFlags || [])[1];
+    const elG = document.getElementById('chapterGenFlag2');
+    const elE = document.getElementById('chapterEditFlag2');
+    return {
+      ok, r,
+      flag,
+      genText: elG ? elG.textContent : '',
+      genHidden: elG ? !!elG.hidden : null,
+      editText: elE ? elE.textContent : '',
+      editHidden: elE ? !!elE.hidden : null,
+      ch2: (novelData.chapters || [])[1] || '',
+      completed: (novelData.batchRun && novelData.batchRun.completed) || [],
+      reason: novelData.batchRun && novelData.batchRun.reason
+    };
+  });
+  check('R10', 'after pass: merge {coverageFailed:false, missing:[], at:ISO} and Tab 5/6 do not render', !!(pass.flag && pass.flag.coverageFailed === false && eq(pass.flag.missing, []) && typeof pass.flag.at === 'string' && pass.flag.at && pass.genHidden === true && !/Coverage failed/.test(pass.genText || '') && pass.editHidden === true && pass.editText === pass.genText), JSON.stringify(pass));
+  await page.close();
+}
+
 // ---------------- Mutations ----------------
 {
   const m3 = mutateCopy(FLAGS.packet);
@@ -452,6 +572,82 @@ async function coverageStop(page, extra) {
     check('M5', 'moving stoppedAt after the checkpoint write turns R7 red', inRec === false, JSON.stringify({ recBr: s.recBr, br: s.br && { stoppedAt: s.br.stoppedAt, reason: s.br.reason } }));
     await page.close();
     try { fs.rmSync(m5.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m6 = mutateCopy(FLAGS.passthrough);
+  check('M6', 'flag NW_6B_FLAGS_PASSTHROUGH present', m6.ok, m6.detail);
+  if (m6.ok) {
+    const page = await openPage(m6.copy);
+    const r = await page.evaluate(async (nd) => {
+      const base = JSON.parse(JSON.stringify(nd));
+      delete base.chapterFlags;
+      const withUnknown = normalizeImportedSessionData({
+        schemaVersion: '1.0',
+        novelData: Object.assign({}, base, { chapterFlags: [{ coverageFailed: false, extraKey: 'keep-me', at: 12345 }] })
+      });
+      novelData = JSON.parse(JSON.stringify(withUnknown.novelData));
+      novelData.apiKey = 'smoke-placeholder-not-a-key';
+      novelData.batchRun = {
+        id: 'flags-m6|2026-10-10T00:00:00.000Z',
+        startedAt: '2026-10-10T00:00:00.000Z',
+        updatedAt: '2026-10-10T00:00:00.000Z',
+        range: { from: 1, to: 4 },
+        regenerateExisting: false,
+        perChapterDownload: false,
+        completed: [],
+        inFlight: null,
+        stoppedAt: null,
+        reason: 'paused',
+        detail: 'm6',
+        tokensUsed: 0,
+        estimate: { perChapter: 1, total: 4, source: 'fallback' },
+        cap: 10,
+        usageEstimated: []
+      };
+      await nwBatchCheckpoint(false);
+      const rec = await window.__h.idbGet(novelData.batchRun.id);
+      const restored = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: JSON.parse(JSON.stringify(rec.novelData)) });
+      return {
+        imported: (withUnknown.novelData.chapterFlags || [])[0] || null,
+        restored: (restored.novelData.chapterFlags || [])[0] || null
+      };
+    }, ND);
+    const kept = !!(r.imported && r.imported.extraKey === 'keep-me' && r.restored && r.restored.extraKey === 'keep-me');
+    check('M6', 'dropping FLAGS_PASSTHROUGH strips unknown key (R9 red)', kept === false, JSON.stringify(r));
+    await page.close();
+    try { fs.rmSync(m6.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m7 = mutateCopy(FLAGS.clearOnPass);
+  check('M7', 'flag NW_6B_CLEAR_FLAG_ON_PASS present', m7.ok, m7.detail);
+  if (m7.ok) {
+    const page = await openPage(m7.copy);
+    await coverageStop(page);
+    const pass = await page.evaluate(async () => {
+      await nwBatchCoverageDecide('regenerate');
+      window.__h.cfg = {};
+      await resumeBatchRun();
+      const flag = (novelData.chapterFlags || [])[1];
+      const elG = document.getElementById('chapterGenFlag2');
+      return {
+        coverageFailed: flag && flag.coverageFailed,
+        genText: elG ? elG.textContent : '',
+        genHidden: elG ? !!elG.hidden : null
+      };
+    });
+    const cleared = pass.coverageFailed === false && pass.genHidden === true && !/Coverage failed/.test(pass.genText || '');
+    check('M7', 'dropping CLEAR_FLAG_ON_PASS leaves fail flag rendered (R10 red)', cleared === false, JSON.stringify(pass));
+    await page.close();
+    try { fs.rmSync(m7.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
+  }
+  const m8 = mutateCopy(FLAGS.keepNewDraft);
+  check('M8', 'flag NW_6B_KEEP_NEW_DRAFT_BOTH_MODES present', m8.ok, m8.detail);
+  if (m8.ok) {
+    const page = await openPage(m8.copy);
+    const OLD2 = 'Hand-written chapter two that must not remain after a coverage failure.';
+    const s = await coverageStop(page, { nd: ND, regenerate: true, prefill: { 2: OLD2 } });
+    const keptNew = /^Chapter 2 part 1/.test(s.chapters[1] || '') && /KEPT-DRAFT-CH2/.test(s.chapters[1] || '') && s.chapters[1] !== OLD2;
+    check('M8', 'dropping KEEP_NEW_DRAFT_BOTH_MODES restores old text on regenerate-on (R1 regen red)', keptNew === false, JSON.stringify({ ch2: s.chapters[1], old: OLD2, rejectedDraft: s.br && s.br.rejectedDraft }));
+    await page.close();
+    try { fs.rmSync(m8.dir, { recursive: true, force: true }); } catch (_) { /* temp */ }
   }
 }
 

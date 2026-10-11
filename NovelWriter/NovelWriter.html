@@ -512,7 +512,7 @@ Synced: 2026-04-19
 	            <button id="batchPauseBtn" data-testid="nw-batch-pause" onclick="pauseBatchRun()" disabled>Pause</button>
 	            <button id="batchResumeBtn" data-testid="nw-batch-resume" onclick="resumeBatchRun()" disabled>Resume</button>
 	            <div id="batchCoverageBox" data-testid="nw-batch-coverage-box" hidden>
-	                <p id="batchCoverageMsg">This chapter failed obligation coverage. Accept keeps the draft and rebuilds continuity from it. Regenerate retries this chapter. Skip continues without feeding this draft into later chapters.</p>
+	                <p id="batchCoverageMsg">This chapter is missing required story points. Accept keeps the draft and rebuilds continuity from it. Regenerate retries this chapter. Skip continues without feeding this draft into later chapters.</p>
 	                <button type="button" id="batchCoverageAcceptBtn" data-testid="nw-batch-coverage-accept" onclick="nwBatchCoverageDecide('accept')">Accept</button>
 	                <button type="button" id="batchCoverageRegenerateBtn" data-testid="nw-batch-coverage-regenerate" onclick="nwBatchCoverageDecide('regenerate')">Regenerate</button>
 	                <button type="button" id="batchCoverageSkipBtn" data-testid="nw-batch-coverage-skip" onclick="nwBatchCoverageDecide('skip')">Skip</button>
@@ -7313,7 +7313,7 @@ return c && c.name && c.backstory && c.arc; });
 		function nwRenderChapterFlag(n) {
 			var flag = (novelData.chapterFlags || [])[n - 1];
 			var text = '';
-			if (flag && flag.coverageFailed) {
+			if (flag && flag.coverageFailed === true) {
 				var miss = Array.isArray(flag.missing) ? flag.missing.filter(Boolean).join(', ') : '';
 				text = 'Coverage failed' + (miss ? ': missing ' + miss : '') + '. Kept for review.';
 			} else if (flag && (flag.replayFail || flag.replay)) {
@@ -9629,18 +9629,6 @@ return c && c.name && c.backstory && c.arc; });
 		            workflowStage: typeof normalizedNovelData.workflowStage === 'string' ? normalizedNovelData.workflowStage : '',
 		            workflowLog: Array.isArray(normalizedNovelData.workflowLog) ? normalizedNovelData.workflowLog : [],
 		            chapterContinuityPackets: Array.isArray(normalizedNovelData.chapterContinuityPackets) ? normalizedNovelData.chapterContinuityPackets : [],
-		            chapterFlags: Array.isArray(normalizedNovelData.chapterFlags)
-		                ? normalizedNovelData.chapterFlags.map(function (f) {
-		                    if (!f || typeof f !== 'object') return null;
-		                    var out = {};
-		                    if (f.coverageFailed) out.coverageFailed = true;
-		                    if (Array.isArray(f.missing)) out.missing = f.missing.slice();
-		                    if (typeof f.at === 'string') out.at = f.at;
-		                    if (f.replayFail != null) out.replayFail = f.replayFail;
-		                    if (f.replay != null) out.replay = f.replay;
-		                    return Object.keys(out).length ? out : null;
-		                })
-		                : [],
 		            continuityFindings: Array.isArray(normalizedNovelData.continuityFindings) ? normalizedNovelData.continuityFindings : [],
 		            continuityTracker: normalizedNovelData.continuityTracker && typeof normalizedNovelData.continuityTracker === 'object'
 		                ? {
@@ -9652,6 +9640,34 @@ return c && c.name && c.backstory && c.arc; });
 		    };
 		    // #134 follow-up 2: ...novelData above would carry the current book's batchRun into a payload that has none.
 		    if (!normalizedNovelData.batchRun) delete mergedNovelData.batchRun;
+		    // chapterFlags: absent stays absent (do not create []); wrong type kept as-is with warn;
+		    // each object entry passes through whole after the type check. Same path on checkpoint restore.
+		    if (typeof NW_6B_FLAGS_PASSTHROUGH === 'undefined' || NW_6B_FLAGS_PASSTHROUGH) {
+		        if (!Object.prototype.hasOwnProperty.call(normalizedNovelData, 'chapterFlags')) {
+		            delete mergedNovelData.chapterFlags;
+		        } else if (!Array.isArray(normalizedNovelData.chapterFlags)) {
+		            console.warn('normalizeImportedSessionData: chapterFlags is not an array; keeping as-is', normalizedNovelData.chapterFlags);
+		            mergedNovelData.chapterFlags = normalizedNovelData.chapterFlags;
+		        } else {
+		            mergedNovelData.chapterFlags = normalizedNovelData.chapterFlags.map(function (f) {
+		                if (!f || typeof f !== 'object') return null;
+		                return Object.assign({}, f);
+		            });
+		        }
+		    } else {
+		        mergedNovelData.chapterFlags = Array.isArray(normalizedNovelData.chapterFlags)
+		            ? normalizedNovelData.chapterFlags.map(function (f) {
+		                if (!f || typeof f !== 'object') return null;
+		                var out = {};
+		                if (f.coverageFailed) out.coverageFailed = true;
+		                if (Array.isArray(f.missing)) out.missing = f.missing.slice();
+		                if (typeof f.at === 'string') out.at = f.at;
+		                if (f.replayFail != null) out.replayFail = f.replayFail;
+		                if (f.replay != null) out.replay = f.replay;
+		                return Object.keys(out).length ? out : null;
+		            })
+		            : [];
+		    }
 		    return {
 		        novelData: mergedNovelData,
 		        requestLog: {
@@ -11983,9 +11999,8 @@ return c && c.name && c.backstory && c.arc; });
         //          (after one retry for HTTP 429/5xx/network only) or Part 1/2 parse failure (reason 'parse', no retry) stops
         //          the batch cleanly and records batchRun.stoppedAt / reason / detail. No alert/confirm/prompt during a batch
         //          (nwNotify). Resume after a parse (or provider) stop regenerates the stopped chapter; only a coverage stop
-        //          is skipped on Resume. A coverage stop with "Regenerate existing" on restores the old text and keeps the
-        //          rejected draft in novelData.batchRun.rejectedDraft {chapter, text, detail} (latest only; it goes into the
-        //          session export but is stripped from the IndexedDB checkpoint). The session auto-export runs only when the
+        //          is skipped on Resume. A coverage stop keeps the NEW draft in chapters[n-1] in both regenerate modes
+        //          and flags it (nwSetChapterFlag merge). The session auto-export runs only when the
         //          run stops (or a checkpoint write fails), not after a clean finish.
         // Must-fix (#134): failures are classified by type (nwClassifyError): 'retryable' (HTTP 429/5xx, network; one retry),
         //          'provider' (other HTTP status incl. 400/401/403, "API Key is missing"; no retry, no estimated usage) and
@@ -12014,6 +12029,9 @@ return c && c.name && c.backstory && c.arc; });
         var NW_6B_PACKET_ROLLBACK = true;
         var NW_6B_CHECKPOINT_COVERAGE_ACK = true;
         var NW_6B_STOPPEDAT_BEFORE_CHECKPOINT = true;
+        var NW_6B_FLAGS_PASSTHROUGH = true;
+        var NW_6B_CLEAR_FLAG_ON_PASS = true;
+        var NW_6B_KEEP_NEW_DRAFT_BOTH_MODES = true;
         window.NW_BATCH = NW_BATCH;
         window.nwBatchState = nwBatchState;
 
@@ -12532,7 +12550,7 @@ return c && c.name && c.backstory && c.arc; });
 
         function nwBatchShowCoverageReview(n) {
             var msg = nwBatchEl('batchCoverageMsg');
-            if (msg) msg.textContent = 'Chapter ' + n + ' failed obligation coverage. Accept keeps the draft and rebuilds continuity from it. Regenerate retries this chapter. Skip continues without feeding this draft into later chapters.';
+            if (msg) msg.textContent = 'Chapter ' + n + ' is missing required story points. Accept keeps the draft and rebuilds continuity from it. Regenerate retries this chapter. Skip continues without feeding this draft into later chapters.';
             nwBatchShow('batchCoverageBox', true);
         }
 
@@ -12749,10 +12767,10 @@ return c && c.name && c.backstory && c.arc; });
                 var snapTracker = novelData.continuityTracker ? JSON.parse(JSON.stringify(novelData.continuityTracker)) : null;
                 var mark = nwBatchUsageMark();
                 var outcome = await nwBatchRunChapter(n);
-                // Restore the pre-chapter text on any failure when regenerating; a coverage failure keeps the new text
-                // only when there was no old text (regenerate off). Gate failures never cleared the text.
-                // Coverage failure with regenerate on: the rejected new draft is kept aside (latest only) in
-                // batchRun.rejectedDraft so it reaches the session export; nwBatchCheckpoint strips it.
+                // Coverage failure: keep the NEW draft in chapters[n-1] in both regenerate modes and flag it.
+                // Packet/tracker still roll back so unaccepted text never feeds n+1. Other failures restore
+                // pre-chapter text unless keepDraft. Mutation NW_6B_KEEP_NEW_DRAFT_BOTH_MODES=false restores
+                // the old regenerate-on path (old text restored; new draft parked in rejectedDraft).
                 if (!outcome.ok && outcome.reason === 'coverage') {
                     if (typeof NW_6B_PACKET_ROLLBACK === 'undefined' || NW_6B_PACKET_ROLLBACK) {
                         if (!Array.isArray(novelData.chapterContinuityPackets)) novelData.chapterContinuityPackets = [];
@@ -12778,11 +12796,24 @@ return c && c.name && c.backstory && c.arc; });
                         });
                     }
                 }
-                if (!outcome.ok && outcome.reason === 'coverage' && br.regenerateExisting) {
-                    br.rejectedDraft = { chapter: n, text: String((novelData.chapters || [])[n - 1] || ''), detail: nwBatchShort(outcome.detail, 300) };
-                    rejectedNow = true;
+                if (outcome.ok && (typeof NW_6B_CLEAR_FLAG_ON_PASS === 'undefined' || NW_6B_CLEAR_FLAG_ON_PASS)) {
+                    if (typeof nwSetChapterFlag === 'function') {
+                        nwSetChapterFlag(n, {
+                            coverageFailed: false,
+                            missing: [],
+                            at: new Date().toISOString()
+                        });
+                    }
                 }
-                if (!outcome.ok && !outcome.keepDraft && !(outcome.reason === 'coverage' && !br.regenerateExisting)) nwBatchSetChapterText(n, old);
+                if (typeof NW_6B_KEEP_NEW_DRAFT_BOTH_MODES !== 'undefined' && !NW_6B_KEEP_NEW_DRAFT_BOTH_MODES) {
+                    if (!outcome.ok && outcome.reason === 'coverage' && br.regenerateExisting) {
+                        br.rejectedDraft = { chapter: n, text: String((novelData.chapters || [])[n - 1] || ''), detail: nwBatchShort(outcome.detail, 300) };
+                        rejectedNow = true;
+                    }
+                    if (!outcome.ok && !outcome.keepDraft && !(outcome.reason === 'coverage' && !br.regenerateExisting)) nwBatchSetChapterText(n, old);
+                } else {
+                    if (!outcome.ok && !outcome.keepDraft && outcome.reason !== 'coverage') nwBatchSetChapterText(n, old);
+                }
                 if (outcome.ok) { if (br.keptDraft === n) br.keptDraft = null; }
                 else if (outcome.keepDraft) br.keptDraft = n;
                 var rows = ensureBookTokenUsage().calls.length - mark;
