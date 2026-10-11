@@ -46,7 +46,7 @@ function isSensitiveUrl(value) {
     if (typeof value !== "string") return false;
     try {
         const url = new URL(value, window.location.href);
-        if (url.username && url.password) return true;
+        if (url.username || url.password) return true;
         const fragment = url.hash.slice(1);
         const fragmentParams = new URLSearchParams(fragment.includes("?") ? fragment.slice(fragment.indexOf("?") + 1) : fragment);
         return [...url.searchParams.keys(), ...fragmentParams.keys()].some(name =>

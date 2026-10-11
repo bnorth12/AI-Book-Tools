@@ -49,6 +49,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     novelData.API_KEY = apiKey;
     novelData.privateKey = apiKey;
     novelData.endpointWithCredentials = `https://${'user:pass'}@example.com/service`;
+    novelData.endpointWithUsername = 'https://user@example.com/service';
+    novelData.endpointWithPassword = `https://${':pass'}@example.com/service`;
     novelData.endpointWithToken = 'https://example.com/service?token=hidden';
     novelData.endpointWithFragment = 'https://example.com/callback#access_token=hidden';
     novelData.serviceSecret = 'hidden-secret';
@@ -87,6 +89,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('API_KEY');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('privateKey');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('endpointWithCredentials');
+  expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('endpointWithUsername');
+  expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('endpointWithPassword');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('endpointWithToken');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('endpointWithFragment');
   expect(JSON.parse(exportedJson).novelData).not.toHaveProperty('serviceSecret');
@@ -116,6 +120,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
         promptTokens: 17,
         agentKey: 'fetchAuthors',
         endpoint: 'https://example.com/service?access_token=hidden',
+        endpointWithUsername: 'https://user@example.com/service',
+        endpointWithPassword: `https://${':pass'}@example.com/service`,
         callback: 'https://example.com/callback#access_token=hidden',
         serviceSecret: 'hidden-secret',
         savedPassword: 'hidden-password',
@@ -133,6 +139,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     hasApiKeyUpper: Object.hasOwn(novelData, 'API_KEY'),
     hasPrivateKey: Object.hasOwn(novelData, 'privateKey'),
     hasEndpoint: Object.hasOwn(novelData, 'endpoint'),
+    hasEndpointWithUsername: Object.hasOwn(novelData, 'endpointWithUsername'),
+    hasEndpointWithPassword: Object.hasOwn(novelData, 'endpointWithPassword'),
     hasCallback: Object.hasOwn(novelData, 'callback'),
     hasServiceSecret: Object.hasOwn(novelData, 'serviceSecret'),
     hasSavedPassword: Object.hasOwn(novelData, 'savedPassword'),
@@ -150,6 +158,8 @@ test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
     hasApiKeyUpper: false,
     hasPrivateKey: false,
     hasEndpoint: false,
+    hasEndpointWithUsername: false,
+    hasEndpointWithPassword: false,
     hasCallback: false,
     hasServiceSecret: false,
     hasSavedPassword: false,

@@ -110,6 +110,8 @@ test.describe('HerbalBookForge Smoke Test', () => {
       project.setup.API_KEY = apiKey;
       project.setup.privateKey = apiKey;
       project.setup.endpointWithCredentials = `https://${'user:pass'}@example.com/service`;
+      project.setup.endpointWithUsername = 'https://user@example.com/service';
+      project.setup.endpointWithPassword = `https://${':pass'}@example.com/service`;
       project.setup.endpointWithToken = 'https://example.com/service?token=hidden';
       project.setup.endpointWithFragment = 'https://example.com/callback#access_token=hidden';
       project.setup.serviceSecret = 'hidden-secret';
@@ -147,6 +149,8 @@ test.describe('HerbalBookForge Smoke Test', () => {
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('API_KEY');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('privateKey');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithCredentials');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithUsername');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithPassword');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithToken');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithFragment');
     expect(JSON.parse(exportedJson).setup).not.toHaveProperty('serviceSecret');
@@ -169,14 +173,15 @@ test.describe('HerbalBookForge Smoke Test', () => {
       agentKey: 'fetchAuthors',
     });
 
-    await page.locator('#api-key').fill('');
-    await page.evaluate(() => { project.setup.apiKey = ''; });
+    await page.locator('#api-key').fill('existing-user-key');
     await page.locator('#import-file').setInputFiles({
       name: 'project-with-key.json',
       mimeType: 'application/json',
       buffer: Buffer.from(JSON.stringify({
         setup: {
           apiKey: secret,
+          endpointWithUsername: 'https://user@example.com/service',
+          endpointWithPassword: `https://${':pass'}@example.com/service`,
           bearer: secret,
           API_KEY: secret,
           privateKey: secret,
@@ -195,7 +200,8 @@ test.describe('HerbalBookForge Smoke Test', () => {
         agentKey: 'importedAgent',
       })),
     });
-    await expect(page.locator('#api-key')).toHaveValue('');
+    await expect(page.locator('#api-key')).toHaveValue('existing-user-key');
+    expect(await page.evaluate(() => project.setup.apiKey)).toBe('existing-user-key');
     await expect(page.locator('#project-name')).toHaveValue('Imported project');
     await expect.poll(() => page.evaluate(() => ({
       metaName: project.meta.name,
@@ -218,6 +224,8 @@ test.describe('HerbalBookForge Smoke Test', () => {
     expect(importedSetup).not.toHaveProperty('API_KEY');
     expect(importedSetup).not.toHaveProperty('privateKey');
     expect(importedSetup).not.toHaveProperty('endpoint');
+    expect(importedSetup).not.toHaveProperty('endpointWithUsername');
+    expect(importedSetup).not.toHaveProperty('endpointWithPassword');
     expect(importedSetup).not.toHaveProperty('callback');
     expect(importedSetup).not.toHaveProperty('serviceSecret');
     expect(importedSetup).not.toHaveProperty('savedPassword');

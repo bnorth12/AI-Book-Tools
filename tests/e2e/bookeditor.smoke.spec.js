@@ -75,6 +75,8 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
       API_KEY: apiKey,
       privateKey: apiKey,
       endpointWithCredentials: `https://${'user:pass'}@example.com/service`,
+      endpointWithUsername: 'https://user@example.com/service',
+      endpointWithPassword: `https://${':pass'}@example.com/service`,
       endpointWithToken: 'https://example.com/service?token=hidden',
       endpointWithFragment: 'https://example.com/callback#access_token=hidden',
       serviceSecret: 'hidden-secret',
@@ -115,6 +117,8 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
   expect(parsedBook.novelData).not.toHaveProperty('API_KEY');
   expect(parsedBook.novelData).not.toHaveProperty('privateKey');
   expect(parsedBook.novelData).not.toHaveProperty('endpointWithCredentials');
+  expect(parsedBook.novelData).not.toHaveProperty('endpointWithUsername');
+  expect(parsedBook.novelData).not.toHaveProperty('endpointWithPassword');
   expect(parsedBook.novelData).not.toHaveProperty('endpointWithToken');
   expect(parsedBook.novelData).not.toHaveProperty('endpointWithFragment');
   expect(parsedBook.novelData).not.toHaveProperty('serviceSecret');
@@ -137,6 +141,8 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
         authorization: secret,
         privateKey: secret,
         endpoint: 'https://example.com/?api_key=hidden',
+        endpointWithUsername: 'https://user@example.com/service',
+        endpointWithPassword: `https://${':pass'}@example.com/service`,
         callback: 'https://example.com/callback#access_token=hidden',
         serviceSecret: 'hidden-secret',
         savedPassword: 'hidden-password',
@@ -155,6 +161,8 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
     hasAuthorization: Object.hasOwn(novelData, 'authorization'),
     hasPrivateKey: Object.hasOwn(novelData, 'privateKey'),
     hasEndpoint: Object.hasOwn(novelData, 'endpoint'),
+    hasEndpointWithUsername: Object.hasOwn(novelData, 'endpointWithUsername'),
+    hasEndpointWithPassword: Object.hasOwn(novelData, 'endpointWithPassword'),
     hasCallback: Object.hasOwn(novelData, 'callback'),
     hasServiceSecret: Object.hasOwn(novelData, 'serviceSecret'),
     hasSavedPassword: Object.hasOwn(novelData, 'savedPassword'),
@@ -170,6 +178,8 @@ test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
     hasAuthorization: false,
     hasPrivateKey: false,
     hasEndpoint: false,
+    hasEndpointWithUsername: false,
+    hasEndpointWithPassword: false,
     hasCallback: false,
     hasServiceSecret: false,
     hasSavedPassword: false,
