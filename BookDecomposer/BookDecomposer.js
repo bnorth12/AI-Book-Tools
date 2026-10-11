@@ -31,6 +31,16 @@ let novelData = {
 };
 let isBookProcessed = false;
 
+function stripSecretFields(value) {
+    if (Array.isArray(value)) return value.map(stripSecretFields);
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value)
+        .filter(([name]) => !/\b(?:api\s*)?key\b|\btoken\b|\bsecret\b|\bpassword\b|\bauthorization\b/i.test(
+            name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[^a-z0-9]+/gi, " ")
+        ))
+        .map(([name, nested]) => [name, stripSecretFields(nested)]));
+}
+
 function chunkText(text, chunkSize) {
     const chunks = [];
     for (let i = 0; i < text.length; i += chunkSize) {
@@ -398,12 +408,7 @@ function populateElementsTable() {
 }
 
 function generateJSON() {
-    const payload = {
-        schemaVersion: "1.0",
-        sourceTool: "BookDecomposer",
-        sourceVersion: "0.2.0",
-        novelData: novelData
-    };
+    const payload = buildSchemaPayload();
     document.getElementById("jsonOutput").textContent = JSON.stringify(payload, null, 2);
 }
 
@@ -412,7 +417,7 @@ function buildSchemaPayload() {
         schemaVersion: "1.0",
         sourceTool: "BookDecomposer",
         sourceVersion: "0.2.0",
-        novelData: novelData
+        novelData: stripSecretFields(novelData)
     };
 }
 
@@ -437,12 +442,13 @@ window.importJSON = function() {
         reader.onload = function(e) {
             try {
                 const raw = JSON.parse(e.target.result);
-                const incoming = raw && raw.novelData && typeof raw.novelData === "object" ? raw.novelData : raw;
+                const incomingData = raw && raw.novelData && typeof raw.novelData === "object" ? raw.novelData : raw;
+                const incoming = stripSecretFields(incomingData);
                 if (!incoming || typeof incoming !== "object") {
                     throw new Error("Invalid JSON structure.");
                 }
 
-                novelData = {
+                novelData = stripSecretFields({
                     ...novelData,
                     ...incoming,
                     characters: Array.isArray(incoming.characters) ? incoming.characters : (novelData.characters || []),
@@ -458,7 +464,7 @@ window.importJSON = function() {
                         ...(novelData.requestLog || {}),
                         ...(incoming.requestLog && typeof incoming.requestLog === "object" ? incoming.requestLog : {})
                     }
-                };
+                });
 
                 document.getElementById("title").value = novelData.title || "";
                 populateChaptersTable();

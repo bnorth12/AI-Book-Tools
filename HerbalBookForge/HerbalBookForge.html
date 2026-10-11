@@ -689,6 +689,16 @@
             };
         }
 
+        function stripSecretFields(value) {
+            if (Array.isArray(value)) return value.map(stripSecretFields);
+            if (!value || typeof value !== 'object') return value;
+            return Object.fromEntries(Object.entries(value)
+                .filter(([name]) => !/\b(?:api\s*)?key\b|\btoken\b|\bsecret\b|\bpassword\b|\bauthorization\b/i.test(
+                    name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ')
+                ))
+                .map(([name, nested]) => [name, stripSecretFields(nested)]));
+        }
+
         const DEFAULT_MODEL = 'grok-4.7';
         let project = {
             meta: { version: "1.0.0", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
@@ -803,7 +813,7 @@
                 || localStorage.getItem('herbalBookForgeProject_v0.9.3');
             if (saved) {
                 try {
-                    const parsed = JSON.parse(saved);
+                    const parsed = stripSecretFields(JSON.parse(saved));
                     project = {
                         ...project,
                         ...parsed,
@@ -830,6 +840,10 @@
             if (!Array.isArray(project.setup.collectionIds)) {
                 project.setup.collectionIds = ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"];
             }
+            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(stripSecretFields(project)));
+            ['v0.14.0', 'v0.11.0', 'v0.10.0', 'v0.9.5', 'v0.9.3'].forEach(version => {
+                localStorage.removeItem(`herbalBookForgeProject_${version}`);
+            });
 
             renderSetupForm();
             renderGoalsForm();
@@ -850,7 +864,7 @@
 
         function saveProject() {
             project.meta.lastEdited = new Date().toISOString();
-            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(project));
+            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(stripSecretFields(project)));
             const status = document.getElementById('save-status');
             if (status) {
                 status.innerHTML = `Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
@@ -874,7 +888,7 @@
 
         function exportProject() {
             const fileName = `${(project.meta.name || "herbal-book").replace(/[^a-z0-9-_ ]/gi, "").trim() || "herbal-book"}_session.json`;
-            const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+            const blob = new Blob([JSON.stringify(stripSecretFields(project), null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -889,7 +903,7 @@
             const reader = new FileReader();
             reader.onload = e => {
                 try {
-                    const parsed = JSON.parse(e.target.result);
+                    const parsed = stripSecretFields(JSON.parse(e.target.result));
                     project = {
                         ...project,
                         ...parsed,

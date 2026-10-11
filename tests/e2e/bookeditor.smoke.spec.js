@@ -29,3 +29,35 @@ test('BE-SMOKE-01 tab shell and core controls render', async ({ page }) => {
   await page.locator('#nav button:has-text("2. Book Input")').click();
   await expect(page.locator('#bookText')).toBeVisible();
 });
+
+test('BE-SEC-01 session export and import omit API keys', async ({ page }) => {
+  await page.goto(APP_URL);
+
+  const secret = 'xai-TESTKEY-123';
+  const exportedJson = await page.evaluate((apiKey) => new Promise((resolve) => {
+    document.getElementById('apiKey').value = apiKey;
+    const originalCreateObjectURL = URL.createObjectURL;
+    URL.createObjectURL = function (blob) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        URL.createObjectURL = originalCreateObjectURL;
+        resolve(reader.result);
+      };
+      reader.readAsText(blob);
+      return 'blob:mock';
+    };
+    exportSession();
+  }), secret);
+
+  expect(exportedJson).not.toContain(secret);
+  expect(JSON.parse(exportedJson)).not.toHaveProperty('apiKey');
+
+  await page.locator('#apiKey').fill('');
+  await page.locator('#importFile').setInputFiles({
+    name: 'session.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ apiKey: secret, genre: 'fantasy', bookText: 'Imported text.' })),
+  });
+  await expect(page.locator('#bookText')).toHaveValue('Imported text.');
+  await expect(page.locator('#apiKey')).toHaveValue('');
+});

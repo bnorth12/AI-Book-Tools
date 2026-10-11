@@ -298,7 +298,7 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
   await gotoApp(page);
 
   await page.evaluate(() => {
-    document.getElementById('apiKey').value = 'sk-secret-key-should-not-export';
+    document.getElementById('apiKey').value = 'xai-TESTKEY-123';
     document.getElementById('title').value = 'Schema Validation Novel';
     document.getElementById('storyArc').value = 'A test of schema compliance.';
     document.getElementById('genre').value = 'scifi';
@@ -320,6 +320,7 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
   });
 
   const parsed = JSON.parse(exportedJson);
+  expect(exportedJson).not.toContain('xai-TESTKEY-123');
 
   // Required schema envelope fields
   expect(parsed.schemaVersion).toBe('1.0');
@@ -352,6 +353,25 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
 
   // requestLog must NOT be duplicated at root level
   expect(parsed).not.toHaveProperty('requestLog');
+});
+
+test('NW-REG-10 Import Session ignores an API key in the file', async ({ page }) => {
+  await gotoApp(page);
+  page.on('dialog', dialog => dialog.accept());
+
+  await page.locator('#importFile').setInputFiles({
+    name: 'session-with-key.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      schemaVersion: '1.0',
+      sourceTool: 'NovelWriter',
+      sourceVersion: '1.0.0',
+      novelData: { title: 'Imported without credentials', genre: 'scifi', chapters: [], apiKey: 'xai-TESTKEY-123' }
+    })),
+  });
+
+  await expect(page.locator('#title')).toHaveValue('Imported without credentials');
+  await expect(page.locator('#apiKey')).toHaveValue('');
 });
 
 // --- Execution HUD state transitions ---

@@ -32,3 +32,45 @@ test('BD-SMOKE-01 tab shell and output panes render', async ({ page }) => {
   await expect(page.locator('button:has-text("Export JSON")')).toBeVisible();
   await expect(page.locator('#jsonOutput')).toBeAttached();
 });
+
+test('BD-SEC-01 JSON export and import omit API keys', async ({ page }) => {
+  await page.goto(APP_URL);
+  await page.locator('.tab button:has-text("Output JSON")').click();
+  const secret = 'xai-TESTKEY-123';
+
+  const exportedJson = await page.evaluate((apiKey) => new Promise((resolve) => {
+    novelData.apiKey = apiKey;
+    novelData.nested = { accessToken: apiKey, title: 'Safe content' };
+    const originalCreateObjectURL = URL.createObjectURL;
+    URL.createObjectURL = function (blob) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        URL.createObjectURL = originalCreateObjectURL;
+        resolve(reader.result);
+      };
+      reader.readAsText(blob);
+      return 'blob:mock';
+    };
+    exportJSON();
+  }), secret);
+  expect(exportedJson).not.toContain(secret);
+
+  const [fileChooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByRole('button', { name: 'Import JSON' }).click(),
+  ]);
+  await fileChooser.setFiles({
+    name: 'session-with-key.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      schemaVersion: '1.0',
+      sourceTool: 'BookDecomposer',
+      novelData: { title: 'Imported safely', apiKey: secret, nested: { authorization: secret } },
+    })),
+  });
+
+  await expect(page.locator('#jsonOutput')).toContainText('Imported safely');
+  await expect(page.locator('#jsonOutput')).not.toContainText(secret);
+  expect(await page.evaluate(() => Object.hasOwn(novelData, 'apiKey'))).toBe(false);
+  await expect(page.locator('#apiKey')).toHaveValue('');
+});

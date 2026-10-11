@@ -9321,6 +9321,16 @@ return c && c.name && c.backstory && c.arc; });
 		    // ---- NW.GEN: Session Import/Export Functions ----
 		    // NW.GEN.SES.1: exportSession() SHALL serialise novelData into a schema-versioned JSON envelope (schemaVersion: '1.0') and trigger a file download.
 		    // NW.GEN.SES.2: importSession() SHALL accept a JSON file, detect whether it is an envelope or bare novelData, normalise it, and restore the full UI state.
+		    function stripSecretFields(value) {
+		        if (Array.isArray(value)) return value.map(stripSecretFields);
+		        if (!value || typeof value !== 'object') return value;
+		        return Object.fromEntries(Object.entries(value)
+		            .filter(([name]) => !/\b(?:api\s*)?key\b|\btoken\b|\bsecret\b|\bpassword\b|\bauthorization\b/i.test(
+		                name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[^a-z0-9]+/gi, ' ')
+		            ))
+		            .map(([name, nested]) => [name, stripSecretFields(nested)]));
+		    }
+
 		    // Export the entire session as JSON using the shared schema envelope.
 			function exportSession() {
 			    collectData();
@@ -9350,7 +9360,7 @@ return c && c.name && c.backstory && c.arc; });
 		        chapterImprovements: _chapterImprovements,
 		        ...exportableNovelData
 		    } = novelData;
-		    const sessionData = {
+		    const sessionData = stripSecretFields({
 			        schemaVersion: '1.0',
 			        sourceTool: 'NovelWriter',
 			        sourceVersion: APP_VERSION,
@@ -9359,9 +9369,9 @@ return c && c.name && c.backstory && c.arc; });
 			            ...exportableNovelData,
 			            requestLog: { ...requestLog }
 			        }
-			    };
+			    });
 			    if (typeof nwTimingExportSnapshot === 'function') sessionData.nwTiming = nwTimingExportSnapshot();
-			    const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json;charset=utf-8' });
+			    const blob = new Blob([JSON.stringify(stripSecretFields(sessionData), null, 2)], { type: 'application/json;charset=utf-8' });
 			    const url = window.URL.createObjectURL(blob);
 			    const a = document.createElement('a');
 			    a.href = url;
@@ -9408,6 +9418,8 @@ return c && c.name && c.backstory && c.arc; });
 		        warnings.push('Imported legacy bare NovelWriter data; migrated to current in-memory schema.');
 		    }
 
+		    normalizedNovelData = stripSecretFields(normalizedNovelData);
+		    normalizedRequestLog = stripSecretFields(normalizedRequestLog);
 		    const mergedNovelData = {
 		            ...novelData,
 		            ...normalizedNovelData,
@@ -9580,7 +9592,7 @@ return c && c.name && c.backstory && c.arc; });
 		            const { novelData: importedNovelData, requestLog: importedRequestLog, importMode, warnings } = normalizeImportedSessionData(rawSessionData);
 		            // Slot 8b: nwTiming is envelope-level, display-only. Never merge into IndexedDB stats.
 		            if (typeof nwTimingState !== 'undefined') {
-		                nwTimingState.imported = rawSessionData && rawSessionData.nwTiming ? rawSessionData.nwTiming : null;
+		                nwTimingState.imported = rawSessionData && rawSessionData.nwTiming ? stripSecretFields(rawSessionData.nwTiming) : null;
 		            }
 		            const priorRunId = novelData && novelData.batchRun && novelData.batchRun.id;
 		            novelData = importedNovelData;
@@ -12127,10 +12139,9 @@ return c && c.name && c.backstory && c.arc; });
         function nwBatchCheckpoint(active) {
             var br = novelData.batchRun;
             br.updatedAt = new Date().toISOString();
-            var nd = JSON.parse(JSON.stringify(novelData));
-            delete nd.apiKey;
+            var nd = stripSecretFields(JSON.parse(JSON.stringify(novelData)));
             delete nd.batchRun;
-            var brCopy = JSON.parse(JSON.stringify(br));
+            var brCopy = stripSecretFields(JSON.parse(JSON.stringify(br)));
             delete brCopy.rejectedDraft; // session export only, never checkpointed
             var rec = { key: br.id, savedAt: br.updatedAt, active: active !== false, novelData: nd, batchRun: brCopy };
             return nwBatchIdbPut(rec, br.id);
@@ -13815,5 +13826,4 @@ return c && c.name && c.backstory && c.arc; });
 	    <div id="nwToast" role="status" aria-live="polite" data-testid="nw-toast" hidden style="position: fixed; right: 1em; bottom: 1em; max-width: 32em; padding: 0.6em 0.9em; background: #333; color: #fff; border-radius: 4px; z-index: 10000;"></div>
 	</body>
 </html>
-
 

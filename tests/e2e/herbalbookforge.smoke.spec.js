@@ -94,6 +94,50 @@ test.describe('HerbalBookForge Smoke Test', () => {
     await expect(page.locator('[data-testid="import-project-input"]')).toBeAttached();
   });
 
+  test('HBF-SEC-01 project export, storage, and import omit API keys', async ({ page }) => {
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+    const secret = 'xai-TESTKEY-123';
+
+    const { exportedJson, storedProject } = await page.evaluate((apiKey) => new Promise((resolve) => {
+      document.getElementById('api-key').value = apiKey;
+      project.setup.apiKey = apiKey;
+      project.setup.authorization = apiKey;
+      const originalCreateObjectURL = URL.createObjectURL;
+      URL.createObjectURL = function (blob) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          URL.createObjectURL = originalCreateObjectURL;
+          resolve({
+            exportedJson: reader.result,
+            storedProject: localStorage.getItem('herbalBookForgeProject_v1.0.0'),
+          });
+        };
+        reader.readAsText(blob);
+        return 'blob:mock';
+      };
+      saveProject();
+      exportProject();
+    }), secret);
+
+    expect(exportedJson).not.toContain(secret);
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('apiKey');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('authorization');
+    expect(storedProject).not.toContain(secret);
+    expect(JSON.parse(storedProject).setup).not.toHaveProperty('apiKey');
+    expect(JSON.parse(storedProject).setup).not.toHaveProperty('authorization');
+
+    await page.locator('#api-key').fill('');
+    await page.evaluate(() => { project.setup.apiKey = ''; });
+    page.on('dialog', dialog => dialog.accept());
+    await page.locator('#import-file').setInputFiles({
+      name: 'project-with-key.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify({ setup: { apiKey: secret }, meta: { name: 'Imported project' } })),
+    });
+    await expect(page.locator('#api-key')).toHaveValue('');
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('herbalBookForgeProject_v1.0.0'))).not.toContain(secret);
+  });
+
   // HBFST.7 (Sprint 6): Tab order — Prompts tab appears after Preview; footer has author-facing label
   test('Prompts tab appears after Preview tab in DOM order (HBFST.7)', async ({ page }) => {
     await page.goto('/HerbalBookForge/HerbalBookForge.html');

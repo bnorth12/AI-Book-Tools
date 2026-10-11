@@ -993,24 +993,32 @@ Synced: 2026-04-19
 
 
 
+        function stripSecretFields(value) {
+            if (Array.isArray(value)) return value.map(stripSecretFields);
+            if (!value || typeof value !== "object") return value;
+            return Object.fromEntries(Object.entries(value)
+                .filter(([name]) => !/\b(?:api\s*)?key\b|\btoken\b|\bsecret\b|\bpassword\b|\bauthorization\b/i.test(
+                    name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[^a-z0-9]+/gi, " ")
+                ))
+                .map(([name, nested]) => [name, stripSecretFields(nested)]));
+        }
+
         // Export the current session state as a JSON file
-                // Export the current session state as a JSON file
-		        function exportSession() {
-		            const sessionData = {
-		                apiKey: document.getElementById("apiKey")?.value || "",
-                        model: document.getElementById("model")?.value || DEFAULT_MODEL,
-                        maxTokens: parseInt(document.getElementById("maxTokens")?.value) || 6000,
-		                genre: document.getElementById("genre")?.value || "",
-		                bookText: document.getElementById("bookText")?.value || "",
-		                improvements: Array.from(document.getElementById("improvementsTableBody").rows).map(row => row.cells[1].innerText),
-		                chapters: chapters,          // Original chapters
-		                editedChapters: editedChapters // Edited chapters (nulls for unincorporated)
-		            };
-		            const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: "application/json" });
-		            const link = document.createElement("a");
-		            link.href = URL.createObjectURL(blob);
-		            link.download = "BookEditorSession.json";
-		            link.click();
+        function exportSession() {
+            const sessionData = stripSecretFields({
+                model: document.getElementById("model")?.value || DEFAULT_MODEL,
+                maxTokens: parseInt(document.getElementById("maxTokens")?.value) || 6000,
+                genre: document.getElementById("genre")?.value || "",
+                bookText: document.getElementById("bookText")?.value || "",
+                improvements: Array.from(document.getElementById("improvementsTableBody").rows).map(row => row.cells[1].innerText),
+                chapters: chapters,          // Original chapters
+                editedChapters: editedChapters // Edited chapters (nulls for unincorporated)
+            });
+            const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: "application/json" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "BookEditorSession.json";
+            link.click();
         }
 
 
@@ -1026,8 +1034,7 @@ Synced: 2026-04-19
 			const file = event.target.files[0];
 			const reader = new FileReader();
 			reader.onload = function(e) {
-				const sessionData = JSON.parse(e.target.result);
-				document.getElementById("apiKey").value = sessionData.apiKey || "";
+				const sessionData = stripSecretFields(JSON.parse(e.target.result));
                 sessionData.model = applyModelSelection(sessionData.model);
                 document.getElementById("maxTokens").value = sessionData.maxTokens || 6000;
 				document.getElementById("genre").value = sessionData.genre || "";

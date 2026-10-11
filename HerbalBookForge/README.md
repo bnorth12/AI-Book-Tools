@@ -62,6 +62,10 @@ npx playwright test --project=herbalbookforge-integration
 
 Integration tests require `GROK_API_KEY` configured in `.env` file.
 
+## API Key Safety
+
+Session exports and browser storage omit API keys, and imported project files cannot set the API key field. Older exports may contain your API key; if you shared one, rotate it at [console.x.ai](https://console.x.ai).
+
 ## Version
 
 Current version: 0.9.5 (Latest stable)
