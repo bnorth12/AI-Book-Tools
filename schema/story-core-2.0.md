@@ -78,12 +78,14 @@ as `keywords` and `keyBeats`, are not secret keys. The denylist applies to
 property names, not prose values (for example, a `passwordHint` in prose).
 
 **A file that has been written must contain no denylisted key or credential.**
-Exporting tools strip those fields and notify the user before writing; schema
-validation rejects any attempted export that still contains them. On import,
-tools strip matching keys and URL credentials, show a warning listing the
-stripped JSON Pointers, and then validate the sanitized document. Thus
-`*-export-stripped.json` fixtures are intentionally rejected export attempts,
-not files that a conforming tool may write.
+Exporting tools strip those fields and notify the user before writing, using
+`secret-export-stripped` for denylisted keys and
+`authorization-export-stripped` for authorization credentials. Schema
+validation guards the sanitized outgoing document so no file containing them
+is written. On import, tools strip matching keys and URL credentials, show a
+warning listing the stripped JSON Pointers, and then validate the sanitized
+document. The export fixtures are synthetic, unstripped attempts, not files a
+conforming tool may write.
 
 The hard-rule instruction in plan §0 (strip and notify on export) takes
 precedence over plan §4.4's older "reject on export" wording.

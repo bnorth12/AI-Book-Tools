@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,17 +7,26 @@ import Ajv2020 from 'ajv/dist/2020.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURES = path.join(ROOT, 'schema', 'fixtures', 'story-core-2.0');
 const SCHEMA_PATH = path.join(ROOT, 'schema', 'story-core-2.0.json');
-const args = new Map(process.argv.slice(2).map((arg) => {
-  const [key, ...value] = arg.replace(/^--/, '').split('=');
-  return [key, value.join('=')];
-}));
-const mutation = args.get('mutation');
+const NW_S1_EXPECTED = path.join(ROOT, 'NovelWriter', 'fixtures', 'nw-s1', 'expected.json');
+const NW_S1_SHA256 = '893ca65ff791c11354849c129f51252a78ff53ef84e9c64577a7423bb60461ec';
+const args = new Map();
+for (let index = 2; index < process.argv.length; index += 1) {
+  const [key, ...parts] = process.argv[index].replace(/^--/, '').split('=');
+  const value = parts.length ? parts.join('=') : process.argv[index + 1]?.startsWith('--') ? '' : process.argv[++index] || '';
+  args.set(key, value);
+}
+let mutation = args.get('mutation')?.toUpperCase();
 const schemaMutation = args.get('mutate-schema');
 const SECRET_KEY = /^(?:api[_-]?key|apikey|secret|client[_-]?secret|password|passwd|authorization|bearer|access[_-]?token|refresh[_-]?token|id[_-]?token|private[_-]?key|x-api-key)$/i;
 const URL_USERINFO = /:\/\/[^/@\s]+:[^/@\s]*@/;
+const CASE_SENSITIVE_DENYLIST = '^(?:apiKey|apikey|secret|client[_-]?secret|password|passwd|authorization|bearer|access[_-]?token|refresh[_-]?token|id[_-]?token|private[_-]?key|x-api-key)$';
 const checks = [];
 const check = (name, ok, detail = '') => checks.push({ name, ok: Boolean(ok), detail });
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const timeout = setTimeout(() => {
+  console.error('FAIL timeout: Story Core contract smoke exceeded 240 seconds');
+  process.exit(1);
+}, 240_000);
 
 if (!fs.existsSync(SCHEMA_PATH)) {
   console.error('FAIL schema: schema/story-core-2.0.json missing');
@@ -29,31 +39,60 @@ const fixtures = new Map(
     .filter((file) => file.endsWith('.json'))
     .map((file) => [file.replaceAll(path.sep, '/'), readJson(path.join(FIXTURES, file))])
 );
+const requiredFixture = (name) => {
+  const fixture = fixtures.get(name);
+  if (!fixture) throw new Error(`Missing Story Core fixture: ${name}`);
+  return fixture;
+};
 let schema = readJson(SCHEMA_PATH);
 
-if (mutation === 'M1') schema.$defs.provenance.properties.source.enum.push('model');
-if (mutation === 'M2') schema.$defs.scene.required.splice(schema.$defs.scene.required.indexOf('breakApproved'), 1);
-if (mutation === 'M3') delete schema.$defs.noSecrets.allOf[1].then.items;
+if (schemaMutation && schemaMutation !== 'drop-denylist') {
+  throw new Error(`Unknown schema mutation: ${schemaMutation}`);
+}
+if (schemaMutation) mutation = 'M5';
+if (mutation && !/^M[1-7]$/.test(mutation)) throw new Error(`Unknown mutation: ${mutation}`);
+
+const mutatedPasses = [];
+if (mutation === 'M1') {
+  const fixture = structuredClone(requiredFixture('2.0-full.json'));
+  fixture.novelData.story.scenes[0].source = 'model';
+  mutatedPasses.push(['temporary mutation M1 uses source model', fixture]);
+}
+if (mutation === 'M2') {
+  const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+  fixture.novelData.story.scenes.push({
+    id: 'sc_mutation_missing_break_approved',
+    chapterId: 'ch_mutation',
+    order: 1
+  });
+  mutatedPasses.push(['temporary mutation M2 omits breakApproved', fixture]);
+}
+if (mutation === 'M3') {
+  const fixture = structuredClone(requiredFixture('token-counts-pass.json'));
+  fixture.ext.novelWriter.requestLog[0].apiKey = 'REDACTED-TEST-VALUE';
+  mutatedPasses.push(['temporary mutation M3 adds apiKey in an extension array', fixture]);
+}
+
 if (mutation === 'M4') {
   schema.$defs.noSecrets.allOf[0].then.patternProperties = {
-    '^(?:api[_-]?key|apikey|secret|client[_-]?secret|password|passwd|authorization|bearer|access[_-]?token|refresh[_-]?token|id[_-]?token|private[_-]?key|x-api-key)$': false
+    [CASE_SENSITIVE_DENYLIST]: false
   };
 }
+
+function removeDenylistRefs(node) {
+  if (!node || typeof node !== 'object') return;
+  for (const [key, value] of Object.entries(node)) {
+    if (key === '$ref' && value === '#/$defs/noSecrets') delete node[key];
+    else removeDenylistRefs(value);
+  }
+}
+
+if (mutation === 'M5') removeDenylistRefs(schema);
 if (mutation === 'M6') schema.properties.ext.additionalProperties = false;
 if (mutation === 'M7') {
   schema.$defs.story.properties.characters = { type: 'array' };
   schema.$defs.story.required.push('characters');
 }
-
-function removeDenylistRef(node) {
-  if (!node || typeof node !== 'object') return;
-  for (const [key, value] of Object.entries(node)) {
-    if (key === '$ref' && value === '#/$defs/noSecrets') delete node[key];
-    else removeDenylistRef(value);
-  }
-}
-
-if (schemaMutation === 'drop-denylist') removeDenylistRef(schema);
 
 function secretLookingValues(value) {
   if (typeof value === 'string') return [value].filter((item) => item.includes('xai-') || item.includes('sk-') || item.includes('Bearer '));
@@ -65,9 +104,7 @@ function secretLookingValues(value) {
 const permittedRedactionFiles = new Set([
   'secret-export-stripped.json',
   'authorization-export-stripped.json',
-  'secret-import-stripped.json',
-  'mutations/M3-array-apiKey.json',
-  'mutations/M4-uppercase-API_KEY.json'
+  'secret-import-stripped.json'
 ]);
 check(
   'schema and fixture values contain no secret-looking strings',
@@ -93,22 +130,22 @@ function expectValid(name, document) {
   check(name, result, result ? '' : JSON.stringify(failDetails(validate.errors)));
 }
 
-function expectDenylisted(name, document, pointer) {
-  const result = validate(document);
-  const found = (validate.errors || []).some((error) => {
-    const key = error.params?.propertyName || error.params?.additionalProperty || error.params?.missingProperty;
-    return error.instancePath === pointer || `${error.instancePath}/${key}` === pointer;
-  });
-  check(name, !result && found, result ? 'unexpectedly valid' : JSON.stringify(failDetails(validate.errors)));
-}
-
 function escapePointer(value) {
   return String(value).replaceAll('~', '~0').replaceAll('/', '~1');
 }
 
-function stripSecrets(value, pointer = '') {
+function expectDenylisted(name, document, pointer) {
+  const result = validate(document);
+  const found = (validate.errors || []).some((error) => {
+    const key = error.params?.propertyName || error.params?.additionalProperty || error.params?.missingProperty;
+    return error.instancePath === pointer || `${error.instancePath}/${escapePointer(key || '')}` === pointer;
+  });
+  check(name, !result && found, result ? 'unexpectedly valid' : JSON.stringify(failDetails(validate.errors)));
+}
+
+function stripSecrets(value, pointer = '', foundPointers = []) {
   if (Array.isArray(value)) {
-    value.forEach((item, index) => stripSecrets(item, `${pointer}/${index}`));
+    value.forEach((item, index) => stripSecrets(item, `${pointer}/${index}`, foundPointers));
     return;
   }
   if (!value || typeof value !== 'object') return;
@@ -117,19 +154,24 @@ function stripSecrets(value, pointer = '') {
     const child = value[key];
     if (SECRET_KEY.test(key) || ((key === 'endpoint' || key === 'url') && typeof child === 'string' && URL_USERINFO.test(child))) {
       delete value[key];
-      strippedPointers.push(childPointer);
+      foundPointers.push(childPointer);
     } else {
-      stripSecrets(child, childPointer);
+      stripSecrets(child, childPointer, foundPointers);
     }
   }
 }
 
 const strippedPointers = [];
-const importOutput = structuredClone(fixtures.get('secret-import-stripped.json'));
-stripSecrets(importOutput);
+const importOutput = structuredClone(requiredFixture('secret-import-stripped.json'));
+stripSecrets(importOutput, '', strippedPointers);
 importOutput.strippedPointers = strippedPointers;
-const expectedImport = fixtures.get('secret-import-stripped.expected.json');
+const expectedImport = requiredFixture('secret-import-stripped.expected.json');
 check('reference import stripper matches expected document and pointers', equal(importOutput, expectedImport));
+const benignApiFixture = structuredClone(requiredFixture('token-counts-pass.json'));
+const benignApiBeforeStrip = structuredClone(benignApiFixture);
+const benignApiPointers = [];
+stripSecrets(benignApiFixture, '', benignApiPointers);
+check('reference import stripper preserves benign api and token metadata', equal(benignApiFixture, benignApiBeforeStrip) && benignApiPointers.length === 0);
 
 const passFiles = [
   '2.0-minimal.json',
@@ -137,11 +179,10 @@ const passFiles = [
   'hbf-core-only.json',
   'unknown-ext-roundtrip.json',
   'token-counts-pass.json',
-  'secret-import-stripped.expected.json',
-  'mutations/M6-unknown-extension.json',
-  'mutations/M7-hbf-no-fiction-fields.json'
+  'secret-import-stripped.expected.json'
 ];
-for (const name of passFiles) expectValid(`must pass ${name}`, fixtures.get(name));
+for (const name of passFiles) expectValid(`must pass ${name}`, requiredFixture(name));
+for (const [name, fixture] of mutatedPasses) expectValid(name, fixture);
 
 const failFiles = [
   ['secret-export-stripped.json', ['/apiKey', '/ext/bookEditor/apiKey']],
@@ -156,21 +197,31 @@ const failFiles = [
   ]]
 ];
 for (const [name, pointers] of failFiles) {
-  for (const pointer of pointers) expectDenylisted(`must reject ${name} at ${pointer}`, fixtures.get(name), pointer);
-}
-expectDenylisted('mutation partner M1 rejects source model', fixtures.get('mutations/M1-source-model.json'), '/novelData/story/scenes/0/source');
-expectDenylisted('mutation partner M2 rejects missing breakApproved', fixtures.get('mutations/M2-missing-breakApproved.json'), '/novelData/story/scenes/0/breakApproved');
-expectDenylisted('mutation partner M3 rejects array apiKey', fixtures.get('mutations/M3-array-apiKey.json'), '/ext/novelWriter/requestLog/0/apiKey');
-for (const pointer of ['/API_KEY', '/novelData/api_key', '/ext/futureTool/APIKEY']) {
-  expectDenylisted(`mutation partner M4 rejects uppercase API_KEY variant at ${pointer}`, fixtures.get('mutations/M4-uppercase-API_KEY.json'), pointer);
+  for (const pointer of pointers) expectDenylisted(`must reject ${name} at ${pointer}`, requiredFixture(name), pointer);
 }
 
-const unknown = fixtures.get('unknown-ext-roundtrip.json');
+const denylistedKeys = [
+  'apiKey', 'api_key', 'api-key', 'apikey', 'API_KEY', 'APIKEY', 'secret',
+  'clientSecret', 'client_secret', 'client-secret', 'password', 'passwd',
+  'authorization', 'bearer', 'accessToken', 'access_token', 'access-token',
+  'refreshToken', 'refresh_token', 'refresh-token', 'idToken', 'id_token',
+  'id-token', 'privateKey', 'private_key', 'private-key', 'x-api-key'
+];
+for (const key of denylistedKeys) {
+  const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+  fixture.ext = { futureTool: { nested: [{ [key]: 'REDACTED-TEST-VALUE' }] } };
+  expectDenylisted(`denylist rejects ${key} in nested extension array`, fixture, `/ext/futureTool/nested/0/${escapePointer(key)}`);
+}
+
+const unknown = requiredFixture('unknown-ext-roundtrip.json');
 check('unknown extension and core keys survive round-trip', equal(JSON.parse(JSON.stringify(unknown)), unknown));
+const nwS1Hash = createHash('sha256').update(fs.readFileSync(NW_S1_EXPECTED)).digest('hex');
+check('nw-s1 expected fixture hash matches 3259d1e', nwS1Hash === NW_S1_SHA256, nwS1Hash);
 
 const failed = checks.filter((item) => !item.ok);
-console.log(`Story Core 2.0 contract smoke: ${checks.length - failed.length} passed, ${failed.length} failed`);
+console.log(`Story Core 2.0 contract smoke${mutation ? ` (${mutation} injected)` : ''}: ${checks.length - failed.length} passed, ${failed.length} failed`);
 for (const item of checks) {
   console.log(`${item.ok ? 'PASS' : 'FAIL'} ${item.name}${item.ok ? '' : ` :: ${item.detail}`}`);
 }
+clearTimeout(timeout);
 if (failed.length) process.exitCode = 1;

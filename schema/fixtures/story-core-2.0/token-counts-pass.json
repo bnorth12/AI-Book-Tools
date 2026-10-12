@@ -29,6 +29,7 @@
       ],
       "keywords": ["persistence"],
       "keyBeats": ["turning point"],
+      "api": "public metadata",
       "notes": "passwordHint appears here as ordinary prose."
     }
   }
