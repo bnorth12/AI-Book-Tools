@@ -305,6 +305,18 @@ Synced: 2026-04-19
                         <pre id="qualityGateResult" style="margin:4px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f5f5ff;border:1px solid #ccd;white-space:pre-wrap;">Quality gate: (none yet)</pre>
 			<pre id="qualityJudgeAlignResult" style="white-space:pre-wrap;font-size:12px;"></pre>
 			<button type="button" id="trackedE2EBtn" onclick="runTrackedE2E()" title="Lean start-to-finish tracked E2E with LIVE calls (uses the key above). Offline/no-key: node scripts/run-tracked-e2e.mjs">Tracked E2E (lean, live)</button>
+			<button type="button" id="testTab1Btn" onclick="testTab1()" hidden>Test Tab 1</button>
+			<button type="button" id="testCharactersBtn" onclick="testCharacters()" hidden>Test Characters</button>
+			<button type="button" id="testSubplotsBtn" onclick="testSubplots()" hidden>Test Subplots</button>
+			<button type="button" id="testOutlinesBtn" onclick="testOutlines()" hidden>Test Outlines</button>
+			<button type="button" id="testGenerateChaptersBtn" onclick="testGenerateChapters()" hidden>Test Generate Chapters</button>
+			<button type="button" id="testEditChaptersBtn" onclick="testEditChapters()" hidden>Test Edit Chapters</button>
+			<button type="button" id="testBookBtn" onclick="testBook()" hidden>Test Book</button>
+			<button type="button" id="testRequestLogBtn" onclick="testRequestLog()" hidden>Test Request Log</button>
+			<button type="button" id="testNavigationBtn" onclick="testNavigation()" hidden>Test Navigation</button>
+			<button type="button" id="testUtilitiesBtn" onclick="testUtilities()" hidden>Test Utilities</button>
+			<button type="button" id="testSessionRoundtripMockBtn" onclick="testSessionRoundtripMock()" hidden>Test Session Roundtrip</button>
+			<button type="button" id="testAdvancedWorkflowBtn" onclick="testAdvancedWorkflow()" hidden>Test Advanced Workflow</button>
 			        <pre id="c1SmokeResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7f7f7;border:1px solid #ddd;border-radius:4px;white-space:pre-wrap;max-height:220px;overflow:auto;">C1 smoke idle — click to validate digests (no full manuscript dump).</pre>
 			<pre id="trackedE2EResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f0f4ff;border:1px solid #b8c7e8;border-radius:4px;white-space:pre-wrap;max-height:360px;overflow:auto;">Tracked E2E idle - click for a lean 2-chapter token + quality run (live API calls).</pre>
 
@@ -369,6 +381,7 @@ Synced: 2026-04-19
 			        <button onclick="suggestSetting()">Suggest Setting</button>
 			        <label for="numChapters">Number of Chapters:</label>
 			        <input type="number" id="numChapters" min="1" value="10" onchange="updateChapterSubpages()">
+			        <span id="numChaptersFixedNote" data-testid="nw-num-chapters-fixed-note" hidden style="margin-left:0.6em;color:#8a4b08;font-size:12px;"></span>
 			        <label for="chapterLength">Target Chapter Length (words):</label>
 			        <input type="number" id="chapterLength" min="500" value="2000">
 			        <button onclick="suggestStoryInfo()">AI Suggest Story Info</button>
@@ -2234,6 +2247,8 @@ let activeAICallCount = 0;
 		var NW_S1_RESIZE_CHAPTERS = true;
 		var NW_S1_RESIZE_SKIP_FUTURE = true;
 		var NW_S1_RESET_RESPECTS_PAUSE_LOCK = true;
+		var NW_S1_LOCK_TRACKED_TEST_BTNS = true;
+		var NW_S1_BLOCK_V2_CHAPTER_RESIZE = true;
 		var NW_S1_RESTORE_OPAQUE_RNG = true;
 		var NW_S1_WORLD_REMOVED_STALE = true;
 		var NW_S1_SPLICE_SCENES = true;
@@ -2287,6 +2302,21 @@ let activeAICallCount = 0;
 			var v = nd && nd.nwSchemaVersion;
 			if (typeof v === 'number' && isFinite(v)) return v;
 			return 0;
+		}
+
+		var NW_S1_CHAPTER_COUNT_FIXED_MSG = 'Chapter count is fixed for files saved by a newer NovelWriter version';
+		var NW_S1_SETUP_TEST_BTN_IDS = ['trackedE2EBtn', 'testTab1Btn', 'testCharactersBtn', 'testSubplotsBtn', 'testOutlinesBtn', 'testGenerateChaptersBtn', 'testEditChaptersBtn', 'testBookBtn', 'testRequestLogBtn', 'testNavigationBtn', 'testUtilitiesBtn', 'testSessionRoundtripMockBtn', 'testAdvancedWorkflowBtn'];
+
+		function nwShowChapterCountFixedNote(on) {
+			var note = document.getElementById('numChaptersFixedNote');
+			if (!note) return;
+			note.textContent = on ? NW_S1_CHAPTER_COUNT_FIXED_MSG : '';
+			note.hidden = !on;
+		}
+
+		function nwChapterCountFixedForNewerSchema(nd) {
+			if (typeof NW_S1_BLOCK_V2_CHAPTER_RESIZE !== 'undefined' && !NW_S1_BLOCK_V2_CHAPTER_RESIZE) return false;
+			return typeof nwSchemaVersion === 'function' && nwSchemaVersion(nd) > 1;
 		}
 
 		function nwDeepClone(v) {
@@ -5767,6 +5797,24 @@ const messages = [
         // Update chapter subpages across all relevant tabs
 		async function updateChapterSubpages(opts) {
 		    opts = opts || {};
+		    var numElEarly = document.getElementById('numChapters');
+		    var requestedCount = parseInt(numElEarly && numElEarly.value, 10);
+		    var currentCount = (typeof novelData !== 'undefined' && novelData) ? Number(novelData.numChapters) : NaN;
+		    if (typeof nwChapterCountFixedForNewerSchema === 'function' && nwChapterCountFixedForNewerSchema(novelData)) {
+		        if (numElEarly) {
+		            numElEarly.disabled = true;
+		            if (currentCount >= 1) numElEarly.value = String(currentCount);
+		        }
+		        if (typeof nwShowChapterCountFixedNote === 'function') nwShowChapterCountFixedNote(true);
+		        if (requestedCount !== currentCount) {
+		            var fixedMsg = (typeof NW_S1_CHAPTER_COUNT_FIXED_MSG !== 'undefined') ? NW_S1_CHAPTER_COUNT_FIXED_MSG : 'Chapter count is fixed for files saved by a newer NovelWriter version';
+		            if (typeof nwToast === 'function') nwToast(fixedMsg);
+		            else console.warn(fixedMsg);
+		            return;
+		        }
+		    } else if (typeof nwShowChapterCountFixedNote === 'function') {
+		        nwShowChapterCountFixedNote(false);
+		    }
 		    if (!opts.internal && typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Chapter count')) {
 		        var numEl = document.getElementById('numChapters');
 		        if (numEl && typeof novelData !== 'undefined' && novelData) numEl.value = String(novelData.numChapters || '');
@@ -13767,10 +13815,19 @@ return c && c.name && c.backstory && c.arc; });
                 var el = nwBatchEl(id);
                 if (el) el.disabled = locked;
             });
+            var v2ChapterCountFixed = typeof nwChapterCountFixedForNewerSchema === 'function' && nwChapterCountFixedForNewerSchema(novelData);
             ['importFile', 'numChapters'].forEach(function (id) {
                 var el = nwBatchEl(id);
-                if (el) el.disabled = setupLocked;
+                if (el) el.disabled = setupLocked || (id === 'numChapters' && v2ChapterCountFixed);
             });
+            if (typeof nwShowChapterCountFixedNote === 'function') nwShowChapterCountFixedNote(v2ChapterCountFixed);
+            if (typeof NW_S1_LOCK_TRACKED_TEST_BTNS === 'undefined' || NW_S1_LOCK_TRACKED_TEST_BTNS) {
+                var testBtnIds = (typeof NW_S1_SETUP_TEST_BTN_IDS !== 'undefined' && NW_S1_SETUP_TEST_BTN_IDS) ? NW_S1_SETUP_TEST_BTN_IDS : ['trackedE2EBtn'];
+                testBtnIds.forEach(function (id) {
+                    var el = nwBatchEl(id);
+                    if (el) el.disabled = setupLocked;
+                });
+            }
             var genAllBtn = nwBatchEl('batchGenerateAllBtn');
             if (genAllBtn) {
                 var genAllLock = setupLocked;

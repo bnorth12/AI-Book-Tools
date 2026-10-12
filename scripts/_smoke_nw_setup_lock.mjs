@@ -31,6 +31,28 @@ const HTML = fs.readFileSync(HTML_PATH, 'utf8');
 const FX = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
 delete FX._fixture;
 
+const SETUP_TEST_BTN_IDS = [
+  'trackedE2EBtn',
+  'testTab1Btn',
+  'testCharactersBtn',
+  'testSubplotsBtn',
+  'testOutlinesBtn',
+  'testGenerateChaptersBtn',
+  'testEditChaptersBtn',
+  'testBookBtn',
+  'testRequestLogBtn',
+  'testNavigationBtn',
+  'testUtilitiesBtn',
+  'testSessionRoundtripMockBtn',
+  'testAdvancedWorkflowBtn'
+];
+function testBtnsAllDisabled(btns) {
+  return Array.isArray(btns) && btns.length === SETUP_TEST_BTN_IDS.length && btns.every((b) => b && b.exists && b.disabled === true);
+}
+function testBtnsAllEnabled(btns) {
+  return Array.isArray(btns) && btns.length === SETUP_TEST_BTN_IDS.length && btns.every((b) => b && b.exists && b.disabled === false);
+}
+
 function enriched(base) {
   const nd = clone(base);
   nd.chapterBlueprints = nd.chapterBlueprints.map((bp, i) => {
@@ -283,6 +305,13 @@ async function runPauseHeld(htmlPath, opts) {
     const nd = args.nd;
     const after = args.after;
     const probe = args.probe;
+    const btnIds = args.btnIds || [];
+    function readTestBtns() {
+      return btnIds.map((id) => {
+        const el = document.getElementById(id);
+        return { id, exists: !!el, disabled: !!(el && el.disabled) };
+      });
+    }
     const h = window.__h;
     h.cfg = {};
     h.load(nd);
@@ -308,6 +337,7 @@ async function runPauseHeld(htmlPath, opts) {
     const importFileDisabled = document.getElementById('importFile').disabled;
     const genAllDisabled = document.getElementById('batchGenerateAllBtn').disabled;
     const addCharDisabled = Array.from(document.querySelectorAll('#tab2 button[onclick*="addCharacter"]')).every((b) => b.disabled);
+    const testBtns = readTestBtns();
     const cancelBtn = document.getElementById('batchCancelBtn');
     const cancelExists = !!cancelBtn;
     const cancelDisabled = cancelBtn ? !!cancelBtn.disabled : true;
@@ -360,7 +390,8 @@ async function runPauseHeld(htmlPath, opts) {
         genAllDisabled: document.getElementById('batchGenerateAllBtn').disabled,
         addCharDisabled: Array.from(document.querySelectorAll('#tab2 button[onclick*="addCharacter"]')).every((b) => b.disabled),
         cancelDisabled: document.getElementById('batchCancelBtn') ? document.getElementById('batchCancelBtn').disabled : true,
-        reason: novelData.batchRun && novelData.batchRun.reason
+        reason: novelData.batchRun && novelData.batchRun.reason,
+        testBtns: readTestBtns()
       };
     } else {
       resumed = await resumeBatchRun();
@@ -369,7 +400,7 @@ async function runPauseHeld(htmlPath, opts) {
     return {
       r: r && r.reason, resumed: resumed && resumed.reason,
       settingDisabled, plotDisabled, setupLocked, numCharactersDisabled, numChaptersDisabled,
-      importFileDisabled, genAllDisabled, addCharDisabled,
+      importFileDisabled, genAllDisabled, addCharDisabled, testBtns,
       cancelExists, cancelDisabled,
       refusedAi, notice, importRefused, importNotice, chaptersRefused, chaptersNotice, genAllRefused, genAllNotice,
       pausedStatus, edited, cancelled, afterCancel,
@@ -378,7 +409,7 @@ async function runPauseHeld(htmlPath, opts) {
       br: novelData.batchRun && { reason: novelData.batchRun.reason, stoppedAt: novelData.batchRun.stoppedAt, completed: novelData.batchRun.completed },
       resumeDisabled: document.getElementById('batchResumeBtn').disabled
     };
-  }, { nd: ND, after, probe });
+  }, { nd: ND, after, probe, btnIds: SETUP_TEST_BTN_IDS });
   await page.close();
   return out;
 }
@@ -393,6 +424,8 @@ check('LOCK:pause-held', 'resume later prompts byte-equal to pre-pause', pauseGr
 
 const pauseCancel = await runPauseHeld(HTML_PATH, { after: 'cancel', probe: true });
 check('LOCK:pause-held', 'after Cancel, Setup controls re-enable', pauseCancel.cancelled === true && pauseCancel.afterCancel && pauseCancel.afterCancel.setupLocked === false && pauseCancel.afterCancel.settingDisabled === false && pauseCancel.afterCancel.numChaptersDisabled === false && pauseCancel.afterCancel.numCharactersDisabled === false && pauseCancel.afterCancel.addCharDisabled === false && pauseCancel.afterCancel.importFileDisabled === false && pauseCancel.afterCancel.genAllDisabled === false, JSON.stringify(pauseCancel));
+check('LOCK:pause-held', 'Tracked E2E and all 12 test* buttons disabled while paused', testBtnsAllDisabled(pauseGreen.testBtns) && testBtnsAllDisabled(pauseCancel.testBtns), JSON.stringify({ resume: pauseGreen.testBtns, cancel: pauseCancel.testBtns }));
+check('LOCK:pause-held', 'after Cancel, Tracked E2E and test* buttons re-enable', testBtnsAllEnabled(pauseCancel.afterCancel && pauseCancel.afterCancel.testBtns), JSON.stringify(pauseCancel.afterCancel && pauseCancel.afterCancel.testBtns));
 
 const mutM2 = mutateCopy('var NW_S1_LOCK_PAUSE_HELD = true;', 'var NW_S1_LOCK_PAUSE_HELD = false;');
 check('LOCK:M2', 'mutation flag present', mutM2.ok, mutM2.detail);
@@ -508,11 +541,21 @@ if (mutM5.ok) {
 globalThis.__LOCK_M5_RED = lockM5Red;
 console.log('LOCK:M5 red-run ' + JSON.stringify(lockM5Red));
 
+const mutM6 = mutateCopy('var NW_S1_LOCK_TRACKED_TEST_BTNS = true;', 'var NW_S1_LOCK_TRACKED_TEST_BTNS = false;');
+check('LOCK:M6', 'mutation flag present', mutM6.ok, mutM6.detail);
+let lockM6Red = null;
+if (mutM6.ok) {
+  lockM6Red = await runPauseHeld(mutM6.copy, { after: 'cancel', probe: false });
+  check('LOCK:M6', 'dropping Tracked E2E/test* buttons from the lock list turns pause-held red (buttons enabled while paused)', !testBtnsAllDisabled(lockM6Red.testBtns) && !!(lockM6Red.testBtns && lockM6Red.testBtns.some((b) => b.exists && b.disabled === false)), JSON.stringify(lockM6Red.testBtns));
+}
+globalThis.__LOCK_M6_RED = lockM6Red;
+console.log('LOCK:M6 red-run ' + JSON.stringify(lockM6Red && lockM6Red.testBtns));
+
 check('pageerror', 'no uncaught pageerror', pageErrors.length === 0, pageErrors.join(' | '));
 await browser.close();
 
 const failed = checks.filter((c) => !c.ok);
-const report = { passed: checks.filter((c) => c.ok).length, failed: failed.length, checks, pageErrors, lockM2Red: globalThis.__LOCK_M2_RED || null, lockM3Red: globalThis.__LOCK_M3_RED || null, lockM4Red: globalThis.__LOCK_M4_RED || null, lockM5Red: globalThis.__LOCK_M5_RED || null };
+const report = { passed: checks.filter((c) => c.ok).length, failed: failed.length, checks, pageErrors, lockM2Red: globalThis.__LOCK_M2_RED || null, lockM3Red: globalThis.__LOCK_M3_RED || null, lockM4Red: globalThis.__LOCK_M4_RED || null, lockM5Red: globalThis.__LOCK_M5_RED || null, lockM6Red: globalThis.__LOCK_M6_RED || null };
 fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(path.join(OUT_DIR, 'SMOKE_NW_SETUP_LOCK.json'), JSON.stringify(report, null, 2));
 console.log('NW setup-lock smoke: ' + report.passed + ' passed, ' + report.failed + ' failed');

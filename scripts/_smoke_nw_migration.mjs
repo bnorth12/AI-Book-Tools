@@ -650,6 +650,74 @@ for (const file of fixtureFiles) {
 }
 
 {
+  const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v2-ids-resize.json'), 'utf8'));
+  const FIXED_MSG = 'Chapter count is fixed for files saved by a newer NovelWriter version';
+  const r = await page.evaluate(async (nd) => {
+    const MSG = 'Chapter count is fixed for files saved by a newer NovelWriter version';
+    const S1 = ['chapterRequiredFacts', 'chapterRequirements', 'chapterFingerprints', 'chapterWritingPlans', 'chapterScenes'];
+    novelData = JSON.parse(JSON.stringify(nd));
+    const n = Number(novelData.numChapters) || (novelData.chapters || []).length;
+    ['chapterOutlines', 'chapterArcs', 'chapterImprovements'].forEach((k) => {
+      if (!Array.isArray(novelData[k])) novelData[k] = Array.from({ length: n }, () => '');
+    });
+    const numEl = document.getElementById('numChapters');
+    numEl.value = String(n);
+    if (typeof nwBatchApplyLock === 'function') nwBatchApplyLock();
+    function snap() {
+      return JSON.parse(JSON.stringify({
+        chapters: novelData.chapters,
+        chapterIds: novelData.chapterIds,
+        chapterRequiredFacts: novelData.chapterRequiredFacts,
+        chapterRequirements: novelData.chapterRequirements,
+        chapterFingerprints: novelData.chapterFingerprints,
+        chapterWritingPlans: novelData.chapterWritingPlans,
+        chapterScenes: novelData.chapterScenes,
+        numChapters: novelData.numChapters
+      }));
+    }
+    function lensOk(s, count) {
+      return s.chapters.length === count
+        && (s.chapterIds || []).length === count
+        && S1.every((k) => Array.isArray(s[k]) && s[k].length === count);
+    }
+    const before = snap();
+    numEl.value = '4';
+    let uiRet;
+    if (typeof numEl.onchange === 'function') uiRet = numEl.onchange();
+    else numEl.dispatchEvent(new Event('change', { bubbles: true }));
+    if (uiRet && typeof uiRet.then === 'function') await uiRet;
+    const afterUi = snap();
+    const noteEl = document.getElementById('numChaptersFixedNote');
+    const toastEl = document.getElementById('nwToast');
+    const afterUiDisabled = !!numEl.disabled;
+    const afterUiValue = String(numEl.value);
+    const noteAfterUi = String((noteEl && noteEl.textContent) || '');
+    const toastAfterUi = String((toastEl && toastEl.textContent) || '');
+    numEl.value = '4';
+    await updateChapterSubpages();
+    const afterForced = snap();
+    const afterForcedDisabled = !!numEl.disabled;
+    const afterForcedValue = String(numEl.value);
+    const noteAfterForced = String((noteEl && noteEl.textContent) || '');
+    const toastAfterForced = String((toastEl && toastEl.textContent) || '');
+    return {
+      before, afterUi, afterForced,
+      afterUiDisabled, afterForcedDisabled, afterUiValue, afterForcedValue,
+      noteAfterUi, noteAfterForced, toastAfterUi, toastAfterForced,
+      lensBefore: lensOk(before, before.numChapters),
+      lensUi: lensOk(afterUi, before.numChapters),
+      lensForced: lensOk(afterForced, before.numChapters),
+      eqUi: JSON.stringify(afterUi) === JSON.stringify(before),
+      eqForced: JSON.stringify(afterForced) === JSON.stringify(before),
+      msg: MSG
+    };
+  }, fx.input);
+  const reasonShown = (note, toast) => note === FIXED_MSG || toast === FIXED_MSG;
+  check('MIG:v2-resize-ui', 'UI path: chapters/ids/S1 arrays unchanged; #numChapters disabled; reason shown', r.eqUi === true && r.lensUi === true && r.afterUiDisabled === true && r.afterUiValue === String(r.before.numChapters) && reasonShown(r.noteAfterUi, r.toastAfterUi), JSON.stringify(r));
+  check('MIG:v2-resize-ui', 'forced updateChapterSubpages: arrays deep-equal before; lengths === chapter count; reason shown', r.eqForced === true && r.lensForced === true && r.afterForcedDisabled === true && r.afterForcedValue === String(r.before.numChapters) && reasonShown(r.noteAfterForced, r.toastAfterForced), JSON.stringify(r));
+}
+
+{
   const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-plan-stale.json'), 'utf8'));
   const r = await page.evaluate((nd) => {
     novelData = JSON.parse(JSON.stringify(nd));
@@ -1026,6 +1094,59 @@ await page.close();
     }, fx.input);
     console.log('MIG:v2-ids-resize-mutation red-run ' + JSON.stringify(r));
     check('MIG:v2-ids-resize:mutation', 'resizing a v2 book writes chapterIds (turns leave-untouched green red)', r.afterUp.length !== r.before.length || r.afterDown.length !== r.before.length, JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_BLOCK_V2_CHAPTER_RESIZE = true;', 'var NW_S1_BLOCK_V2_CHAPTER_RESIZE = false;');
+  check('MIG:v2-resize-ui:mutation-flag', 'block-v2-chapter-resize flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v2-ids-resize.json'), 'utf8'));
+    const r = await p.evaluate(async (nd) => {
+      const S1 = ['chapterRequiredFacts', 'chapterRequirements', 'chapterFingerprints', 'chapterWritingPlans', 'chapterScenes'];
+      novelData = JSON.parse(JSON.stringify(nd));
+      const n = Number(novelData.numChapters) || (novelData.chapters || []).length;
+      ['chapterOutlines', 'chapterArcs', 'chapterImprovements'].forEach((k) => {
+        if (!Array.isArray(novelData[k])) novelData[k] = Array.from({ length: n }, () => '');
+      });
+      const numEl = document.getElementById('numChapters');
+      numEl.value = String(n);
+      if (typeof nwBatchApplyLock === 'function') nwBatchApplyLock();
+      function snap() {
+        return JSON.parse(JSON.stringify({
+          chapters: novelData.chapters,
+          chapterIds: novelData.chapterIds,
+          chapterRequiredFacts: novelData.chapterRequiredFacts,
+          chapterRequirements: novelData.chapterRequirements,
+          chapterFingerprints: novelData.chapterFingerprints,
+          chapterWritingPlans: novelData.chapterWritingPlans,
+          chapterScenes: novelData.chapterScenes,
+          numChapters: novelData.numChapters
+        }));
+      }
+      const before = snap();
+      numEl.value = '4';
+      let uiRet;
+      if (typeof numEl.onchange === 'function') uiRet = numEl.onchange();
+      else numEl.dispatchEvent(new Event('change', { bubbles: true }));
+      if (uiRet && typeof uiRet.then === 'function') await uiRet;
+      const afterUi = snap();
+      numEl.value = '4';
+      await updateChapterSubpages();
+      const afterForced = snap();
+      return {
+        before, afterUi, afterForced,
+        eqUi: JSON.stringify(afterUi) === JSON.stringify(before),
+        eqForced: JSON.stringify(afterForced) === JSON.stringify(before),
+        chLenUi: (afterUi.chapters || []).length,
+        chLenForced: (afterForced.chapters || []).length,
+        disabled: !!numEl.disabled
+      };
+    }, fx.input);
+    console.log('MIG:v2-resize-ui-mutation red-run ' + JSON.stringify(r));
+    check('MIG:v2-resize-ui:mutation', 'removing v2 chapter-count guard turns MIG:v2-resize-ui red (arrays change)', r.eqUi === false || r.eqForced === false || r.chLenUi !== r.before.numChapters || r.chLenForced !== r.before.numChapters, JSON.stringify(r));
     await p.close();
   }
 }
