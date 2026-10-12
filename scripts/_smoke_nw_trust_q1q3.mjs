@@ -569,9 +569,10 @@ async function runSuite(page, only) {
     if (want('T9') || want('T9b') || want('T9c')) {
       try {
         applyBook(book);
-        const text = 'alpha  beta\n\ngamma';
-        const unsaved = 'UNSAVED different draft that must not be hashed';
-        novelData.chapters = [text, ''];
+        const saved = 'SAVED chapter before the textarea edit';
+        const edited = 'alpha  beta\n\ngamma';
+        const emptyChapter = 'chapter two had no saved text';
+        novelData.chapters = [saved, ''];
         novelData.numChapters = 2;
         novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
         if (typeof applySessionDataToUI === 'function') applySessionDataToUI();
@@ -581,8 +582,8 @@ async function runSuite(page, only) {
         const edit1 = document.getElementById('chapterEditContent1');
         const gen2 = document.getElementById('chapterGenContent2');
         const edit2 = document.getElementById('chapterEditContent2');
-        if (gen1) gen1.value = unsaved;
-        if (edit1) edit1.value = unsaved;
+        if (gen1) gen1.value = edited;
+        if (edit1) edit1.value = edited;
         if (gen2) gen2.value = '';
         if (edit2) edit2.value = '';
         window.callAI = async function () {
@@ -591,30 +592,40 @@ async function runSuite(page, only) {
         await runChapterContinuityAudit(1, { silent: true });
         const row = novelData.continuityTracker.chapters[0];
         const hash = row && row.auditedTextHash;
-        const expected = nwTextHash(text);
+        const expected = nwTextHash(edited);
         if (!hash || hash !== expected) fail('T9', 'hash ' + hash + ' expected ' + expected);
-        else if (typeof nwTrackerAuditState !== 'function') fail('T9', 'hash ' + hash + ' expected ' + expected);
+        else if (novelData.chapters[0] !== edited) fail('T9', 'chapter held ' + JSON.stringify(novelData.chapters[0]));
+        else if (typeof nwTrackerAuditState !== 'function') fail('T9', 'nwTrackerAuditState missing');
         else {
           const fresh = nwTrackerAuditState(1);
           novelData.chapters[0] = 'alpha beta gamma';
           const collapsed = nwTrackerAuditState(1);
           novelData.chapters[0] = 'alpha beta gamma EXTRA';
-          const edited = nwTrackerAuditState(1);
+          const stale = nwTrackerAuditState(1);
           if (typeof renderContinuityStatusPanel === 'function') renderContinuityStatusPanel();
           const panel = (document.getElementById('continuityStatusPanel') || {}).value || '';
-          novelData.chapters[0] = text;
+          novelData.chapters[0] = edited;
           const absentBefore = nwTrackerAuditState(2);
           if (fresh !== 'audited') fail('T9', 'tracker stale right after audit: ' + fresh);
-          else if (hash === nwTextHash(unsaved)) fail('T9', 'hashed the textarea');
           else if (collapsed !== 'audited') fail('T9', 'whitespace collapse showed ' + collapsed);
-          else if (edited !== 'tracker stale') fail('T9', 'edit showed ' + edited);
+          else if (stale !== 'tracker stale') fail('T9', 'edit showed ' + stale);
           else if (absentBefore !== 'not audited') fail('T9', 'absent showed ' + absentBefore);
           else if (panel.indexOf('Chapter 2: not audited') < 0) fail('T9', 'panel ' + panel.slice(panel.indexOf('Tracker audit')));
           else if (panel.indexOf('Chapter 2: tracker stale') >= 0) fail('T9', 'absent rendered stale');
-          else pass('T9');
+          else {
+            novelData.chapters[1] = '';
+            if (gen2) gen2.value = emptyChapter;
+            if (edit2) edit2.value = emptyChapter;
+            await runChapterContinuityAudit(2, { silent: true });
+            const row2 = novelData.continuityTracker.chapters[1];
+            const hash2 = row2 && row2.auditedTextHash;
+            if (novelData.chapters[1] !== emptyChapter) fail('T9', 'empty chapter held ' + JSON.stringify(novelData.chapters[1]));
+            else if (hash2 !== nwTextHash(emptyChapter)) fail('T9', 'empty chapter hash ' + hash2 + ' expected ' + nwTextHash(emptyChapter));
+            else pass('T9');
+          }
         }
 
-        novelData.chapters[0] = text;
+        novelData.chapters[0] = edited;
         const exported = stripSecretFields(JSON.parse(JSON.stringify(novelData)));
         const removed = findRemovedSecretFields(novelData);
         const imported = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: JSON.parse(JSON.stringify(exported)) });
@@ -701,7 +712,7 @@ const names = {
   T7: 'call order is draft, draft, revise, audit and the hash is of the revised text',
   T8: 'Generate All locks per-chapter actions and the estimate uses full chapter length',
   T8lock: 'replay flag is not written while the batch lock is held',
-  T9: 'audit hashes saved chapter text, not the textarea; tracker is not stale; a real edit is stale; whitespace is not; absent is not audited',
+  T9: 'audit keeps the edited textarea as the chapter and hashes that text; tracker is audited; a real edit is stale; whitespace is not; absent is not audited; an empty chapter keeps its edited text and hash',
   T9b: 'export then import keeps the hash; a non-string is kept with a warning',
   T9c: 'regression guard: migrate, normalize, and resize do not invent auditedTextHash'
 };
@@ -722,6 +733,7 @@ const mutations = [
   ['MUT-copy-replay', 'var internal = nwScoreReplayInternal(text);\n\t\t\tvar prevScore = nwScoreReplayPrev(text, prevText);', "var internal = { status: 'PASS', internal: { shared: 0, restartAt: null } };\n\t\t\tvar prevScore = { status: 'PASS', shared: 0, openingCopyWords: 0 };", 'T6'],
   ['MUT-audit-before-revise', "\t\t    try {\n\t\t        // SLOT8C: draft-only skip lives in ensureQualityAfterGenerate (novelData.skipAutoRevision)\n\t\t        await ensureQualityAfterGenerate(chapterNum);\n\t\t    } catch (qgErr) {\n\t\t        console.warn('qualityGate/revise after generateChapter', qgErr);\n\t\t        // In a batch this goes to the status line and does not stop the run.\n\t\t        if (opts.batch && typeof nwNotify === 'function') nwNotify('Chapter ' + chapterNum + ' quality gate/revise error (run continues): ' + String((qgErr && qgErr.message) || qgErr), { level: 'warn' });\n\t\t    }\n\t\t    await nwRunChapterAuditNow();", "\t\t    await nwRunChapterAuditNow();\n\t\t    try {\n\t\t        // SLOT8C: draft-only skip lives in ensureQualityAfterGenerate (novelData.skipAutoRevision)\n\t\t        await ensureQualityAfterGenerate(chapterNum);\n\t\t    } catch (qgErr) {\n\t\t        console.warn('qualityGate/revise after generateChapter', qgErr);\n\t\t        // In a batch this goes to the status line and does not stop the run.\n\t\t        if (opts.batch && typeof nwNotify === 'function') nwNotify('Chapter ' + chapterNum + ' quality gate/revise error (run continues): ' + String((qgErr && qgErr.message) || qgErr), { level: 'warn' });\n\t\t    }", 'T7'],
   ['MUT-flag-outside-lock', 'var allowed = !!opts.batch || !locked;\n\t\t\tif (!allowed) return { refused: true };', 'var allowed = true;\n\t\t\tif (!allowed) return { refused: true };', 'T8lock'],
+  ['MUT-audit-restore-old', "collectData();\n\t\t\tconst savedChapterText = (novelData.chapters && novelData.chapters[chapterNum - 1] == null) ? '' : String((novelData.chapters || [])[chapterNum - 1] || '');", "const savedChapterText = (novelData.chapters && novelData.chapters[chapterNum - 1] == null) ? '' : String((novelData.chapters || [])[chapterNum - 1] || '');\n\t\t\tcollectData();\n\t\t\tif (Array.isArray(novelData.chapters) && chapterNum >= 1) novelData.chapters[chapterNum - 1] = savedChapterText;", 'T9'],
   ['MUT-drop-hash', 'chapterAudit.auditedTextHash = nwAuditedTextHash(savedChapterText);', '', 'T9'],
   ['MUT-raw-hash', 'function nwAuditedTextHash(text) {\n\t\t\treturn nwTextHash(text);\n\t\t}', "function nwAuditedTextHash(text) {\n\t\t\tvar str = String(text == null ? '' : text);\n\t\t\tvar h = 0x811c9dc5;\n\t\t\tfor (var i = 0; i < str.length; i++) {\n\t\t\t\th ^= str.charCodeAt(i);\n\t\t\t\th = Math.imul(h, 0x01000193);\n\t\t\t}\n\t\t\treturn (h >>> 0).toString(16).padStart(8, '0');\n\t\t}", 'T9'],
   ['MUT-strip-hash', '.filter(([name, nested]) => !isSecretField(name) && !isSensitiveUrl(nested))', ".filter(([name, nested]) => name !== 'auditedTextHash' && !isSecretField(name) && !isSensitiveUrl(nested))", 'T9b'],
