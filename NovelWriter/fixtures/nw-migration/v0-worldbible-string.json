@@ -1,0 +1,55 @@
+{
+  "input": {
+    "title": "WB",
+    "genre": "scifi",
+    "numChapters": 1,
+    "worldBible": "A string bible of the wet dock.",
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed."
+      }
+    ],
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      }
+    ]
+  },
+  "expectedAddedKeys": [
+    "nwSchemaVersion",
+    "storyWorld",
+    "chapterIds",
+    "chapterScenes[0]",
+    "chapterRequirements[0]",
+    "chapterFingerprints[0]",
+    "characters[0].id",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "storyWorld = {version, notes} only"
+}

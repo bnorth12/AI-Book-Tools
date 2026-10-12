@@ -1,0 +1,73 @@
+{
+  "input": {
+    "title": "V2RSZ",
+    "genre": "scifi",
+    "numChapters": 2,
+    "nwSchemaVersion": 2,
+    "futureKey": {
+      "keep": true,
+      "kind": "v2-only"
+    },
+    "chapters": [
+      "Chapter 1 v2 prose. Mira counted the relay clicks.",
+      "Chapter 2 v2 prose. The dock clock disagreed."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y"
+      }
+    ],
+    "chapterIds": [
+      "v2_keep_a",
+      "v2_keep_b"
+    ],
+    "chapterRequiredFacts": [
+      { "items": [{ "id": "f-a", "text": "fact-a" }] },
+      { "items": [{ "id": "f-b", "text": "fact-b" }] }
+    ],
+    "chapterRequirements": [
+      { "cast": ["mira"], "setting": "a" },
+      { "cast": ["mira"], "setting": "b" }
+    ],
+    "chapterFingerprints": [
+      { "textHash": "fp-a" },
+      { "textHash": "fp-b" }
+    ],
+    "chapterWritingPlans": [
+      { "builtFrom": "plan-a" },
+      { "builtFrom": "plan-b" }
+    ],
+    "chapterScenes": [
+      {
+        "version": 2,
+        "textHash": "a",
+        "extraV2": true,
+        "scenes": [
+          {
+            "id": "sc_a1",
+            "chapterId": "v2_keep_a",
+            "order": 1
+          }
+        ]
+      },
+      {
+        "version": 2,
+        "textHash": "b",
+        "extraV2": true,
+        "scenes": [
+          {
+            "id": "sc_b1",
+            "chapterId": "v2_keep_b",
+            "order": 1
+          }
+        ]
+      }
+    ]
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "helper: v2 book resize must leave chapterIds and S1 per-chapter arrays untouched"
+}

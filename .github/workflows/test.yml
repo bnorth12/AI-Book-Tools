@@ -38,6 +38,18 @@ jobs:
       - name: NovelWriter retention smoke
         run: npm run test:smoke:nw-retention
 
+      - name: NovelWriter S1 migration smoke
+        run: npm run test:smoke:nw-migration
+
+      - name: NovelWriter S1 Setup lock smoke (LOCK:setup-midrun, LOCK:pause-held)
+        run: npm run test:smoke:nw-setup-lock
+
+      - name: NovelWriter S1 pinned-fixture smoke
+        run: npm run test:smoke:nw-s1-pin
+
+      - name: NovelWriter QCAT harness smoke (QH:23 REQ-SCH-07)
+        run: npm run test:smoke:nw-qcat-harness
+
       - name: Lint HTML files
         run: |
           npx htmlhint "**/*.html"

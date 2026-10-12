@@ -1,0 +1,61 @@
+{
+  "input": {
+    "title": "SP",
+    "genre": "scifi",
+    "numChapters": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed."
+      }
+    ],
+    "subplots": [
+      {
+        "title": "Clock",
+        "summary": "Dock clock vs relay log.",
+        "extra": "keep-me"
+      }
+    ],
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      }
+    ]
+  },
+  "expectedAddedKeys": [
+    "nwSchemaVersion",
+    "subplotsMeta[0]",
+    "chapterIds",
+    "chapterScenes[0]",
+    "chapterRequirements[0]",
+    "chapterFingerprints[0]",
+    "characters[0].id",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "object copied to subplotsMeta first"
+}

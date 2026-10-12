@@ -1,0 +1,24 @@
+{
+  "input": {
+    "title": "FNG",
+    "genre": "scifi",
+    "numChapters": 2,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      "",
+      ""
+    ],
+    "chapterFlags": [
+      null,
+      {
+        "coverageFailed": true
+      }
+    ]
+  },
+  "expectedAddedKeys": [
+    "chapterIds",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "null kept, read as absent, no warning"
+}

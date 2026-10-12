@@ -1,0 +1,113 @@
+{
+  "input": {
+    "title": "RFP",
+    "genre": "scifi",
+    "numChapters": 2,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 2 original prose. The dock clock disagreed with the log after the first choice."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed."
+      }
+    ],
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      },
+      {
+        "chapter": 2,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      }
+    ],
+    "chapterFactChecks": [
+      [
+        {
+          "id": "inc1",
+          "label": "relay",
+          "kind": "include",
+          "match": "phrase",
+          "pattern": "relay"
+        }
+      ],
+      [
+        {
+          "id": "inc2",
+          "label": "clock",
+          "kind": "include",
+          "match": "phrase",
+          "pattern": "clock"
+        }
+      ]
+    ],
+    "chapterRequiredFacts": [
+      {
+        "items": [
+          {
+            "id": "keep-me",
+            "text": "already here",
+            "mustInclude": true,
+            "source": "user"
+          }
+        ]
+      }
+    ]
+  },
+  "expectedAddedKeys": [
+    "nwSchemaVersion",
+    "chapterIds",
+    "chapterScenes[0]",
+    "chapterScenes[1]",
+    "chapterRequiredFacts[1]",
+    "chapterRequirements[0]",
+    "chapterRequirements[1]",
+    "chapterFingerprints[0]",
+    "chapterFingerprints[1]",
+    "characters[0].id",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "entry [0] deep-equal"
+}

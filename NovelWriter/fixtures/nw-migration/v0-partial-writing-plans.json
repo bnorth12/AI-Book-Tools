@@ -1,0 +1,144 @@
+{
+  "input": {
+    "title": "PWP",
+    "genre": "scifi",
+    "numChapters": 4,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 2 original prose. The dock clock disagreed with the log after the first choice.",
+      "",
+      ""
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed."
+      }
+    ],
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      },
+      {
+        "chapter": 2,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      },
+      {
+        "chapter": 3,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      },
+      {
+        "chapter": 4,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      }
+    ],
+    "chapterWritingPlans": [
+      {
+        "items": [
+          {
+            "kind": "beat",
+            "label": "a"
+          }
+        ],
+        "extraPlan": true
+      },
+      {
+        "items": []
+      }
+    ]
+  },
+  "expectedAddedKeys": [
+    "nwSchemaVersion",
+    "chapterIds",
+    "chapterScenes[0]",
+    "chapterScenes[1]",
+    "chapterRequirements[0]",
+    "chapterRequirements[1]",
+    "chapterRequirements[2]",
+    "chapterRequirements[3]",
+    "chapterFingerprints[0]",
+    "chapterFingerprints[1]",
+    "characters[0].id",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "plans untouched, no padding"
+}

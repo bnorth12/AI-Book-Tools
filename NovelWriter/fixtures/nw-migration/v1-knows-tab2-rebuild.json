@@ -1,0 +1,37 @@
+{
+  "input": {
+    "title": "K2",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      ""
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "Dock tech.",
+        "arc": "Commit.",
+        "extraChar": "keep",
+        "knows": [
+          {
+            "conceptId": "c1",
+            "learnedIn": 1,
+            "locked": true,
+            "source": "user"
+          },
+          {
+            "conceptId": "c2",
+            "learnedIn": 1,
+            "extraKnows": "keep",
+            "source": "ai"
+          }
+        ]
+      }
+    ]
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "helper: Tab 2 DOM rebuild via normalizeCharacterItem"
+}
