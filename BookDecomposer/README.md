@@ -57,6 +57,10 @@ This tool now exports and imports the shared schema wrapper in `schema/novel-sch
 
 Standard Grok models are sent through `https://api.x.ai/v1/chat/completions`. Multi-agent models are sent through `https://api.x.ai/v1/responses`.
 
+## API Key Safety
+
+JSON exports omit API keys and other secret fields, and imported files cannot add them to the session. Older exports may contain your API key; if you shared one, rotate it at [console.x.ai](https://console.x.ai).
+
 ## UI Unification Conventions
 
 - Uses shared shell token classes (`ui-shell`, `ui-nav`, `ui-tab-btn`, `ui-panel`) for cross-tool consistency.

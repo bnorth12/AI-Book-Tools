@@ -297,12 +297,31 @@ test('NW-REG-07 Update Chapter revises chapter content via mocked API', async ({
 test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive fields', async ({ page }) => {
   await gotoApp(page);
 
-  await page.evaluate(() => {
-    document.getElementById('apiKey').value = 'sk-secret-key-should-not-export';
+  const proseFixture = 'She kept the #secret close. Who holds the key?key=yes. The word password stayed in the sentence.';
+  await page.evaluate((prose) => {
+    document.getElementById('apiKey').value = 'xai-TESTKEY-123';
     document.getElementById('title').value = 'Schema Validation Novel';
-    document.getElementById('storyArc').value = 'A test of schema compliance.';
+    document.getElementById('storyArc').value = prose;
     document.getElementById('genre').value = 'scifi';
-  });
+    document.getElementById('maxTokens').value = '4321';
+    novelData.tokenUsage = { calls: 2, promptTokens: 17 };
+    novelData.key = 'sort-key';
+    novelData.token = 'ordinary-token';
+    novelData.API_KEY = 'xai-TESTKEY-123';
+    novelData.privateKey = 'xai-TESTKEY-123';
+    novelData.endpointWithCredentials = `https://${'user:pass'}@example.com/service`;
+    novelData.endpointWithUsername = 'https://user@example.com/service';
+    novelData.endpointWithPassword = `https://${':pass'}@example.com/service`;
+    novelData.endpointWithToken = 'https://example.com/service?token=hidden';
+    novelData.endpointWithFragment = 'https://example.com/callback#access_token=hidden';
+    novelData.serviceSecret = 'hidden-secret';
+    novelData.savedPassword = 'hidden-password';
+    novelData.bearerToken = 'hidden-bearer';
+    novelData.promptTokens = 17;
+    novelData.agentKey = 'fetchAuthors';
+    requestLog.tokenUsage = '17 tokens';
+    requestLog.tokenUsageDetail = { promptTokens: 17 };
+  }, proseFixture);
 
   // Intercept the download by patching Blob/URL.createObjectURL in-page
   const exportedJson = await page.evaluate(() => {
@@ -320,6 +339,10 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
   });
 
   const parsed = JSON.parse(exportedJson);
+  expect(exportedJson).not.toContain('xai-TESTKEY-123');
+  expect(exportedJson).not.toContain('user:pass@');
+  expect(exportedJson).not.toContain('token=hidden');
+  expect(exportedJson).not.toContain('access_token=hidden');
 
   // Required schema envelope fields
   expect(parsed.schemaVersion).toBe('1.0');
@@ -333,15 +356,43 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
   expect(parsed.novelData).toHaveProperty('title', 'Schema Validation Novel');
   expect(parsed.novelData).toHaveProperty('genre');
   expect(parsed.novelData).toHaveProperty('storyArc');
+  expect(parsed.novelData.storyArc).toBe(proseFixture);
+  expect(await page.evaluate((prose) => {
+    const url = new URL(prose, window.location.href);
+    const fragment = url.hash.slice(1);
+    const params = new URLSearchParams(fragment.includes('?') ? fragment.slice(fragment.indexOf('?') + 1) : fragment);
+    return params.has('key');
+  }, proseFixture)).toBe(true);
   expect(Array.isArray(parsed.novelData.characters)).toBe(true);
   expect(Array.isArray(parsed.novelData.subplots)).toBe(true);
   expect(Array.isArray(parsed.novelData.chapters)).toBe(true);
   expect(parsed.novelData).toHaveProperty('requestLog');
+  expect(parsed.novelData).toMatchObject({
+    key: 'sort-key',
+    token: 'ordinary-token',
+    tokenUsage: { calls: 2, promptTokens: 17 },
+    maxTokens: 4321,
+    promptTokens: 17,
+    agentKey: 'fetchAuthors',
+    requestLog: {
+      tokenUsage: '17 tokens',
+      tokenUsageDetail: { promptTokens: 17 },
+    },
+  });
+  expect(parsed.novelData).not.toHaveProperty('API_KEY');
+  expect(parsed.novelData).not.toHaveProperty('privateKey');
+  expect(parsed.novelData).not.toHaveProperty('endpointWithCredentials');
+  expect(parsed.novelData).not.toHaveProperty('endpointWithUsername');
+  expect(parsed.novelData).not.toHaveProperty('endpointWithPassword');
+  expect(parsed.novelData).not.toHaveProperty('endpointWithToken');
+  expect(parsed.novelData).not.toHaveProperty('endpointWithFragment');
+  expect(parsed.novelData).not.toHaveProperty('serviceSecret');
+  expect(parsed.novelData).not.toHaveProperty('savedPassword');
+  expect(parsed.novelData).not.toHaveProperty('bearerToken');
 
   // Sensitive and operational fields must NOT be present in novelData
   expect(parsed.novelData).not.toHaveProperty('apiKey');
   expect(parsed.novelData).not.toHaveProperty('model');
-  expect(parsed.novelData).not.toHaveProperty('maxTokens');
   expect(parsed.novelData).not.toHaveProperty('chapterImprovements');
   expect(parsed.novelData).not.toHaveProperty('bookImprovements');
   expect(parsed.novelData).not.toHaveProperty('authors');
@@ -352,6 +403,110 @@ test('NW-REG-08 Export Session produces schema-compliant JSON without sensitive 
 
   // requestLog must NOT be duplicated at root level
   expect(parsed).not.toHaveProperty('requestLog');
+});
+
+test('NW-REG-10 Import Session ignores an API key in the file', async ({ page }) => {
+  await gotoApp(page);
+  const proseFixture = 'She kept the #secret close. Who holds the key?key=yes. The word password stayed in the sentence.';
+  const importNotices = [];
+  page.on('dialog', async dialog => {
+    importNotices.push(dialog.message());
+    await dialog.accept();
+  });
+  await page.locator('#apiKey').fill('existing-user-key');
+
+  await page.locator('#importFile').setInputFiles({
+    name: 'session-with-key.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      schemaVersion: '1.0',
+      sourceTool: 'NovelWriter',
+      sourceVersion: '1.0.0',
+      novelData: {
+        title: 'Imported without credentials',
+        genre: 'scifi',
+        storyArc: proseFixture,
+        chapters: [],
+        apiKey: 'xai-TESTKEY-123',
+        bearer: 'xai-TESTKEY-123',
+        API_KEY: 'xai-TESTKEY-123',
+        privateKey: 'xai-TESTKEY-123',
+        endpoint: 'https://example.com/service?access_token=hidden',
+        endpointWithUsername: 'https://user@example.com/service',
+        endpointWithPassword: `https://${':pass'}@example.com/service`,
+        callback: 'https://example.com/callback#access_token=hidden',
+        serviceSecret: 'hidden-secret',
+        savedPassword: 'hidden-password',
+        bearerToken: 'hidden-bearer',
+        key: 'sort-key',
+        token: 'ordinary-token',
+        tokenUsage: { calls: 2, promptTokens: 17 },
+        maxTokens: 4321,
+        promptTokens: 17,
+        agentKey: 'fetchAuthors',
+      },
+      requestLog: {
+        apiKey: 'xai-TESTKEY-123',
+        authorization: 'xai-TESTKEY-123',
+        tokenUsage: '17 tokens',
+        tokenUsageDetail: { promptTokens: 17 },
+      },
+    })),
+  });
+
+  await expect(page.locator('#title')).toHaveValue('Imported without credentials');
+  await expect(page.locator('#storyArc')).toHaveValue(proseFixture);
+  await expect(page.locator('#apiKey')).toHaveValue('existing-user-key');
+  await expect(page.locator('#maxTokens')).toHaveValue('4321');
+  expect(await page.evaluate(() => ({
+    hasApiKey: Object.hasOwn(novelData, 'apiKey'),
+    apiKey: novelData.apiKey,
+    hasBearer: Object.hasOwn(novelData, 'bearer'),
+    hasApiKeyUpper: Object.hasOwn(novelData, 'API_KEY'),
+    hasPrivateKey: Object.hasOwn(novelData, 'privateKey'),
+    hasEndpoint: Object.hasOwn(novelData, 'endpoint'),
+    hasEndpointWithUsername: Object.hasOwn(novelData, 'endpointWithUsername'),
+    hasEndpointWithPassword: Object.hasOwn(novelData, 'endpointWithPassword'),
+    hasCallback: Object.hasOwn(novelData, 'callback'),
+    hasServiceSecret: Object.hasOwn(novelData, 'serviceSecret'),
+    hasSavedPassword: Object.hasOwn(novelData, 'savedPassword'),
+    hasBearerToken: Object.hasOwn(novelData, 'bearerToken'),
+    key: novelData.key,
+    token: novelData.token,
+    tokenUsage: novelData.tokenUsage,
+    promptTokens: novelData.promptTokens,
+    agentKey: novelData.agentKey,
+    requestLog,
+  }))).toMatchObject({
+    hasApiKey: true,
+    apiKey: 'existing-user-key',
+    hasBearer: false,
+    hasApiKeyUpper: false,
+    hasPrivateKey: false,
+    hasEndpoint: false,
+    hasEndpointWithUsername: false,
+    hasEndpointWithPassword: false,
+    hasCallback: false,
+    hasServiceSecret: false,
+    hasSavedPassword: false,
+    hasBearerToken: false,
+    key: 'sort-key',
+    token: 'ordinary-token',
+    tokenUsage: { calls: 2, promptTokens: 17 },
+    promptTokens: 17,
+    agentKey: 'fetchAuthors',
+    requestLog: {
+      tokenUsage: '17 tokens',
+      tokenUsageDetail: { promptTokens: 17 },
+    },
+  });
+  expect(importNotices.some(message => message.includes('apiKey') && message.includes('endpoint') && message.includes('console.x.ai'))).toBe(true);
+  const checkpoint = await page.evaluate(async () => {
+    novelData.batchRun = { id: 'prose-retention-smoke' };
+    await nwBatchCheckpoint(true);
+    return nwBatchFindInterrupted();
+  });
+  expect(checkpoint.novelData.storyArc).toBe(proseFixture);
 });
 
 // --- Execution HUD state transitions ---

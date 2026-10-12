@@ -10631,6 +10631,55 @@ return c && c.name && c.backstory && c.arc; });
 		    // ---- NW.GEN: Session Import/Export Functions ----
 		    // NW.GEN.SES.1: exportSession() SHALL serialise novelData into a schema-versioned JSON envelope (schemaVersion: '1.0') and trigger a file download.
 		    // NW.GEN.SES.2: importSession() SHALL accept a JSON file, detect whether it is an envelope or bare novelData, normalise it, and restore the full UI state.
+		    const SECRET_FIELD_DENYLIST = {
+		        exact: ["apiKey", "api_key", "accessToken", "access_token", "authToken", "authorization", "privateKey"],
+		        patterns: [/secret/i, /password/i, /^bearer/i]
+		    };
+
+		    function isSecretField(name) {
+		        const normalized = String(name).toLowerCase();
+		        return SECRET_FIELD_DENYLIST.exact.some(field => field.toLowerCase() === normalized)
+		            || SECRET_FIELD_DENYLIST.patterns.some(pattern => pattern.test(normalized));
+		    }
+
+		    function isSensitiveUrl(value) {
+		        if (typeof value !== 'string') return false;
+		        try {
+		            const url = new URL(value);
+		            if (url.username || url.password) return true;
+		            const fragment = url.hash.slice(1);
+		            const fragmentParams = fragment.includes('=')
+		                ? new URLSearchParams(fragment.includes('?') ? fragment.slice(fragment.indexOf('?') + 1) : fragment)
+		                : new URLSearchParams();
+		            return [...url.searchParams.keys(), ...fragmentParams.keys()].some(name =>
+		                ['key', 'token'].includes(name.toLowerCase()) || isSecretField(name)
+		            );
+		        } catch (error) {
+		            return false;
+		        }
+		    }
+
+		    function findRemovedSecretFields(value, fieldName = '') {
+		        if (Array.isArray(value)) {
+		            return [...new Set(value.flatMap(item => isSensitiveUrl(item)
+		                ? [fieldName || 'URL value']
+		                : findRemovedSecretFields(item, fieldName)))];
+		        }
+		        if (!value || typeof value !== 'object') return [];
+		        return [...new Set(Object.entries(value).flatMap(([name, nested]) => {
+		            if (isSecretField(name) || isSensitiveUrl(nested)) return [name];
+		            return findRemovedSecretFields(nested, name);
+		        }))];
+		    }
+
+		    function stripSecretFields(value) {
+		        if (Array.isArray(value)) return Array.from(value, item => isSensitiveUrl(item) ? null : stripSecretFields(item));
+		        if (!value || typeof value !== 'object') return value;
+		        return Object.fromEntries(Object.entries(value)
+		            .filter(([name, nested]) => !isSecretField(name) && !isSensitiveUrl(nested))
+		            .map(([name, nested]) => [name, stripSecretFields(nested)]));
+		    }
+
 		    // Export the entire session as JSON using the shared schema envelope.
 			function exportSession() {
 			    collectData();
@@ -10655,13 +10704,12 @@ return c && c.name && c.backstory && c.arc; });
 		    const {
 		        apiKey: _apiKey,
 		        model: _model,
-		        maxTokens: _maxTokens,
 		        authors: _authors,
 		        bookImprovements: _bookImprovements,
 		        chapterImprovements: _chapterImprovements,
 		        ...exportableNovelData
 		    } = novelData;
-		    const sessionData = {
+		    const sessionData = stripSecretFields({
 			        schemaVersion: '1.0',
 			        sourceTool: 'NovelWriter',
 			        sourceVersion: APP_VERSION,
@@ -10670,9 +10718,9 @@ return c && c.name && c.backstory && c.arc; });
 			            ...exportableNovelData,
 			            requestLog: { ...requestLog }
 			        }
-			    };
+			    });
 			    if (typeof nwTimingExportSnapshot === 'function') sessionData.nwTiming = nwTimingExportSnapshot();
-			    const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json;charset=utf-8' });
+			    const blob = new Blob([JSON.stringify(stripSecretFields(sessionData), null, 2)], { type: 'application/json;charset=utf-8' });
 			    const url = window.URL.createObjectURL(blob);
 			    const a = document.createElement('a');
 			    a.href = url;
@@ -10691,6 +10739,10 @@ return c && c.name && c.backstory && c.arc; });
 		// Validate and normalize incoming session payloads.
 		function normalizeImportedSessionData(rawData) {
 		    const warnings = [];
+		    const removedFields = findRemovedSecretFields(rawData);
+		    if (removedFields.length) {
+		        warnings.push(`Sensitive fields removed: ${removedFields.join(', ')}. If the file was shared, rotate your API key at console.x.ai.`);
+		    }
 		    const isSchemaEnvelope = rawData && typeof rawData === 'object' && rawData.schemaVersion === '1.0' && rawData.novelData && typeof rawData.novelData === 'object';
 		    const isLegacyEnvelope = rawData && typeof rawData === 'object' && rawData.novelData && typeof rawData.novelData === 'object';
 		    const isBareLegacy = rawData && typeof rawData === 'object' && typeof rawData.genre === 'string' && Array.isArray(rawData.chapters);
@@ -10719,6 +10771,8 @@ return c && c.name && c.backstory && c.arc; });
 		        warnings.push('Imported legacy bare NovelWriter data; migrated to current in-memory schema.');
 		    }
 
+		    normalizedNovelData = stripSecretFields(normalizedNovelData);
+		    normalizedRequestLog = stripSecretFields(normalizedRequestLog);
 		    const mergedNovelData = {
 		            ...novelData,
 		            ...normalizedNovelData,
@@ -10943,9 +10997,10 @@ return c && c.name && c.backstory && c.arc; });
 		            const rawSessionData = JSON.parse(e.target.result);
 		            const { novelData: importedNovelData, requestLog: importedRequestLog, importMode, warnings } = normalizeImportedSessionData(rawSessionData);
 		            const migratedNovelData = (typeof nwMigrateSession === 'function') ? nwMigrateSession(importedNovelData) : importedNovelData;
+		            const existingApiKey = document.getElementById('apiKey').value;
 		            // Slot 8b: nwTiming is envelope-level, display-only. Never merge into IndexedDB stats.
 		            if (typeof nwTimingState !== 'undefined') {
-		                nwTimingState.imported = rawSessionData && rawSessionData.nwTiming ? rawSessionData.nwTiming : null;
+		                nwTimingState.imported = rawSessionData && rawSessionData.nwTiming ? stripSecretFields(rawSessionData.nwTiming) : null;
 		            }
 		            const priorRunId = novelData && novelData.batchRun && novelData.batchRun.id;
 		            novelData = migratedNovelData;
@@ -10955,6 +11010,8 @@ return c && c.name && c.backstory && c.arc; });
 		            if (!novelData.batchRun && typeof nwBatchForgetRun === 'function') await nwBatchForgetRun(priorRunId);
 
 		            applySessionDataToUI();
+		            document.getElementById('apiKey').value = existingApiKey;
+		            novelData.apiKey = existingApiKey;
 
 		            // Run-less import: drop the previous book's custom cap so Generate All uses a fresh estimate.
 		            if (!novelData.batchRun) {
@@ -13613,10 +13670,9 @@ return c && c.name && c.backstory && c.arc; });
         function nwBatchCheckpoint(active) {
             var br = novelData.batchRun;
             br.updatedAt = new Date().toISOString();
-            var nd = JSON.parse(JSON.stringify(novelData));
-            delete nd.apiKey;
+            var nd = stripSecretFields(JSON.parse(JSON.stringify(novelData)));
             delete nd.batchRun;
-            var brCopy = JSON.parse(JSON.stringify(br));
+            var brCopy = stripSecretFields(JSON.parse(JSON.stringify(br)));
             delete brCopy.rejectedDraft; // session export only, never checkpointed
             if (typeof NW_6B_CHECKPOINT_COVERAGE_ACK !== 'undefined' && !NW_6B_CHECKPOINT_COVERAGE_ACK) delete brCopy.coverageAck;
             var rec = { key: br.id, savedAt: br.updatedAt, active: active !== false, novelData: nd, batchRun: brCopy };
@@ -14340,8 +14396,12 @@ return c && c.name && c.backstory && c.arc; });
             if (!rec) return false;
             var keyEl = nwBatchEl('apiKey');
             var apiKey = keyEl ? keyEl.value : '';
-            novelData = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: JSON.parse(JSON.stringify(rec.novelData)) }).novelData;
-            if (typeof nwMigrateSession === 'function') novelData = nwMigrateSession(novelData);
+            var restored = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: JSON.parse(JSON.stringify(rec.novelData)) });
+            if (restored.warnings && restored.warnings.length) {
+                console.warn('Checkpoint restore warnings:', restored.warnings);
+            }
+            var migratedNovelData = (typeof nwMigrateSession === 'function') ? nwMigrateSession(restored.novelData) : restored.novelData;
+            novelData = migratedNovelData;
             novelData.apiKey = apiKey;
             var br = novelData.batchRun = JSON.parse(JSON.stringify(rec.batchRun));
             var was = br.inFlight;
@@ -15606,5 +15666,3 @@ return c && c.name && c.backstory && c.arc; });
 	    <div id="nwToast" role="status" aria-live="polite" data-testid="nw-toast" hidden style="position: fixed; right: 1em; bottom: 1em; max-width: 32em; padding: 0.6em 0.9em; background: #333; color: #fff; border-radius: 4px; z-index: 10000;"></div>
 	</body>
 </html>
-
-

@@ -738,6 +738,28 @@ for (const file of fixtureFiles) {
   check('MIG:round-trip', 'export → import → deep-equal S1 keys including chapterScenes/chapterIds', r.eq === true, JSON.stringify({ before: r.before, after: r.after }).slice(0, 1200));
 }
 
+{
+  const r = await page.evaluate(() => {
+    const input = {
+      chapterIds: ['ch_aaaaaaaaaa', 'ch_bbbbbbbbbb'],
+      chapterScenes: [
+        { id: 'sc_cccccccccc', scenes: [{ id: 'sc_dddddddddd', chapterId: 'ch_aaaaaaaaaa', order: 1, span: [0, 10] }] },
+        null
+      ],
+      storyWorld: { version: 1, notes: 'keep me', concepts: [{ id: 'c1', name: 'Alpha' }] },
+      apiKey: 'xai-SHOULD-STRIP'
+    };
+    const out = stripSecretFields(JSON.parse(JSON.stringify(input)));
+    return {
+      idsEq: JSON.stringify(out.chapterIds) === JSON.stringify(input.chapterIds),
+      scenesEq: JSON.stringify(out.chapterScenes) === JSON.stringify(input.chapterScenes),
+      worldEq: JSON.stringify(out.storyWorld) === JSON.stringify(input.storyWorld),
+      hasApiKey: Object.prototype.hasOwnProperty.call(out, 'apiKey')
+    };
+  });
+  check('MIG:strip-s1-passthrough', 'stripSecretFields passes chapterIds, chapterScenes and storyWorld through unchanged', r.idsEq && r.scenesEq && r.worldEq && r.hasApiKey === false, JSON.stringify(r));
+}
+
 await page.close();
 
 {

@@ -31,6 +31,55 @@ let novelData = {
 };
 let isBookProcessed = false;
 
+const SECRET_FIELD_DENYLIST = {
+    exact: ["apiKey", "api_key", "accessToken", "access_token", "authToken", "authorization", "privateKey"],
+    patterns: [/secret/i, /password/i, /^bearer/i]
+};
+
+function isSecretField(name) {
+    const normalized = String(name).toLowerCase();
+    return SECRET_FIELD_DENYLIST.exact.some(field => field.toLowerCase() === normalized)
+        || SECRET_FIELD_DENYLIST.patterns.some(pattern => pattern.test(normalized));
+}
+
+function isSensitiveUrl(value) {
+    if (typeof value !== "string") return false;
+    try {
+        const url = new URL(value);
+        if (url.username || url.password) return true;
+        const fragment = url.hash.slice(1);
+        const fragmentParams = fragment.includes("=")
+            ? new URLSearchParams(fragment.includes("?") ? fragment.slice(fragment.indexOf("?") + 1) : fragment)
+            : new URLSearchParams();
+        return [...url.searchParams.keys(), ...fragmentParams.keys()].some(name =>
+            ["key", "token"].includes(name.toLowerCase()) || isSecretField(name)
+        );
+    } catch (error) {
+        return false;
+    }
+}
+
+function findRemovedSecretFields(value, fieldName = "") {
+    if (Array.isArray(value)) {
+        return [...new Set(value.flatMap(item => isSensitiveUrl(item)
+            ? [fieldName || "URL value"]
+            : findRemovedSecretFields(item, fieldName)))];
+    }
+    if (!value || typeof value !== "object") return [];
+    return [...new Set(Object.entries(value).flatMap(([name, nested]) => {
+        if (isSecretField(name) || isSensitiveUrl(nested)) return [name];
+        return findRemovedSecretFields(nested, name);
+    }))];
+}
+
+function stripSecretFields(value) {
+    if (Array.isArray(value)) return Array.from(value, item => isSensitiveUrl(item) ? null : stripSecretFields(item));
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value)
+        .filter(([name, nested]) => !isSecretField(name) && !isSensitiveUrl(nested))
+        .map(([name, nested]) => [name, stripSecretFields(nested)]));
+}
+
 function chunkText(text, chunkSize) {
     const chunks = [];
     for (let i = 0; i < text.length; i += chunkSize) {
@@ -398,12 +447,7 @@ function populateElementsTable() {
 }
 
 function generateJSON() {
-    const payload = {
-        schemaVersion: "1.0",
-        sourceTool: "BookDecomposer",
-        sourceVersion: "0.2.0",
-        novelData: novelData
-    };
+    const payload = buildSchemaPayload();
     document.getElementById("jsonOutput").textContent = JSON.stringify(payload, null, 2);
 }
 
@@ -412,7 +456,7 @@ function buildSchemaPayload() {
         schemaVersion: "1.0",
         sourceTool: "BookDecomposer",
         sourceVersion: "0.2.0",
-        novelData: novelData
+        novelData: stripSecretFields(novelData)
     };
 }
 
@@ -437,12 +481,14 @@ window.importJSON = function() {
         reader.onload = function(e) {
             try {
                 const raw = JSON.parse(e.target.result);
-                const incoming = raw && raw.novelData && typeof raw.novelData === "object" ? raw.novelData : raw;
+                const incomingData = raw && raw.novelData && typeof raw.novelData === "object" ? raw.novelData : raw;
+                const removedFields = findRemovedSecretFields(raw);
+                const incoming = stripSecretFields(incomingData);
                 if (!incoming || typeof incoming !== "object") {
                     throw new Error("Invalid JSON structure.");
                 }
 
-                novelData = {
+                novelData = stripSecretFields({
                     ...novelData,
                     ...incoming,
                     characters: Array.isArray(incoming.characters) ? incoming.characters : (novelData.characters || []),
@@ -458,7 +504,7 @@ window.importJSON = function() {
                         ...(novelData.requestLog || {}),
                         ...(incoming.requestLog && typeof incoming.requestLog === "object" ? incoming.requestLog : {})
                     }
-                };
+                });
 
                 document.getElementById("title").value = novelData.title || "";
                 populateChaptersTable();
@@ -466,6 +512,9 @@ window.importJSON = function() {
                 generateJSON();
                 isBookProcessed = true;
                 showTab(4);
+                if (removedFields.length) {
+                    alert(`Sensitive fields removed: ${removedFields.join(", ")}. If the file was shared, rotate your API key at console.x.ai.`);
+                }
             } catch (error) {
                 alert("Error importing JSON: " + error.message);
             }
