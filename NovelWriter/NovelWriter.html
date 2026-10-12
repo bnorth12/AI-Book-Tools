@@ -10304,10 +10304,8 @@ return c && c.name && c.backstory && c.arc; });
 
 		async function runChapterContinuityAudit(chapterNum, options = {}) {
 			const __c2ContEp = evidencePackPromptBlock({ goal: 'continuityAudit', chapter: chapterNum, tokenBudgetHint: 1200 });
-			// Hash the chapter saved before collectData. An unsaved textarea must not become the audited body.
-			const savedChapterText = (novelData.chapters && novelData.chapters[chapterNum - 1] == null) ? '' : String((novelData.chapters || [])[chapterNum - 1] || '');
 			collectData();
-			if (Array.isArray(novelData.chapters) && chapterNum >= 1) novelData.chapters[chapterNum - 1] = savedChapterText;
+			const savedChapterText = (novelData.chapters && novelData.chapters[chapterNum - 1] == null) ? '' : String((novelData.chapters || [])[chapterNum - 1] || '');
 		    // Agent Skill I/O pack (tab5.continuityAudit)
 		    window.__lastSkillPack = packSkillInputs('tab5.continuityAudit', { novelData: novelData, chapterNum: chapterNum });
 
