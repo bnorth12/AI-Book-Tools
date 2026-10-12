@@ -8,6 +8,7 @@
   "API_KEY": "REDACTED-TEST-VALUE",
   "novelData": {
     "title": "Uppercase Key Test",
+    "api_key": "REDACTED-TEST-VALUE",
     "story": {
       "book": {
         "id": "bk_uppercase_key",
@@ -15,6 +16,11 @@
       },
       "chapters": [],
       "scenes": []
+    }
+  },
+  "ext": {
+    "futureTool": {
+      "APIKEY": "REDACTED-TEST-VALUE"
     }
   }
 }

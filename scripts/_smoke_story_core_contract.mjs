@@ -31,11 +31,18 @@ const fixtures = new Map(
 );
 let schema = readJson(SCHEMA_PATH);
 
-if (mutation === 'M6') {
-  schema.properties.ext.additionalProperties = false;
+if (mutation === 'M1') schema.$defs.provenance.properties.source.enum.push('model');
+if (mutation === 'M2') schema.$defs.scene.required.splice(schema.$defs.scene.required.indexOf('breakApproved'), 1);
+if (mutation === 'M3') delete schema.$defs.noSecrets.allOf[1].then.items;
+if (mutation === 'M4') {
+  schema.$defs.noSecrets.allOf[0].then.patternProperties = {
+    '^(?:api[_-]?key|apikey|secret|client[_-]?secret|password|passwd|authorization|bearer|access[_-]?token|refresh[_-]?token|id[_-]?token|private[_-]?key|x-api-key)$': false
+  };
 }
+if (mutation === 'M6') schema.properties.ext.additionalProperties = false;
 if (mutation === 'M7') {
-  schema.properties.novelData.properties.story.required.push('characters');
+  schema.$defs.story.properties.characters = { type: 'array' };
+  schema.$defs.story.required.push('characters');
 }
 
 function removeDenylistRef(node) {
@@ -48,13 +55,11 @@ function removeDenylistRef(node) {
 
 if (schemaMutation === 'drop-denylist') removeDenylistRef(schema);
 
-function valuesHaveSecretLookingText(value) {
-  if (typeof value === 'string') {
-    return value.includes('xai-') || value.includes('sk-') || value.includes('Bearer ');
-  }
-  if (Array.isArray(value)) return value.some(valuesHaveSecretLookingText);
-  if (value && typeof value === 'object') return Object.values(value).some(valuesHaveSecretLookingText);
-  return false;
+function secretLookingValues(value) {
+  if (typeof value === 'string') return [value].filter((item) => item.includes('xai-') || item.includes('sk-') || item.includes('Bearer '));
+  if (Array.isArray(value)) return value.flatMap(secretLookingValues);
+  if (value && typeof value === 'object') return Object.values(value).flatMap(secretLookingValues);
+  return [];
 }
 
 const permittedRedactionFiles = new Set([
@@ -66,9 +71,10 @@ const permittedRedactionFiles = new Set([
 ]);
 check(
   'schema and fixture values contain no secret-looking strings',
-  !valuesHaveSecretLookingText(schema) && [...fixtures].every(([name, value]) => {
-    if (!valuesHaveSecretLookingText(value)) return true;
-    return permittedRedactionFiles.has(name) && JSON.stringify(value).includes('REDACTED-TEST-VALUE');
+  secretLookingValues(schema).length === 0 && [...fixtures].every(([name, value]) => {
+    const suspicious = secretLookingValues(value);
+    if (suspicious.length === 0) return true;
+    return permittedRedactionFiles.has(name) && suspicious.every((item) => item.includes('REDACTED-TEST-VALUE'));
   })
 );
 
@@ -90,7 +96,7 @@ function expectValid(name, document) {
 function expectDenylisted(name, document, pointer) {
   const result = validate(document);
   const found = (validate.errors || []).some((error) => {
-    const key = error.params?.propertyName || error.params?.additionalProperty;
+    const key = error.params?.propertyName || error.params?.additionalProperty || error.params?.missingProperty;
     return error.instancePath === pointer || `${error.instancePath}/${key}` === pointer;
   });
   check(name, !result && found, result ? 'unexpectedly valid' : JSON.stringify(failDetails(validate.errors)));
@@ -131,7 +137,9 @@ const passFiles = [
   'hbf-core-only.json',
   'unknown-ext-roundtrip.json',
   'token-counts-pass.json',
-  'secret-import-stripped.expected.json'
+  'secret-import-stripped.expected.json',
+  'mutations/M6-unknown-extension.json',
+  'mutations/M7-hbf-no-fiction-fields.json'
 ];
 for (const name of passFiles) expectValid(`must pass ${name}`, fixtures.get(name));
 
@@ -150,33 +158,15 @@ const failFiles = [
 for (const [name, pointers] of failFiles) {
   for (const pointer of pointers) expectDenylisted(`must reject ${name} at ${pointer}`, fixtures.get(name), pointer);
 }
+expectDenylisted('mutation partner M1 rejects source model', fixtures.get('mutations/M1-source-model.json'), '/novelData/story/scenes/0/source');
+expectDenylisted('mutation partner M2 rejects missing breakApproved', fixtures.get('mutations/M2-missing-breakApproved.json'), '/novelData/story/scenes/0/breakApproved');
+expectDenylisted('mutation partner M3 rejects array apiKey', fixtures.get('mutations/M3-array-apiKey.json'), '/ext/novelWriter/requestLog/0/apiKey');
+for (const pointer of ['/API_KEY', '/novelData/api_key', '/ext/futureTool/APIKEY']) {
+  expectDenylisted(`mutation partner M4 rejects uppercase API_KEY variant at ${pointer}`, fixtures.get('mutations/M4-uppercase-API_KEY.json'), pointer);
+}
 
 const unknown = fixtures.get('unknown-ext-roundtrip.json');
 check('unknown extension and core keys survive round-trip', equal(JSON.parse(JSON.stringify(unknown)), unknown));
-
-function applyMutation(id) {
-  const fixture = {
-    M1: 'mutations/M1-source-model.json',
-    M2: 'mutations/M2-missing-breakApproved.json',
-    M3: 'mutations/M3-array-apiKey.json',
-    M4: 'mutations/M4-uppercase-API_KEY.json',
-    M6: 'mutations/M6-unknown-extension.json',
-    M7: 'mutations/M7-hbf-no-fiction-fields.json'
-  }[id];
-  if (!fixture) throw new Error(`Unknown mutation: ${id}`);
-  const document = fixtures.get(fixture);
-  if (id === 'M4') expectValid('mutation M4: uppercase API_KEY must be rejected', document);
-  else if (id === 'M3') expectValid('mutation M3: array apiKey must be rejected', document);
-  else if (id === 'M7') expectValid('mutation M7: nonfiction without fiction fields must remain valid', document);
-  else expectValid(`mutation ${id}: intentionally mutated valid fixture`, document);
-}
-
-if (schemaMutation === 'drop-denylist') {
-  for (const [name] of failFiles) expectDenylisted(`schema mutation: denylist remains active for ${name}`, fixtures.get(name), '');
-  expectDenylisted('schema mutation: M3 array apiKey remains blocked', fixtures.get('mutations/M3-array-apiKey.json'), '');
-} else if (mutation) {
-  applyMutation(mutation);
-}
 
 const failed = checks.filter((item) => !item.ok);
 console.log(`Story Core 2.0 contract smoke: ${checks.length - failed.length} passed, ${failed.length} failed`);

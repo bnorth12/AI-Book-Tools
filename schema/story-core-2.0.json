@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema/story-core-2.0.json",
+  "title": "AI Book Tools Story Core 2.0",
+  "description": "Additive shared book/story contract. Unknown fields are preserved, but secret-bearing keys and URL userinfo are forbidden.",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": "2.0"
+    },
+    "coreVersion": {
+      "type": "string"
+    },
+    "sourceTool": {
+      "type": "string"
+    },
+    "sourceVersion": {
+      "type": "string"
+    },
+    "exportedAt": {
+      "type": "string"
+    },
+    "workType": {
+      "enum": ["fiction", "nonfiction"]
+    },
+    "novelData": {
+      "type": "object",
+      "properties": {
+        "story": {
+          "$ref": "#/$defs/story"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ext": {
+      "type": "object",
+      "properties": {
+        "novelWriter": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "bookEditor": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "bookDecomposer": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "providerConfig": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "coreVersion",
+    "sourceTool",
+    "sourceVersion",
+    "exportedAt",
+    "workType",
+    "novelData"
+  ],
+  "allOf": [
+    {
+      "$ref": "#/$defs/noSecrets"
+    },
+    {
+      "if": {
+        "properties": {
+          "workType": {
+            "const": "fiction"
+          }
+        },
+        "required": ["workType"]
+      },
+      "then": {
+        "properties": {
+          "novelData": {
+            "type": "object",
+            "properties": {
+              "story": {
+                "$ref": "#/$defs/story"
+              }
+            },
+            "required": ["story"]
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "story": {
+      "type": "object",
+      "properties": {
+        "book": {
+          "$ref": "#/$defs/book"
+        },
+        "chapters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/chapter"
+          }
+        },
+        "scenes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scene"
+          }
+        }
+      },
+      "required": ["book"],
+      "additionalProperties": true
+    },
+    "book": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "synopsis": {
+          "type": ["string", "null"]
+        },
+        "seriesId": {
+          "type": ["string", "null"]
+        },
+        "bookNumber": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        }
+      },
+      "required": ["id", "title"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/provenance"
+        }
+      ],
+      "additionalProperties": true
+    },
+    "chapter": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^ch_"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": ["id"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/provenance"
+        }
+      ],
+      "additionalProperties": true
+    },
+    "scene": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^sc_"
+        },
+        "chapterId": {
+          "type": "string",
+          "pattern": "^ch_"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "breakApproved": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id", "chapterId", "order", "breakApproved"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/provenance"
+        }
+      ],
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "enum": ["ai", "user", "import"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "approved": {
+          "type": "boolean"
+        },
+        "approvedAt": {
+          "type": "string"
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "span": {
+          "type": "object",
+          "properties": {
+            "chapter": {
+              "type": "string"
+            },
+            "start": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "end": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": ["chapter", "start", "end"],
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "noSecrets": {
+      "allOf": [
+        {
+          "if": {
+            "type": "object"
+          },
+          "then": {
+            "type": "object",
+            "patternProperties": {
+              "^(?:[aA][pP][iI](?:[_-]?[kK][eE][yY])?|[sS][eE][cC][rR][eE][tT]|[cC][lL][iI][eE][nN][tT](?:[_-]?[sS][eE][cC][rR][eE][tT])|[pP][aA][sS][sS][wW][oO][rR][dD]|[pP][aA][sS][sS][wW][dD]|[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]|[bB][eE][aA][rR][eE][rR]|[aA][cC][cC][eE][sS][sS][_-]?[tT][oO][kK][eE][nN]|[rR][eE][fF][rR][eE][sS][hH][_-]?[tT][oO][kK][eE][nN]|[iI][dD][_-]?[tT][oO][kK][eE][nN]|[pP][rR][iI][vV][aA][tT][eE][_-]?[kK][eE][yY]|[xX]-[aA][pP][iI]-[kK][eE][yY])$": false
+            },
+            "properties": {
+              "endpoint": {
+                "allOf": [
+                  {
+                    "not": {
+                      "type": "string",
+                      "pattern": "://[^/@\\s]+:[^/@\\s]*@"
+                    }
+                  },
+                  {
+                    "$ref": "#/$defs/noSecrets"
+                  }
+                ]
+              },
+              "url": {
+                "allOf": [
+                  {
+                    "not": {
+                      "type": "string",
+                      "pattern": "://[^/@\\s]+:[^/@\\s]*@"
+                    }
+                  },
+                  {
+                    "$ref": "#/$defs/noSecrets"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/noSecrets"
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "array"
+          },
+          "then": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/noSecrets"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
