@@ -4,6 +4,7 @@
  * LOCK:pause-held + LOCK:M2 (release Setup lock on pause).
  * LOCK:M3 (Generate All disabled on `locked` instead of setupLocked).
  * LOCK:M4 (Cancel while paused does not release Setup lock).
+ * LOCK:pause-tracked-e2e-reset + LOCK:M5 (Tracked E2E/resetState ignore pause lock and wipe the book).
  * Full Tab 1-4/7 AI control list; nonzero matched-control count per tab (1b).
  * No network, no API key. Prints each check id PASS/FAIL.
  *
@@ -423,11 +424,95 @@ if (mutM4.ok) {
 globalThis.__LOCK_M4_RED = lockM4Red;
 console.log('LOCK:M4 red-run ' + JSON.stringify(lockM4Red));
 
+async function runPauseTrackedE2EReset(htmlPath) {
+  const page = await openPage(htmlPath);
+  const out = await page.evaluate(async (nd) => {
+    const h = window.__h;
+    h.cfg = {};
+    h.load(nd);
+    document.getElementById('setting').value = 'ORIGINAL SETTING: wet dock under failing lights, ozone and relay hum.';
+    document.getElementById('generalPlot').value = 'ORIGINAL PLOT: Mira names the mismatch, then pays the delayed cost.';
+    novelData.setting = 'ORIGINAL SETTING: wet dock under failing lights, ozone and relay hum.';
+    novelData.generalPlot = 'ORIGINAL PLOT: Mira names the mismatch, then pays the delayed cost.';
+    novelData.title = 'PAUSED-BOOK-TITLE';
+    document.getElementById('title').value = 'PAUSED-BOOK-TITLE';
+    const realCall = window.callAI;
+    window.callAI = async function () {
+      const g = window.__lastGenerateChapterGate;
+      const ch = g ? g.chapter : 0;
+      const part = /Part 2/.test(String(requestLog.status)) ? 2 : 1;
+      if (ch === 1 && part === 1) pauseBatchRun();
+      return realCall.apply(this, arguments);
+    };
+    const r = await generateAllChapters();
+    const snap = JSON.parse(JSON.stringify({
+      title: novelData.title,
+      setting: novelData.setting,
+      generalPlot: novelData.generalPlot,
+      chapters: novelData.chapters,
+      numChapters: novelData.numChapters,
+      batchReason: novelData.batchRun && novelData.batchRun.reason,
+      completed: (novelData.batchRun && novelData.batchRun.completed) || []
+    }));
+    document.getElementById('apiKey').value = 'smoke-placeholder-not-a-key';
+    const origReset = resetState;
+    let resetCalled = false;
+    resetState = function () {
+      resetCalled = true;
+      const ret = origReset.apply(this, arguments);
+      throw new Error('__smoke_stop_after_reset');
+    };
+    const toastEl = document.getElementById('nwToast');
+    h.toasts.length = 0;
+    if (toastEl) { toastEl.textContent = ''; toastEl.hidden = true; }
+    let te = null;
+    try { te = await runTrackedE2E(); } catch (e) { te = { threw: String(e && e.message || e) }; }
+    resetState = origReset;
+    const notice = String((toastEl && toastEl.textContent) || (h.toasts && h.toasts[0]) || '');
+    const after = {
+      title: novelData.title,
+      setting: novelData.setting,
+      generalPlot: novelData.generalPlot,
+      chapters: novelData.chapters,
+      numChapters: novelData.numChapters,
+      batchReason: novelData.batchRun && novelData.batchRun.reason,
+      completed: (novelData.batchRun && novelData.batchRun.completed) || []
+    };
+    return {
+      r: r && r.reason,
+      snap,
+      after,
+      resetCalled,
+      notice,
+      bookEq: JSON.stringify(snap) === JSON.stringify(after),
+      setupLocked: typeof nwBatchSetupIsLocked === 'function' && nwBatchSetupIsLocked(),
+      teNull: te == null,
+      teOk: te && te.ok,
+      teErrors: te && te.errors
+    };
+  }, ND);
+  await page.close();
+  return out;
+}
+
+const pauseTracked = await runPauseTrackedE2EReset(HTML_PATH);
+check('LOCK:pause-tracked-e2e-reset', 'paused run: Tracked E2E reset path refused with locked notice; book data unchanged', pauseTracked.bookEq === true && pauseTracked.resetCalled === false && pauseTracked.setupLocked === true && LOCKED_NOTICE_RE.test(pauseTracked.notice) && pauseTracked.snap.batchReason === 'paused' && pauseTracked.snap.title === 'PAUSED-BOOK-TITLE', JSON.stringify(pauseTracked));
+
+const mutM5 = mutateCopy('var NW_S1_RESET_RESPECTS_PAUSE_LOCK = true;', 'var NW_S1_RESET_RESPECTS_PAUSE_LOCK = false;');
+check('LOCK:M5', 'mutation flag present', mutM5.ok, mutM5.detail);
+let lockM5Red = null;
+if (mutM5.ok) {
+  lockM5Red = await runPauseTrackedE2EReset(mutM5.copy);
+  check('LOCK:M5', 'removing Tracked E2E/reset pause lock turns pause-tracked-e2e-reset red (book data wiped)', lockM5Red.resetCalled === true && lockM5Red.bookEq === false, JSON.stringify(lockM5Red));
+}
+globalThis.__LOCK_M5_RED = lockM5Red;
+console.log('LOCK:M5 red-run ' + JSON.stringify(lockM5Red));
+
 check('pageerror', 'no uncaught pageerror', pageErrors.length === 0, pageErrors.join(' | '));
 await browser.close();
 
 const failed = checks.filter((c) => !c.ok);
-const report = { passed: checks.filter((c) => c.ok).length, failed: failed.length, checks, pageErrors, lockM2Red: globalThis.__LOCK_M2_RED || null, lockM3Red: globalThis.__LOCK_M3_RED || null, lockM4Red: globalThis.__LOCK_M4_RED || null };
+const report = { passed: checks.filter((c) => c.ok).length, failed: failed.length, checks, pageErrors, lockM2Red: globalThis.__LOCK_M2_RED || null, lockM3Red: globalThis.__LOCK_M3_RED || null, lockM4Red: globalThis.__LOCK_M4_RED || null, lockM5Red: globalThis.__LOCK_M5_RED || null };
 fs.mkdirSync(OUT_DIR, { recursive: true });
 fs.writeFileSync(path.join(OUT_DIR, 'SMOKE_NW_SETUP_LOCK.json'), JSON.stringify(report, null, 2));
 console.log('NW setup-lock smoke: ' + report.passed + ' passed, ' + report.failed + ' failed');

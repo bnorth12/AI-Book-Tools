@@ -2232,6 +2232,8 @@ let activeAICallCount = 0;
 		var NW_S1_OPAQUE_ID_THROW_ON_COLLISION = true;
 		var NW_S1_RESIZE_SPLICE_ALL = true;
 		var NW_S1_RESIZE_CHAPTERS = true;
+		var NW_S1_RESIZE_SKIP_FUTURE = true;
+		var NW_S1_RESET_RESPECTS_PAUSE_LOCK = true;
 		var NW_S1_RESTORE_OPAQUE_RNG = true;
 		var NW_S1_WORLD_REMOVED_STALE = true;
 		var NW_S1_SPLICE_SCENES = true;
@@ -2278,6 +2280,13 @@ let activeAICallCount = 0;
 
 		function nwHasOwn(obj, key) {
 			return !!(obj && Object.prototype.hasOwnProperty.call(obj, key));
+		}
+
+		function nwSchemaVersion(nd) {
+			nd = nd || (typeof novelData !== 'undefined' ? novelData : null);
+			var v = nd && nd.nwSchemaVersion;
+			if (typeof v === 'number' && isFinite(v)) return v;
+			return 0;
 		}
 
 		function nwDeepClone(v) {
@@ -2833,6 +2842,12 @@ let activeAICallCount = 0;
 		function nwChapterIdsUpdate(op, n, extra, target) {
 			target = target || novelData;
 			if (nwOwnerLocked()) return { ok: false, reason: 'locked' };
+			if (op === 'resize') {
+				var ver = typeof nwSchemaVersion === 'function' ? nwSchemaVersion(target) : (target && target.nwSchemaVersion);
+				if ((typeof NW_S1_RESIZE_SKIP_FUTURE === 'undefined' || NW_S1_RESIZE_SKIP_FUTURE) && typeof ver === 'number' && ver > 1) {
+					return { ok: true, skipped: true };
+				}
+			}
 			var taken = nwTakenIds(target, 'ch_');
 			var ids = nwEnsureChapterIdsArray(target);
 			if (!ids) return { ok: false, reason: 'wrong-type' };
@@ -3237,6 +3252,7 @@ let activeAICallCount = 0;
 		window.nwDeriveChapterRequirements = nwDeriveChapterRequirements;
 		window.nwRequirementsSetMustNotInclude = nwRequirementsSetMustNotInclude;
 		window.nwBuildChapterFingerprint = nwBuildChapterFingerprint;
+		window.nwSchemaVersion = nwSchemaVersion;
 		window.nwChapterIdsUpdate = nwChapterIdsUpdate;
 		window.nwChapterScenesUpdate = nwChapterScenesUpdate;
 		window.nwMigrateSession = nwMigrateSession;
@@ -9156,6 +9172,13 @@ return c && c.name && c.backstory && c.arc; });
 		}
 
 		async function runTrackedE2E() {
+			if (typeof NW_S1_RESET_RESPECTS_PAUSE_LOCK === 'undefined' || NW_S1_RESET_RESPECTS_PAUSE_LOCK) {
+				if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Tracked E2E')) {
+					const cancelEl = document.getElementById('trackedE2EResult');
+					if (cancelEl) cancelEl.textContent = 'Tracked E2E refused - Generate All run is active or paused; novel unchanged.';
+					return null;
+				}
+			}
 			// Engineering gate: resetState() wipes the current novel and this run makes live API calls; ask first.
 			if (!window.confirm('This resets the current novel and makes live API calls. Continue?')) {
 				const cancelEl = document.getElementById('trackedE2EResult');
@@ -9240,6 +9263,9 @@ return c && c.name && c.backstory && c.arc; });
 						resetState();
 					} catch (e) {
 						log('resetState warning: ' + (e.message || e));
+						report.errors.push({ step: 'init', error: (e && e.message) ? e.message : String(e) });
+						_trackedFinalize(report);
+						return publish();
 					}
 				}
 				document.getElementById('apiKey').value = savedKey;
@@ -14977,8 +15003,13 @@ return c && c.name && c.backstory && c.arc; });
 
 		// Reset state for tests with real API setup
 		function resetState() {
-		    // Generate All single writer: never wipe the session under a running (or interrupted) batch.
-		    if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
+		    // Generate All single writer: never wipe the session under a running, interrupted, or paused batch.
+		    var pauseGuard = (typeof NW_S1_RESET_RESPECTS_PAUSE_LOCK === 'undefined' || NW_S1_RESET_RESPECTS_PAUSE_LOCK);
+		    var locked = pauseGuard
+		        ? (typeof nwBatchSetupIsLocked === 'function' && nwBatchSetupIsLocked())
+		        : (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked());
+		    if (locked) {
+		        if (typeof nwRefuseAiIfLocked === 'function') nwRefuseAiIfLocked('Reset state');
 		        throw new Error('resetState locked: Generate All Chapters run is active or awaiting restore.');
 		    }
 		    novelData = {

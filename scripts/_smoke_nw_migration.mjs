@@ -622,6 +622,34 @@ for (const file of fixtureFiles) {
 }
 
 {
+  const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v2-ids-resize.json'), 'utf8'));
+  const r = await page.evaluate((nd) => {
+    novelData = JSON.parse(JSON.stringify(nd));
+    const snap = () => JSON.parse(JSON.stringify({
+      ids: novelData.chapterIds,
+      scenes: novelData.chapterScenes,
+      facts: novelData.chapterRequiredFacts,
+      reqs: novelData.chapterRequirements,
+      fps: novelData.chapterFingerprints,
+      plans: novelData.chapterWritingPlans,
+      chapters: novelData.chapters,
+      numChapters: novelData.numChapters,
+      futureKey: novelData.futureKey,
+      ver: novelData.nwSchemaVersion
+    }));
+    const before = snap();
+    const ver = typeof nwSchemaVersion === 'function' ? nwSchemaVersion(novelData) : novelData.nwSchemaVersion;
+    nwSetOpaqueRng(nwSeededRng(0x53310001));
+    const up = nwChapterIdsUpdate('resize', 4);
+    const afterUp = snap();
+    const down = nwChapterIdsUpdate('resize', 1);
+    const afterDown = snap();
+    return { before, afterUp, afterDown, ver, up, down };
+  }, fx.input);
+  check('MIG:v2-ids-resize', 'resize leaves v2+ chapterIds and S1 per-chapter arrays untouched', r.ver === 2 && eq(r.afterUp, r.before) && eq(r.afterDown, r.before) && eq(r.before.ids, ['v2_keep_a', 'v2_keep_b']) && r.before.futureKey && r.before.futureKey.keep === true, JSON.stringify(r));
+}
+
+{
   const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v1-plan-stale.json'), 'utf8'));
   const r = await page.evaluate((nd) => {
     novelData = JSON.parse(JSON.stringify(nd));
@@ -976,6 +1004,28 @@ await page.close();
       return { down, grown };
     }, fx.input);
     check('MIG:v1-ids-resize:chapters-mutation', 'skipping chapters resize turns length-equal green red', r.down.chLen !== r.down.idLen || r.grown.chLen !== r.grown.idLen, JSON.stringify(r));
+    await p.close();
+  }
+}
+
+{
+  const mut = mutateCopy('var NW_S1_RESIZE_SKIP_FUTURE = true;', 'var NW_S1_RESIZE_SKIP_FUTURE = false;');
+  check('MIG:v2-ids-resize:mutation-flag', 'resize-skip-future flag present', mut.ok, mut.detail);
+  if (mut.ok) {
+    const p = await openPage(mut.copy);
+    const fx = JSON.parse(fs.readFileSync(path.join(FIX_DIR, 'v2-ids-resize.json'), 'utf8'));
+    const r = await p.evaluate((nd) => {
+      novelData = JSON.parse(JSON.stringify(nd));
+      const before = novelData.chapterIds.slice();
+      nwSetOpaqueRng(nwSeededRng(0x53310001));
+      nwChapterIdsUpdate('resize', 4);
+      const afterUp = novelData.chapterIds.slice();
+      nwChapterIdsUpdate('resize', 1);
+      const afterDown = novelData.chapterIds.slice();
+      return { before, afterUp, afterDown, chLen: (novelData.chapters || []).length };
+    }, fx.input);
+    console.log('MIG:v2-ids-resize-mutation red-run ' + JSON.stringify(r));
+    check('MIG:v2-ids-resize:mutation', 'resizing a v2 book writes chapterIds (turns leave-untouched green red)', r.afterUp.length !== r.before.length || r.afterDown.length !== r.before.length, JSON.stringify(r));
     await p.close();
   }
 }
