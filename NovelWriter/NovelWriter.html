@@ -509,6 +509,8 @@ Synced: 2026-04-19
 	        <label title="Writes each chapter from your outline and blueprint with no automatic rewrite passes. Use it when you want to revise by hand; quality scores are still shown."><input type="checkbox" id="skipAutoRevision"> Skip automatic revision passes (draft only)</label>
 	        <p id="draftOnlyNote" role="status" hidden>Draft-only mode is on: automatic revision passes are skipped.</p>
 	        <label title="One extra callAI per scored chapter to judge each blueprint beat as present, partial, or missing. Off by default. Does not rewrite text. Counted in the Generate All estimate and token ledger. Skipped when draft-only is on unless this box is also ticked."><input type="checkbox" id="aiBeatCheck" data-testid="nw-ai-beat-check"> AI beat check (1 extra call per chapter)</label>
+	        <label title="Before Generate All starts, build a writing plan for each planned chapter that does not already have a fresh plan. Off by default."><input type="checkbox" id="batchBuildPlansFirst" data-testid="nw-build-plans-first"> Build plans first</label>
+	        <label title="When Build plans first is on, each plan is one small AI call. Off uses the local heuristic and adds nothing to the estimate."><input type="checkbox" id="batchBuildPlansUseAI" data-testid="nw-build-plans-ai"> Build plans with AI</label>
 	        <button onclick="rebuildContinuityPackets()">Rebuild Continuity Packets</button>
 	        <button onclick="runContinuityAuditAll()">Run Continuity Audit (All Chapters)</button>
 	        <label for="continuityStatusPanel">Continuity Tracker:</label>
@@ -1148,7 +1150,7 @@ let activeAICallCount = 0;
 				const prev = nwActiveCall;
 				if (prev && prev.ticker) clearInterval(prev.ticker);
 			}
-			const c = { id: ++nwActiveCallSeq, operation: operation, label: label || '', startedAt: Date.now(), ticker: null, abortCtl: extra.abortCtl || null, taskType: extra.taskType || '', expectedMs: extra.expectedMs || 0, keepWaiting: false, userAbort: false, rejectAbort: perCall ? (extra.rejectAbort || null) : null };
+			const c = { id: ++nwActiveCallSeq, operation: operation, label: label || '', startedAt: Date.now(), ticker: null, abortCtl: extra.abortCtl || null, taskType: extra.taskType || '', expectedMs: extra.expectedMs || 0, keepWaiting: false, userAbort: false, rejectAbort: perCall ? (extra.rejectAbort || null) : null, chapter: extra.chapter != null ? extra.chapter : null };
 			if (perCall) nwActiveCalls.set(c.id, c);
 			nwActiveCall = c;
 			c.ticker = setInterval(nwRenderActiveCall, 1000);
@@ -1819,6 +1821,7 @@ let activeAICallCount = 0;
 			},
 			'tab5.generateChapter': {
 				id: 'tab5.generateChapter', tab: 'tab5', agentKey: 'generateChapter', name: 'Chapter Draft',
+				version: 'q1.1',
 				ability: 'Execute blueprint + outline obligations in prose. Do not invent a new throughline. Development must be earned from spine inputs; never pad-to-N.',
 				inputs: [
 					{ name: 'chapterNum', binder: 'chapterNum', required: true },
@@ -1833,6 +1836,18 @@ let activeAICallCount = 0;
 				],
 				output: { shape: 'chapterProse', validators: ['nonEmptyText', 'obligationCoverage'] },
 				stop: 'tab5ReadinessGreen'
+			},
+			'tab5.buildWritingPlan': {
+				id: 'tab5.buildWritingPlan', tab: 'tab5', agentKey: 'generateChapter', name: 'Writing Plan',
+				version: '4p.1',
+				ability: 'Build one chapter writing plan as JSON items (setting, cast, beat, fact, keyPoint). Do not draft prose.',
+				inputs: [
+					{ name: 'chapterNum', binder: 'chapterNum', required: true },
+					{ name: 'blueprint', binder: 'chapterBlueprint', required: false, maxChars: 900 },
+					{ name: 'chapterOutline', binder: 'chapterOutlineText', required: false, maxChars: 800 }
+				],
+				output: { shape: 'writingPlan', validators: ['objectOrArray'] },
+				stop: null
 			},
 			'tab5.continuityAudit': {
 				id: 'tab5.continuityAudit', tab: 'tab5', agentKey: 'continuityAudit', name: 'Continuity Audit',
@@ -1927,11 +1942,15 @@ let activeAICallCount = 0;
 			return skillCatalog[skillId] || defaultSkillCatalog[skillId] || null;
 		}
 
-		function getSkillSystemPrompt(skillId, fallbackPrompt) {
+		function getSkillSystemPrompt(skillId, fallbackPrompt, chapterNum) {
 			const skill = getAgentSkill(skillId);
 			if (!skill) return fallbackPrompt || '';
 			const base = getAgentPrompt(skill.tab, skill.agentKey, fallbackPrompt || '');
-			const ability = (skill.ability || '').trim();
+			let ability = (skill.ability || '').trim();
+			// The HARD REQUIREMENTS sentence is part of the draft system prompt only when that section is emitted.
+			if (skillId === 'tab5.generateChapter' && typeof getChapterBlueprint === 'function' && getChapterBlueprint(chapterNum)) {
+				ability = (ability ? ability + ' ' : '') + 'The HARD REQUIREMENTS section is the authority for setting, cast, beats and facts.';
+			}
 			if (!ability) return base;
 			return base + '\n\nSkill ability:\n' + ability;
 		}
@@ -3230,6 +3249,7 @@ let activeAICallCount = 0;
 					if (nwChapterHasText(nd, i - 1)) nwBuildChapterFingerprint(i, nd);
 				}
 				if (!keepWrongVersion) nd.nwSchemaVersion = NW_S1_SCHEMA_VERSION;
+
 			} finally {
 				nwMigrateInProgress = false;
 			}
@@ -3898,6 +3918,7 @@ let activeAICallCount = 0;
 	            // Persist Plan-fact DOM edits before updateChapterSubpages rebuilds chapterGenContainer.
 	            if (typeof NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD === 'undefined' || NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD) {
 	                if (typeof nwCollectPlanFactsFromUi === 'function') nwCollectPlanFactsFromUi();
+	                if (typeof nwCollectWritingPlansFromUi === 'function') nwCollectWritingPlansFromUi();
 	            }
 	            updateChapterSubpages({ internal: true });
 	            showEditChapterSubpage(1);
@@ -4050,6 +4071,7 @@ let activeAICallCount = 0;
 		        callTick = nwCallStart(operationName, callLabel, {
 		            abortCtl: abortCtl,
 		            taskType: taskType,
+		            chapter: opts.chapter,
 		            expectedMs: (_est && _est.avg) || 0,
 		            rejectAbort: function () {
 		                userAborted = true;
@@ -5822,6 +5844,10 @@ const messages = [
 		    }
 		    const numChapters = parseInt(document.getElementById('numChapters').value);
 		    novelData.numChapters = numChapters;
+		    if (!Array.isArray(novelData.chapterOutlines)) novelData.chapterOutlines = [];
+		    if (!Array.isArray(novelData.chapterArcs)) novelData.chapterArcs = [];
+		    if (!Array.isArray(novelData.chapters)) novelData.chapters = [];
+		    if (!Array.isArray(novelData.chapterImprovements)) novelData.chapterImprovements = [];
 		    novelData.chapterOutlines = novelData.chapterOutlines.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapterOutlines.length)).fill(''));
 		    novelData.chapterArcs = novelData.chapterArcs.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapterArcs.length)).fill(''));
 		    novelData.chapters = novelData.chapters.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapters.length)).fill(''));
@@ -5840,6 +5866,7 @@ const messages = [
 		        novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
 		    }
 		    novelData.continuityTracker.chapters = (novelData.continuityTracker.chapters || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.continuityTracker.chapters || []).length)).fill(null));
+
 
 		    // Outlines Tab
 		    const outlinesNav = document.getElementById('chapterOutlinesNav');
@@ -5918,6 +5945,12 @@ const messages = [
 		            <button onclick="generateChapter(${i})">Generate Chapter</button>
 		        `;
 		        genContainer.appendChild(subpage);
+		        if (typeof nwRenderWritingPlanPanel === 'function') {
+		            var planPanel = nwRenderWritingPlanPanel(i);
+		            var planTa = subpage.querySelector('textarea');
+		            if (planTa) subpage.insertBefore(planPanel, planTa);
+		            else subpage.appendChild(planPanel);
+		        }
 		        var genFlag = document.createElement('div');
 		        genFlag.id = 'chapterGenFlag' + i;
 		        genFlag.className = 'nw-chapter-flag';
@@ -6874,7 +6907,7 @@ const messages = [
 		 * Build Tab5 Draft user-content pack (part 1 or 2). Exposes blueprint obligations
 		 * for E2E assert without requiring a live completion.
 		 */
-		function buildGenerateChapterUserContent(chapterNum, part, opts) {
+		function nwLegacyDraftUserContent(chapterNum, part, opts) {
 			// Skill-packed inputs (tab5.generateChapter) available via window.__lastSkillPack / __chSkillPack
 
 			opts = opts || {};
@@ -6955,6 +6988,648 @@ return c && c.name && c.backstory && c.arc; });
 			return lines.join('\n');
 		}
 
+		function nwAuditedTextHash(text) {
+			return nwTextHash(text);
+		}
+
+		function nwTrackerAuditState(n) {
+			var row = (novelData.continuityTracker && novelData.continuityTracker.chapters || [])[n - 1];
+			if (!row || typeof row.auditedTextHash !== 'string' || !row.auditedTextHash) return 'not audited';
+			var text = String((novelData.chapters || [])[n - 1] || '');
+			return row.auditedTextHash === nwTextHash(text) ? 'audited' : 'tracker stale';
+		}
+
+		function nwAuditFencedChapter(chapterText) {
+			var text = String(chapterText || '');
+			var maxTokens = parseInt((document.getElementById('maxTokens') || {}).value, 10) || 30000;
+			var headroom = Math.max(8000, maxTokens * 4);
+			if (text.length <= headroom) return '<<<CHAPTER\n' + text + '\nCHAPTER>>>';
+			var mid = Math.floor(text.length / 2);
+			return '<<<CHAPTER\n' + text.slice(0, mid) + '\nCHAPTER>>>\n<<<CHAPTER\n' + text.slice(mid) + '\nCHAPTER>>>';
+		}
+
+		function nwCheckChapterReplay(n, opts) {
+			opts = opts || {};
+			if (!(n >= 1)) return { flagged: false };
+			var locked = typeof nwBatchIsLocked === 'function' && nwBatchIsLocked();
+			var allowed = !!opts.batch || !locked;
+			if (!allowed) return { refused: true };
+			var text = String((novelData.chapters || [])[n - 1] || '');
+			var prevText = n > 1 ? String((novelData.chapters || [])[n - 2] || '') : '';
+			var internal = nwScoreReplayInternal(text);
+			var prevScore = nwScoreReplayPrev(text, prevText);
+			var shared = (internal && internal.internal && Number(internal.internal.shared)) || 0;
+			var fail = (internal && internal.status === 'FAIL') || shared >= 25 || (prevScore && prevScore.status === 'FAIL');
+			if (!fail) return { flagged: false, internal: internal, prev: prevScore };
+			var at = new Date().toISOString();
+			var replay = { internal: internal, prev: prevScore, openingCopy: prevScore ? prevScore.openingCopyWords : 0, at: at };
+			nwSetChapterFlag(n, { replay: replay });
+			if (!(novelData && novelData.skipAutoRevision)) {
+				if (!Array.isArray(novelData.chapterImprovements)) novelData.chapterImprovements = [];
+				var note = 'Replay check flagged: do not restart this chapter or copy the previous opening.';
+				var cur = String(novelData.chapterImprovements[n - 1] || '');
+				if (cur.indexOf(note) < 0) novelData.chapterImprovements[n - 1] = cur ? (cur + '\n' + note) : note;
+			}
+			if (typeof nwNotify === 'function') nwNotify('Chapter ' + n + ' replay check flagged.', { level: 'warn' });
+			if (opts.batch && typeof nwBatchSetStatus === 'function' && typeof nwBatchState !== 'undefined' && nwBatchState && nwBatchState.running) {
+				nwBatchSetStatus((nwBatchState.lastStatus || '') + ' Replay flagged ch' + n + '.', 'running');
+			}
+			return { flagged: true, internal: internal, prev: prevScore };
+		}
+
+		function nwPlansAreLocked() {
+			return nwBatchSetupIsLocked();
+		}
+
+		function nwWritingPlanIsStale(n) {
+			return nwPlanIsStale(n);
+		}
+
+		function nwRefreshPlanBuiltFrom(n) {
+			if (nwPlansAreLocked()) return { ok: false, reason: 'locked' };
+			return { ok: false, reason: 'refresh-only-on-build' };
+		}
+
+		function nwNormSetting(s) {
+			return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+		}
+
+		function nwBlueprintSettingText(n, bp) {
+			var hooks = bp && Array.isArray(bp.worldHooks) ? bp.worldHooks.map(function (h) { return String(h || '').trim(); }).filter(Boolean) : [];
+			if (hooks.length) return hooks.join('; ');
+			var req = (novelData.chapterRequirements || [])[n - 1];
+			if (req && Array.isArray(req.setting) && req.setting.length) return req.setting.map(String).join('; ');
+			return '';
+		}
+
+		function nwBlueprintBeatTexts(bp) {
+			var lines = [];
+			if (!bp || typeof bp !== 'object') return lines;
+			['sceneGoal', 'castArcBeat', 'dialogueTurn', 'turnOrPayoff', 'sensoryWorldHook'].forEach(function (k) {
+				if (bp[k] && typeof bp[k] !== 'object') lines.push(String(bp[k]).trim());
+			});
+			(Array.isArray(bp.characterBeats) ? bp.characterBeats : []).forEach(function (b) {
+				if (!b) return;
+				if (typeof b === 'string') lines.push(b.trim());
+				else lines.push([b.name, b.beat].filter(Boolean).join(': '));
+			});
+			return lines.filter(Boolean);
+		}
+
+		function nwMustIncludeFacts(n) {
+			var rec = (novelData.chapterRequiredFacts || [])[n - 1];
+			var items = rec && Array.isArray(rec.items) ? rec.items : [];
+			return items.filter(function (it) { return it && it.mustInclude === true && String(it.text || it.label || '').trim(); });
+		}
+
+		function nwShowPlanLabel(s) {
+			var t = String(s || '');
+			(typeof NW_QCAT_CAMEL_FIELDS !== 'undefined' ? NW_QCAT_CAMEL_FIELDS : []).forEach(function (f) {
+				t = t.split(f).join(f.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase());
+			});
+			return t;
+		}
+
+		function nwPushPlanConflict(n, message) {
+			window.__nwPlanConflicts = window.__nwPlanConflicts || [];
+			var existing = null;
+			for (var i = 0; i < window.__nwPlanConflicts.length; i++) {
+				if (window.__nwPlanConflicts[i] && window.__nwPlanConflicts[i].chapter === n) { existing = window.__nwPlanConflicts[i]; break; }
+			}
+			if (existing) {
+				if (existing.message.indexOf(message) < 0) existing.message += ' ' + message;
+			} else {
+				window.__nwPlanConflicts.push({ chapter: n, message: message });
+			}
+			if (!window.__nwPlanConflictNotified && typeof nwNotify === 'function') {
+				window.__nwPlanConflictNotified = true;
+				nwNotify('A writing plan item conflicts with the blueprint. The blueprint item is used.', { level: 'warn' });
+			}
+		}
+
+		function nwFirstClause(s) {
+			var t = String(s || '');
+			var cut = t.split(/[.;]/)[0];
+			return cut || t;
+		}
+
+		function nwCapRequirementLines(lines) {
+			function over() {
+				return lines.length > 15 || lines.join('\n').length > 1200;
+			}
+			if (!over()) return lines;
+			lines = lines.map(function (line) {
+				if (line.kind === 'beat' || line.kind === 'keyPoint') return { kind: line.kind, text: nwFirstClause(line.text) };
+				return line;
+			});
+			var dropOrder = ['keyPoint', 'worldBeat', 'beat'];
+			while (over()) {
+				var idx = -1;
+				for (var d = 0; d < dropOrder.length && idx < 0; d++) {
+					for (var i = lines.length - 1; i >= 0; i--) {
+						if (lines[i].kind === dropOrder[d]) { idx = i; break; }
+					}
+				}
+				if (idx < 0) break;
+				lines.splice(idx, 1);
+			}
+			return lines;
+		}
+
+		function nwBuildHardRequirements(chapterNum) {
+			var bp = getChapterBlueprint(chapterNum);
+			var planRaw = (novelData.chapterWritingPlans || [])[chapterNum - 1];
+			var planItems = [];
+			if (planRaw && typeof planRaw === 'object') planItems = Array.isArray(planRaw.items) ? planRaw.items.slice() : (Array.isArray(planRaw) ? planRaw.slice() : []);
+			var usePlan = !!(bp && planItems.length);
+			var blueprintWins = true;
+			var source = usePlan ? 'writingPlan' : 'blueprint';
+			var emitted = [];
+			function add(kind, text) {
+				text = nwShowPlanLabel(text);
+				if (!String(text || '').trim()) return;
+				emitted.push({ kind: kind, text: text });
+			}
+			var setting = nwBlueprintSettingText(chapterNum, bp);
+			var castNames = (bp && typeof nwRequiredCastNames === 'function') ? nwRequiredCastNames(bp).required.slice() : [];
+			var beatTexts = nwBlueprintBeatTexts(bp);
+			var facts = nwMustIncludeFacts(chapterNum);
+			if (usePlan) {
+				var planSettings = planItems.filter(function (it) { return it && it.kind === 'setting'; });
+				var settingConflict = planSettings.some(function (it) {
+					var p = nwNormSetting(it.label);
+					var b = nwNormSetting(setting);
+					if (!p || !b) return false;
+					return b.indexOf(p) < 0 && p.indexOf(b) < 0;
+				});
+				if (settingConflict && blueprintWins) {
+					nwPushPlanConflict(chapterNum, 'Setting conflict: blueprint setting kept.');
+					add('setting', '- Setting: ' + setting + ' (stay here unless a beat moves the scene)');
+				} else if (settingConflict) {
+					add('setting', '- Setting: ' + planSettings.map(function (it) { return it.label; }).join('; '));
+				} else if (planSettings.length) {
+					add('setting', '- Setting: ' + planSettings.map(function (it) { return it.label; }).join('; ') + ' (stay here unless a beat moves the scene)');
+				} else if (setting) {
+					add('setting', '- Setting: ' + setting + ' (stay here unless a beat moves the scene)');
+				}
+				var planCast = planItems.filter(function (it) { return it && it.kind === 'cast'; }).map(function (it) { return String(it.label || '').trim(); }).filter(Boolean);
+				var castOut = [];
+				castNames.forEach(function (name) {
+					var key = String(name).toLowerCase();
+					var present = planCast.some(function (p) {
+						var pl = p.toLowerCase();
+						return pl.indexOf(key) >= 0 || key.indexOf(pl) >= 0;
+					});
+					if (!present && blueprintWins) {
+						nwPushPlanConflict(chapterNum, 'Cast conflict: ' + name + ' stays on the page.');
+						castOut.push(name);
+					} else if (present || !blueprintWins) {
+						if (present) castOut.push(name);
+					}
+				});
+				planCast.forEach(function (p) {
+					var pl = p.toLowerCase();
+					var have = castOut.some(function (c) { return String(c).toLowerCase() === pl || pl.indexOf(String(c).toLowerCase()) >= 0; });
+					if (!have) castOut.push(p);
+				});
+				if (!blueprintWins) castOut = planCast.slice();
+				if (castOut.length) add('cast', '- On-page cast: ' + castOut.join('; ') + '; each speaks or acts');
+				var planBeats = planItems.filter(function (it) { return it && it.kind === 'beat'; });
+				(planBeats.length ? planBeats.map(function (it) { return it.label; }) : beatTexts).forEach(function (b) { add('beat', '- Beats: ' + b); });
+				var planFacts = planItems.filter(function (it) { return it && it.kind === 'fact'; });
+				var factLabels = planFacts.map(function (it) { return String(it.label || '').trim(); }).filter(Boolean);
+				if (planFacts.length) {
+					facts.forEach(function (f) {
+						var text = String(f.text || f.label || '').trim();
+						var present = factLabels.some(function (l) { return l.toLowerCase() === text.toLowerCase(); });
+						if (!present && blueprintWins) {
+							nwPushPlanConflict(chapterNum, 'Fact conflict: required fact kept.');
+							factLabels.push(text);
+						}
+					});
+				}
+				if (!planFacts.length) factLabels = facts.map(function (f) { return String(f.text || f.label); });
+				if (factLabels.length) add('fact', '- Facts: ' + factLabels.join('; '));
+				planItems.filter(function (it) { return it && it.kind === 'keyPoint'; }).forEach(function (it) { add('keyPoint', '- Key point: ' + it.label); });
+				planItems.filter(function (it) { return it && it.kind === 'worldBeat'; }).forEach(function (it) { add('worldBeat', '- World: ' + [it.label, it.detail].filter(Boolean).join(' — ')); });
+			} else {
+				if (setting) add('setting', '- Setting: ' + setting + ' (stay here unless a beat moves the scene)');
+				if (castNames.length) add('cast', '- On-page cast: ' + castNames.join('; ') + '; each speaks or acts');
+				beatTexts.forEach(function (b) { add('beat', '- Beats: ' + b); });
+				if (facts.length) add('fact', '- Facts: ' + facts.map(function (f) { return f.text || f.label; }).join('; '));
+			}
+			emitted = nwCapRequirementLines(emitted);
+			return {
+				lines: emitted.map(function (l) { return l.text; }),
+				source: source,
+				items: emitted,
+				header: 'HARD REQUIREMENTS (must be on the page; these override everything below):'
+			};
+		}
+
+		function nwDejargonValue(v) {
+			if (Array.isArray(v)) return v.map(nwDejargonValue);
+			if (v && typeof v === 'object') {
+				var o = {};
+				Object.keys(v).forEach(function (k) {
+					var nk = k.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^[A-Z]/, function (c) { return c.toLowerCase(); });
+					o[nk] = nwDejargonValue(v[k]);
+				});
+				return o;
+			}
+			if (typeof v === 'string') {
+				return v.replace(/\bsceneGoal\b/g, 'scene goal').replace(/\bturnOrPayoff\b/g, 'turn or payoff').replace(/\bcastArcBeat\b/g, 'cast arc beat').replace(/\bdialogueTurn\b/g, 'dialogue turn').replace(/\bsensoryWorldHook\b/g, 'sensory world hook');
+			}
+			return v;
+		}
+
+		function nwPreviousChapterTail(n) {
+			if (!(n >= 2)) return '';
+			var text = String((novelData.chapters || [])[n - 2] || '').trim();
+			if (!text) return '';
+			var paras = text.split(/\n\s*\n/).map(function (p) { return p.trim(); }).filter(Boolean);
+			if (!paras.length) paras = [text];
+			var acc = [];
+			var count = 0;
+			for (var i = paras.length - 1; i >= 0; i--) {
+				var w = paras[i].split(/\s+/).filter(Boolean);
+				if (acc.length && count + w.length > 250) break;
+				acc.unshift(paras[i]);
+				count += w.length;
+				if (count >= 250) break;
+			}
+			if (acc.length === 1) {
+				var words = acc[0].split(/\s+/).filter(Boolean);
+				if (words.length > 250) return words.slice(-250).join(' ');
+			}
+			return acc.join('\n\n');
+		}
+
+		function nwDraftUserContentWithRequirements(chapterNum, part, opts, bp) {
+			var legacy = nwLegacyDraftUserContent(chapterNum, part, opts);
+			var lines = legacy.split('\n');
+			lines = lines.map(function (line) {
+				if (line.indexOf('- **Chapter Blueprint (obligations JSON):**') === 0) {
+					var dig = digestChapterBlueprint(bp);
+					var shown = dig ? nwDejargonValue(dig) : { missing: true, chapter: chapterNum };
+					return '- **Chapter plan (reference):** ' + JSON.stringify(shown);
+				}
+				if (line.indexOf('- **Execute obligations:**') === 0) {
+					return '- **Cover every hard requirement in scene:** Dramatize every checklist item below. Success = obligations covered in scene — NOT hitting a word count.';
+				}
+				return line;
+			});
+			var built = nwBuildHardRequirements(chapterNum);
+			window.__nwLastHardRequirements = built;
+			var block = [built.header].concat(built.lines);
+			block.push('If sources disagree: this list > chapter outline > story bible / digests.');
+			if (Number(part) === 2) {
+				block.push('Items not yet on the page in the first half come first.');
+				block.push('Do not restate or replay the first half; continue forward from its last line.');
+			} else {
+				var tail = nwPreviousChapterTail(chapterNum);
+				if (tail) block.push('Previous chapter ended with (do not repeat, do not reopen with it): ' + tail);
+			}
+			var firstHalf = null;
+			if (Number(part) === 2 && lines.length > 1 && lines[1].indexOf('- **First Half:**') === 0) {
+				firstHalf = lines.splice(1, 1)[0];
+			}
+			var chunk = block.slice();
+			if (firstHalf) chunk.push(firstHalf);
+			lines.splice(1, 0, chunk.join('\n'));
+			var forbidAt = -1;
+			for (var fi = 0; fi < lines.length; fi++) if (lines[fi].indexOf('- **Cast / world bound:**') === 0) forbidAt = fi;
+			var reqRow = (novelData.chapterRequirements || [])[chapterNum - 1];
+			var extraBan = (reqRow && Array.isArray(reqRow.mustNotInclude) && reqRow.mustNotInclude.length) ? ('; also never: ' + reqRow.mustNotInclude.join(', ')) : '';
+			var forbid = '- Never use planning words in the prose: ' + (typeof NW_NOTE_LEAK_TERMS !== 'undefined' ? NW_NOTE_LEAK_TERMS.join(', ') : '') + extraBan;
+			if (forbidAt >= 0) lines.splice(forbidAt + 1, 0, forbid);
+			else lines.push(forbid);
+			return lines.join('\n');
+		}
+
+		function buildGenerateChapterUserContent(chapterNum, part, opts) {
+			var bp = (typeof getChapterBlueprint === 'function') ? getChapterBlueprint(chapterNum) : null;
+			if (!bp) {
+				return nwLegacyDraftUserContent(chapterNum, part, opts);
+			}
+			return nwDraftUserContentWithRequirements(chapterNum, part, opts, bp);
+		}
+
+		function nwMatchCharId(name) {
+			var key = String(name || '').trim().toLowerCase();
+			if (!key) return null;
+			var chars = novelData.characters || [];
+			for (var i = 0; i < chars.length; i++) {
+				var c = chars[i];
+				if (!c) continue;
+				if (String(c.name || '').trim().toLowerCase() === key || String(c.id || '') === String(name)) return c.id || null;
+			}
+			return null;
+		}
+
+		function nwMatchLocationId(label) {
+			var key = nwNormSetting(label);
+			var locs = novelData.storyWorld && Array.isArray(novelData.storyWorld.locations) ? novelData.storyWorld.locations : [];
+			for (var i = 0; i < locs.length; i++) {
+				var loc = locs[i];
+				if (!loc) continue;
+				if (nwNormSetting(loc.name) === key || String(loc.id || '') === String(label)) return loc.id || null;
+			}
+			return null;
+		}
+
+		function nwNormalizePlanItem(it) {
+			it = it || {};
+			var row = { kind: String(it.kind || 'keyPoint'), label: String(it.label || it.text || ''), detail: String(it.detail || '') };
+			['charId', 'locationId', 'factId', 'conceptId', 'deliveryMode', 'via', 'who', 'where'].forEach(function (k) {
+				if (it[k] != null && it[k] !== '') row[k] = it[k];
+			});
+			return row;
+		}
+
+		function nwHeuristicWritingPlan(n) {
+			var bp = getChapterBlueprint(n);
+			var items = [];
+			nwBlueprintBeatTexts(bp).forEach(function (b) { items.push({ kind: 'beat', label: b, detail: '' }); });
+			if (bp && typeof nwRequiredCastNames === 'function') {
+				nwRequiredCastNames(bp).required.forEach(function (name) {
+					var row = { kind: 'cast', label: name, detail: 'on page' };
+					var id = nwMatchCharId(name);
+					if (id) row.charId = id;
+					items.push(row);
+				});
+			}
+			var setting = nwBlueprintSettingText(n, bp);
+			if (setting) {
+				setting.split(';').forEach(function (part) {
+					var label = part.trim();
+					if (!label) return;
+					var row = { kind: 'setting', label: label, detail: '' };
+					var id = nwMatchLocationId(label);
+					if (id) row.locationId = id;
+					items.push(row);
+				});
+			}
+			nwMustIncludeFacts(n).forEach(function (f) {
+				var row = { kind: 'fact', label: String(f.text || f.label || ''), detail: '' };
+				if (f.id) row.factId = f.id;
+				items.push(row);
+			});
+			var outline = String((novelData.chapterOutlines || [])[n - 1] || '');
+			outline.split(/[.!?]+\s+/).map(function (s) { return s.trim(); }).filter(Boolean).slice(0, 3).forEach(function (s) {
+				items.push({ kind: 'keyPoint', label: s.slice(0, 200), detail: '' });
+			});
+			return items;
+		}
+
+		function nwStoreWritingPlan(n, items, builtBy) {
+			if (nwPlansAreLocked()) return { ok: false, reason: 'locked' };
+			if (!Array.isArray(novelData.chapterWritingPlans)) novelData.chapterWritingPlans = [];
+			var prev = novelData.chapterWritingPlans[n - 1];
+			var plan = { items: (items || []).map(nwNormalizePlanItem), builtBy: builtBy || 'heuristic', builtAt: new Date().toISOString() };
+			if (prev && typeof prev === 'object' && !Array.isArray(prev) && prev.worldFrom) plan.worldFrom = prev.worldFrom;
+			plan.builtFrom = nwComputeBuiltFrom(n);
+			novelData.chapterWritingPlans[n - 1] = plan;
+			var old = document.getElementById('writingPlanPanel' + n);
+			if (old && old.parentNode) old.parentNode.replaceChild(nwRenderWritingPlanPanel(n), old);
+			return { ok: true, plan: plan };
+		}
+
+		async function nwBuildWritingPlanAI(n) {
+			var sent = [n];
+			var response = null;
+			try {
+				response = await callAI([
+					{ role: 'system', content: (typeof getSkillSystemPrompt === 'function') ? getSkillSystemPrompt('tab5.buildWritingPlan', 'Return JSON only.') : 'Return JSON only.' },
+					{ role: 'user', content: 'Build a writing plan for chapter ' + sent.join(',') + '. Blueprint: ' + JSON.stringify(getChapterBlueprint(n) || null) }
+				], document.getElementById('tab5'), {
+					operationName: 'buildWritingPlan_' + n,
+					taskType: 'other',
+					skillId: 'tab5.buildWritingPlan',
+					chapter: n,
+					chapters: sent,
+					max_tokens: 1500
+				});
+			} catch (e) {
+				if (typeof nwNotify === 'function') nwNotify('Writing plan AI failed for chapter ' + n + '; used the heuristic.', { level: 'warn' });
+				return nwStoreWritingPlan(n, nwHeuristicWritingPlan(n), 'heuristic');
+			}
+			var items = response && Array.isArray(response.items) ? response.items : null;
+			if (!items) {
+				if (typeof nwNotify === 'function') nwNotify('Writing plan AI returned no items for chapter ' + n + '; used the heuristic.', { level: 'warn' });
+				items = nwHeuristicWritingPlan(n);
+				return nwStoreWritingPlan(n, items, 'heuristic');
+			}
+			return nwStoreWritingPlan(n, items, 'ai');
+		}
+
+		async function nwBuildWritingPlan(n, opts) {
+			opts = opts || {};
+			if (nwPlansAreLocked()) return { ok: false, reason: 'locked' };
+			var prev = (novelData.chapterWritingPlans || [])[n - 1];
+			var userEdited = prev && typeof prev === 'object' && prev.builtBy === 'user';
+			if (userEdited) {
+				var ok = (typeof confirm === 'function') ? confirm('Overwrite the writing plan you edited for chapter ' + n + '?') : false;
+				if (!ok) return { ok: false, reason: 'cancelled' };
+			}
+			if (opts.useAI) return nwBuildWritingPlanAI(n);
+			return nwStoreWritingPlan(n, nwHeuristicWritingPlan(n), 'heuristic');
+		}
+
+		async function nwBuildPlansFirst(chapters, useAI) {
+			window.__nwPlanPhaseLog = window.__nwPlanPhaseLog || [];
+			window.__nwPlanPhaseLog.push('plans');
+			chapters = chapters || [];
+			for (var i = 0; i < chapters.length; i++) {
+				if (window.__nwPlanBuildCancel) break;
+				var n = chapters[i];
+				var plan = (novelData.chapterWritingPlans || [])[n - 1];
+				var has = plan && typeof plan === 'object' && Array.isArray(plan.items) && plan.items.length;
+				var stale = nwWritingPlanIsStale(n);
+				if (has && !stale) continue;
+				await nwBuildWritingPlan(n, { useAI: !!useAI });
+			}
+			return { ok: true };
+		}
+
+		function nwSetPlanText(el, text) {
+			el.textContent = String(text == null ? '' : text);
+		}
+
+		function nwAppendPlanRow(list, chapterNum, item) {
+			item = item || { kind: 'keyPoint', label: '', detail: '' };
+			var row = document.createElement('div');
+			row.className = 'nw-plan-row';
+			var kind = document.createElement('select');
+			kind.className = 'wp-kind';
+			['setting', 'cast', 'beat', 'fact', 'keyPoint', 'worldBeat'].forEach(function (k) {
+				var o = document.createElement('option');
+				o.value = k;
+				o.textContent = k;
+				kind.appendChild(o);
+			});
+			kind.value = item.kind || 'keyPoint';
+			var label = document.createElement('input');
+			label.type = 'text';
+			label.className = 'wp-label';
+			label.value = item.label || '';
+			var detail = document.createElement('input');
+			detail.type = 'text';
+			detail.className = 'wp-detail';
+			detail.value = item.detail || '';
+			var shown = document.createElement('span');
+			shown.className = 'wp-shown';
+			nwSetPlanText(shown, item.label || '');
+			var extra = {};
+			['charId', 'locationId', 'factId', 'conceptId', 'deliveryMode', 'via', 'who', 'where'].forEach(function (k) {
+				if (item[k] != null && item[k] !== '') extra[k] = item[k];
+			});
+			row.dataset.extra = JSON.stringify(extra);
+			function onEdit() { nwApplyPlanUserEdit(chapterNum); }
+			[kind, label, detail].forEach(function (el) {
+				el.addEventListener('input', onEdit);
+				el.addEventListener('change', onEdit);
+			});
+			var up = document.createElement('button');
+			up.type = 'button';
+			up.textContent = 'Up';
+			up.addEventListener('click', function () {
+				if (nwPlansAreLocked()) return;
+				var prev = row.previousElementSibling;
+				if (prev) row.parentNode.insertBefore(row, prev);
+				nwApplyPlanUserEdit(chapterNum);
+			});
+			var down = document.createElement('button');
+			down.type = 'button';
+			down.textContent = 'Down';
+			down.addEventListener('click', function () {
+				if (nwPlansAreLocked()) return;
+				var next = row.nextElementSibling;
+				if (next) row.parentNode.insertBefore(next, row);
+				nwApplyPlanUserEdit(chapterNum);
+			});
+			var del = document.createElement('button');
+			del.type = 'button';
+			del.textContent = 'Delete';
+			del.addEventListener('click', function () {
+				if (nwPlansAreLocked()) return;
+				row.parentNode && row.parentNode.removeChild(row);
+				nwApplyPlanUserEdit(chapterNum);
+			});
+			row.appendChild(kind);
+			row.appendChild(label);
+			row.appendChild(detail);
+			row.appendChild(shown);
+			row.appendChild(up);
+			row.appendChild(down);
+			row.appendChild(del);
+			list.appendChild(row);
+		}
+
+		function nwReadPlanRows(panel) {
+			var items = [];
+			panel.querySelectorAll('.nw-plan-row').forEach(function (row) {
+				var extra = {};
+				try { extra = JSON.parse(row.dataset.extra || '{}'); } catch (e) { extra = {}; }
+				var kind = row.querySelector('.wp-kind');
+				var label = row.querySelector('.wp-label');
+				var detail = row.querySelector('.wp-detail');
+				items.push(nwNormalizePlanItem(Object.assign({}, extra, {
+					kind: kind ? kind.value : 'keyPoint',
+					label: label ? label.value : '',
+					detail: detail ? detail.value : ''
+				})));
+			});
+			return items;
+		}
+
+		function nwApplyPlanUserEdit(n) {
+			if (nwPlansAreLocked()) return { ok: false, reason: 'locked' };
+			var panel = document.getElementById('writingPlanPanel' + n);
+			if (!panel) return { ok: false, reason: 'no-panel' };
+			var items = nwReadPlanRows(panel);
+			if (!Array.isArray(novelData.chapterWritingPlans)) novelData.chapterWritingPlans = [];
+			var prev = novelData.chapterWritingPlans[n - 1];
+			var plan = (prev && typeof prev === 'object' && !Array.isArray(prev)) ? Object.assign({}, prev) : {};
+			plan.items = items;
+			plan.builtBy = 'user';
+			plan.editedAt = new Date().toISOString();
+			novelData.chapterWritingPlans[n - 1] = plan;
+			return { ok: true, plan: plan };
+		}
+
+		function nwCollectWritingPlansFromUi() {
+			document.querySelectorAll('.nw-plan-panel').forEach(function (panel) {
+				var n = Number(panel.getAttribute('data-chapter'));
+				if (!(n >= 1)) return;
+				var items = nwReadPlanRows(panel);
+				var prev = (novelData.chapterWritingPlans || [])[n - 1];
+				var prevItems = prev && Array.isArray(prev.items) ? prev.items.map(nwNormalizePlanItem) : [];
+				if (JSON.stringify(prevItems) === JSON.stringify(items)) return;
+				nwApplyPlanUserEdit(n);
+			});
+		}
+
+		function nwRenderWritingPlanPanel(chapterNum) {
+			var panel = document.createElement('div');
+			panel.id = 'writingPlanPanel' + chapterNum;
+			panel.className = 'nw-plan-panel';
+			panel.setAttribute('data-chapter', String(chapterNum));
+			var title = document.createElement('h4');
+			title.textContent = 'Writing plan';
+			panel.appendChild(title);
+			var stale = document.createElement('p');
+			stale.className = 'wp-stale';
+			var isStale = false;
+			try { isStale = nwWritingPlanIsStale(chapterNum); } catch (e) { isStale = false; }
+			stale.textContent = isStale ? 'plan stale: blueprint changed' : '';
+			stale.hidden = !isStale;
+			panel.appendChild(stale);
+			var warn = document.createElement('p');
+			warn.className = 'wp-conflicts';
+			var conflicts = (window.__nwPlanConflicts || []).filter(function (c) { return c && c.chapter === chapterNum; });
+			warn.textContent = conflicts.map(function (c) { return c.message; }).join(' ');
+			warn.hidden = !conflicts.length;
+			panel.appendChild(warn);
+			var list = document.createElement('div');
+			list.className = 'wp-items';
+			list.id = 'writingPlanItems' + chapterNum;
+			panel.appendChild(list);
+			var plan = (novelData.chapterWritingPlans || [])[chapterNum - 1];
+			var items = plan && Array.isArray(plan.items) ? plan.items : (Array.isArray(plan) ? plan : []);
+			items.forEach(function (it) { nwAppendPlanRow(list, chapterNum, it); });
+			function btn(text, fn) {
+				var b = document.createElement('button');
+				b.type = 'button';
+				b.textContent = text;
+				b.addEventListener('click', function (ev) { ev.preventDefault(); fn(); });
+				panel.appendChild(b);
+				return b;
+			}
+			btn('Build', function () { nwBuildWritingPlan(chapterNum, { useAI: false }); });
+			btn('Build with AI', function () { nwBuildWritingPlan(chapterNum, { useAI: true }); });
+			btn('Add', function () {
+				if (nwPlansAreLocked()) return;
+				nwAppendPlanRow(list, chapterNum, { kind: 'keyPoint', label: '', detail: '' });
+				nwApplyPlanUserEdit(chapterNum);
+			});
+			return panel;
+		}
+
+		window.nwAuditedTextHash = nwAuditedTextHash;
+		window.nwTrackerAuditState = nwTrackerAuditState;
+		window.nwAuditFencedChapter = nwAuditFencedChapter;
+		window.nwCheckChapterReplay = nwCheckChapterReplay;
+		window.nwPlansAreLocked = nwPlansAreLocked;
+		window.nwWritingPlanIsStale = nwWritingPlanIsStale;
+		window.nwRefreshPlanBuiltFrom = nwRefreshPlanBuiltFrom;
+		window.nwBuildHardRequirements = nwBuildHardRequirements;
+		window.nwBuildWritingPlan = nwBuildWritingPlan;
+		window.nwBuildPlansFirst = nwBuildPlansFirst;
+		window.nwRenderWritingPlanPanel = nwRenderWritingPlanPanel;
+		window.nwApplyPlanUserEdit = nwApplyPlanUserEdit;
+		window.nwCollectWritingPlansFromUi = nwCollectWritingPlansFromUi;
+		window.nwHeuristicWritingPlan = nwHeuristicWritingPlan;
 
 		function buildPromptContextPack(options = {}) {
 			const chapterNum = options.chapterNum || null;
@@ -8421,8 +9096,10 @@ return c && c.name && c.backstory && c.arc; });
 			if (flag && flag.coverageFailed === true) {
 				var miss = Array.isArray(flag.missing) ? flag.missing.filter(Boolean).join(', ') : '';
 				text = 'Coverage failed' + (miss ? ': missing ' + miss : '') + '. Kept for review.';
-			} else if (flag && flag.replay) {
-				text = 'Replay check flagged this chapter.';
+			}
+			if (flag && flag.replay) {
+				var replayText = 'Replay check flagged this chapter.';
+				text = text ? (text + ' ' + replayText) : replayText;
 			}
 			['chapterGenFlag', 'chapterEditFlag'].forEach(function (p) {
 				var el = document.getElementById(p + n);
@@ -9593,7 +10270,17 @@ return c && c.name && c.backstory && c.arc; });
 				characterProgress.length ? characterProgress.join('\n') : 'Not audited yet.',
 				'',
 				'Recent Continuity Risks:',
-				riskLines.length ? riskLines.join('\n') : 'No continuity findings yet.'
+				riskLines.length ? riskLines.join('\n') : 'No continuity findings yet.',
+				'',
+				'Tracker audit:',
+				(function () {
+					var n = Number(novelData.numChapters) || 0;
+					var lines = [];
+					for (var i = 1; i <= n; i++) {
+						lines.push('Chapter ' + i + ': ' + (typeof nwTrackerAuditState === 'function' ? nwTrackerAuditState(i) : 'not audited'));
+					}
+					return lines.length ? lines.join('\n') : 'not audited';
+				})()
 			].join('\n');
 		}
 
@@ -9617,11 +10304,14 @@ return c && c.name && c.backstory && c.arc; });
 
 		async function runChapterContinuityAudit(chapterNum, options = {}) {
 			const __c2ContEp = evidencePackPromptBlock({ goal: 'continuityAudit', chapter: chapterNum, tokenBudgetHint: 1200 });
+			// Hash the chapter saved before collectData. An unsaved textarea must not become the audited body.
+			const savedChapterText = (novelData.chapters && novelData.chapters[chapterNum - 1] == null) ? '' : String((novelData.chapters || [])[chapterNum - 1] || '');
 			collectData();
+			if (Array.isArray(novelData.chapters) && chapterNum >= 1) novelData.chapters[chapterNum - 1] = savedChapterText;
 		    // Agent Skill I/O pack (tab5.continuityAudit)
 		    window.__lastSkillPack = packSkillInputs('tab5.continuityAudit', { novelData: novelData, chapterNum: chapterNum });
 
-			const chapterText = novelData.chapters[chapterNum - 1] || document.getElementById(`chapterGenContent${chapterNum}`)?.value || '';
+			const chapterText = String(savedChapterText).trim() ? savedChapterText : (document.getElementById(`chapterGenContent${chapterNum}`)?.value || '');
 			if (!chapterText.trim()) {
 				if (!options.silent) alert(`Chapter ${chapterNum} has no content to audit.`);
 				return null;
@@ -9634,8 +10324,9 @@ return c && c.name && c.backstory && c.arc; });
 					content: [
 						`Audit continuity for Chapter ${chapterNum} of a novel titled "${novelData.title || 'Untitled'}".`,
 						`Continuity mode: ${novelData.continuityStrictMode ? 'strict' : 'balanced'}`,
-						`Context pack: ${JSON.stringify(buildPromptContextPack({ chapterNum, includePacket: false, extra: { continuityPacket: packet, chapterTextDigest: getTrimmedContext(chapterText, 4000) } }))}`,
-						`Chapter text (trimmed): ${getTrimmedContext(chapterText, 6000)}`,
+						`Context pack: ${JSON.stringify(buildPromptContextPack({ chapterNum, includePacket: false, extra: { continuityPacket: packet } }))}`,
+						nwAuditFencedChapter(chapterText),
+						'Report findings as plain observations. Do not quote this prompt\'s field names.',
 						'Return strict JSON only with this structure:',
 						'{',
 						'  "chapterSummary": "<120-220 words>",',
@@ -9672,6 +10363,9 @@ return c && c.name && c.backstory && c.arc; });
 				continuityRisks: Array.isArray(parsed.continuityRisks) ? parsed.continuityRisks : [],
 				recommendedFixes: Array.isArray(parsed.recommendedFixes) ? parsed.recommendedFixes : []
 			};
+			if (String(savedChapterText).trim()) {
+				chapterAudit.auditedTextHash = nwAuditedTextHash(savedChapterText);
+			}
 			novelData.continuityTracker.chapters[chapterNum - 1] = chapterAudit;
 			novelData.continuityTracker.storyArcProgress = chapterAudit.storyArcProgress;
 			novelData.continuityTracker.characterArcProgress = mergeCharacterArcProgress(novelData.continuityTracker.characterArcProgress, chapterAudit.characterArcProgress);
@@ -10927,6 +11621,17 @@ return c && c.name && c.backstory && c.arc; });
 		            return normalizeSubplotItem(raw, i, mergedNovelData);
 		        });
 		    }
+		    (function () {
+		        var trackerChapters = mergedNovelData.continuityTracker && mergedNovelData.continuityTracker.chapters;
+		        if (!Array.isArray(trackerChapters)) return;
+		        trackerChapters.forEach(function (row, idx) {
+		            if (!row || typeof row !== 'object') return;
+		            if (Object.prototype.hasOwnProperty.call(row, 'auditedTextHash') && typeof row.auditedTextHash !== 'string') {
+		                console.warn('normalizeImportedSessionData: auditedTextHash on chapter ' + (idx + 1) + ' is not a string; keeping as-is');
+		            }
+		        });
+		    })();
+
 		    return {
 		        novelData: mergedNovelData,
 		        requestLog: {
@@ -11017,6 +11722,7 @@ return c && c.name && c.backstory && c.arc; });
 		            breakdown: null
 		        }));
 		    }
+		    if (!Array.isArray(novelData.bookImprovementsWithStatus)) novelData.bookImprovementsWithStatus = [];
 		    updateBookImprovementsTable(novelData.bookImprovementsWithStatus.map(item => item.text).join('\n'));
 
 		    // Populate Tab 8 if breakdown data exists
@@ -11812,7 +12518,7 @@ return c && c.name && c.backstory && c.arc; });
 		var NW_QCAT_RESTART_MIN_WORDS = 40;
 		var NW_QCAT_RESTART_DENSITY = 0.4;
 		var NW_QCAT_NAME_TITLES = ['dr', 'doctor', 'captain', 'capt', 'mr', 'mrs', 'ms', 'prof', 'professor', 'commander', 'lt', 'sgt', 'admiral', 'general', 'colonel', 'major'];
-		var NW_NOTE_LEAK_TERMS = ['fail closed', 'followable', 'this row', 'fenced header', 'blueprint', 'obligation', 'beat checklist', 'sceneGoal', 'turnOrPayoff', 'deferred thread'];
+		var NW_NOTE_LEAK_TERMS = ['fail closed', 'followable', 'this row', 'fenced header', 'blueprint', 'obligation', 'beat checklist', 'sceneGoal', 'turnOrPayoff', 'deferred thread', 'checklist', 'hard requirement', 'word count'];
 		var NW_QCAT_CAMEL_FIELDS = ['sceneGoal', 'castArcBeat', 'subplotPressure', 'dialogueTurn', 'sensoryWorldHook', 'turnOrPayoff', 'characterBeats', 'worldHooks', 'allowedPayoffs', 'deferredThreads', 'arcStep'];
 		var NW_QCAT_STOP = new Set(('a an the and or but if in on at to for of as by with from into over after before about against between through during without within along among upon than then so nor not no yes it its it\'s i me my we our you your he she they them his her their this that these those be is am are was were been being do did does doing have has had having will would can could should may might must shall').split(/\s+/));
 		var NW_QCAT_BEAT_FIELDS = ['sceneGoal', 'dialogueTurn', 'turnOrPayoff', 'subplotPressure', 'sensoryWorldHook'];
@@ -12101,7 +12807,7 @@ return c && c.name && c.backstory && c.arc; });
 			beats.status = status;
 			return beats;
 		}
-		function nwScoreCast(text, bp) {
+		function nwRequiredCastNames(bp) {
 			var required = [];
 			var byKey = {};
 			var dialogueNames = nwExtractCapNames((bp && bp.dialogueTurn) || '');
@@ -12139,6 +12845,12 @@ return c && c.name && c.backstory && c.arc; });
 				if (key) dialogueKeys[key] = 1;
 				else if (!NW_QCAT_FILTER_TITLE_FRAGMENTS && n) dialogueKeys[n] = 1;
 			});
+			return { required: required, dialogueKeys: dialogueKeys };
+		}
+		function nwScoreCast(text, bp) {
+			var info = nwRequiredCastNames(bp);
+			var required = info.required;
+			var dialogueKeys = info.dialogueKeys;
 			var counts = {};
 			var missing = [];
 			var missingDialogue = [];
@@ -13112,7 +13824,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		    // Part 1 — blueprint-bound pack (obligations over pad quotas)
 		    const messagesPart1 = [
-			    { role: 'system', content: getSkillSystemPrompt('tab5.generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
+			    { role: 'system', content: getSkillSystemPrompt('tab5.generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`, chapterNum) },
 		        {
 		            role: 'user',
 		            content: buildGenerateChapterUserContent(chapterNum, 1, { continuityPacket: continuityPacket })
@@ -13161,7 +13873,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		    // Part 2
 			const messagesPart2 = [
-			    { role: 'system', content: getSkillSystemPrompt('tab5.generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
+			    { role: 'system', content: getSkillSystemPrompt('tab5.generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`, chapterNum) },
 			    {
 			        role: 'user',
 			        content: buildGenerateChapterUserContent(chapterNum, 2, { continuityPacket: continuityPacket, firstHalf: chapterContent })
@@ -13223,14 +13935,15 @@ return c && c.name && c.backstory && c.arc; });
 		    requestLog.returnedInfo = JSON.stringify({ chapter: novelData.chapters[chapterNum-1] }, null, 2);
 		    console.log('Pre-final updateRequestLog - chapterContent Length:', chapterContent.length);
 		    updateRequestLog();
-			refreshContinuityAfterChapter(chapterNum);
-			if (novelData.autoContinuityAudit) {
-				if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'audit', '');
-				// #134 follow-up 5: in a batch only the audit call is retried (Parts 1/2 already spent their tokens).
-				if (opts.batch && typeof nwBatchContinuityAudit === 'function') await nwBatchContinuityAudit(chapterNum);
-				else await runChapterContinuityAudit(chapterNum, { silent: true });
-			}
 		    console.log('Post-final updateRequestLog - chapterContent Length:', chapterContent.length);
+		    async function nwRunChapterAuditNow() {
+		        refreshContinuityAfterChapter(chapterNum);
+		        if (!novelData.autoContinuityAudit) return;
+		        if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'audit', '');
+		        // #134 follow-up 5: in a batch only the audit call is retried (Parts 1/2 already spent their tokens).
+		        if (opts.batch && typeof nwBatchContinuityAudit === 'function') await nwBatchContinuityAudit(chapterNum);
+		        else await runChapterContinuityAudit(chapterNum, { silent: true });
+		    }
 		    try {
 		        // SLOT8C: draft-only skip lives in ensureQualityAfterGenerate (novelData.skipAutoRevision)
 		        await ensureQualityAfterGenerate(chapterNum);
@@ -13239,6 +13952,8 @@ return c && c.name && c.backstory && c.arc; });
 		        // In a batch this goes to the status line and does not stop the run.
 		        if (opts.batch && typeof nwNotify === 'function') nwNotify('Chapter ' + chapterNum + ' quality gate/revise error (run continues): ' + String((qgErr && qgErr.message) || qgErr), { level: 'warn' });
 		    }
+		    await nwRunChapterAuditNow();
+		    if (typeof nwCheckChapterReplay === 'function') nwCheckChapterReplay(chapterNum, opts);
 			if (!NW_QCAT_SCORE_AFTER_COVERAGE) {
 				await nwScoreGeneratedChapter(chapterNum, opts);
 			}
@@ -13641,7 +14356,23 @@ return c && c.name && c.backstory && c.arc; });
                 perChapter = nwBatchMaxTokens() * nwBatchPasses();
                 source = 'fallback';
             }
-            return { perChapter: perChapter, total: perChapter * (Number(planned) || 0), source: source };
+            var count = Number(planned) || 0;
+            var total = perChapter * count;
+            var planBuildCalls = 0;
+            var buildEl = nwBatchEl('batchBuildPlansFirst');
+            var aiEl = nwBatchEl('batchBuildPlansUseAI');
+            if (buildEl && buildEl.checked && aiEl && aiEl.checked) {
+                planBuildCalls = count;
+                total += planBuildCalls * 1500;
+            }
+            var auditInputChars = 0;
+            if (typeof novelData !== 'undefined' && novelData && novelData.autoContinuityAudit) {
+                var chs = novelData.chapters || [];
+                var sum = 0;
+                for (var ai = 0; ai < chs.length; ai++) sum += String(chs[ai] || '').length;
+                auditInputChars = sum;
+            }
+            return { perChapter: perChapter, total: total, source: source, planBuildCalls: planBuildCalls, auditInputChars: auditInputChars };
         }
 
         function nwBatchReadOptions() {
@@ -13805,7 +14536,12 @@ return c && c.name && c.backstory && c.arc; });
         function nwBatchApplyLock() {
             var locked = nwBatchIsLocked();
             var setupLocked = (typeof nwBatchSetupIsLocked === 'function') ? nwBatchSetupIsLocked() : locked;
-            document.querySelectorAll('#chapterGenContainer button, #chapterEditContainer button').forEach(function (b) { b.disabled = locked; });
+            document.querySelectorAll('#chapterGenContainer button, #chapterEditContainer button').forEach(function (b) {
+                if (b.closest && b.closest('.nw-plan-panel')) return;
+                b.disabled = locked;
+            });
+            var planLocked = (typeof nwPlansAreLocked === 'function') ? nwPlansAreLocked() : locked;
+            document.querySelectorAll('.nw-plan-panel button, .nw-plan-panel input, .nw-plan-panel select, .nw-plan-panel textarea').forEach(function (el) { el.disabled = planLocked; });
             document.querySelectorAll('textarea[id^="chapterEditContent"]').forEach(function (t) { t.readOnly = locked; t.disabled = locked; });
             // Tab 7 Apply (updateChapter) and Tab 8 Integrate Suggestions are writers too.
             document.querySelectorAll('#tab7 button[onclick*="applyTopBookCritiques"], #improvementsTableBody button[onclick*="applyBookCritiqueItem"], #tab8 button[onclick*="integrateBreakdownSuggestions"]').forEach(function (b) { b.disabled = locked; });
@@ -14062,11 +14798,23 @@ return c && c.name && c.backstory && c.arc; });
         window.nwBatchCoverageDecide = nwBatchCoverageDecide;
 
         // ---- batch entry points ----
-        function generateAllChapters() {
+        async function generateAllChapters() {
             if (typeof nwBatchPauseHoldsSetupLock === 'function' && nwBatchPauseHoldsSetupLock()) {
                 if (typeof nwRefuseAiIfLocked === 'function') nwRefuseAiIfLocked('Generate All');
                 return Promise.resolve({ started: false, reason: 'paused' });
             }
+            window.__nwPlanPhaseLog = [];
+            var buildEl = nwBatchEl('batchBuildPlansFirst');
+            var aiEl = nwBatchEl('batchBuildPlansUseAI');
+            var wantPlans = !!(buildEl && buildEl.checked);
+            if (wantPlans && typeof nwBuildPlansFirst === 'function') {
+                try { collectData(); } catch (e) { console.warn('[plans] collectData', e); }
+                var range = (typeof nwBatchReadOptions === 'function') ? nwBatchReadOptions() : { from: 1, to: (novelData && novelData.numChapters) || 1 };
+                var chapterNums = [];
+                for (var pn = range.from; pn <= range.to; pn++) chapterNums.push(pn);
+                await nwBuildPlansFirst(chapterNums, !!(aiEl && aiEl.checked));
+            }
+            window.__nwPlanPhaseLog.push('batch-start');
             nwBatchState.lastPromise = nwBatchStart(false);
             return nwBatchState.lastPromise;
         }
@@ -15032,6 +15780,7 @@ return c && c.name && c.backstory && c.arc; });
 		   novelData.skipAutoRevision = !!document.getElementById('skipAutoRevision')?.checked;
 		   novelData.aiBeatCheck = !!document.getElementById('aiBeatCheck')?.checked;
 		   if (typeof nwCollectPlanFactsFromUi === 'function') nwCollectPlanFactsFromUi();
+		   if (typeof nwCollectWritingPlansFromUi === 'function') nwCollectWritingPlansFromUi();
 		   novelData.chapterContinuityPackets = Array.isArray(novelData.chapterContinuityPackets) ? novelData.chapterContinuityPackets : [];
 		   novelData.continuityFindings = Array.isArray(novelData.continuityFindings) ? novelData.continuityFindings : [];
 		   if (!novelData.continuityTracker || typeof novelData.continuityTracker !== 'object') {
