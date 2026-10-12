@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "2.0",
+  "coreVersion": "2.0",
+  "sourceTool": "HerbalBookForge",
+  "sourceVersion": "1.0",
+  "exportedAt": "2026-10-12T00:00:00Z",
+  "workType": "nonfiction",
+  "novelData": {
+    "title": "A Field Guide to Garden Herbs",
+    "story": {
+      "book": {
+        "id": "bk_garden_herbs",
+        "title": "A Field Guide to Garden Herbs"
+      },
+      "chapters": [
+        {
+          "id": "ch_growing",
+          "number": 1,
+          "title": "Growing Conditions"
+        }
+      ]
+    }
+  }
+}

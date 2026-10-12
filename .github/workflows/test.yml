@@ -50,6 +50,9 @@ jobs:
       - name: NovelWriter QCAT harness smoke (QH:23 REQ-SCH-07)
         run: npm run test:smoke:nw-qcat-harness
 
+      - name: Story Core 2.0 contract smoke
+        run: npm run test:contract:story-core
+
       - name: Lint HTML files
         run: |
           npx htmlhint "**/*.html"

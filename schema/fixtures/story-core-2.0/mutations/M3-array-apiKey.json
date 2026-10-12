@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "2.0",
+  "coreVersion": "2.0",
+  "sourceTool": "NovelWriter",
+  "sourceVersion": "2.0",
+  "exportedAt": "2026-10-12T00:00:00Z",
+  "workType": "fiction",
+  "novelData": {
+    "title": "Token Counts Are Not Secrets",
+    "story": {
+      "book": {
+        "id": "bk_token_counts",
+        "title": "Token Counts Are Not Secrets"
+      },
+      "chapters": [],
+      "scenes": []
+    }
+  },
+  "ext": {
+    "novelWriter": {
+      "requestLog": [
+        {
+          "tokenCounts": {
+            "promptTokens": 120,
+            "completionTokens": 85,
+            "maxTokens": 512
+          },
+          "apiKey": "REDACTED-TEST-VALUE"
+        }
+      ]
+    }
+  }
+}

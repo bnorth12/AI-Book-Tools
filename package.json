@@ -21,6 +21,7 @@
     "test:smoke:nw-migration": "node scripts/_smoke_nw_migration.mjs",
     "test:smoke:nw-setup-lock": "node scripts/_smoke_nw_setup_lock.mjs",
     "test:smoke:nw-s1-pin": "node scripts/_smoke_nw_s1_pin.mjs",
+    "test:contract:story-core": "node scripts/_smoke_story_core_contract.mjs",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:install": "playwright install chromium",
     "test:regression": "npm run test:governance && npm run test:e2e",

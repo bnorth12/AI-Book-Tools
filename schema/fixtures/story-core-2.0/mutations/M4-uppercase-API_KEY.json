@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "2.0",
+  "coreVersion": "2.0",
+  "sourceTool": "fixture",
+  "sourceVersion": "1.0",
+  "exportedAt": "2026-10-12T00:00:00Z",
+  "workType": "fiction",
+  "API_KEY": "REDACTED-TEST-VALUE",
+  "novelData": {
+    "title": "Uppercase Key Test",
+    "story": {
+      "book": {
+        "id": "bk_uppercase_key",
+        "title": "Uppercase Key Test"
+      },
+      "chapters": [],
+      "scenes": []
+    }
+  }
+}
