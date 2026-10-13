@@ -305,6 +305,18 @@ Synced: 2026-04-19
                         <pre id="qualityGateResult" style="margin:4px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f5f5ff;border:1px solid #ccd;white-space:pre-wrap;">Quality gate: (none yet)</pre>
 			<pre id="qualityJudgeAlignResult" style="white-space:pre-wrap;font-size:12px;"></pre>
 			<button type="button" id="trackedE2EBtn" onclick="runTrackedE2E()" title="Lean start-to-finish tracked E2E with LIVE calls (uses the key above). Offline/no-key: node scripts/run-tracked-e2e.mjs">Tracked E2E (lean, live)</button>
+			<button type="button" id="testTab1Btn" onclick="testTab1()" hidden>Test Tab 1</button>
+			<button type="button" id="testCharactersBtn" onclick="testCharacters()" hidden>Test Characters</button>
+			<button type="button" id="testSubplotsBtn" onclick="testSubplots()" hidden>Test Subplots</button>
+			<button type="button" id="testOutlinesBtn" onclick="testOutlines()" hidden>Test Outlines</button>
+			<button type="button" id="testGenerateChaptersBtn" onclick="testGenerateChapters()" hidden>Test Generate Chapters</button>
+			<button type="button" id="testEditChaptersBtn" onclick="testEditChapters()" hidden>Test Edit Chapters</button>
+			<button type="button" id="testBookBtn" onclick="testBook()" hidden>Test Book</button>
+			<button type="button" id="testRequestLogBtn" onclick="testRequestLog()" hidden>Test Request Log</button>
+			<button type="button" id="testNavigationBtn" onclick="testNavigation()" hidden>Test Navigation</button>
+			<button type="button" id="testUtilitiesBtn" onclick="testUtilities()" hidden>Test Utilities</button>
+			<button type="button" id="testSessionRoundtripMockBtn" onclick="testSessionRoundtripMock()" hidden>Test Session Roundtrip</button>
+			<button type="button" id="testAdvancedWorkflowBtn" onclick="testAdvancedWorkflow()" hidden>Test Advanced Workflow</button>
 			        <pre id="c1SmokeResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f7f7f7;border:1px solid #ddd;border-radius:4px;white-space:pre-wrap;max-height:220px;overflow:auto;">C1 smoke idle — click to validate digests (no full manuscript dump).</pre>
 			<pre id="trackedE2EResult" style="margin:8px 0 12px;padding:8px 10px;font-size:12px;line-height:1.35;color:#555;background:#f0f4ff;border:1px solid #b8c7e8;border-radius:4px;white-space:pre-wrap;max-height:360px;overflow:auto;">Tracked E2E idle - click for a lean 2-chapter token + quality run (live API calls).</pre>
 
@@ -369,6 +381,7 @@ Synced: 2026-04-19
 			        <button onclick="suggestSetting()">Suggest Setting</button>
 			        <label for="numChapters">Number of Chapters:</label>
 			        <input type="number" id="numChapters" min="1" value="10" onchange="updateChapterSubpages()">
+			        <span id="numChaptersFixedNote" data-testid="nw-num-chapters-fixed-note" hidden style="margin-left:0.6em;color:#8a4b08;font-size:12px;"></span>
 			        <label for="chapterLength">Target Chapter Length (words):</label>
 			        <input type="number" id="chapterLength" min="500" value="2000">
 			        <button onclick="suggestStoryInfo()">AI Suggest Story Info</button>
@@ -486,7 +499,7 @@ Synced: 2026-04-19
 	    <!-- NW.T5.5: Tab 5 SHALL provide a Strict Continuity Mode toggle that enforces stronger chapter-to-chapter consistency constraints in generation prompts. -->
 	    <!-- NW.T5.6: Tab 5 SHALL provide continuity packet and audit controls (rebuild packets and run continuity audit) plus a read-only continuity status panel. -->
 	    <!-- NW.T5.7: Continuity packet, tracker, and findings data SHALL persist in session state and round-trip through import/export as optional schema-compatible fields. -->
-	    <!-- NW.T5.8: Tab 5 SHALL provide an optional "Generate All Chapters" batch (range, regenerate-existing and per-chapter-download toggles off by default, token cap, Pause/Resume, status line) that drafts prose only for chapters with outlines (NW_GENERATE_ALL_SPEC). -->
+	    <!-- NW.T5.8: Tab 5 SHALL provide an optional "Generate All Chapters" batch (range, regenerate-existing and per-chapter-download toggles off by default, token cap, Pause/Resume/Cancel run, status line) that drafts prose only for chapters with outlines (NW_GENERATE_ALL_SPEC). -->
 	    <!-- NW.T5.19: Tab 5 SHALL provide an optional AI beat check (off by default) and per-chapter Plan facts rows stored on novelData.chapterFactChecks, not inside chapterBlueprints. -->
 	    <!-- Implemented: v0.3.4 | Date: 2026-04-18 -->
 	    <div id="tab5" class="tab">
@@ -496,6 +509,8 @@ Synced: 2026-04-19
 	        <label title="Writes each chapter from your outline and blueprint with no automatic rewrite passes. Use it when you want to revise by hand; quality scores are still shown."><input type="checkbox" id="skipAutoRevision"> Skip automatic revision passes (draft only)</label>
 	        <p id="draftOnlyNote" role="status" hidden>Draft-only mode is on: automatic revision passes are skipped.</p>
 	        <label title="One extra callAI per scored chapter to judge each blueprint beat as present, partial, or missing. Off by default. Does not rewrite text. Counted in the Generate All estimate and token ledger. Skipped when draft-only is on unless this box is also ticked."><input type="checkbox" id="aiBeatCheck" data-testid="nw-ai-beat-check"> AI beat check (1 extra call per chapter)</label>
+	        <label title="Before Generate All starts, build a writing plan for each planned chapter that does not already have a fresh plan. Off by default."><input type="checkbox" id="batchBuildPlansFirst" data-testid="nw-build-plans-first"> Build plans first</label>
+	        <label title="When Build plans first is on, each plan is one small AI call. Off uses the local heuristic and adds nothing to the estimate."><input type="checkbox" id="batchBuildPlansUseAI" data-testid="nw-build-plans-ai"> Build plans with AI</label>
 	        <button onclick="rebuildContinuityPackets()">Rebuild Continuity Packets</button>
 	        <button onclick="runContinuityAuditAll()">Run Continuity Audit (All Chapters)</button>
 	        <label for="continuityStatusPanel">Continuity Tracker:</label>
@@ -511,6 +526,7 @@ Synced: 2026-04-19
 	            <small id="batchEstimateHint" aria-live="polite"></small>
 	            <button id="batchPauseBtn" data-testid="nw-batch-pause" onclick="pauseBatchRun()" disabled>Pause</button>
 	            <button id="batchResumeBtn" data-testid="nw-batch-resume" onclick="resumeBatchRun()" disabled>Resume</button>
+	            <button id="batchCancelBtn" data-testid="nw-batch-cancel" onclick="cancelBatchRun()" disabled>Cancel run</button>
 	            <div id="batchCoverageBox" data-testid="nw-batch-coverage-box" hidden>
 	                <p id="batchCoverageMsg">This chapter is missing required story points. Accept keeps the draft and rebuilds continuity from it. Regenerate retries this chapter. Skip continues without feeding this draft into later chapters.</p>
 	                <button type="button" id="batchCoverageAcceptBtn" data-testid="nw-batch-coverage-accept" onclick="nwBatchCoverageDecide('accept')">Accept</button>
@@ -783,7 +799,8 @@ Synced: 2026-04-19
 	        qualitySamples: [],
 	        kbEnabled: false,
 	        lastQualityGate: null,
-	        qualityFindings: []
+	        qualityFindings: [],
+	        nwSchemaVersion: 1
 	    };
 
 	    let requestLog = {
@@ -1133,7 +1150,7 @@ let activeAICallCount = 0;
 				const prev = nwActiveCall;
 				if (prev && prev.ticker) clearInterval(prev.ticker);
 			}
-			const c = { id: ++nwActiveCallSeq, operation: operation, label: label || '', startedAt: Date.now(), ticker: null, abortCtl: extra.abortCtl || null, taskType: extra.taskType || '', expectedMs: extra.expectedMs || 0, keepWaiting: false, userAbort: false, rejectAbort: perCall ? (extra.rejectAbort || null) : null };
+			const c = { id: ++nwActiveCallSeq, operation: operation, label: label || '', startedAt: Date.now(), ticker: null, abortCtl: extra.abortCtl || null, taskType: extra.taskType || '', expectedMs: extra.expectedMs || 0, keepWaiting: false, userAbort: false, rejectAbort: perCall ? (extra.rejectAbort || null) : null, chapter: extra.chapter != null ? extra.chapter : null };
 			if (perCall) nwActiveCalls.set(c.id, c);
 			nwActiveCall = c;
 			c.ticker = setInterval(nwRenderActiveCall, 1000);
@@ -1804,6 +1821,7 @@ let activeAICallCount = 0;
 			},
 			'tab5.generateChapter': {
 				id: 'tab5.generateChapter', tab: 'tab5', agentKey: 'generateChapter', name: 'Chapter Draft',
+				version: 'q1.1',
 				ability: 'Execute blueprint + outline obligations in prose. Do not invent a new throughline. Development must be earned from spine inputs; never pad-to-N.',
 				inputs: [
 					{ name: 'chapterNum', binder: 'chapterNum', required: true },
@@ -1818,6 +1836,18 @@ let activeAICallCount = 0;
 				],
 				output: { shape: 'chapterProse', validators: ['nonEmptyText', 'obligationCoverage'] },
 				stop: 'tab5ReadinessGreen'
+			},
+			'tab5.buildWritingPlan': {
+				id: 'tab5.buildWritingPlan', tab: 'tab5', agentKey: 'generateChapter', name: 'Writing Plan',
+				version: '4p.1',
+				ability: 'Build one chapter writing plan as JSON items (setting, cast, beat, fact, keyPoint). Do not draft prose.',
+				inputs: [
+					{ name: 'chapterNum', binder: 'chapterNum', required: true },
+					{ name: 'blueprint', binder: 'chapterBlueprint', required: false, maxChars: 900 },
+					{ name: 'chapterOutline', binder: 'chapterOutlineText', required: false, maxChars: 800 }
+				],
+				output: { shape: 'writingPlan', validators: ['objectOrArray'] },
+				stop: null
 			},
 			'tab5.continuityAudit': {
 				id: 'tab5.continuityAudit', tab: 'tab5', agentKey: 'continuityAudit', name: 'Continuity Audit',
@@ -1912,11 +1942,15 @@ let activeAICallCount = 0;
 			return skillCatalog[skillId] || defaultSkillCatalog[skillId] || null;
 		}
 
-		function getSkillSystemPrompt(skillId, fallbackPrompt) {
+		function getSkillSystemPrompt(skillId, fallbackPrompt, chapterNum) {
 			const skill = getAgentSkill(skillId);
 			if (!skill) return fallbackPrompt || '';
 			const base = getAgentPrompt(skill.tab, skill.agentKey, fallbackPrompt || '');
-			const ability = (skill.ability || '').trim();
+			let ability = (skill.ability || '').trim();
+			// The HARD REQUIREMENTS sentence is part of the draft system prompt only when that section is emitted.
+			if (skillId === 'tab5.generateChapter' && typeof getChapterBlueprint === 'function' && getChapterBlueprint(chapterNum)) {
+				ability = (ability ? ability + ' ' : '') + 'The HARD REQUIREMENTS section is the authority for setting, cast, beats and facts.';
+			}
 			if (!ability) return base;
 			return base + '\n\nSkill ability:\n' + ability;
 		}
@@ -2214,33 +2248,1076 @@ let activeAICallCount = 0;
 			return sa.length >= sb.length ? sa : sb;
 		}
 
+		// ---- NW S1: schema v1 + scenes + owner helpers (ARCHITECTURE.md §2-§8) ----
+		var NW_S1_NORMALIZER_PASSTHROUGH = true;
+		var NW_S1_LOCK_SETUP_INPUTS = true;
+		var NW_S1_LOCK_TAB47 = true;
+		var NW_S1_LOCK_PAUSE_HELD = true;
+		var NW_S1_LOCK_GENALL_SETUP = true;
+		var NW_S1_CANCEL_RELEASES_LOCK = true;
+		var NW_S1_KEEP_WRONG_TYPES = true;
+		var NW_S1_KEEP_WRONG_SUBPLOTS_META = true;
+		var NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS = true;
+		var NW_S1_KEEP_WRONG_REQUIRED_FACTS = true;
+		var NW_S1_KEEP_WRONG_REQUIREMENTS = true;
+		var NW_S1_KEEP_WRONG_FINGERPRINTS = true;
+		var NW_S1_OPAQUE_ID_THROW_ON_COLLISION = true;
+		var NW_S1_RESIZE_SPLICE_ALL = true;
+		var NW_S1_RESIZE_CHAPTERS = true;
+		var NW_S1_RESIZE_SKIP_FUTURE = true;
+		var NW_S1_RESET_RESPECTS_PAUSE_LOCK = true;
+		var NW_S1_LOCK_TRACKED_TEST_BTNS = true;
+		var NW_S1_BLOCK_V2_CHAPTER_RESIZE = true;
+		var NW_S1_RESTORE_OPAQUE_RNG = true;
+		var NW_S1_WORLD_REMOVED_STALE = true;
+		var NW_S1_SPLICE_SCENES = true;
+		var NW_S1_SCHEMA_VERSION = 1;
+		var nwMigrateInProgress = false;
+		var nwOpaqueRngCurrent = null;
+		var NW_S1_KEYS = ['storyWorld', 'subplotsMeta', 'chapterFlags', 'chapterWritingPlans', 'chapterRequirements', 'chapterRequiredFacts', 'chapterFingerprints', 'chapterThemeTags', 'chapterScenes', 'chapterIds', 'nwSchemaVersion'];
+		var NW_S1_KEY_TYPES = {
+			storyWorld: 'object',
+			subplotsMeta: 'array',
+			chapterFlags: 'array',
+			chapterWritingPlans: 'array',
+			chapterRequirements: 'array',
+			chapterRequiredFacts: 'array',
+			chapterFingerprints: 'array',
+			chapterThemeTags: 'array',
+			chapterScenes: 'array',
+			chapterIds: 'array',
+			nwSchemaVersion: 'number'
+		};
+		var NW_S1_WHOLE_REPLACE = { genreProfiles: 1, structureTemplate: 1, immersionWeight: 1, arc: 1, subplots: 1, role: 1, setupRefs: 1 };
+		var NW_S1_LOCKED_ARRAYS = { concepts: 'id', rules: 'id', locations: 'id', systems: 'id', themes: 'id' };
+		var NW_S1_CHAR_KNOWN = ['name', 'backstory', 'arc', 'role', 'goal', 'flaw', 'notes', 'obligations', 'id', 'voice', 'relationships', 'explainerFor', 'knows'];
+		var NW_S1_SCENE_MARKER_RE = /\[\[\s*scene\b|<<+\s*scene\b|<!--\s*scene\b/i;
+
+		function nwOwnerLocked() {
+			if (nwMigrateInProgress) return false;
+			if (typeof nwBatchState !== 'undefined' && nwBatchState && nwBatchState.importing) return false;
+			return typeof nwBatchIsLocked === 'function' && nwBatchIsLocked();
+		}
+
+		function nwRefuseAiIfLocked(name) {
+			var setupLocked = (typeof nwBatchSetupIsLocked === 'function') ? nwBatchSetupIsLocked()
+				: (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked());
+			if (setupLocked) {
+				var msg = (name || 'AI action') + ' is locked while a Generate All run is active or awaiting restore.';
+				if (typeof nwToast === 'function') nwToast(msg);
+				else if (typeof nwNotify === 'function') nwNotify(msg);
+				else console.warn(msg);
+				return true;
+			}
+			return false;
+		}
+
+		function nwHasOwn(obj, key) {
+			return !!(obj && Object.prototype.hasOwnProperty.call(obj, key));
+		}
+
+		function nwSchemaVersion(nd) {
+			nd = nd || (typeof novelData !== 'undefined' ? novelData : null);
+			var v = nd && nd.nwSchemaVersion;
+			if (typeof v === 'number' && isFinite(v)) return v;
+			return 0;
+		}
+
+		var NW_S1_CHAPTER_COUNT_FIXED_MSG = 'Chapter count is fixed for files saved by a newer NovelWriter version';
+		var NW_S1_SETUP_TEST_BTN_IDS = ['trackedE2EBtn', 'testTab1Btn', 'testCharactersBtn', 'testSubplotsBtn', 'testOutlinesBtn', 'testGenerateChaptersBtn', 'testEditChaptersBtn', 'testBookBtn', 'testRequestLogBtn', 'testNavigationBtn', 'testUtilitiesBtn', 'testSessionRoundtripMockBtn', 'testAdvancedWorkflowBtn'];
+
+		function nwShowChapterCountFixedNote(on) {
+			var note = document.getElementById('numChaptersFixedNote');
+			if (!note) return;
+			note.textContent = on ? NW_S1_CHAPTER_COUNT_FIXED_MSG : '';
+			note.hidden = !on;
+		}
+
+		function nwChapterCountFixedForNewerSchema(nd) {
+			if (typeof NW_S1_BLOCK_V2_CHAPTER_RESIZE !== 'undefined' && !NW_S1_BLOCK_V2_CHAPTER_RESIZE) return false;
+			return typeof nwSchemaVersion === 'function' && nwSchemaVersion(nd) > 1;
+		}
+
+		function nwDeepClone(v) {
+			if (v == null || typeof v !== 'object') return v;
+			try { return JSON.parse(JSON.stringify(v)); } catch (_) { return v; }
+		}
+
+		function nwSetOpaqueRng(rng) {
+			nwOpaqueRngCurrent = typeof rng === 'function' ? rng : null;
+			return nwOpaqueRngCurrent;
+		}
+
+		function nwSeededRng(seed) {
+			var s = (Number(seed) >>> 0) || 0;
+			return function () {
+				s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+				return s / 4294967296;
+			};
+		}
+
+		function nwTextHash(s) {
+			var str = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+			var h = 0x811c9dc5;
+			for (var i = 0; i < str.length; i++) {
+				h ^= str.charCodeAt(i);
+				h = Math.imul(h, 0x01000193);
+			}
+			return (h >>> 0).toString(16).padStart(8, '0');
+		}
+
+		function nwSlugId(name, taken, emptySlug) {
+			var slug = String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+			if (!slug) slug = emptySlug || 'item';
+			var set = taken instanceof Set ? taken : new Set(taken || []);
+			if (!set.has(slug)) return slug;
+			var n = 2;
+			while (set.has(slug + '-' + n)) n++;
+			return slug + '-' + n;
+		}
+
+		function nwCharacterId(name, taken) { return nwSlugId(name, taken, 'char'); }
+		function nwItemId(name, taken) { return nwSlugId(name, taken, 'item'); }
+
+		function nwOpaqueId(prefix, taken, rng) {
+			rng = rng || nwOpaqueRngCurrent || Math.random;
+			var set = taken instanceof Set ? taken : new Set(taken || []);
+			var alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
+			var id, guard = 0;
+			do {
+				var chars = '';
+				for (var i = 0; i < 10; i++) chars += alphabet.charAt(Math.floor(rng() * 36) % 36);
+				id = String(prefix || '') + chars;
+				guard++;
+			} while (set.has(id) && guard < 50);
+			if (set.has(id) && (typeof NW_S1_OPAQUE_ID_THROW_ON_COLLISION === 'undefined' || NW_S1_OPAQUE_ID_THROW_ON_COLLISION)) {
+				throw new Error('nwOpaqueId: too many collisions');
+			}
+			if (taken instanceof Set) taken.add(id);
+			else if (Array.isArray(taken)) taken.push(id);
+			return id;
+		}
+
+		function nwTakenIds(nd, kind) {
+			var set = new Set();
+			nd = nd || (typeof novelData !== 'undefined' ? novelData : {});
+			if (kind === 'ch_' || kind === 'all') {
+				if (Array.isArray(nd.chapterIds)) nd.chapterIds.forEach(function (id) { if (id) set.add(id); });
+			}
+			if (kind === 'sc_' || kind === 'all') {
+				if (Array.isArray(nd.chapterScenes)) nd.chapterScenes.forEach(function (rec) {
+					if (rec && Array.isArray(rec.scenes)) rec.scenes.forEach(function (s) { if (s && s.id) set.add(s.id); });
+				});
+			}
+			if (kind === 'bt_' || kind === 'all') {
+				(nd.chapterBlueprints || []).forEach(function (bp) {
+					if (!bp || typeof bp !== 'object') return;
+					(bp.beats || []).forEach(function (b) { if (b && b.id) set.add(b.id); });
+				});
+				(nd.chapterWritingPlans || []).forEach(function (p) {
+					if (!p || !Array.isArray(p.items)) return;
+					p.items.forEach(function (it) { if (it && it.id) set.add(it.id); });
+				});
+			}
+			return set;
+		}
+
+		function nwWarnWrongType(key, value) {
+			console.warn('normalizeImportedSessionData: ' + key + ' has wrong type; keeping as-is', value);
+		}
+
+		function nwS1TypeOk(key, value) {
+			var t = NW_S1_KEY_TYPES[key];
+			if (t === 'array') return Array.isArray(value);
+			if (t === 'number') return typeof value === 'number' && isFinite(value);
+			if (t === 'object') return value != null && typeof value === 'object' && !Array.isArray(value);
+			return true;
+		}
+
+		function nwApplyS1KeyPassthrough(merged, imported) {
+			NW_S1_KEYS.forEach(function (key) {
+				if (key === 'chapterFlags') return;
+				if (!nwHasOwn(imported, key)) {
+					delete merged[key];
+					return;
+				}
+				var val = imported[key];
+				if (!nwS1TypeOk(key, val)) {
+					nwWarnWrongType(key, val);
+					merged[key] = val;
+					return;
+				}
+				if (typeof NW_S1_NORMALIZER_PASSTHROUGH !== 'undefined' && !NW_S1_NORMALIZER_PASSTHROUGH) {
+					if (key === 'storyWorld' && val && typeof val === 'object') {
+						merged[key] = nwWhitelistStoryWorld(val);
+					} else {
+						merged[key] = val;
+					}
+				} else {
+					merged[key] = val;
+				}
+			});
+			if (merged.storyWorld && typeof merged.storyWorld === 'object' && !Array.isArray(merged.storyWorld)) {
+				nwWarnNestedWrongTypes(merged.storyWorld);
+			}
+			if (typeof NW_S1_NORMALIZER_PASSTHROUGH !== 'undefined' && !NW_S1_NORMALIZER_PASSTHROUGH) {
+				if (Array.isArray(merged.chapterThemeTags)) {
+					merged.chapterThemeTags = merged.chapterThemeTags.map(function (t) {
+						return t && typeof t === 'object' ? nwPickKeys(t, ['tags', 'source']) : t;
+					});
+				}
+				if (Array.isArray(merged.characters)) {
+					merged.characters = merged.characters.map(function (c) {
+						if (!c || typeof c !== 'object' || !Array.isArray(c.knows)) return c;
+						var copy = Object.assign({}, c);
+						copy.knows = c.knows.map(function (k) {
+							return k && typeof k === 'object' ? nwPickKeys(k, ['conceptId', 'learnedIn', 'locked', 'source']) : k;
+						});
+						return copy;
+					});
+				}
+			}
+		}
+
+		function nwPickKeys(obj, keys) {
+			if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+			var out = {};
+			keys.forEach(function (k) { if (nwHasOwn(obj, k)) out[k] = obj[k]; });
+			return out;
+		}
+		function nwWhitelistStoryWorld(sw) {
+			var out = nwPickKeys(sw, ['version', 'notes', 'locations', 'rules', 'concepts', 'topicTags', 'genreProfiles', 'structureTemplate', 'immersionWeight', 'systems', 'themes', 'contradictions', 'setupRefs', 'role', 'arc', 'subplots', 'conceptsExtractedFrom']);
+			if (out.role && typeof out.role === 'object') out.role = nwPickKeys(out.role, ['value', 'source', 'evidence', 'decidedAt']);
+			if (out.immersionWeight && typeof out.immersionWeight === 'object') out.immersionWeight = nwPickKeys(out.immersionWeight, ['culture', 'science', 'tech']);
+			if (out.structureTemplate && typeof out.structureTemplate === 'object') {
+				out.structureTemplate = nwPickKeys(out.structureTemplate, ['id', 'beats']);
+				if (Array.isArray(out.structureTemplate.beats)) {
+					out.structureTemplate.beats = out.structureTemplate.beats.map(function (b) { return nwPickKeys(b, ['name', 'pct']); });
+				}
+			}
+			if (Array.isArray(out.systems)) {
+				out.systems = out.systems.map(function (s) {
+					return nwPickKeys(s, ['id', 'name', 'kind', 'hardness', 'powerSource', 'costs', 'limits', 'users', 'ruleIds', 'locked', 'source']);
+				});
+			}
+			return out;
+		}
+
+		function nwWarnNestedWrongTypes(sw) {
+			if (nwHasOwn(sw, 'systems') && sw.systems != null && !Array.isArray(sw.systems)) {
+				console.warn('normalizeImportedSessionData: storyWorld.systems has wrong type; keeping as-is', sw.systems);
+			}
+		}
+
 		function normalizeCharacterItem(raw) {
 			if (raw == null) return null;
 			if (typeof raw === 'string') {
-				const name = raw.trim();
-				return name ? { name: name, backstory: '', arc: '', obligations: [] } : null;
+				var nameOnly = raw.trim();
+				return nameOnly ? { name: nameOnly } : null;
 			}
 			if (typeof raw !== 'object') return null;
-			const name = String(pickAliased(raw, 'name') || raw.name || '').trim();
-			const backstory = String(pickAliased(raw, 'backstory') || '').trim();
-			const arc = String(pickAliased(raw, 'arc') || '').trim();
-			let obligations = pickAliased(raw, 'obligations');
-			if (typeof obligations === 'string' && obligations.trim()) obligations = [obligations.trim()];
-			if (!Array.isArray(obligations)) obligations = [];
+			var out = {};
+			Object.keys(raw).forEach(function (k) { out[k] = raw[k]; });
+			if (nwHasOwn(raw, 'name') || pickAliased(raw, 'name')) out.name = String(pickAliased(raw, 'name') || raw.name || '').trim();
+			if (nwHasOwn(raw, 'backstory') || pickAliased(raw, 'backstory')) out.backstory = String(pickAliased(raw, 'backstory') || '').trim();
+			if (nwHasOwn(raw, 'arc') || pickAliased(raw, 'arc')) out.arc = String(pickAliased(raw, 'arc') || '').trim();
+			if (nwHasOwn(raw, 'obligations') || pickAliased(raw, 'obligations') != null) {
+				var obligations = pickAliased(raw, 'obligations');
+				if (typeof obligations === 'string' && obligations.trim()) obligations = [obligations.trim()];
+				if (Array.isArray(obligations)) out.obligations = obligations;
+				else out.obligations = obligations;
+			}
+			var name = String(out.name || '').trim();
+			var backstory = String(out.backstory || '').trim();
+			var arc = String(out.arc || '').trim();
 			if (!name && !backstory && !arc) return null;
-			return { name: name, backstory: backstory, arc: arc, obligations: obligations };
+			return out;
 		}
 
-		function normalizeSubplotItem(raw) {
+		function nwCopySubplotMetaFromRaw(nd, raw, i) {
+			if (!nd || raw == null || typeof raw !== 'object' || Array.isArray(raw)) return;
+			if (nwHasOwn(nd, 'subplotsMeta') && !Array.isArray(nd.subplotsMeta)) {
+				if ((typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES)
+					&& (typeof NW_S1_KEEP_WRONG_SUBPLOTS_META === 'undefined' || NW_S1_KEEP_WRONG_SUBPLOTS_META)) {
+					console.warn('nwCopySubplotMetaFromRaw: subplotsMeta has wrong type; keeping as-is', nd.subplotsMeta);
+					return;
+				}
+				nd.subplotsMeta = [];
+			}
+			if (!Array.isArray(nd.subplotsMeta)) nd.subplotsMeta = [];
+			if (nd.subplotsMeta[i] == null) nd.subplotsMeta[i] = Object.assign({}, raw);
+		}
+
+		function normalizeSubplotItem(raw, i, nd) {
+			var target = nd || (typeof novelData !== 'undefined' ? novelData : null);
+			if (raw != null && typeof raw === 'object' && !Array.isArray(raw) && typeof i === 'number' && target) {
+				nwCopySubplotMetaFromRaw(target, raw, i);
+			}
 			if (raw == null) return '';
 			if (typeof raw === 'string') return raw.trim();
 			if (typeof raw === 'object') {
-				const t = raw.text || raw.subplot || raw.throughline || raw.summary || raw.description;
+				var t = raw.text || raw.subplot || raw.throughline || raw.summary || raw.description;
 				if (t) return String(t).trim();
 				try { return JSON.stringify(raw); } catch (_) { return String(raw); }
 			}
 			return String(raw).trim();
 		}
+
+		function nwStoryWorldUpdate(patch, origin, target) {
+			origin = origin || 'user';
+			target = target || novelData;
+			if (nwOwnerLocked()) return { ok: false, reason: 'locked', skipped: [] };
+			if (!patch || typeof patch !== 'object') return { ok: false, reason: 'bad-patch', skipped: [] };
+			var lockLike = origin === 'ai' || origin === 'import';
+			if (!target.storyWorld || typeof target.storyWorld !== 'object' || Array.isArray(target.storyWorld)) {
+				target.storyWorld = { version: 1 };
+			}
+			var sw = target.storyWorld;
+			var skipped = [];
+			var refused = [];
+			var proposal = null;
+			Object.keys(patch).forEach(function (key) {
+				if (key === 'version') {
+					if (origin === 'user' || origin === 'import' || origin === 'migrate') sw.version = patch.version;
+					return;
+				}
+				if (key === 'notes') {
+					sw.notes = patch.notes;
+					return;
+				}
+				if (NW_S1_WHOLE_REPLACE[key]) {
+					if (lockLike) {
+						refused.push(key);
+						if (!proposal) proposal = {};
+						proposal[key] = patch[key];
+						return;
+					}
+					if (key === 'arc' || key === 'subplots') {
+						if (sw.role && sw.role.value && sw.role.value !== 'character' && origin === 'user') {
+							// user may still store; readers ignore unless role is character
+						}
+					}
+					if (key === 'role' && lockLike && sw.role && sw.role.source === 'user') {
+						refused.push(key);
+						if (!proposal) proposal = {};
+						proposal[key] = patch[key];
+						return;
+					}
+					sw[key] = nwDeepClone(patch[key]);
+					return;
+				}
+				if (NW_S1_LOCKED_ARRAYS[key]) {
+					var idKey = NW_S1_LOCKED_ARRAYS[key];
+					if (!Array.isArray(sw[key])) sw[key] = [];
+					var arr = sw[key];
+					var byId = {};
+					arr.forEach(function (it, idx) { if (it && it[idKey]) byId[it[idKey]] = idx; });
+					var incoming = Array.isArray(patch[key]) ? patch[key] : [];
+					incoming.forEach(function (it) {
+						if (!it || typeof it !== 'object') return;
+						var id = it[idKey];
+						if (!id) {
+							var taken = arr.map(function (x) { return x && x.id; }).filter(Boolean);
+							id = nwItemId(it.name, taken);
+							it = Object.assign({}, it, { id: id });
+						}
+						var idx = byId[id];
+						var existing = idx != null ? arr[idx] : null;
+						if (lockLike && existing && existing.locked) {
+							skipped.push(id);
+							return;
+						}
+						var merged = Object.assign({}, existing || {}, it);
+						if (!existing) merged.source = origin === 'import' ? 'import' : (origin === 'ai' ? 'ai' : 'user');
+						else if (origin === 'user' && existing.source === 'ai') merged.source = 'user';
+						if (idx != null) arr[idx] = merged;
+						else {
+							byId[id] = arr.length;
+							arr.push(merged);
+						}
+					});
+					return;
+				}
+				if (key === 'contradictions') {
+					if (!Array.isArray(sw.contradictions)) sw.contradictions = [];
+					(Array.isArray(patch.contradictions) ? patch.contradictions : []).forEach(function (c) {
+						if (!c || typeof c !== 'object') return;
+						var cid = c.id || ('ctr-' + nwTextHash(String(c.conceptId || '') + '|' + String(c.text || '') + '|' + (c.chapter != null ? c.chapter : '')));
+						if (sw.contradictions.some(function (x) { return x && x.id === cid; })) return;
+						sw.contradictions.push(Object.assign({}, c, { id: cid }));
+					});
+					return;
+				}
+				if (key === 'conceptsExtractedFrom') {
+					sw.conceptsExtractedFrom = patch.conceptsExtractedFrom;
+					return;
+				}
+				sw[key] = patch[key];
+			});
+			return { ok: refused.length === 0, skipped: skipped, refused: refused, proposal: proposal };
+		}
+
+		function nwCharacterKnowsUpdate(charId, entries, origin, target) {
+			origin = origin || 'user';
+			target = target || novelData;
+			if (nwOwnerLocked()) return { ok: false, reason: 'locked', skipped: [] };
+			if (!Array.isArray(target.characters)) return { ok: false, reason: 'no-characters', skipped: [] };
+			var idx = target.characters.findIndex(function (c) { return c && (c.id === charId || c.name === charId); });
+			if (idx < 0) return { ok: false, reason: 'missing-character', skipped: [] };
+			var ch = Object.assign({}, target.characters[idx]);
+			if (!Array.isArray(ch.knows)) ch.knows = [];
+			var skipped = [];
+			var lockLike = origin === 'ai' || origin === 'import';
+			(Array.isArray(entries) ? entries : []).forEach(function (ent) {
+				if (!ent || typeof ent !== 'object') return;
+				var conceptId = ent.conceptId;
+				var existing = ch.knows.find(function (k) { return k && k.conceptId === conceptId; });
+				if (lockLike && existing && existing.locked) {
+					skipped.push(conceptId);
+					return;
+				}
+				var merged = Object.assign({}, existing || {}, ent);
+				if (!existing) merged.source = origin === 'import' ? 'import' : (origin === 'ai' ? 'ai' : 'user');
+				else if (origin === 'user' && existing.source === 'ai') merged.source = 'user';
+				if (existing) {
+					var ki = ch.knows.indexOf(existing);
+					ch.knows[ki] = merged;
+				} else ch.knows.push(merged);
+			});
+			var norm = normalizeCharacterItem(ch);
+			target.characters[idx] = norm || ch;
+			return { ok: true, skipped: skipped };
+		}
+
+		function nwChapterThemeTagsUpdate(n, patch, origin, target) {
+			origin = origin || 'user';
+			target = target || novelData;
+			if (nwOwnerLocked()) return { ok: false, reason: 'locked' };
+			if (!(n >= 1) || !patch || typeof patch !== 'object') return { ok: false, reason: 'bad-args' };
+			if (!Array.isArray(target.chapterThemeTags)) target.chapterThemeTags = [];
+			var prev = target.chapterThemeTags[n - 1] && typeof target.chapterThemeTags[n - 1] === 'object' ? target.chapterThemeTags[n - 1] : {};
+			target.chapterThemeTags[n - 1] = Object.assign({}, prev, patch);
+			return { ok: true };
+		}
+
+		function nwRequiredFactsFromLegacy(n, target) {
+			target = target || novelData;
+			var rows = (target.chapterFactChecks || [])[n - 1];
+			if (typeof rows === 'string' && rows.trim()) {
+				return [{ id: 'lf-0', text: rows.trim(), mustInclude: true, source: 'user' }];
+			}
+			if (!Array.isArray(rows) || !rows.length) return [];
+			var out = [];
+			rows.forEach(function (row, index) {
+				if (typeof row === 'string') {
+					out.push({ id: 'lf-' + (index === 0 ? '0' : index), text: row, mustInclude: true, source: 'user' });
+					return;
+				}
+				if (!row || typeof row !== 'object') return;
+				if (row.kind === 'probe') return;
+				var mustInclude = row.kind !== 'exclude';
+				var text = row.label || row.pattern || '';
+				var id = 'lf-' + (row.id != null ? row.id : index);
+				var item = { id: id, text: text, mustInclude: mustInclude, source: 'user' };
+				if (row.id != null) item.legacyId = row.id;
+				out.push(item);
+			});
+			return out;
+		}
+
+		function nwRequiredFactsUpsert(n, items, source, target) {
+			target = target || novelData;
+			if (nwOwnerLocked()) return { ok: false, reason: 'locked' };
+			if (!(n >= 1)) return { ok: false, reason: 'bad-n' };
+			source = source || 'user';
+			if (nwHasOwn(target, 'chapterRequiredFacts') && !Array.isArray(target.chapterRequiredFacts)) {
+				if ((typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES)
+					&& (typeof NW_S1_KEEP_WRONG_REQUIRED_FACTS === 'undefined' || NW_S1_KEEP_WRONG_REQUIRED_FACTS)) {
+					console.warn('nwRequiredFactsUpsert: chapterRequiredFacts has wrong type; keeping as-is', target.chapterRequiredFacts);
+					return { ok: false, reason: 'wrong-type' };
+				}
+				target.chapterRequiredFacts = [];
+			}
+			if (!Array.isArray(target.chapterRequiredFacts)) target.chapterRequiredFacts = [];
+			var prev = target.chapterRequiredFacts[n - 1];
+			if (prev != null && typeof prev !== 'object') return { ok: false, reason: 'wrong-type' };
+			var rec = prev && typeof prev === 'object' ? Object.assign({}, prev) : { items: [] };
+			var others = (Array.isArray(rec.items) ? rec.items : []).filter(function (it) { return it && it.source !== source; });
+			var incoming = [];
+			(Array.isArray(items) ? items : []).forEach(function (it, idx) {
+				if (!it || typeof it !== 'object') return;
+				var row = Object.assign({}, it, { source: source });
+				if (!row.id) row.id = 'rf-' + source + '-' + idx;
+				incoming.push(row);
+			});
+			rec.items = others.concat(incoming);
+			target.chapterRequiredFacts[n - 1] = rec;
+			return { ok: true, rec: rec };
+		}
+
+		function nwReadBlueprint(n, target) {
+			var list = target && target.chapterBlueprints;
+			if (!Array.isArray(list) || !list.length) return null;
+			var raw = list[n - 1];
+			if (raw == null) {
+				raw = list.find(function (b) {
+					return b && (b.chapter === n || b.chapter === String(n));
+				});
+			}
+			if (raw == null) return null;
+			if (typeof raw === 'string') {
+				try { return JSON.parse(raw); } catch (_) { return { chapter: n, arcStep: raw }; }
+			}
+			return (typeof raw === 'object') ? raw : null;
+		}
+
+		function nwDeriveChapterRequirements(n, target) {
+			target = target || novelData;
+			if (nwOwnerLocked()) return { ok: false, reason: 'locked' };
+			if (!(n >= 1)) return { ok: false, reason: 'bad-n' };
+			var bp = nwReadBlueprint(n, target);
+			if (!bp || typeof bp !== 'object') return { ok: false, reason: 'no-blueprint' };
+			var derivedFrom = nwTextHash(JSON.stringify(target.chapterBlueprints[n - 1]));
+			if (nwHasOwn(target, 'chapterRequirements') && !Array.isArray(target.chapterRequirements)) {
+				if ((typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES)
+					&& (typeof NW_S1_KEEP_WRONG_REQUIREMENTS === 'undefined' || NW_S1_KEEP_WRONG_REQUIREMENTS)) {
+					console.warn('nwDeriveChapterRequirements: chapterRequirements has wrong type; keeping as-is', target.chapterRequirements);
+					return { ok: false, reason: 'wrong-type' };
+				}
+				target.chapterRequirements = [];
+			}
+			if (!Array.isArray(target.chapterRequirements)) target.chapterRequirements = [];
+			var prev = target.chapterRequirements[n - 1];
+			if (prev && typeof prev === 'object' && prev.derivedFrom === derivedFrom) return { ok: true, skipped: true, rec: prev };
+			var names = [];
+			if (Array.isArray(bp.cast)) {
+				bp.cast.forEach(function (c) {
+					if (typeof c === 'string') names.push(c);
+					else if (c && (c.name || c.id)) names.push(c.name || c.id);
+				});
+			}
+			(Array.isArray(bp.characterBeats) ? bp.characterBeats : []).forEach(function (b) {
+				if (b && b.name) names.push(String(b.name));
+			});
+			var chars = Array.isArray(target.characters) ? target.characters : [];
+			var cast = [];
+			var seen = {};
+			names.forEach(function (nm) {
+				var key = String(nm || '').trim();
+				if (!key || seen[key.toLowerCase()]) return;
+				seen[key.toLowerCase()] = true;
+				var hit = chars.find(function (c) { return c && (c.id === key || String(c.name || '').toLowerCase() === key.toLowerCase()); });
+				cast.push(hit && hit.id ? hit.id : key);
+			});
+			var setting = [];
+			var locSeen = {};
+			(Array.isArray(bp.worldHooks) ? bp.worldHooks : []).forEach(function (h) {
+				var text = String(h || '').trim();
+				if (!text || locSeen[text.toLowerCase()]) return;
+				locSeen[text.toLowerCase()] = true;
+				var locId = null;
+				var locs = target.storyWorld && Array.isArray(target.storyWorld.locations) ? target.storyWorld.locations : [];
+				var loc = locs.find(function (l) { return l && (l.id === text || String(l.name || '').toLowerCase() === text.toLowerCase()); });
+				setting.push(loc && loc.id ? loc.id : text);
+			});
+			var rec = Object.assign({}, (prev && typeof prev === 'object') ? prev : {}, {
+				cast: cast,
+				setting: setting,
+				derivedFrom: derivedFrom
+			});
+			if (!nwHasOwn(rec, 'mustNotInclude')) rec.mustNotInclude = (prev && prev.mustNotInclude) || [];
+			target.chapterRequirements[n - 1] = rec;
+			return { ok: true, rec: rec };
+		}
+
+		function nwRequirementsSetMustNotInclude(n, list, target) {
+			target = target || novelData;
+			if (nwOwnerLocked()) return { ok: false, reason: 'locked' };
+			if (!(n >= 1)) return { ok: false, reason: 'bad-n' };
+			if (!Array.isArray(target.chapterRequirements)) target.chapterRequirements = [];
+			var prev = target.chapterRequirements[n - 1] && typeof target.chapterRequirements[n - 1] === 'object' ? target.chapterRequirements[n - 1] : {};
+			target.chapterRequirements[n - 1] = Object.assign({}, prev, { mustNotInclude: Array.isArray(list) ? list.slice() : [] });
+			return { ok: true };
+		}
+
+		function nwBuildChapterFingerprint(n, target) {
+			target = target || novelData;
+			if (nwOwnerLocked()) return null;
+			if (!(n >= 1)) return null;
+			var text = String((target.chapters || [])[n - 1] || '');
+			if (!text.replace(/\s+/g, ' ').trim()) return null;
+			var textHash = nwTextHash(text);
+			if (nwHasOwn(target, 'chapterFingerprints') && !Array.isArray(target.chapterFingerprints)) {
+				if ((typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES)
+					&& (typeof NW_S1_KEEP_WRONG_FINGERPRINTS === 'undefined' || NW_S1_KEEP_WRONG_FINGERPRINTS)) {
+					console.warn('nwBuildChapterFingerprint: chapterFingerprints has wrong type; keeping as-is', target.chapterFingerprints);
+					return null;
+				}
+				target.chapterFingerprints = [];
+			}
+			if (!Array.isArray(target.chapterFingerprints)) target.chapterFingerprints = [];
+			var existing = target.chapterFingerprints[n - 1];
+			if (existing && typeof existing === 'object' && existing.textHash === textHash) return existing;
+			var words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+			var first = words.slice(0, 200);
+			var shingles = [];
+			for (var i = 0; i + 8 <= first.length && shingles.length < 49; i += 4) {
+				shingles.push(nwTextHash(first.slice(i, i + 8).join(' ')));
+			}
+			var fp = { textHash: textHash, tailWindowWords: 250, openingShingles: shingles };
+			target.chapterFingerprints[n - 1] = fp;
+			return fp;
+		}
+
+		function nwChapterCount(nd) {
+			nd = nd || novelData;
+			var n = Number(nd.numChapters);
+			if (n >= 1) return n;
+			return Array.isArray(nd.chapters) ? nd.chapters.length : 0;
+		}
+
+		function nwEnsureChapterIdsArray(nd) {
+			if (nwHasOwn(nd, 'chapterIds') && !Array.isArray(nd.chapterIds)) {
+				if (typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES) {
+					console.warn('nwEnsureChapterIdsArray: chapterIds has wrong type; keeping as-is', nd.chapterIds);
+					return null;
+				}
+				nd.chapterIds = [];
+			}
+			if (!Array.isArray(nd.chapterIds)) nd.chapterIds = [];
+			return nd.chapterIds;
+		}
+
+		function nwChapterIdsUpdate(op, n, extra, target) {
+			target = target || novelData;
+			if (nwOwnerLocked()) return { ok: false, reason: 'locked' };
+			if (op === 'resize') {
+				var ver = typeof nwSchemaVersion === 'function' ? nwSchemaVersion(target) : (target && target.nwSchemaVersion);
+				if ((typeof NW_S1_RESIZE_SKIP_FUTURE === 'undefined' || NW_S1_RESIZE_SKIP_FUTURE) && typeof ver === 'number' && ver > 1) {
+					return { ok: true, skipped: true };
+				}
+			}
+			var taken = nwTakenIds(target, 'ch_');
+			var ids = nwEnsureChapterIdsArray(target);
+			if (!ids) return { ok: false, reason: 'wrong-type' };
+			var count = nwChapterCount(target);
+			if (op === 'assign') {
+				if (!(n >= 1)) return { ok: false, reason: 'bad-n' };
+				if (!ids[n - 1]) ids[n - 1] = nwOpaqueId('ch_', taken);
+				return { ok: true, id: ids[n - 1] };
+			}
+			if (op === 'insert') {
+				var at = (n >= 1) ? n - 1 : ids.length;
+				var nid = nwOpaqueId('ch_', taken);
+				ids.splice(at, 0, nid);
+				if (!Array.isArray(target.chapters)) target.chapters = [];
+				target.chapters.splice(at, 0, '');
+				nwSplicePerChapter(target, at, 'insert');
+				target.numChapters = (target.chapters || []).length;
+				return { ok: true, id: nid };
+			}
+			if (op === 'delete') {
+				var di = (n >= 1) ? n - 1 : -1;
+				if (di < 0) return { ok: false, reason: 'bad-n' };
+				ids.splice(di, 1);
+				if (Array.isArray(target.chapters)) target.chapters.splice(di, 1);
+				nwSplicePerChapter(target, di, 'delete');
+				target.numChapters = (target.chapters || []).length;
+				return { ok: true };
+			}
+			if (op === 'reorder') {
+				var from = n >= 1 ? n - 1 : -1;
+				var to = extra >= 1 ? extra - 1 : -1;
+				if (from < 0 || to < 0) return { ok: false, reason: 'bad-index' };
+				nwMoveIndex(ids, from, to);
+				if (Array.isArray(target.chapters)) nwMoveIndex(target.chapters, from, to);
+				nwSplicePerChapter(target, from, 'reorder', to);
+				return { ok: true };
+			}
+			if (op === 'resize') {
+				var next = n >= 0 ? n : count;
+				if (!Array.isArray(target.chapters)) target.chapters = [];
+				while (ids.length < next) ids.push(nwOpaqueId('ch_', taken));
+				if (ids.length > next) ids.length = next;
+				if (typeof NW_S1_RESIZE_CHAPTERS === 'undefined' || NW_S1_RESIZE_CHAPTERS) {
+					while (target.chapters.length < next) target.chapters.push('');
+					if (target.chapters.length > next) target.chapters.length = next;
+				}
+				var spliceAll = (typeof NW_S1_RESIZE_SPLICE_ALL === 'undefined' || NW_S1_RESIZE_SPLICE_ALL);
+				var s1Arrs = spliceAll
+					? ['chapterRequiredFacts', 'chapterRequirements', 'chapterFingerprints', 'chapterWritingPlans', 'chapterScenes']
+					: ['chapterScenes'];
+				s1Arrs.forEach(function (k) {
+					if (Array.isArray(target[k]) && target[k].length > next) target[k].length = next;
+				});
+				target.numChapters = next;
+				return { ok: true };
+			}
+			return { ok: false, reason: 'bad-op' };
+		}
+
+		function nwMoveIndex(arr, from, to) {
+			if (!Array.isArray(arr) || from === to) return;
+			if (from < 0 || from >= arr.length) return;
+			var item = arr.splice(from, 1)[0];
+			arr.splice(to, 0, item);
+		}
+
+		function nwSplicePerChapter(target, index, op, to) {
+			var keys = ['chapterScenes', 'chapterOutlines', 'chapterArcs', 'chapterBlueprints', 'chapterWritingPlans', 'chapterRequirements', 'chapterRequiredFacts', 'chapterFingerprints', 'chapterThemeTags', 'chapterFlags', 'chapterScorecards', 'chapterFactChecks', 'editedChapters', 'chapterImprovements', 'chapterContinuityPackets'];
+			keys.forEach(function (k) {
+				if (k === 'chapterScenes' && typeof NW_S1_SPLICE_SCENES !== 'undefined' && !NW_S1_SPLICE_SCENES) return;
+				if (!Array.isArray(target[k])) return;
+				if (op === 'insert') target[k].splice(index, 0, undefined);
+				else if (op === 'delete') target[k].splice(index, 1);
+				else if (op === 'reorder') nwMoveIndex(target[k], index, to);
+			});
+		}
+
+		function nwChapterTextHash(n, target) {
+			target = target || novelData;
+			return nwTextHash(String((target.chapters || [])[n - 1] || ''));
+		}
+
+		function nwSceneIsEffectivelyApproved(n, scene, target) {
+			target = target || novelData;
+			if (!scene || scene.breakApproved !== true) return false;
+			var rec = (target.chapterScenes || [])[n - 1];
+			if (!rec || typeof rec !== 'object') return false;
+			return rec.textHash === nwChapterTextHash(n, target);
+		}
+
+		function nwApprovedSceneIds(n, target) {
+			target = target || novelData;
+			var rec = (target.chapterScenes || [])[n - 1];
+			if (!rec || typeof rec !== 'object') return [];
+			if (rec.textHash !== nwChapterTextHash(n, target)) return [];
+			return (Array.isArray(rec.scenes) ? rec.scenes : []).filter(function (s) { return s && s.breakApproved === true; }).map(function (s) { return s.id; }).filter(Boolean).sort();
+		}
+
+		function nwSceneBoundaryStatus(n, target) {
+			target = target || novelData;
+			var rec = (target.chapterScenes || [])[n - 1];
+			if (!rec || typeof rec !== 'object') return { present: false };
+			var current = nwChapterTextHash(n, target);
+			var mismatch = rec.textHash !== current;
+			var scenes = Array.isArray(rec.scenes) ? rec.scenes : [];
+			return {
+				present: true,
+				hashMismatch: mismatch,
+				proposed: mismatch || scenes.some(function (s) { return !s || s.breakApproved !== true; }),
+				reason: mismatch ? 'chapter text changed' : '',
+				spansUnchanged: true,
+				storedBreakApproved: scenes.map(function (s) { return !!(s && s.breakApproved); }),
+				effectivelyApproved: !mismatch && scenes.some(function (s) { return s && s.breakApproved === true; })
+			};
+		}
+
+		function nwChapterScenesUpdate(n, patch, origin, target) {
+			origin = origin || 'user';
+			target = target || novelData;
+			if (nwOwnerLocked()) return { ok: false, reason: 'locked' };
+			if (!(n >= 1) || !patch || typeof patch !== 'object') return { ok: false, reason: 'bad-args' };
+			if (nwHasOwn(target, 'chapterScenes') && !Array.isArray(target.chapterScenes)) {
+				if (typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES) {
+					console.warn('nwChapterScenesUpdate: chapterScenes has wrong type; keeping as-is', target.chapterScenes);
+					return { ok: false, reason: 'wrong-type' };
+				}
+				target.chapterScenes = [];
+			}
+			if (!Array.isArray(target.chapterScenes)) target.chapterScenes = [];
+			var prev = target.chapterScenes[n - 1] && typeof target.chapterScenes[n - 1] === 'object' ? target.chapterScenes[n - 1] : {};
+			var next = Object.assign({}, prev, patch);
+			delete next.migratedBy;
+			var taken = nwTakenIds(target, 'sc_');
+			if (Array.isArray(patch.scenes)) {
+				var byId = {};
+				(Array.isArray(prev.scenes) ? prev.scenes : []).forEach(function (s) { if (s && s.id) byId[s.id] = Object.assign({}, s); });
+				next.scenes = patch.scenes.map(function (s, i) {
+					if (!s || typeof s !== 'object') return s;
+					var row = Object.assign({}, s.id && byId[s.id] ? byId[s.id] : {}, s);
+					delete row.migratedBy;
+					if (!row.id) row.id = nwOpaqueId('sc_', taken);
+					if (!row.chapterId) {
+						var skipFillChapterId = nwHasOwn(target, 'chapterIds') && !Array.isArray(target.chapterIds)
+							&& (typeof NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS === 'undefined' || NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS);
+						if (!skipFillChapterId) row.chapterId = (target.chapterIds || [])[n - 1];
+					}
+					if (row.order == null) row.order = i + 1;
+					if (row.breakApproved == null) row.breakApproved = false;
+					if (origin === 'user' && row.source == null) row.source = 'user';
+					return row;
+				});
+			}
+			var currentHash = nwChapterTextHash(n, target);
+			if (origin === 'user' && prev.textHash && prev.textHash !== currentHash) {
+				next.textHash = currentHash;
+				if (Array.isArray(next.scenes)) {
+					next.scenes = next.scenes.map(function (s) {
+						if (!s || typeof s !== 'object') return s;
+						var reasons = Array.isArray(s.boundaryReasons) ? s.boundaryReasons.slice() : [];
+						if (reasons.indexOf('chapter text changed') < 0) reasons.push('chapter text changed');
+						return Object.assign({}, s, { breakApproved: false, boundaryReasons: reasons });
+					});
+				}
+			}
+			target.chapterScenes[n - 1] = next;
+			return { ok: true, rec: next };
+		}
+
+		function nwResolveSceneRef(sceneId, target) {
+			target = target || novelData;
+			var scenes = target.chapterScenes || [];
+			for (var i = 0; i < scenes.length; i++) {
+				var rec = scenes[i];
+				if (!rec || !Array.isArray(rec.scenes)) continue;
+				var hit = rec.scenes.find(function (s) { return s && s.id === sceneId; });
+				if (hit) return { scope: 'scene', chapterIndex: i, chapterId: (target.chapterIds || [])[i], scene: hit };
+			}
+			return { scope: 'chapter', chapterIndex: null, scene: null, sceneId: sceneId };
+		}
+
+		function nwComputeBuiltFrom(n, target) {
+			target = target || novelData;
+			var bp = Array.isArray(target.chapterBlueprints) ? (target.chapterBlueprints[n - 1] != null ? target.chapterBlueprints[n - 1] : null) : null;
+			var req = Array.isArray(target.chapterRequirements) ? target.chapterRequirements[n - 1] : null;
+			var reqPart = (req && typeof req === 'object') ? { cast: req.cast, setting: req.setting, mustNotInclude: req.mustNotInclude } : null;
+			var facts = Array.isArray(target.chapterRequiredFacts) ? target.chapterRequiredFacts[n - 1] : null;
+			var items = (facts && Array.isArray(facts.items))
+				? facts.items.map(function (it) { return { id: it.id, text: it.text, mustInclude: it.mustInclude }; }).sort(function (a, b) { return String(a.id || '').localeCompare(String(b.id || '')); })
+				: null;
+			var sceneIds = nwApprovedSceneIds(n, target);
+			return nwTextHash(JSON.stringify([bp, reqPart, items, sceneIds]));
+		}
+
+		function nwComputeWorldFrom(n, target) {
+			target = target || novelData;
+			var sw = target.storyWorld;
+			if (!sw || typeof sw !== 'object') {
+				var plan0 = Array.isArray(target.chapterWritingPlans) ? target.chapterWritingPlans[n - 1] : null;
+				var hasWb = plan0 && Array.isArray(plan0.items) && plan0.items.some(function (it) { return it && it.kind === 'worldBeat'; });
+				return hasWb ? nwTextHash(JSON.stringify([null, null, null, null, null])) : null;
+			}
+			var approved = (Array.isArray(sw.concepts) ? sw.concepts : []).filter(function (c) { return c && c.approvedAt; }).map(function (c) {
+				return { id: c.id, mustExplain: c.mustExplain, familiarity: c.familiarity };
+			}).sort(function (a, b) { return String(a.id || '').localeCompare(String(b.id || '')); });
+			return nwTextHash(JSON.stringify([
+				approved,
+				sw.role ? sw.role.value : null,
+				sw.genreProfiles != null ? sw.genreProfiles : null,
+				sw.structureTemplate && sw.structureTemplate.id != null ? sw.structureTemplate.id : null,
+				sw.immersionWeight != null ? sw.immersionWeight : null
+			]));
+		}
+
+		function nwPlanIsStale(n, target) {
+			target = target || novelData;
+			var plan = Array.isArray(target.chapterWritingPlans) ? target.chapterWritingPlans[n - 1] : null;
+			if (!plan || typeof plan !== 'object') return false;
+			if (!plan.builtFrom) return true;
+			if (plan.builtFrom !== nwComputeBuiltFrom(n, target)) return true;
+			var hasWb = Array.isArray(plan.items) && plan.items.some(function (it) { return it && it.kind === 'worldBeat'; });
+			if (hasWb && !plan.worldFrom) return true;
+			if (plan.worldFrom) {
+				var cur = nwComputeWorldFrom(n, target);
+				var worldRemovedStale = (typeof NW_S1_WORLD_REMOVED_STALE === 'undefined' || NW_S1_WORLD_REMOVED_STALE);
+				if (worldRemovedStale) {
+					if (cur == null || plan.worldFrom !== cur) return true;
+				} else if (cur && plan.worldFrom !== cur) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		function nwChapterHasText(nd, i) {
+			var t = (nd.chapters || [])[i];
+			return !!(t && String(t).replace(/\s+/g, ' ').trim());
+		}
+
+		function nwStampMigratedBy(nd) {
+			if (!nd.ext || typeof nd.ext !== 'object') nd.ext = {};
+			if (!nd.ext.novelWriter || typeof nd.ext.novelWriter !== 'object') nd.ext.novelWriter = {};
+			if (!nd.ext.novelWriter.migratedBy) nd.ext.novelWriter.migratedBy = 'S1';
+		}
+
+		function nwMigrateSession(nd, opts) {
+			opts = opts || {};
+			if (!nd || typeof nd !== 'object') return nd;
+			var prevRng = nwOpaqueRngCurrent;
+			if (opts.rng) nwSetOpaqueRng(opts.rng);
+			try {
+			var ver = nd.nwSchemaVersion;
+			if (typeof ver === 'number' && ver > NW_S1_SCHEMA_VERSION) {
+				console.warn('nwMigrateSession: nwSchemaVersion ' + ver + ' is newer than this app; read-through, unchanged');
+				return nd;
+			}
+			var keepWrongVersion = nwHasOwn(nd, 'nwSchemaVersion') && typeof nd.nwSchemaVersion !== 'number';
+			nwMigrateInProgress = true;
+			try {
+				if (Array.isArray(nd.subplots)) {
+					nd.subplots.forEach(function (raw, i) { nwCopySubplotMetaFromRaw(nd, raw, i); });
+				}
+				if (!nwHasOwn(nd, 'storyWorld')) {
+					var legacy = (typeof nd.worldBible === 'string' && nd.worldBible.trim()) ? nd.worldBible
+						: (typeof nd.world === 'string' && nd.world.trim() ? nd.world : null);
+					if (legacy) nwStoryWorldUpdate({ version: 1, notes: legacy }, 'import', nd);
+				}
+				if (Array.isArray(nd.characters)) {
+					var takenChars = new Set(nd.characters.map(function (c) { return c && c.id; }).filter(Boolean));
+					nd.characters.forEach(function (c) {
+						if (!c || typeof c !== 'object') return;
+						if (!c.id) {
+							c.id = nwCharacterId(c.name, takenChars);
+							takenChars.add(c.id);
+						}
+					});
+				}
+				var nCh = nwChapterCount(nd);
+				var i;
+				var keepWrong = (typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES);
+				var chapterIdsWrong = nwHasOwn(nd, 'chapterIds') && !Array.isArray(nd.chapterIds);
+				var chapterScenesWrong = nwHasOwn(nd, 'chapterScenes') && !Array.isArray(nd.chapterScenes);
+				if (chapterIdsWrong && keepWrong) {
+					console.warn('nwMigrateSession: chapterIds has wrong type; skipping owner write', nd.chapterIds);
+				} else {
+					for (i = 1; i <= nCh; i++) nwChapterIdsUpdate('assign', i, null, nd);
+				}
+				for (i = 1; i <= nCh; i++) {
+					if (chapterScenesWrong && keepWrong) {
+						if (i === 1) console.warn('nwMigrateSession: chapterScenes has wrong type; skipping owner write', nd.chapterScenes);
+						continue;
+					}
+					if (!nwChapterHasText(nd, i - 1)) continue;
+					var existingScenes = Array.isArray(nd.chapterScenes) ? nd.chapterScenes[i - 1] : null;
+					if (existingScenes && typeof existingScenes === 'object') continue;
+					var chapterIdsStillWrong = nwHasOwn(nd, 'chapterIds') && !Array.isArray(nd.chapterIds);
+					var skipSceneChId = chapterIdsStillWrong && (typeof NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS === 'undefined' || NW_S1_SKIP_SCENE_CHAPTERID_WRONG_IDS);
+					if (skipSceneChId && i === 1) {
+						console.warn('nwMigrateSession: chapterIds has wrong type; skipping scene chapterId write', nd.chapterIds);
+					}
+					var chId = skipSceneChId ? undefined : (nd.chapterIds || [])[i - 1];
+					var scTaken = nwTakenIds(nd, 'sc_');
+					var scId = nwOpaqueId('sc_', scTaken);
+					var textHash = nwChapterTextHash(i, nd);
+					var sceneRow = {
+						id: scId,
+						order: 1,
+						breakApproved: false,
+						source: 'import',
+						boundaryReasons: []
+					};
+					if (!skipSceneChId) sceneRow.chapterId = chId;
+					nwChapterScenesUpdate(i, {
+						version: 1,
+						textHash: textHash,
+						scenes: [sceneRow]
+					}, 'import', nd);
+				}
+				nwStampMigratedBy(nd);
+				var factsWrong = nwHasOwn(nd, 'chapterRequiredFacts') && !Array.isArray(nd.chapterRequiredFacts);
+				var keepWrongFacts = keepWrong && (typeof NW_S1_KEEP_WRONG_REQUIRED_FACTS === 'undefined' || NW_S1_KEEP_WRONG_REQUIRED_FACTS);
+				var reqsWrong = nwHasOwn(nd, 'chapterRequirements') && !Array.isArray(nd.chapterRequirements);
+				var keepWrongReqs = keepWrong && (typeof NW_S1_KEEP_WRONG_REQUIREMENTS === 'undefined' || NW_S1_KEEP_WRONG_REQUIREMENTS);
+				var fpsWrong = nwHasOwn(nd, 'chapterFingerprints') && !Array.isArray(nd.chapterFingerprints);
+				var keepWrongFps = keepWrong && (typeof NW_S1_KEEP_WRONG_FINGERPRINTS === 'undefined' || NW_S1_KEEP_WRONG_FINGERPRINTS);
+				for (i = 1; i <= nCh; i++) {
+					if (factsWrong && keepWrongFacts) {
+						if (i === 1) console.warn('nwMigrateSession: chapterRequiredFacts has wrong type; keeping as-is', nd.chapterRequiredFacts);
+						continue;
+					}
+					if (Array.isArray(nd.chapterRequiredFacts) && nd.chapterRequiredFacts.length > (i - 1) && nd.chapterRequiredFacts[i - 1] != null) continue;
+					var legacyFacts = (nd.chapterFactChecks || [])[i - 1];
+					var hasLegacy = (Array.isArray(legacyFacts) && legacyFacts.length) || (typeof legacyFacts === 'string' && legacyFacts.trim());
+					if (!hasLegacy) continue;
+					nwRequiredFactsUpsert(i, nwRequiredFactsFromLegacy(i, nd), 'user', nd);
+				}
+				for (i = 1; i <= nCh; i++) {
+					if (reqsWrong && keepWrongReqs) {
+						if (i === 1) console.warn('nwMigrateSession: chapterRequirements has wrong type; keeping as-is', nd.chapterRequirements);
+						continue;
+					}
+					var bp = Array.isArray(nd.chapterBlueprints) ? nd.chapterBlueprints[i - 1] : null;
+					if (bp == null || bp === '') continue;
+					nwDeriveChapterRequirements(i, nd);
+				}
+				for (i = 1; i <= nCh; i++) {
+					if (fpsWrong && keepWrongFps) {
+						if (i === 1) console.warn('nwMigrateSession: chapterFingerprints has wrong type; keeping as-is', nd.chapterFingerprints);
+						continue;
+					}
+					if (nwChapterHasText(nd, i - 1)) nwBuildChapterFingerprint(i, nd);
+				}
+				if (!keepWrongVersion) nd.nwSchemaVersion = NW_S1_SCHEMA_VERSION;
+
+			} finally {
+				nwMigrateInProgress = false;
+			}
+			return nd;
+			} finally {
+				if (typeof NW_S1_RESTORE_OPAQUE_RNG === 'undefined' || NW_S1_RESTORE_OPAQUE_RNG) {
+					nwSetOpaqueRng(prevRng);
+				}
+			}
+		}
+
+		function nwCollectCharactersFromDom() {
+			var charList = document.getElementById('characterList');
+			if (!charList) return Array.isArray(novelData.characters) ? novelData.characters.slice() : [];
+			return Array.from(charList.getElementsByClassName('character')).map(function (c, i) {
+				var existing = (novelData.characters || [])[i] || {};
+				var domName = (c.querySelector('.charName') && c.querySelector('.charName').value) || '';
+				var domBack = (c.querySelector('.charBackstory') && c.querySelector('.charBackstory').value) || '';
+				var domArc = (c.querySelector('.charArc') && c.querySelector('.charArc').value) || '';
+				var merged = Object.assign({}, existing);
+				if (domName) merged.name = domName;
+				else if (!nwHasOwn(merged, 'name')) merged.name = existing.name || '';
+				if (domBack) merged.backstory = domBack;
+				else if (!nwHasOwn(merged, 'backstory')) merged.backstory = existing.backstory || '';
+				if (domArc) merged.arc = domArc;
+				else if (!nwHasOwn(merged, 'arc')) merged.arc = existing.arc || '';
+				if (domName || existing.name) merged.name = domName || existing.name || '';
+				if (domBack || existing.backstory) merged.backstory = domBack || existing.backstory || '';
+				if (domArc || existing.arc) merged.arc = domArc || existing.arc || '';
+				var norm = normalizeCharacterItem(merged);
+				return norm || merged;
+			});
+		}
+
+		function nwChapterTextHasSceneMarker(text) {
+			return NW_S1_SCENE_MARKER_RE.test(String(text || ''));
+		}
+
+		window.nwTextHash = nwTextHash;
+		window.nwCharacterId = nwCharacterId;
+		window.nwItemId = nwItemId;
+		window.nwOpaqueId = nwOpaqueId;
+		window.nwSeededRng = nwSeededRng;
+		window.nwSetOpaqueRng = nwSetOpaqueRng;
+		window.nwStoryWorldUpdate = nwStoryWorldUpdate;
+		window.nwCharacterKnowsUpdate = nwCharacterKnowsUpdate;
+		window.nwChapterThemeTagsUpdate = nwChapterThemeTagsUpdate;
+		window.nwRequiredFactsUpsert = nwRequiredFactsUpsert;
+		window.nwRequiredFactsFromLegacy = nwRequiredFactsFromLegacy;
+		window.nwDeriveChapterRequirements = nwDeriveChapterRequirements;
+		window.nwRequirementsSetMustNotInclude = nwRequirementsSetMustNotInclude;
+		window.nwBuildChapterFingerprint = nwBuildChapterFingerprint;
+		window.nwSchemaVersion = nwSchemaVersion;
+		window.nwChapterIdsUpdate = nwChapterIdsUpdate;
+		window.nwChapterScenesUpdate = nwChapterScenesUpdate;
+		window.nwMigrateSession = nwMigrateSession;
+		window.nwSceneIsEffectivelyApproved = nwSceneIsEffectivelyApproved;
+		window.nwSceneBoundaryStatus = nwSceneBoundaryStatus;
+		window.nwResolveSceneRef = nwResolveSceneRef;
+		window.nwComputeBuiltFrom = nwComputeBuiltFrom;
+		window.nwComputeWorldFrom = nwComputeWorldFrom;
+		window.nwPlanIsStale = nwPlanIsStale;
+		window.nwApprovedSceneIds = nwApprovedSceneIds;
+		window.nwCollectCharactersFromDom = nwCollectCharactersFromDom;
+		window.nwChapterTextHasSceneMarker = nwChapterTextHasSceneMarker;
+		window.nwRefuseAiIfLocked = nwRefuseAiIfLocked;
+		window.normalizeCharacterItem = normalizeCharacterItem;
+		window.normalizeSubplotItem = normalizeSubplotItem;
 
 		function unwrapLlmEnvelope(raw) {
 			if (raw == null) return raw;
@@ -2351,7 +3428,13 @@ let activeAICallCount = 0;
 				floors: floors
 			};
 			if ((stage.required || []).indexOf('characters') >= 0 || (stage.optional || []).indexOf('characters') >= 0 || (stage.llmResponse && String(stage.llmResponse.shape || '').indexOf('characters') >= 0)) {
-				payload.characters = (nd.characters || []).map(normalizeCharacterItem).filter(Boolean);
+				payload.characters = (nd.characters || []).map(function (c) {
+					const n = normalizeCharacterItem(c);
+					if (!n) return null;
+					const out = {};
+					['name', 'backstory', 'arc', 'obligations'].forEach(function (k) { if (n[k] !== undefined) out[k] = n[k]; });
+					return out;
+				}).filter(Boolean);
 			}
 			if ((stage.required || []).indexOf('subplots') >= 0 || (stage.llmResponse && String(stage.llmResponse.shape || '').indexOf('subplot') >= 0)) {
 				payload.subplots = (nd.subplots || []).map(normalizeSubplotItem);
@@ -2835,8 +3918,9 @@ let activeAICallCount = 0;
 	            // Persist Plan-fact DOM edits before updateChapterSubpages rebuilds chapterGenContainer.
 	            if (typeof NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD === 'undefined' || NW_QCAT_PERSIST_FACTS_BEFORE_REBUILD) {
 	                if (typeof nwCollectPlanFactsFromUi === 'function') nwCollectPlanFactsFromUi();
+	                if (typeof nwCollectWritingPlansFromUi === 'function') nwCollectWritingPlansFromUi();
 	            }
-	            updateChapterSubpages();
+	            updateChapterSubpages({ internal: true });
 	            showEditChapterSubpage(1);
 	            if (typeof nwRenderChapterScorecards === 'function') nwRenderChapterScorecards();
 	        }
@@ -2987,6 +4071,7 @@ let activeAICallCount = 0;
 		        callTick = nwCallStart(operationName, callLabel, {
 		            abortCtl: abortCtl,
 		            taskType: taskType,
+		            chapter: opts.chapter,
 		            expectedMs: (_est && _est.avg) || 0,
 		            rejectAbort: function () {
 		                userAborted = true;
@@ -3283,6 +4368,7 @@ let activeAICallCount = 0;
 	    // NW.T1.F4: suggestStoryInfo() SHALL populate all story info fields in one LLM call, preserving any fields already filled by the user.
 	    // Fetch authors for the selected genre via AI (corrected)
 		async function fetchAuthors() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Fetch Authors')) return;
 		    		    // Agent Skill I/O pack (tab1.fetchAuthors)
 		    window.__lastSkillPack = packSkillInputs('tab1.fetchAuthors', { novelData: novelData });
 const genre = document.getElementById('genre').value;
@@ -3447,6 +4533,7 @@ const genre = document.getElementById('genre').value;
 
 		//Get an editable style guide for the specific author selected
         async function fetchStyleGuide() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Fetch Style Guide')) return;
 		   
 		    // Agent Skill I/O pack (tab1.fetchStyleGuide)
 		    window.__lastSkillPack = packSkillInputs('tab1.fetchStyleGuide', { novelData: novelData });
@@ -3543,6 +4630,7 @@ const genre = document.getElementById('genre').value;
 
 		//AI Suggesting Story Arc
 		async function suggestStoryArc() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Suggest Story Arc')) return;
 		    collectData();
 		    // Agent Skill I/O pack (tab1.suggestStoryArc)
 		    window.__lastSkillPack = packSkillInputs('tab1.suggestStoryArc', { novelData: novelData });
@@ -3630,6 +4718,7 @@ const genre = document.getElementById('genre').value;
 		// Generate Core Story Elements for Tab 1
 		// Generate Plot Arc
 		async function suggestGeneralPlot() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Suggest General Plot')) return;
 		    collectData();
 		    // Agent Skill I/O pack (tab1.suggestGeneralPlot)
 		    window.__lastSkillPack = packSkillInputs('tab1.suggestGeneralPlot', { novelData: novelData });
@@ -3731,6 +4820,7 @@ const genre = document.getElementById('genre').value;
 
 		//Geneates the Setting on Tab 1
 		async function suggestSetting() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Suggest Setting')) return;
 		    collectData();
 		    // Agent Skill I/O pack (tab1.suggestSetting)
 		    window.__lastSkillPack = packSkillInputs('tab1.suggestSetting', { novelData: novelData });
@@ -3828,6 +4918,7 @@ const genre = document.getElementById('genre').value;
 	    // NW.T2.F3: refineCharacters() SHALL send subplot context to the LLM to deepen and refine existing character backstories and arcs.
 	    //scrapes story info fields for character names and adds them to the character list
 	    async function scrapeBookInfoForCharacters() {
+	        if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Scrape Book Info for Characters')) return;
 	        collectData();
 		    // Agent Skill I/O pack (tab2.scrapeBookInfoForCharacters)
 		    window.__lastSkillPack = packSkillInputs('tab2.scrapeBookInfoForCharacters', { novelData: novelData });
@@ -3907,6 +4998,7 @@ const genre = document.getElementById('genre').value;
 
 	    //suggests charater information
 	    async function suggestCharacters() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Suggest Characters')) return;
 		    const numCharactersEl = document.getElementById('numCharacters');
 		    const targetCount = Math.max(1, parseInt(numCharactersEl.value, 10) || 1);
 		    syncCharacterEntries();
@@ -4078,18 +5170,18 @@ const genre = document.getElementById('genre').value;
 		            console.warn(`Dropped ${droppedCount} extra character(s) returned by LLM to preserve numCharacters=${targetCount}.`);
 		        }
 
-		        novelData.characters = Array.from(charList.getElementsByClassName('character')).map((c, i) => {
+		        novelData.characters = (typeof nwCollectCharactersFromDom === 'function')
+		            ? nwCollectCharactersFromDom()
+		            : Array.from(charList.getElementsByClassName('character')).map((c, i) => {
 		            const existing = novelData.characters[i] || {};
 		            const domName = (c.querySelector('.charName') && c.querySelector('.charName').value) || '';
 		            const domBack = (c.querySelector('.charBackstory') && c.querySelector('.charBackstory').value) || '';
 		            const domArc = (c.querySelector('.charArc') && c.querySelector('.charArc').value) || '';
-		            return {
+		            return normalizeCharacterItem(Object.assign({}, existing, {
 		                name: domName || existing.name || '',
 		                backstory: domBack || existing.backstory || '',
-		                arc: domArc || existing.arc || '',
-		                ...(existing.role !== undefined ? { role: existing.role } : {}),
-		                ...(existing.notes !== undefined ? { notes: existing.notes } : {})
-		            };
+		                arc: domArc || existing.arc || ''
+		            })) || existing;
 		        });
 				document.getElementById('numCharacters').value = String(targetCount);
 				updateCharacterCounter();
@@ -4118,6 +5210,7 @@ const genre = document.getElementById('genre').value;
 
 		// Refine characters with subplot integration via AI
 		async function refineCharacters() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Refine Characters')) return;
 		    collectData();
 		    if (!novelData.characters.length || !novelData.subplots.length) {
 		        console.error('Cannot refine characters: Missing characters or subplots.');
@@ -4191,18 +5284,18 @@ const genre = document.getElementById('genre').value;
 		                div.querySelector('.charArc').value = char.arc;
 		            }
 		        });
-		        novelData.characters = Array.from(charList.getElementsByClassName('character')).map((c, i) => {
+		        novelData.characters = (typeof nwCollectCharactersFromDom === 'function')
+		            ? nwCollectCharactersFromDom()
+		            : Array.from(charList.getElementsByClassName('character')).map((c, i) => {
 		            const existing = novelData.characters[i] || {};
 		            const domName = (c.querySelector('.charName') && c.querySelector('.charName').value) || '';
 		            const domBack = (c.querySelector('.charBackstory') && c.querySelector('.charBackstory').value) || '';
 		            const domArc = (c.querySelector('.charArc') && c.querySelector('.charArc').value) || '';
-		            return {
+		            return normalizeCharacterItem(Object.assign({}, existing, {
 		                name: domName || existing.name || '',
 		                backstory: domBack || existing.backstory || '',
-		                arc: domArc || existing.arc || '',
-		                ...(existing.role !== undefined ? { role: existing.role } : {}),
-		                ...(existing.notes !== undefined ? { notes: existing.notes } : {})
-		            };
+		                arc: domArc || existing.arc || ''
+		            })) || existing;
 		        });
 				document.getElementById('numCharacters').value = novelData.characters.length || 1;
 				updateCharacterCounter();
@@ -4217,6 +5310,7 @@ const genre = document.getElementById('genre').value;
 	    // Suggest subplots via AI
 	   // Suggest subplots via AI
 	   async function suggestSubplots() {
+	       if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('AI Suggest Subplots')) return;
 	       collectData();
 	       const existingSubplots = novelData.subplots.filter(s => s.trim());
 	       const minSubplots = parseInt(document.getElementById('minSubplots').value) || 2;
@@ -4366,6 +5460,7 @@ const messages = [
 
 		// Enrich existing cast: deepen backstory+arc under subplot/world/plot pressure (does NOT freeze thin backstory).
 		async function enrichCharacters() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Enrich Characters')) return;
 		    if (typeof window !== 'undefined') window.__activeSkillId = 'tab2.enrichCharacters';
 		    collectData();
 		    if (!novelData.characters || !novelData.characters.length) {
@@ -4565,6 +5660,7 @@ const messages = [
 
 		// Enrich existing subplots from cast+world+plot (not invent-from-scratch pad).
 		async function enrichSubplots() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Enrich Subplots')) return;
 		    if (typeof window !== 'undefined') window.__activeSkillId = 'tab3.enrichSubplots';
 		    collectData();
 		    const existing = (novelData.subplots || []).map(subplotPlainText).filter(function (s) { return s && s.trim(); });
@@ -4721,9 +5817,37 @@ const messages = [
 	    // NW.CH.3: Each chapter subpage in Tab 5 SHALL include a chapter draft textarea and a "Generate Chapter" button.
 	    // NW.CH.4: Each chapter subpage in Tab 6 SHALL include an editable chapter textarea, an improvements field, "Update Chapter", and "Check Spelling & Grammar" buttons.
         // Update chapter subpages across all relevant tabs
-		async function updateChapterSubpages() {
+		async function updateChapterSubpages(opts) {
+		    opts = opts || {};
+		    var numElEarly = document.getElementById('numChapters');
+		    var requestedCount = parseInt(numElEarly && numElEarly.value, 10);
+		    var currentCount = (typeof novelData !== 'undefined' && novelData) ? Number(novelData.numChapters) : NaN;
+		    if (typeof nwChapterCountFixedForNewerSchema === 'function' && nwChapterCountFixedForNewerSchema(novelData)) {
+		        if (numElEarly) {
+		            numElEarly.disabled = true;
+		            if (currentCount >= 1) numElEarly.value = String(currentCount);
+		        }
+		        if (typeof nwShowChapterCountFixedNote === 'function') nwShowChapterCountFixedNote(true);
+		        if (requestedCount !== currentCount) {
+		            var fixedMsg = (typeof NW_S1_CHAPTER_COUNT_FIXED_MSG !== 'undefined') ? NW_S1_CHAPTER_COUNT_FIXED_MSG : 'Chapter count is fixed for files saved by a newer NovelWriter version';
+		            if (typeof nwToast === 'function') nwToast(fixedMsg);
+		            else console.warn(fixedMsg);
+		            return;
+		        }
+		    } else if (typeof nwShowChapterCountFixedNote === 'function') {
+		        nwShowChapterCountFixedNote(false);
+		    }
+		    if (!opts.internal && typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Chapter count')) {
+		        var numEl = document.getElementById('numChapters');
+		        if (numEl && typeof novelData !== 'undefined' && novelData) numEl.value = String(novelData.numChapters || '');
+		        return;
+		    }
 		    const numChapters = parseInt(document.getElementById('numChapters').value);
 		    novelData.numChapters = numChapters;
+		    if (!Array.isArray(novelData.chapterOutlines)) novelData.chapterOutlines = [];
+		    if (!Array.isArray(novelData.chapterArcs)) novelData.chapterArcs = [];
+		    if (!Array.isArray(novelData.chapters)) novelData.chapters = [];
+		    if (!Array.isArray(novelData.chapterImprovements)) novelData.chapterImprovements = [];
 		    novelData.chapterOutlines = novelData.chapterOutlines.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapterOutlines.length)).fill(''));
 		    novelData.chapterArcs = novelData.chapterArcs.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapterArcs.length)).fill(''));
 		    novelData.chapters = novelData.chapters.slice(0, numChapters).concat(Array(Math.max(0, numChapters - novelData.chapters.length)).fill(''));
@@ -4735,12 +5859,14 @@ const messages = [
 		    } else if (Array.isArray(novelData.chapterFlags) && novelData.chapterFlags.length > numChapters) {
 		        novelData.chapterFlags.length = numChapters;
 		    }
+		    if (typeof nwChapterIdsUpdate === 'function') nwChapterIdsUpdate('resize', numChapters);
 		    novelData.chapterScorecards = (novelData.chapterScorecards || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterScorecards || []).length)).fill(null));
 		    novelData.chapterFactChecks = (novelData.chapterFactChecks || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.chapterFactChecks || []).length)).fill(null));
 		    if (!novelData.continuityTracker || typeof novelData.continuityTracker !== 'object') {
 		        novelData.continuityTracker = { chapters: [], characterArcProgress: [], storyArcProgress: {} };
 		    }
 		    novelData.continuityTracker.chapters = (novelData.continuityTracker.chapters || []).slice(0, numChapters).concat(Array(Math.max(0, numChapters - (novelData.continuityTracker.chapters || []).length)).fill(null));
+
 
 		    // Outlines Tab
 		    const outlinesNav = document.getElementById('chapterOutlinesNav');
@@ -4819,6 +5945,12 @@ const messages = [
 		            <button onclick="generateChapter(${i})">Generate Chapter</button>
 		        `;
 		        genContainer.appendChild(subpage);
+		        if (typeof nwRenderWritingPlanPanel === 'function') {
+		            var planPanel = nwRenderWritingPlanPanel(i);
+		            var planTa = subpage.querySelector('textarea');
+		            if (planTa) subpage.insertBefore(planPanel, planTa);
+		            else subpage.appendChild(planPanel);
+		        }
 		        var genFlag = document.createElement('div');
 		        genFlag.id = 'chapterGenFlag' + i;
 		        genFlag.className = 'nw-chapter-flag';
@@ -5775,7 +6907,7 @@ const messages = [
 		 * Build Tab5 Draft user-content pack (part 1 or 2). Exposes blueprint obligations
 		 * for E2E assert without requiring a live completion.
 		 */
-		function buildGenerateChapterUserContent(chapterNum, part, opts) {
+		function nwLegacyDraftUserContent(chapterNum, part, opts) {
 			// Skill-packed inputs (tab5.generateChapter) available via window.__lastSkillPack / __chSkillPack
 
 			opts = opts || {};
@@ -5856,6 +6988,648 @@ return c && c.name && c.backstory && c.arc; });
 			return lines.join('\n');
 		}
 
+		function nwAuditedTextHash(text) {
+			return nwTextHash(text);
+		}
+
+		function nwTrackerAuditState(n) {
+			var row = (novelData.continuityTracker && novelData.continuityTracker.chapters || [])[n - 1];
+			if (!row || typeof row.auditedTextHash !== 'string' || !row.auditedTextHash) return 'not audited';
+			var text = String((novelData.chapters || [])[n - 1] || '');
+			return row.auditedTextHash === nwTextHash(text) ? 'audited' : 'tracker stale';
+		}
+
+		function nwAuditFencedChapter(chapterText) {
+			var text = String(chapterText || '');
+			var maxTokens = parseInt((document.getElementById('maxTokens') || {}).value, 10) || 30000;
+			var headroom = Math.max(8000, maxTokens * 4);
+			if (text.length <= headroom) return '<<<CHAPTER\n' + text + '\nCHAPTER>>>';
+			var mid = Math.floor(text.length / 2);
+			return '<<<CHAPTER\n' + text.slice(0, mid) + '\nCHAPTER>>>\n<<<CHAPTER\n' + text.slice(mid) + '\nCHAPTER>>>';
+		}
+
+		function nwCheckChapterReplay(n, opts) {
+			opts = opts || {};
+			if (!(n >= 1)) return { flagged: false };
+			var locked = typeof nwBatchIsLocked === 'function' && nwBatchIsLocked();
+			var allowed = !!opts.batch || !locked;
+			if (!allowed) return { refused: true };
+			var text = String((novelData.chapters || [])[n - 1] || '');
+			var prevText = n > 1 ? String((novelData.chapters || [])[n - 2] || '') : '';
+			var internal = nwScoreReplayInternal(text);
+			var prevScore = nwScoreReplayPrev(text, prevText);
+			var shared = (internal && internal.internal && Number(internal.internal.shared)) || 0;
+			var fail = (internal && internal.status === 'FAIL') || shared >= 25 || (prevScore && prevScore.status === 'FAIL');
+			if (!fail) return { flagged: false, internal: internal, prev: prevScore };
+			var at = new Date().toISOString();
+			var replay = { internal: internal, prev: prevScore, openingCopy: prevScore ? prevScore.openingCopyWords : 0, at: at };
+			nwSetChapterFlag(n, { replay: replay });
+			if (!(novelData && novelData.skipAutoRevision)) {
+				if (!Array.isArray(novelData.chapterImprovements)) novelData.chapterImprovements = [];
+				var note = 'Replay check flagged: do not restart this chapter or copy the previous opening.';
+				var cur = String(novelData.chapterImprovements[n - 1] || '');
+				if (cur.indexOf(note) < 0) novelData.chapterImprovements[n - 1] = cur ? (cur + '\n' + note) : note;
+			}
+			if (typeof nwNotify === 'function') nwNotify('Chapter ' + n + ' replay check flagged.', { level: 'warn' });
+			if (opts.batch && typeof nwBatchSetStatus === 'function' && typeof nwBatchState !== 'undefined' && nwBatchState && nwBatchState.running) {
+				nwBatchSetStatus((nwBatchState.lastStatus || '') + ' Replay flagged ch' + n + '.', 'running');
+			}
+			return { flagged: true, internal: internal, prev: prevScore };
+		}
+
+		function nwPlansAreLocked() {
+			return nwBatchSetupIsLocked();
+		}
+
+		function nwWritingPlanIsStale(n) {
+			return nwPlanIsStale(n);
+		}
+
+		function nwRefreshPlanBuiltFrom(n) {
+			if (nwPlansAreLocked()) return { ok: false, reason: 'locked' };
+			return { ok: false, reason: 'refresh-only-on-build' };
+		}
+
+		function nwNormSetting(s) {
+			return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+		}
+
+		function nwBlueprintSettingText(n, bp) {
+			var hooks = bp && Array.isArray(bp.worldHooks) ? bp.worldHooks.map(function (h) { return String(h || '').trim(); }).filter(Boolean) : [];
+			if (hooks.length) return hooks.join('; ');
+			var req = (novelData.chapterRequirements || [])[n - 1];
+			if (req && Array.isArray(req.setting) && req.setting.length) return req.setting.map(String).join('; ');
+			return '';
+		}
+
+		function nwBlueprintBeatTexts(bp) {
+			var lines = [];
+			if (!bp || typeof bp !== 'object') return lines;
+			['sceneGoal', 'castArcBeat', 'dialogueTurn', 'turnOrPayoff', 'sensoryWorldHook'].forEach(function (k) {
+				if (bp[k] && typeof bp[k] !== 'object') lines.push(String(bp[k]).trim());
+			});
+			(Array.isArray(bp.characterBeats) ? bp.characterBeats : []).forEach(function (b) {
+				if (!b) return;
+				if (typeof b === 'string') lines.push(b.trim());
+				else lines.push([b.name, b.beat].filter(Boolean).join(': '));
+			});
+			return lines.filter(Boolean);
+		}
+
+		function nwMustIncludeFacts(n) {
+			var rec = (novelData.chapterRequiredFacts || [])[n - 1];
+			var items = rec && Array.isArray(rec.items) ? rec.items : [];
+			return items.filter(function (it) { return it && it.mustInclude === true && String(it.text || it.label || '').trim(); });
+		}
+
+		function nwShowPlanLabel(s) {
+			var t = String(s || '');
+			(typeof NW_QCAT_CAMEL_FIELDS !== 'undefined' ? NW_QCAT_CAMEL_FIELDS : []).forEach(function (f) {
+				t = t.split(f).join(f.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase());
+			});
+			return t;
+		}
+
+		function nwPushPlanConflict(n, message) {
+			window.__nwPlanConflicts = window.__nwPlanConflicts || [];
+			var existing = null;
+			for (var i = 0; i < window.__nwPlanConflicts.length; i++) {
+				if (window.__nwPlanConflicts[i] && window.__nwPlanConflicts[i].chapter === n) { existing = window.__nwPlanConflicts[i]; break; }
+			}
+			if (existing) {
+				if (existing.message.indexOf(message) < 0) existing.message += ' ' + message;
+			} else {
+				window.__nwPlanConflicts.push({ chapter: n, message: message });
+			}
+			if (!window.__nwPlanConflictNotified && typeof nwNotify === 'function') {
+				window.__nwPlanConflictNotified = true;
+				nwNotify('A writing plan item conflicts with the blueprint. The blueprint item is used.', { level: 'warn' });
+			}
+		}
+
+		function nwFirstClause(s) {
+			var t = String(s || '');
+			var cut = t.split(/[.;]/)[0];
+			return cut || t;
+		}
+
+		function nwCapRequirementLines(lines) {
+			function over() {
+				return lines.length > 15 || lines.join('\n').length > 1200;
+			}
+			if (!over()) return lines;
+			lines = lines.map(function (line) {
+				if (line.kind === 'beat' || line.kind === 'keyPoint') return { kind: line.kind, text: nwFirstClause(line.text) };
+				return line;
+			});
+			var dropOrder = ['keyPoint', 'worldBeat', 'beat'];
+			while (over()) {
+				var idx = -1;
+				for (var d = 0; d < dropOrder.length && idx < 0; d++) {
+					for (var i = lines.length - 1; i >= 0; i--) {
+						if (lines[i].kind === dropOrder[d]) { idx = i; break; }
+					}
+				}
+				if (idx < 0) break;
+				lines.splice(idx, 1);
+			}
+			return lines;
+		}
+
+		function nwBuildHardRequirements(chapterNum) {
+			var bp = getChapterBlueprint(chapterNum);
+			var planRaw = (novelData.chapterWritingPlans || [])[chapterNum - 1];
+			var planItems = [];
+			if (planRaw && typeof planRaw === 'object') planItems = Array.isArray(planRaw.items) ? planRaw.items.slice() : (Array.isArray(planRaw) ? planRaw.slice() : []);
+			var usePlan = !!(bp && planItems.length);
+			var blueprintWins = true;
+			var source = usePlan ? 'writingPlan' : 'blueprint';
+			var emitted = [];
+			function add(kind, text) {
+				text = nwShowPlanLabel(text);
+				if (!String(text || '').trim()) return;
+				emitted.push({ kind: kind, text: text });
+			}
+			var setting = nwBlueprintSettingText(chapterNum, bp);
+			var castNames = (bp && typeof nwRequiredCastNames === 'function') ? nwRequiredCastNames(bp).required.slice() : [];
+			var beatTexts = nwBlueprintBeatTexts(bp);
+			var facts = nwMustIncludeFacts(chapterNum);
+			if (usePlan) {
+				var planSettings = planItems.filter(function (it) { return it && it.kind === 'setting'; });
+				var settingConflict = planSettings.some(function (it) {
+					var p = nwNormSetting(it.label);
+					var b = nwNormSetting(setting);
+					if (!p || !b) return false;
+					return b.indexOf(p) < 0 && p.indexOf(b) < 0;
+				});
+				if (settingConflict && blueprintWins) {
+					nwPushPlanConflict(chapterNum, 'Setting conflict: blueprint setting kept.');
+					add('setting', '- Setting: ' + setting + ' (stay here unless a beat moves the scene)');
+				} else if (settingConflict) {
+					add('setting', '- Setting: ' + planSettings.map(function (it) { return it.label; }).join('; '));
+				} else if (planSettings.length) {
+					add('setting', '- Setting: ' + planSettings.map(function (it) { return it.label; }).join('; ') + ' (stay here unless a beat moves the scene)');
+				} else if (setting) {
+					add('setting', '- Setting: ' + setting + ' (stay here unless a beat moves the scene)');
+				}
+				var planCast = planItems.filter(function (it) { return it && it.kind === 'cast'; }).map(function (it) { return String(it.label || '').trim(); }).filter(Boolean);
+				var castOut = [];
+				castNames.forEach(function (name) {
+					var key = String(name).toLowerCase();
+					var present = planCast.some(function (p) {
+						var pl = p.toLowerCase();
+						return pl.indexOf(key) >= 0 || key.indexOf(pl) >= 0;
+					});
+					if (!present && blueprintWins) {
+						nwPushPlanConflict(chapterNum, 'Cast conflict: ' + name + ' stays on the page.');
+						castOut.push(name);
+					} else if (present || !blueprintWins) {
+						if (present) castOut.push(name);
+					}
+				});
+				planCast.forEach(function (p) {
+					var pl = p.toLowerCase();
+					var have = castOut.some(function (c) { return String(c).toLowerCase() === pl || pl.indexOf(String(c).toLowerCase()) >= 0; });
+					if (!have) castOut.push(p);
+				});
+				if (!blueprintWins) castOut = planCast.slice();
+				if (castOut.length) add('cast', '- On-page cast: ' + castOut.join('; ') + '; each speaks or acts');
+				var planBeats = planItems.filter(function (it) { return it && it.kind === 'beat'; });
+				(planBeats.length ? planBeats.map(function (it) { return it.label; }) : beatTexts).forEach(function (b) { add('beat', '- Beats: ' + b); });
+				var planFacts = planItems.filter(function (it) { return it && it.kind === 'fact'; });
+				var factLabels = planFacts.map(function (it) { return String(it.label || '').trim(); }).filter(Boolean);
+				if (planFacts.length) {
+					facts.forEach(function (f) {
+						var text = String(f.text || f.label || '').trim();
+						var present = factLabels.some(function (l) { return l.toLowerCase() === text.toLowerCase(); });
+						if (!present && blueprintWins) {
+							nwPushPlanConflict(chapterNum, 'Fact conflict: required fact kept.');
+							factLabels.push(text);
+						}
+					});
+				}
+				if (!planFacts.length) factLabels = facts.map(function (f) { return String(f.text || f.label); });
+				if (factLabels.length) add('fact', '- Facts: ' + factLabels.join('; '));
+				planItems.filter(function (it) { return it && it.kind === 'keyPoint'; }).forEach(function (it) { add('keyPoint', '- Key point: ' + it.label); });
+				planItems.filter(function (it) { return it && it.kind === 'worldBeat'; }).forEach(function (it) { add('worldBeat', '- World: ' + [it.label, it.detail].filter(Boolean).join(' — ')); });
+			} else {
+				if (setting) add('setting', '- Setting: ' + setting + ' (stay here unless a beat moves the scene)');
+				if (castNames.length) add('cast', '- On-page cast: ' + castNames.join('; ') + '; each speaks or acts');
+				beatTexts.forEach(function (b) { add('beat', '- Beats: ' + b); });
+				if (facts.length) add('fact', '- Facts: ' + facts.map(function (f) { return f.text || f.label; }).join('; '));
+			}
+			emitted = nwCapRequirementLines(emitted);
+			return {
+				lines: emitted.map(function (l) { return l.text; }),
+				source: source,
+				items: emitted,
+				header: 'HARD REQUIREMENTS (must be on the page; these override everything below):'
+			};
+		}
+
+		function nwDejargonValue(v) {
+			if (Array.isArray(v)) return v.map(nwDejargonValue);
+			if (v && typeof v === 'object') {
+				var o = {};
+				Object.keys(v).forEach(function (k) {
+					var nk = k.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^[A-Z]/, function (c) { return c.toLowerCase(); });
+					o[nk] = nwDejargonValue(v[k]);
+				});
+				return o;
+			}
+			if (typeof v === 'string') {
+				return v.replace(/\bsceneGoal\b/g, 'scene goal').replace(/\bturnOrPayoff\b/g, 'turn or payoff').replace(/\bcastArcBeat\b/g, 'cast arc beat').replace(/\bdialogueTurn\b/g, 'dialogue turn').replace(/\bsensoryWorldHook\b/g, 'sensory world hook');
+			}
+			return v;
+		}
+
+		function nwPreviousChapterTail(n) {
+			if (!(n >= 2)) return '';
+			var text = String((novelData.chapters || [])[n - 2] || '').trim();
+			if (!text) return '';
+			var paras = text.split(/\n\s*\n/).map(function (p) { return p.trim(); }).filter(Boolean);
+			if (!paras.length) paras = [text];
+			var acc = [];
+			var count = 0;
+			for (var i = paras.length - 1; i >= 0; i--) {
+				var w = paras[i].split(/\s+/).filter(Boolean);
+				if (acc.length && count + w.length > 250) break;
+				acc.unshift(paras[i]);
+				count += w.length;
+				if (count >= 250) break;
+			}
+			if (acc.length === 1) {
+				var words = acc[0].split(/\s+/).filter(Boolean);
+				if (words.length > 250) return words.slice(-250).join(' ');
+			}
+			return acc.join('\n\n');
+		}
+
+		function nwDraftUserContentWithRequirements(chapterNum, part, opts, bp) {
+			var legacy = nwLegacyDraftUserContent(chapterNum, part, opts);
+			var lines = legacy.split('\n');
+			lines = lines.map(function (line) {
+				if (line.indexOf('- **Chapter Blueprint (obligations JSON):**') === 0) {
+					var dig = digestChapterBlueprint(bp);
+					var shown = dig ? nwDejargonValue(dig) : { missing: true, chapter: chapterNum };
+					return '- **Chapter plan (reference):** ' + JSON.stringify(shown);
+				}
+				if (line.indexOf('- **Execute obligations:**') === 0) {
+					return '- **Cover every hard requirement in scene:** Dramatize every checklist item below. Success = obligations covered in scene — NOT hitting a word count.';
+				}
+				return line;
+			});
+			var built = nwBuildHardRequirements(chapterNum);
+			window.__nwLastHardRequirements = built;
+			var block = [built.header].concat(built.lines);
+			block.push('If sources disagree: this list > chapter outline > story bible / digests.');
+			if (Number(part) === 2) {
+				block.push('Items not yet on the page in the first half come first.');
+				block.push('Do not restate or replay the first half; continue forward from its last line.');
+			} else {
+				var tail = nwPreviousChapterTail(chapterNum);
+				if (tail) block.push('Previous chapter ended with (do not repeat, do not reopen with it): ' + tail);
+			}
+			var firstHalf = null;
+			if (Number(part) === 2 && lines.length > 1 && lines[1].indexOf('- **First Half:**') === 0) {
+				firstHalf = lines.splice(1, 1)[0];
+			}
+			var chunk = block.slice();
+			if (firstHalf) chunk.push(firstHalf);
+			lines.splice(1, 0, chunk.join('\n'));
+			var forbidAt = -1;
+			for (var fi = 0; fi < lines.length; fi++) if (lines[fi].indexOf('- **Cast / world bound:**') === 0) forbidAt = fi;
+			var reqRow = (novelData.chapterRequirements || [])[chapterNum - 1];
+			var extraBan = (reqRow && Array.isArray(reqRow.mustNotInclude) && reqRow.mustNotInclude.length) ? ('; also never: ' + reqRow.mustNotInclude.join(', ')) : '';
+			var forbid = '- Never use planning words in the prose: ' + (typeof NW_NOTE_LEAK_TERMS !== 'undefined' ? NW_NOTE_LEAK_TERMS.join(', ') : '') + extraBan;
+			if (forbidAt >= 0) lines.splice(forbidAt + 1, 0, forbid);
+			else lines.push(forbid);
+			return lines.join('\n');
+		}
+
+		function buildGenerateChapterUserContent(chapterNum, part, opts) {
+			var bp = (typeof getChapterBlueprint === 'function') ? getChapterBlueprint(chapterNum) : null;
+			if (!bp) {
+				return nwLegacyDraftUserContent(chapterNum, part, opts);
+			}
+			return nwDraftUserContentWithRequirements(chapterNum, part, opts, bp);
+		}
+
+		function nwMatchCharId(name) {
+			var key = String(name || '').trim().toLowerCase();
+			if (!key) return null;
+			var chars = novelData.characters || [];
+			for (var i = 0; i < chars.length; i++) {
+				var c = chars[i];
+				if (!c) continue;
+				if (String(c.name || '').trim().toLowerCase() === key || String(c.id || '') === String(name)) return c.id || null;
+			}
+			return null;
+		}
+
+		function nwMatchLocationId(label) {
+			var key = nwNormSetting(label);
+			var locs = novelData.storyWorld && Array.isArray(novelData.storyWorld.locations) ? novelData.storyWorld.locations : [];
+			for (var i = 0; i < locs.length; i++) {
+				var loc = locs[i];
+				if (!loc) continue;
+				if (nwNormSetting(loc.name) === key || String(loc.id || '') === String(label)) return loc.id || null;
+			}
+			return null;
+		}
+
+		function nwNormalizePlanItem(it) {
+			it = it || {};
+			var row = { kind: String(it.kind || 'keyPoint'), label: String(it.label || it.text || ''), detail: String(it.detail || '') };
+			['charId', 'locationId', 'factId', 'conceptId', 'deliveryMode', 'via', 'who', 'where'].forEach(function (k) {
+				if (it[k] != null && it[k] !== '') row[k] = it[k];
+			});
+			return row;
+		}
+
+		function nwHeuristicWritingPlan(n) {
+			var bp = getChapterBlueprint(n);
+			var items = [];
+			nwBlueprintBeatTexts(bp).forEach(function (b) { items.push({ kind: 'beat', label: b, detail: '' }); });
+			if (bp && typeof nwRequiredCastNames === 'function') {
+				nwRequiredCastNames(bp).required.forEach(function (name) {
+					var row = { kind: 'cast', label: name, detail: 'on page' };
+					var id = nwMatchCharId(name);
+					if (id) row.charId = id;
+					items.push(row);
+				});
+			}
+			var setting = nwBlueprintSettingText(n, bp);
+			if (setting) {
+				setting.split(';').forEach(function (part) {
+					var label = part.trim();
+					if (!label) return;
+					var row = { kind: 'setting', label: label, detail: '' };
+					var id = nwMatchLocationId(label);
+					if (id) row.locationId = id;
+					items.push(row);
+				});
+			}
+			nwMustIncludeFacts(n).forEach(function (f) {
+				var row = { kind: 'fact', label: String(f.text || f.label || ''), detail: '' };
+				if (f.id) row.factId = f.id;
+				items.push(row);
+			});
+			var outline = String((novelData.chapterOutlines || [])[n - 1] || '');
+			outline.split(/[.!?]+\s+/).map(function (s) { return s.trim(); }).filter(Boolean).slice(0, 3).forEach(function (s) {
+				items.push({ kind: 'keyPoint', label: s.slice(0, 200), detail: '' });
+			});
+			return items;
+		}
+
+		function nwStoreWritingPlan(n, items, builtBy) {
+			if (nwPlansAreLocked()) return { ok: false, reason: 'locked' };
+			if (!Array.isArray(novelData.chapterWritingPlans)) novelData.chapterWritingPlans = [];
+			var prev = novelData.chapterWritingPlans[n - 1];
+			var plan = { items: (items || []).map(nwNormalizePlanItem), builtBy: builtBy || 'heuristic', builtAt: new Date().toISOString() };
+			if (prev && typeof prev === 'object' && !Array.isArray(prev) && prev.worldFrom) plan.worldFrom = prev.worldFrom;
+			plan.builtFrom = nwComputeBuiltFrom(n);
+			novelData.chapterWritingPlans[n - 1] = plan;
+			var old = document.getElementById('writingPlanPanel' + n);
+			if (old && old.parentNode) old.parentNode.replaceChild(nwRenderWritingPlanPanel(n), old);
+			return { ok: true, plan: plan };
+		}
+
+		async function nwBuildWritingPlanAI(n) {
+			var sent = [n];
+			var response = null;
+			try {
+				response = await callAI([
+					{ role: 'system', content: (typeof getSkillSystemPrompt === 'function') ? getSkillSystemPrompt('tab5.buildWritingPlan', 'Return JSON only.') : 'Return JSON only.' },
+					{ role: 'user', content: 'Build a writing plan for chapter ' + sent.join(',') + '. Blueprint: ' + JSON.stringify(getChapterBlueprint(n) || null) }
+				], document.getElementById('tab5'), {
+					operationName: 'buildWritingPlan_' + n,
+					taskType: 'other',
+					skillId: 'tab5.buildWritingPlan',
+					chapter: n,
+					chapters: sent,
+					max_tokens: 1500
+				});
+			} catch (e) {
+				if (typeof nwNotify === 'function') nwNotify('Writing plan AI failed for chapter ' + n + '; used the heuristic.', { level: 'warn' });
+				return nwStoreWritingPlan(n, nwHeuristicWritingPlan(n), 'heuristic');
+			}
+			var items = response && Array.isArray(response.items) ? response.items : null;
+			if (!items) {
+				if (typeof nwNotify === 'function') nwNotify('Writing plan AI returned no items for chapter ' + n + '; used the heuristic.', { level: 'warn' });
+				items = nwHeuristicWritingPlan(n);
+				return nwStoreWritingPlan(n, items, 'heuristic');
+			}
+			return nwStoreWritingPlan(n, items, 'ai');
+		}
+
+		async function nwBuildWritingPlan(n, opts) {
+			opts = opts || {};
+			if (nwPlansAreLocked()) return { ok: false, reason: 'locked' };
+			var prev = (novelData.chapterWritingPlans || [])[n - 1];
+			var userEdited = prev && typeof prev === 'object' && prev.builtBy === 'user';
+			if (userEdited) {
+				var ok = (typeof confirm === 'function') ? confirm('Overwrite the writing plan you edited for chapter ' + n + '?') : false;
+				if (!ok) return { ok: false, reason: 'cancelled' };
+			}
+			if (opts.useAI) return nwBuildWritingPlanAI(n);
+			return nwStoreWritingPlan(n, nwHeuristicWritingPlan(n), 'heuristic');
+		}
+
+		async function nwBuildPlansFirst(chapters, useAI) {
+			window.__nwPlanPhaseLog = window.__nwPlanPhaseLog || [];
+			window.__nwPlanPhaseLog.push('plans');
+			chapters = chapters || [];
+			for (var i = 0; i < chapters.length; i++) {
+				if (window.__nwPlanBuildCancel) break;
+				var n = chapters[i];
+				var plan = (novelData.chapterWritingPlans || [])[n - 1];
+				var has = plan && typeof plan === 'object' && Array.isArray(plan.items) && plan.items.length;
+				var stale = nwWritingPlanIsStale(n);
+				if (has && !stale) continue;
+				await nwBuildWritingPlan(n, { useAI: !!useAI });
+			}
+			return { ok: true };
+		}
+
+		function nwSetPlanText(el, text) {
+			el.textContent = String(text == null ? '' : text);
+		}
+
+		function nwAppendPlanRow(list, chapterNum, item) {
+			item = item || { kind: 'keyPoint', label: '', detail: '' };
+			var row = document.createElement('div');
+			row.className = 'nw-plan-row';
+			var kind = document.createElement('select');
+			kind.className = 'wp-kind';
+			['setting', 'cast', 'beat', 'fact', 'keyPoint', 'worldBeat'].forEach(function (k) {
+				var o = document.createElement('option');
+				o.value = k;
+				o.textContent = k;
+				kind.appendChild(o);
+			});
+			kind.value = item.kind || 'keyPoint';
+			var label = document.createElement('input');
+			label.type = 'text';
+			label.className = 'wp-label';
+			label.value = item.label || '';
+			var detail = document.createElement('input');
+			detail.type = 'text';
+			detail.className = 'wp-detail';
+			detail.value = item.detail || '';
+			var shown = document.createElement('span');
+			shown.className = 'wp-shown';
+			nwSetPlanText(shown, item.label || '');
+			var extra = {};
+			['charId', 'locationId', 'factId', 'conceptId', 'deliveryMode', 'via', 'who', 'where'].forEach(function (k) {
+				if (item[k] != null && item[k] !== '') extra[k] = item[k];
+			});
+			row.dataset.extra = JSON.stringify(extra);
+			function onEdit() { nwApplyPlanUserEdit(chapterNum); }
+			[kind, label, detail].forEach(function (el) {
+				el.addEventListener('input', onEdit);
+				el.addEventListener('change', onEdit);
+			});
+			var up = document.createElement('button');
+			up.type = 'button';
+			up.textContent = 'Up';
+			up.addEventListener('click', function () {
+				if (nwPlansAreLocked()) return;
+				var prev = row.previousElementSibling;
+				if (prev) row.parentNode.insertBefore(row, prev);
+				nwApplyPlanUserEdit(chapterNum);
+			});
+			var down = document.createElement('button');
+			down.type = 'button';
+			down.textContent = 'Down';
+			down.addEventListener('click', function () {
+				if (nwPlansAreLocked()) return;
+				var next = row.nextElementSibling;
+				if (next) row.parentNode.insertBefore(next, row);
+				nwApplyPlanUserEdit(chapterNum);
+			});
+			var del = document.createElement('button');
+			del.type = 'button';
+			del.textContent = 'Delete';
+			del.addEventListener('click', function () {
+				if (nwPlansAreLocked()) return;
+				row.parentNode && row.parentNode.removeChild(row);
+				nwApplyPlanUserEdit(chapterNum);
+			});
+			row.appendChild(kind);
+			row.appendChild(label);
+			row.appendChild(detail);
+			row.appendChild(shown);
+			row.appendChild(up);
+			row.appendChild(down);
+			row.appendChild(del);
+			list.appendChild(row);
+		}
+
+		function nwReadPlanRows(panel) {
+			var items = [];
+			panel.querySelectorAll('.nw-plan-row').forEach(function (row) {
+				var extra = {};
+				try { extra = JSON.parse(row.dataset.extra || '{}'); } catch (e) { extra = {}; }
+				var kind = row.querySelector('.wp-kind');
+				var label = row.querySelector('.wp-label');
+				var detail = row.querySelector('.wp-detail');
+				items.push(nwNormalizePlanItem(Object.assign({}, extra, {
+					kind: kind ? kind.value : 'keyPoint',
+					label: label ? label.value : '',
+					detail: detail ? detail.value : ''
+				})));
+			});
+			return items;
+		}
+
+		function nwApplyPlanUserEdit(n) {
+			if (nwPlansAreLocked()) return { ok: false, reason: 'locked' };
+			var panel = document.getElementById('writingPlanPanel' + n);
+			if (!panel) return { ok: false, reason: 'no-panel' };
+			var items = nwReadPlanRows(panel);
+			if (!Array.isArray(novelData.chapterWritingPlans)) novelData.chapterWritingPlans = [];
+			var prev = novelData.chapterWritingPlans[n - 1];
+			var plan = (prev && typeof prev === 'object' && !Array.isArray(prev)) ? Object.assign({}, prev) : {};
+			plan.items = items;
+			plan.builtBy = 'user';
+			plan.editedAt = new Date().toISOString();
+			novelData.chapterWritingPlans[n - 1] = plan;
+			return { ok: true, plan: plan };
+		}
+
+		function nwCollectWritingPlansFromUi() {
+			document.querySelectorAll('.nw-plan-panel').forEach(function (panel) {
+				var n = Number(panel.getAttribute('data-chapter'));
+				if (!(n >= 1)) return;
+				var items = nwReadPlanRows(panel);
+				var prev = (novelData.chapterWritingPlans || [])[n - 1];
+				var prevItems = prev && Array.isArray(prev.items) ? prev.items.map(nwNormalizePlanItem) : [];
+				if (JSON.stringify(prevItems) === JSON.stringify(items)) return;
+				nwApplyPlanUserEdit(n);
+			});
+		}
+
+		function nwRenderWritingPlanPanel(chapterNum) {
+			var panel = document.createElement('div');
+			panel.id = 'writingPlanPanel' + chapterNum;
+			panel.className = 'nw-plan-panel';
+			panel.setAttribute('data-chapter', String(chapterNum));
+			var title = document.createElement('h4');
+			title.textContent = 'Writing plan';
+			panel.appendChild(title);
+			var stale = document.createElement('p');
+			stale.className = 'wp-stale';
+			var isStale = false;
+			try { isStale = nwWritingPlanIsStale(chapterNum); } catch (e) { isStale = false; }
+			stale.textContent = isStale ? 'plan stale: blueprint changed' : '';
+			stale.hidden = !isStale;
+			panel.appendChild(stale);
+			var warn = document.createElement('p');
+			warn.className = 'wp-conflicts';
+			var conflicts = (window.__nwPlanConflicts || []).filter(function (c) { return c && c.chapter === chapterNum; });
+			warn.textContent = conflicts.map(function (c) { return c.message; }).join(' ');
+			warn.hidden = !conflicts.length;
+			panel.appendChild(warn);
+			var list = document.createElement('div');
+			list.className = 'wp-items';
+			list.id = 'writingPlanItems' + chapterNum;
+			panel.appendChild(list);
+			var plan = (novelData.chapterWritingPlans || [])[chapterNum - 1];
+			var items = plan && Array.isArray(plan.items) ? plan.items : (Array.isArray(plan) ? plan : []);
+			items.forEach(function (it) { nwAppendPlanRow(list, chapterNum, it); });
+			function btn(text, fn) {
+				var b = document.createElement('button');
+				b.type = 'button';
+				b.textContent = text;
+				b.addEventListener('click', function (ev) { ev.preventDefault(); fn(); });
+				panel.appendChild(b);
+				return b;
+			}
+			btn('Build', function () { nwBuildWritingPlan(chapterNum, { useAI: false }); });
+			btn('Build with AI', function () { nwBuildWritingPlan(chapterNum, { useAI: true }); });
+			btn('Add', function () {
+				if (nwPlansAreLocked()) return;
+				nwAppendPlanRow(list, chapterNum, { kind: 'keyPoint', label: '', detail: '' });
+				nwApplyPlanUserEdit(chapterNum);
+			});
+			return panel;
+		}
+
+		window.nwAuditedTextHash = nwAuditedTextHash;
+		window.nwTrackerAuditState = nwTrackerAuditState;
+		window.nwAuditFencedChapter = nwAuditFencedChapter;
+		window.nwCheckChapterReplay = nwCheckChapterReplay;
+		window.nwPlansAreLocked = nwPlansAreLocked;
+		window.nwWritingPlanIsStale = nwWritingPlanIsStale;
+		window.nwRefreshPlanBuiltFrom = nwRefreshPlanBuiltFrom;
+		window.nwBuildHardRequirements = nwBuildHardRequirements;
+		window.nwBuildWritingPlan = nwBuildWritingPlan;
+		window.nwBuildPlansFirst = nwBuildPlansFirst;
+		window.nwRenderWritingPlanPanel = nwRenderWritingPlanPanel;
+		window.nwApplyPlanUserEdit = nwApplyPlanUserEdit;
+		window.nwCollectWritingPlansFromUi = nwCollectWritingPlansFromUi;
+		window.nwHeuristicWritingPlan = nwHeuristicWritingPlan;
 
 		function buildPromptContextPack(options = {}) {
 			const chapterNum = options.chapterNum || null;
@@ -6045,7 +7819,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		// Offline smoke isolation (Copilot highs on #117 QE1-3/QE5/QE6): snapshot novelData keys + DOM values, restore in finally.
 		function _nwSmokeSnapshot(keys, domIds) {
-			const extra8d = ['chapterScorecards', 'chapterFactChecks', 'factChecks', 'workflowStage', 'workflowLog', 'aiBeatCheck', 'lastBookScore'];
+			const extra8d = ['chapterScorecards', 'chapterFactChecks', 'factChecks', 'workflowStage', 'workflowLog', 'aiBeatCheck', 'lastBookScore', 'chapterRequiredFacts', 'chapterRequirements', 'chapterFingerprints', 'storyWorld', 'chapterThemeTags', 'chapterScenes', 'chapterIds', 'subplotsMeta', 'chapterWritingPlans', 'nwSchemaVersion'];
 			keys = (keys || []).concat(extra8d.filter(function (k) { return (keys || []).indexOf(k) < 0; }));
 			const snap = {};
 			(keys || []).forEach(function (k) { snap[k] = { had: Object.prototype.hasOwnProperty.call(novelData, k), v: novelData[k] === undefined ? undefined : JSON.parse(JSON.stringify(novelData[k])) }; });
@@ -7322,8 +9096,10 @@ return c && c.name && c.backstory && c.arc; });
 			if (flag && flag.coverageFailed === true) {
 				var miss = Array.isArray(flag.missing) ? flag.missing.filter(Boolean).join(', ') : '';
 				text = 'Coverage failed' + (miss ? ': missing ' + miss : '') + '. Kept for review.';
-			} else if (flag && flag.replay) {
-				text = 'Replay check flagged this chapter.';
+			}
+			if (flag && flag.replay) {
+				var replayText = 'Replay check flagged this chapter.';
+				text = text ? (text + ' ' + replayText) : replayText;
 			}
 			['chapterGenFlag', 'chapterEditFlag'].forEach(function (p) {
 				var el = document.getElementById(p + n);
@@ -8121,6 +9897,13 @@ return c && c.name && c.backstory && c.arc; });
 		}
 
 		async function runTrackedE2E() {
+			if (typeof NW_S1_RESET_RESPECTS_PAUSE_LOCK === 'undefined' || NW_S1_RESET_RESPECTS_PAUSE_LOCK) {
+				if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Tracked E2E')) {
+					const cancelEl = document.getElementById('trackedE2EResult');
+					if (cancelEl) cancelEl.textContent = 'Tracked E2E refused - Generate All run is active or paused; novel unchanged.';
+					return null;
+				}
+			}
 			// Engineering gate: resetState() wipes the current novel and this run makes live API calls; ask first.
 			if (!window.confirm('This resets the current novel and makes live API calls. Continue?')) {
 				const cancelEl = document.getElementById('trackedE2EResult');
@@ -8205,6 +9988,9 @@ return c && c.name && c.backstory && c.arc; });
 						resetState();
 					} catch (e) {
 						log('resetState warning: ' + (e.message || e));
+						report.errors.push({ step: 'init', error: (e && e.message) ? e.message : String(e) });
+						_trackedFinalize(report);
+						return publish();
 					}
 				}
 				document.getElementById('apiKey').value = savedKey;
@@ -8484,7 +10270,17 @@ return c && c.name && c.backstory && c.arc; });
 				characterProgress.length ? characterProgress.join('\n') : 'Not audited yet.',
 				'',
 				'Recent Continuity Risks:',
-				riskLines.length ? riskLines.join('\n') : 'No continuity findings yet.'
+				riskLines.length ? riskLines.join('\n') : 'No continuity findings yet.',
+				'',
+				'Tracker audit:',
+				(function () {
+					var n = Number(novelData.numChapters) || 0;
+					var lines = [];
+					for (var i = 1; i <= n; i++) {
+						lines.push('Chapter ' + i + ': ' + (typeof nwTrackerAuditState === 'function' ? nwTrackerAuditState(i) : 'not audited'));
+					}
+					return lines.length ? lines.join('\n') : 'not audited';
+				})()
 			].join('\n');
 		}
 
@@ -8509,10 +10305,11 @@ return c && c.name && c.backstory && c.arc; });
 		async function runChapterContinuityAudit(chapterNum, options = {}) {
 			const __c2ContEp = evidencePackPromptBlock({ goal: 'continuityAudit', chapter: chapterNum, tokenBudgetHint: 1200 });
 			collectData();
+			const savedChapterText = (novelData.chapters && novelData.chapters[chapterNum - 1] == null) ? '' : String((novelData.chapters || [])[chapterNum - 1] || '');
 		    // Agent Skill I/O pack (tab5.continuityAudit)
 		    window.__lastSkillPack = packSkillInputs('tab5.continuityAudit', { novelData: novelData, chapterNum: chapterNum });
 
-			const chapterText = novelData.chapters[chapterNum - 1] || document.getElementById(`chapterGenContent${chapterNum}`)?.value || '';
+			const chapterText = String(savedChapterText).trim() ? savedChapterText : (document.getElementById(`chapterGenContent${chapterNum}`)?.value || '');
 			if (!chapterText.trim()) {
 				if (!options.silent) alert(`Chapter ${chapterNum} has no content to audit.`);
 				return null;
@@ -8525,8 +10322,9 @@ return c && c.name && c.backstory && c.arc; });
 					content: [
 						`Audit continuity for Chapter ${chapterNum} of a novel titled "${novelData.title || 'Untitled'}".`,
 						`Continuity mode: ${novelData.continuityStrictMode ? 'strict' : 'balanced'}`,
-						`Context pack: ${JSON.stringify(buildPromptContextPack({ chapterNum, includePacket: false, extra: { continuityPacket: packet, chapterTextDigest: getTrimmedContext(chapterText, 4000) } }))}`,
-						`Chapter text (trimmed): ${getTrimmedContext(chapterText, 6000)}`,
+						`Context pack: ${JSON.stringify(buildPromptContextPack({ chapterNum, includePacket: false, extra: { continuityPacket: packet } }))}`,
+						nwAuditFencedChapter(chapterText),
+						'Report findings as plain observations. Do not quote this prompt\'s field names.',
 						'Return strict JSON only with this structure:',
 						'{',
 						'  "chapterSummary": "<120-220 words>",',
@@ -8563,6 +10361,9 @@ return c && c.name && c.backstory && c.arc; });
 				continuityRisks: Array.isArray(parsed.continuityRisks) ? parsed.continuityRisks : [],
 				recommendedFixes: Array.isArray(parsed.recommendedFixes) ? parsed.recommendedFixes : []
 			};
+			if (String(savedChapterText).trim()) {
+				chapterAudit.auditedTextHash = nwAuditedTextHash(savedChapterText);
+			}
 			novelData.continuityTracker.chapters[chapterNum - 1] = chapterAudit;
 			novelData.continuityTracker.storyArcProgress = chapterAudit.storyArcProgress;
 			novelData.continuityTracker.characterArcProgress = mergeCharacterArcProgress(novelData.continuityTracker.characterArcProgress, chapterAudit.characterArcProgress);
@@ -8696,6 +10497,7 @@ return c && c.name && c.backstory && c.arc; });
 
 	        // Suggest improvements for the entire book and update the table
 		    async function suggestBookImprovements() {
+			    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Suggest Improvements')) return;
 			    collectData();
 		    // Agent Skill I/O pack (tab7.suggestBookImprovements)
 		    window.__lastSkillPack = packSkillInputs('tab7.suggestBookImprovements', { novelData: novelData });
@@ -8889,6 +10691,7 @@ return c && c.name && c.backstory && c.arc; });
 
 			//Break improvements into executable parts
 			async function breakdownImprovement(index) {
+			    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Break Down')) return;
 			    collectData();
 		    // Agent Skill I/O pack (tab7.breakdownImprovement)
 			    const improvement = (novelData.bookImprovementsWithStatus || [])[index];
@@ -9543,6 +11346,7 @@ return c && c.name && c.backstory && c.arc; });
 		    // NW.T4.F1: incorporateOutlineSuggestions() SHALL send current outlines plus user improvement notes to the LLM and overwrite all three outline fields with the revised versions.
 		    // Incorporate user-suggested improvements into the main outlines
 		    async function incorporateOutlineSuggestions() {
+			    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Incorporate Suggestions')) return;
 			    collectData();
 		    // Agent Skill I/O pack (tab4.incorporateOutlineSuggestions)
 		    window.__lastSkillPack = packSkillInputs('tab4.incorporateOutlineSuggestions', { novelData: novelData });
@@ -9593,6 +11397,55 @@ return c && c.name && c.backstory && c.arc; });
 		    // ---- NW.GEN: Session Import/Export Functions ----
 		    // NW.GEN.SES.1: exportSession() SHALL serialise novelData into a schema-versioned JSON envelope (schemaVersion: '1.0') and trigger a file download.
 		    // NW.GEN.SES.2: importSession() SHALL accept a JSON file, detect whether it is an envelope or bare novelData, normalise it, and restore the full UI state.
+		    const SECRET_FIELD_DENYLIST = {
+		        exact: ["apiKey", "api_key", "accessToken", "access_token", "authToken", "authorization", "privateKey"],
+		        patterns: [/secret/i, /password/i, /^bearer/i]
+		    };
+
+		    function isSecretField(name) {
+		        const normalized = String(name).toLowerCase();
+		        return SECRET_FIELD_DENYLIST.exact.some(field => field.toLowerCase() === normalized)
+		            || SECRET_FIELD_DENYLIST.patterns.some(pattern => pattern.test(normalized));
+		    }
+
+		    function isSensitiveUrl(value) {
+		        if (typeof value !== 'string') return false;
+		        try {
+		            const url = new URL(value);
+		            if (url.username || url.password) return true;
+		            const fragment = url.hash.slice(1);
+		            const fragmentParams = fragment.includes('=')
+		                ? new URLSearchParams(fragment.includes('?') ? fragment.slice(fragment.indexOf('?') + 1) : fragment)
+		                : new URLSearchParams();
+		            return [...url.searchParams.keys(), ...fragmentParams.keys()].some(name =>
+		                ['key', 'token'].includes(name.toLowerCase()) || isSecretField(name)
+		            );
+		        } catch (error) {
+		            return false;
+		        }
+		    }
+
+		    function findRemovedSecretFields(value, fieldName = '') {
+		        if (Array.isArray(value)) {
+		            return [...new Set(value.flatMap(item => isSensitiveUrl(item)
+		                ? [fieldName || 'URL value']
+		                : findRemovedSecretFields(item, fieldName)))];
+		        }
+		        if (!value || typeof value !== 'object') return [];
+		        return [...new Set(Object.entries(value).flatMap(([name, nested]) => {
+		            if (isSecretField(name) || isSensitiveUrl(nested)) return [name];
+		            return findRemovedSecretFields(nested, name);
+		        }))];
+		    }
+
+		    function stripSecretFields(value) {
+		        if (Array.isArray(value)) return Array.from(value, item => isSensitiveUrl(item) ? null : stripSecretFields(item));
+		        if (!value || typeof value !== 'object') return value;
+		        return Object.fromEntries(Object.entries(value)
+		            .filter(([name, nested]) => !isSecretField(name) && !isSensitiveUrl(nested))
+		            .map(([name, nested]) => [name, stripSecretFields(nested)]));
+		    }
+
 		    // Export the entire session as JSON using the shared schema envelope.
 			function exportSession() {
 			    collectData();
@@ -9617,13 +11470,12 @@ return c && c.name && c.backstory && c.arc; });
 		    const {
 		        apiKey: _apiKey,
 		        model: _model,
-		        maxTokens: _maxTokens,
 		        authors: _authors,
 		        bookImprovements: _bookImprovements,
 		        chapterImprovements: _chapterImprovements,
 		        ...exportableNovelData
 		    } = novelData;
-		    const sessionData = {
+		    const sessionData = stripSecretFields({
 			        schemaVersion: '1.0',
 			        sourceTool: 'NovelWriter',
 			        sourceVersion: APP_VERSION,
@@ -9632,9 +11484,9 @@ return c && c.name && c.backstory && c.arc; });
 			            ...exportableNovelData,
 			            requestLog: { ...requestLog }
 			        }
-			    };
+			    });
 			    if (typeof nwTimingExportSnapshot === 'function') sessionData.nwTiming = nwTimingExportSnapshot();
-			    const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json;charset=utf-8' });
+			    const blob = new Blob([JSON.stringify(stripSecretFields(sessionData), null, 2)], { type: 'application/json;charset=utf-8' });
 			    const url = window.URL.createObjectURL(blob);
 			    const a = document.createElement('a');
 			    a.href = url;
@@ -9653,6 +11505,10 @@ return c && c.name && c.backstory && c.arc; });
 		// Validate and normalize incoming session payloads.
 		function normalizeImportedSessionData(rawData) {
 		    const warnings = [];
+		    const removedFields = findRemovedSecretFields(rawData);
+		    if (removedFields.length) {
+		        warnings.push(`Sensitive fields removed: ${removedFields.join(', ')}. If the file was shared, rotate your API key at console.x.ai.`);
+		    }
 		    const isSchemaEnvelope = rawData && typeof rawData === 'object' && rawData.schemaVersion === '1.0' && rawData.novelData && typeof rawData.novelData === 'object';
 		    const isLegacyEnvelope = rawData && typeof rawData === 'object' && rawData.novelData && typeof rawData.novelData === 'object';
 		    const isBareLegacy = rawData && typeof rawData === 'object' && typeof rawData.genre === 'string' && Array.isArray(rawData.chapters);
@@ -9681,6 +11537,8 @@ return c && c.name && c.backstory && c.arc; });
 		        warnings.push('Imported legacy bare NovelWriter data; migrated to current in-memory schema.');
 		    }
 
+		    normalizedNovelData = stripSecretFields(normalizedNovelData);
+		    normalizedRequestLog = stripSecretFields(normalizedRequestLog);
 		    const mergedNovelData = {
 		            ...novelData,
 		            ...normalizedNovelData,
@@ -9749,6 +11607,29 @@ return c && c.name && c.backstory && c.arc; });
 		            })
 		            : [];
 		    }
+		    if (typeof nwApplyS1KeyPassthrough === 'function') {
+		        nwApplyS1KeyPassthrough(mergedNovelData, normalizedNovelData);
+		    } else {
+		        ['storyWorld', 'subplotsMeta', 'chapterWritingPlans', 'chapterRequirements', 'chapterRequiredFacts', 'chapterFingerprints', 'chapterThemeTags', 'chapterScenes', 'chapterIds', 'nwSchemaVersion'].forEach(function (key) {
+		            if (!Object.prototype.hasOwnProperty.call(normalizedNovelData, key)) delete mergedNovelData[key];
+		        });
+		    }
+		    if (Array.isArray(normalizedNovelData.subplots)) {
+		        mergedNovelData.subplots = normalizedNovelData.subplots.map(function (raw, i) {
+		            return normalizeSubplotItem(raw, i, mergedNovelData);
+		        });
+		    }
+		    (function () {
+		        var trackerChapters = mergedNovelData.continuityTracker && mergedNovelData.continuityTracker.chapters;
+		        if (!Array.isArray(trackerChapters)) return;
+		        trackerChapters.forEach(function (row, idx) {
+		            if (!row || typeof row !== 'object') return;
+		            if (Object.prototype.hasOwnProperty.call(row, 'auditedTextHash') && typeof row.auditedTextHash !== 'string') {
+		                console.warn('normalizeImportedSessionData: auditedTextHash on chapter ' + (idx + 1) + ' is not a string; keeping as-is');
+		            }
+		        });
+		    })();
+
 		    return {
 		        novelData: mergedNovelData,
 		        requestLog: {
@@ -9829,7 +11710,7 @@ return c && c.name && c.backstory && c.arc; });
 		    document.getElementById('plotOutline').value = novelData.plotOutline || '';
 		    document.getElementById('storyArcOutline').value = novelData.storyArcOutline || '';
 		    document.getElementById('outlineImprovements').value = novelData.outlineImprovements || '';
-		    updateChapterSubpages();
+		    updateChapterSubpages({ internal: true });
 
 		    // Handle improvements for older files and restore breakdowns
 		    if (novelData.bookImprovements && (!novelData.bookImprovementsWithStatus || novelData.bookImprovementsWithStatus.length === 0)) {
@@ -9839,6 +11720,7 @@ return c && c.name && c.backstory && c.arc; });
 		            breakdown: null
 		        }));
 		    }
+		    if (!Array.isArray(novelData.bookImprovementsWithStatus)) novelData.bookImprovementsWithStatus = [];
 		    updateBookImprovementsTable(novelData.bookImprovementsWithStatus.map(item => item.text).join('\n'));
 
 		    // Populate Tab 8 if breakdown data exists
@@ -9858,7 +11740,11 @@ return c && c.name && c.backstory && c.arc; });
 
         // Import a session from a JSON file.
 	    function importSession(event) {
-		    // Generate All single writer: no import while a batch runs or an interrupted run awaits restore.
+		    // Generate All single writer: no import while a batch runs, is paused, or an interrupted run awaits restore.
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Import session')) {
+		        if (event && event.target) event.target.value = '';
+		        return;
+		    }
 		    if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
 		        console.warn('importSession locked: Generate All Chapters run is active or awaiting restore.');
 		        if (event && event.target) event.target.value = '';
@@ -9871,8 +11757,12 @@ return c && c.name && c.backstory && c.arc; });
 		    reader.onload = async function(e) {
 		        // #134 follow-up 1 (NW.T5.14): a Generate All run may have started while the file was being read.
 		        // Recheck the lock before touching anything; nothing from the file is applied.
-		        if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
-		            if (typeof nwToast === 'function') nwToast(NW_IMPORT_CANCELLED_MSG);
+		        if ((typeof nwBatchSetupIsLocked === 'function' && nwBatchSetupIsLocked()) || (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked())) {
+		            if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
+		                if (typeof nwToast === 'function') nwToast(NW_IMPORT_CANCELLED_MSG);
+		            } else if (typeof nwRefuseAiIfLocked === 'function') {
+		                nwRefuseAiIfLocked('Import session');
+		            }
 		            if (event && event.target) event.target.value = '';
 		            return;
 		        }
@@ -9884,18 +11774,22 @@ return c && c.name && c.backstory && c.arc; });
 		        try {
 		            const rawSessionData = JSON.parse(e.target.result);
 		            const { novelData: importedNovelData, requestLog: importedRequestLog, importMode, warnings } = normalizeImportedSessionData(rawSessionData);
+		            const migratedNovelData = (typeof nwMigrateSession === 'function') ? nwMigrateSession(importedNovelData) : importedNovelData;
+		            const existingApiKey = document.getElementById('apiKey').value;
 		            // Slot 8b: nwTiming is envelope-level, display-only. Never merge into IndexedDB stats.
 		            if (typeof nwTimingState !== 'undefined') {
-		                nwTimingState.imported = rawSessionData && rawSessionData.nwTiming ? rawSessionData.nwTiming : null;
+		                nwTimingState.imported = rawSessionData && rawSessionData.nwTiming ? stripSecretFields(rawSessionData.nwTiming) : null;
 		            }
 		            const priorRunId = novelData && novelData.batchRun && novelData.batchRun.id;
-		            novelData = importedNovelData;
+		            novelData = migratedNovelData;
 		            requestLog = importedRequestLog;
 		            // #134 follow-up 2 (NW.T5.15): a book imported without a batchRun must not inherit the previous book's run.
 		            // Await checkpoint delete before reporting success; IDB failures are logged inside nwBatchForgetRun.
 		            if (!novelData.batchRun && typeof nwBatchForgetRun === 'function') await nwBatchForgetRun(priorRunId);
 
 		            applySessionDataToUI();
+		            document.getElementById('apiKey').value = existingApiKey;
+		            novelData.apiKey = existingApiKey;
 
 		            // Run-less import: drop the previous book's custom cap so Generate All uses a fresh estimate.
 		            if (!novelData.batchRun) {
@@ -9943,6 +11837,7 @@ return c && c.name && c.backstory && c.arc; });
 	    // NW.T4.F4: updateChapterOutline() SHALL send per-chapter improvement notes to the LLM and update that chapter's outline and arc fields.
 	    // Generate novel outlines via AI
 	    async function generateNovelOutlines() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Generate Novel Outlines')) return;
 		    collectData();
 		    const __outlineSkillPack = packSkillInputs('tab4.generateNovelOutlines', { novelData: novelData });
 		    if (!__outlineSkillPack.ok) {
@@ -10176,6 +12071,7 @@ return c && c.name && c.backstory && c.arc; });
 		//Generate a chapter outline and arc
 
 		async function enrichChapterBlueprints() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Enrich Chapter Blueprints')) return;
 		    if (typeof window !== 'undefined') window.__activeSkillId = 'tab4.enrichChapterBlueprints';
 		    collectData();
 		    const cap = Number(novelData.numChapters) || Math.max((novelData.chapterBlueprints || []).length, 1);
@@ -10373,6 +12269,7 @@ return c && c.name && c.backstory && c.arc; });
 		}
 
 		async function generateChapterOutline(chapterNum) {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Generate Chapter Outline')) return;
 		    collectData();
 		    // Agent Skill I/O pack (tab4.generateChapterOutline)
 		    window.__lastSkillPack = packSkillInputs('tab4.generateChapterOutline', { novelData: novelData, chapterNum: chapterNum });
@@ -10529,6 +12426,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		//Update Chapter Outline with AI support
 		async function updateChapterOutline(chapterNum) {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Update Chapter Outline')) return;
 		    collectData();
 		    // Agent Skill I/O pack (tab4.updateChapterOutline)
 		    window.__lastSkillPack = packSkillInputs('tab4.updateChapterOutline', { novelData: novelData, chapterNum: chapterNum });
@@ -10618,7 +12516,7 @@ return c && c.name && c.backstory && c.arc; });
 		var NW_QCAT_RESTART_MIN_WORDS = 40;
 		var NW_QCAT_RESTART_DENSITY = 0.4;
 		var NW_QCAT_NAME_TITLES = ['dr', 'doctor', 'captain', 'capt', 'mr', 'mrs', 'ms', 'prof', 'professor', 'commander', 'lt', 'sgt', 'admiral', 'general', 'colonel', 'major'];
-		var NW_NOTE_LEAK_TERMS = ['fail closed', 'followable', 'this row', 'fenced header', 'blueprint', 'obligation', 'beat checklist', 'sceneGoal', 'turnOrPayoff', 'deferred thread'];
+		var NW_NOTE_LEAK_TERMS = ['fail closed', 'followable', 'this row', 'fenced header', 'blueprint', 'obligation', 'beat checklist', 'sceneGoal', 'turnOrPayoff', 'deferred thread', 'checklist', 'hard requirement', 'word count'];
 		var NW_QCAT_CAMEL_FIELDS = ['sceneGoal', 'castArcBeat', 'subplotPressure', 'dialogueTurn', 'sensoryWorldHook', 'turnOrPayoff', 'characterBeats', 'worldHooks', 'allowedPayoffs', 'deferredThreads', 'arcStep'];
 		var NW_QCAT_STOP = new Set(('a an the and or but if in on at to for of as by with from into over after before about against between through during without within along among upon than then so nor not no yes it its it\'s i me my we our you your he she they them his her their this that these those be is am are was were been being do did does doing have has had having will would can could should may might must shall').split(/\s+/));
 		var NW_QCAT_BEAT_FIELDS = ['sceneGoal', 'dialogueTurn', 'turnOrPayoff', 'subplotPressure', 'sensoryWorldHook'];
@@ -10907,7 +12805,7 @@ return c && c.name && c.backstory && c.arc; });
 			beats.status = status;
 			return beats;
 		}
-		function nwScoreCast(text, bp) {
+		function nwRequiredCastNames(bp) {
 			var required = [];
 			var byKey = {};
 			var dialogueNames = nwExtractCapNames((bp && bp.dialogueTurn) || '');
@@ -10945,6 +12843,12 @@ return c && c.name && c.backstory && c.arc; });
 				if (key) dialogueKeys[key] = 1;
 				else if (!NW_QCAT_FILTER_TITLE_FRAGMENTS && n) dialogueKeys[n] = 1;
 			});
+			return { required: required, dialogueKeys: dialogueKeys };
+		}
+		function nwScoreCast(text, bp) {
+			var info = nwRequiredCastNames(bp);
+			var required = info.required;
+			var dialogueKeys = info.dialogueKeys;
 			var counts = {};
 			var missing = [];
 			var missingDialogue = [];
@@ -11918,7 +13822,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		    // Part 1 — blueprint-bound pack (obligations over pad quotas)
 		    const messagesPart1 = [
-			    { role: 'system', content: getSkillSystemPrompt('tab5.generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
+			    { role: 'system', content: getSkillSystemPrompt('tab5.generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`, chapterNum) },
 		        {
 		            role: 'user',
 		            content: buildGenerateChapterUserContent(chapterNum, 1, { continuityPacket: continuityPacket })
@@ -11967,7 +13871,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		    // Part 2
 			const messagesPart2 = [
-			    { role: 'system', content: getSkillSystemPrompt('tab5.generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`) },
+			    { role: 'system', content: getSkillSystemPrompt('tab5.generateChapter', `You are a creative writing assistant specializing in immersive, character-driven narratives with a ${novelData.authorStyle || 'generic'}-inspired style, adaptable to any genre.`, chapterNum) },
 			    {
 			        role: 'user',
 			        content: buildGenerateChapterUserContent(chapterNum, 2, { continuityPacket: continuityPacket, firstHalf: chapterContent })
@@ -12029,14 +13933,15 @@ return c && c.name && c.backstory && c.arc; });
 		    requestLog.returnedInfo = JSON.stringify({ chapter: novelData.chapters[chapterNum-1] }, null, 2);
 		    console.log('Pre-final updateRequestLog - chapterContent Length:', chapterContent.length);
 		    updateRequestLog();
-			refreshContinuityAfterChapter(chapterNum);
-			if (novelData.autoContinuityAudit) {
-				if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'audit', '');
-				// #134 follow-up 5: in a batch only the audit call is retried (Parts 1/2 already spent their tokens).
-				if (opts.batch && typeof nwBatchContinuityAudit === 'function') await nwBatchContinuityAudit(chapterNum);
-				else await runChapterContinuityAudit(chapterNum, { silent: true });
-			}
 		    console.log('Post-final updateRequestLog - chapterContent Length:', chapterContent.length);
+		    async function nwRunChapterAuditNow() {
+		        refreshContinuityAfterChapter(chapterNum);
+		        if (!novelData.autoContinuityAudit) return;
+		        if (typeof nwBatchSubStep === 'function') nwBatchSubStep(chapterNum, 'audit', '');
+		        // #134 follow-up 5: in a batch only the audit call is retried (Parts 1/2 already spent their tokens).
+		        if (opts.batch && typeof nwBatchContinuityAudit === 'function') await nwBatchContinuityAudit(chapterNum);
+		        else await runChapterContinuityAudit(chapterNum, { silent: true });
+		    }
 		    try {
 		        // SLOT8C: draft-only skip lives in ensureQualityAfterGenerate (novelData.skipAutoRevision)
 		        await ensureQualityAfterGenerate(chapterNum);
@@ -12045,6 +13950,8 @@ return c && c.name && c.backstory && c.arc; });
 		        // In a batch this goes to the status line and does not stop the run.
 		        if (opts.batch && typeof nwNotify === 'function') nwNotify('Chapter ' + chapterNum + ' quality gate/revise error (run continues): ' + String((qgErr && qgErr.message) || qgErr), { level: 'warn' });
 		    }
+		    await nwRunChapterAuditNow();
+		    if (typeof nwCheckChapterReplay === 'function') nwCheckChapterReplay(chapterNum, opts);
 			if (!NW_QCAT_SCORE_AFTER_COVERAGE) {
 				await nwScoreGeneratedChapter(chapterNum, opts);
 			}
@@ -12447,7 +14354,23 @@ return c && c.name && c.backstory && c.arc; });
                 perChapter = nwBatchMaxTokens() * nwBatchPasses();
                 source = 'fallback';
             }
-            return { perChapter: perChapter, total: perChapter * (Number(planned) || 0), source: source };
+            var count = Number(planned) || 0;
+            var total = perChapter * count;
+            var planBuildCalls = 0;
+            var buildEl = nwBatchEl('batchBuildPlansFirst');
+            var aiEl = nwBatchEl('batchBuildPlansUseAI');
+            if (buildEl && buildEl.checked && aiEl && aiEl.checked) {
+                planBuildCalls = count;
+                total += planBuildCalls * 1500;
+            }
+            var auditInputChars = 0;
+            if (typeof novelData !== 'undefined' && novelData && novelData.autoContinuityAudit) {
+                var chs = novelData.chapters || [];
+                var sum = 0;
+                for (var ai = 0; ai < chs.length; ai++) sum += String(chs[ai] || '').length;
+                auditInputChars = sum;
+            }
+            return { perChapter: perChapter, total: total, source: source, planBuildCalls: planBuildCalls, auditInputChars: auditInputChars };
         }
 
         function nwBatchReadOptions() {
@@ -12550,10 +14473,9 @@ return c && c.name && c.backstory && c.arc; });
         function nwBatchCheckpoint(active) {
             var br = novelData.batchRun;
             br.updatedAt = new Date().toISOString();
-            var nd = JSON.parse(JSON.stringify(novelData));
-            delete nd.apiKey;
+            var nd = stripSecretFields(JSON.parse(JSON.stringify(novelData)));
             delete nd.batchRun;
-            var brCopy = JSON.parse(JSON.stringify(br));
+            var brCopy = stripSecretFields(JSON.parse(JSON.stringify(br)));
             delete brCopy.rejectedDraft; // session export only, never checkpointed
             if (typeof NW_6B_CHECKPOINT_COVERAGE_ACK !== 'undefined' && !NW_6B_CHECKPOINT_COVERAGE_ACK) delete brCopy.coverageAck;
             var rec = { key: br.id, savedAt: br.updatedAt, active: active !== false, novelData: nd, batchRun: brCopy };
@@ -12579,10 +14501,20 @@ return c && c.name && c.backstory && c.arc; });
             return !!(nwBatchState.running || nwBatchState.interrupted || nwBatchState.importing || nwBatchState.integrating);
         }
 
+        function nwBatchPauseHoldsSetupLock() {
+            if (typeof NW_S1_LOCK_PAUSE_HELD !== 'undefined' && !NW_S1_LOCK_PAUSE_HELD) return false;
+            var br = typeof novelData !== 'undefined' && novelData && novelData.batchRun;
+            return !!(br && br.reason === 'paused' && !(nwBatchState && nwBatchState.running));
+        }
+
+        function nwBatchSetupIsLocked() {
+            return nwBatchIsLocked() || nwBatchPauseHoldsSetupLock();
+        }
+
         function nwBatchIsResumable() {
             var br = novelData.batchRun;
             if (!br || !br.range || nwBatchState.running) return false;
-            if (br.reason == null || br.reason === 'done') return false;
+            if (br.reason == null || br.reason === 'done' || br.reason === 'cancelled') return false;
             // Only a coverage stop skips its chapter; a parse/provider/gate stop regenerates the stopped chapter on Resume.
             // Accept/Skip keep the skip; Regenerate retries the stopped chapter.
             var skip = br.reason === 'coverage' ? br.stoppedAt : null;
@@ -12601,15 +14533,57 @@ return c && c.name && c.backstory && c.arc; });
 
         function nwBatchApplyLock() {
             var locked = nwBatchIsLocked();
-            document.querySelectorAll('#chapterGenContainer button, #chapterEditContainer button').forEach(function (b) { b.disabled = locked; });
+            var setupLocked = (typeof nwBatchSetupIsLocked === 'function') ? nwBatchSetupIsLocked() : locked;
+            document.querySelectorAll('#chapterGenContainer button, #chapterEditContainer button').forEach(function (b) {
+                if (b.closest && b.closest('.nw-plan-panel')) return;
+                b.disabled = locked;
+            });
+            var planLocked = (typeof nwPlansAreLocked === 'function') ? nwPlansAreLocked() : locked;
+            document.querySelectorAll('.nw-plan-panel button, .nw-plan-panel input, .nw-plan-panel select, .nw-plan-panel textarea').forEach(function (el) { el.disabled = planLocked; });
             document.querySelectorAll('textarea[id^="chapterEditContent"]').forEach(function (t) { t.readOnly = locked; t.disabled = locked; });
             // Tab 7 Apply (updateChapter) and Tab 8 Integrate Suggestions are writers too.
             document.querySelectorAll('#tab7 button[onclick*="applyTopBookCritiques"], #improvementsTableBody button[onclick*="applyBookCritiqueItem"], #tab8 button[onclick*="integrateBreakdownSuggestions"]').forEach(function (b) { b.disabled = locked; });
             // #134 follow-up 4: the Tab 5 continuity writers are locked the same way.
             document.querySelectorAll('#tab5 button[onclick*="rebuildContinuityPackets"], #tab5 button[onclick*="runContinuityAuditAll"]').forEach(function (b) { b.disabled = locked; });
-            ['importFile', 'numChapters', 'batchGenerateAllBtn', 'batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap', 'skipAutoRevision', 'aiBeatCheck', 'scoreAllChaptersBtn'].forEach(function (id) {
+            ['batchFrom', 'batchTo', 'batchRegenerate', 'batchPerChapterDownload', 'batchTokenCap', 'skipAutoRevision', 'aiBeatCheck', 'scoreAllChaptersBtn'].forEach(function (id) {
                 var el = nwBatchEl(id);
                 if (el) el.disabled = locked;
+            });
+            var v2ChapterCountFixed = typeof nwChapterCountFixedForNewerSchema === 'function' && nwChapterCountFixedForNewerSchema(novelData);
+            ['importFile', 'numChapters'].forEach(function (id) {
+                var el = nwBatchEl(id);
+                if (el) el.disabled = setupLocked || (id === 'numChapters' && v2ChapterCountFixed);
+            });
+            if (typeof nwShowChapterCountFixedNote === 'function') nwShowChapterCountFixedNote(v2ChapterCountFixed);
+            if (typeof NW_S1_LOCK_TRACKED_TEST_BTNS === 'undefined' || NW_S1_LOCK_TRACKED_TEST_BTNS) {
+                var testBtnIds = (typeof NW_S1_SETUP_TEST_BTN_IDS !== 'undefined' && NW_S1_SETUP_TEST_BTN_IDS) ? NW_S1_SETUP_TEST_BTN_IDS : ['trackedE2EBtn'];
+                testBtnIds.forEach(function (id) {
+                    var el = nwBatchEl(id);
+                    if (el) el.disabled = setupLocked;
+                });
+            }
+            var genAllBtn = nwBatchEl('batchGenerateAllBtn');
+            if (genAllBtn) {
+                var genAllLock = setupLocked;
+                if (typeof NW_S1_LOCK_GENALL_SETUP !== 'undefined' && !NW_S1_LOCK_GENALL_SETUP) genAllLock = locked;
+                genAllBtn.disabled = genAllLock;
+            }
+            var setupIds = ['setting', 'generalPlot', 'storyArc', 'title', 'genre', 'authorStyle', 'styleGuide', 'chapterLength', 'numCharacters', 'minSubplots'];
+            if (typeof NW_S1_LOCK_SETUP_INPUTS === 'undefined' || NW_S1_LOCK_SETUP_INPUTS) {
+                setupIds.forEach(function (id) {
+                    var el = document.getElementById(id);
+                    if (el) el.disabled = setupLocked;
+                });
+            }
+            var aiSel = '#tab1 button[onclick*="suggest"], #tab1 button[onclick*="fetchAuthors"], #tab1 button[onclick*="fetchStyleGuide"], #tab2 button[onclick*="suggest"], #tab2 button[onclick*="scrape"], #tab2 button[onclick*="refine"], #tab2 button[onclick*="enrich"], #tab3 button[onclick*="suggest"], #tab3 button[onclick*="enrich"], #tab4 button[onclick*="generate"], #tab4 button[onclick*="enrich"], #tab4 button[onclick*="updateChapter"], #tab7 button[onclick*="suggestBookImprovements"]';
+            if (typeof NW_S1_LOCK_TAB47 === 'undefined' || NW_S1_LOCK_TAB47) {
+                aiSel += ', #tab4 button[onclick*="incorporateOutlineSuggestions"], #tab7 button[onclick*="breakdownImprovement"], #tab2 button[onclick*="addCharacter"], #tab3 button[onclick*="addSubplot"]';
+            }
+            document.querySelectorAll(aiSel).forEach(function (b) { b.disabled = setupLocked; });
+            document.querySelectorAll('#chapterOutlines button').forEach(function (b) { b.disabled = setupLocked; });
+            document.querySelectorAll('#tab2 .charName, #tab2 .charBackstory, #tab2 .charArc, #tab3 .subplot, #tab4 textarea').forEach(function (t) {
+                t.disabled = setupLocked;
+                if ('readOnly' in t) t.readOnly = setupLocked;
             });
             var decideBusy = !!nwBatchState.coverageDecideOwner;
             ['batchCoverageAcceptBtn', 'batchCoverageRegenerateBtn', 'batchCoverageSkipBtn'].forEach(function (id) {
@@ -12620,6 +14594,8 @@ return c && c.name && c.backstory && c.arc; });
             if (pause) pause.disabled = !nwBatchState.running;
             var resume = nwBatchEl('batchResumeBtn');
             if (resume) resume.disabled = locked || !nwBatchIsResumable();
+            var cancel = nwBatchEl('batchCancelBtn');
+            if (cancel) cancel.disabled = !nwBatchPauseHoldsSetupLock();
             var fs = nwBatchEl('batchRunFieldset');
             if (fs) fs.dataset.locked = locked ? '1' : '0';
             return locked;
@@ -12820,9 +14796,43 @@ return c && c.name && c.backstory && c.arc; });
         window.nwBatchCoverageDecide = nwBatchCoverageDecide;
 
         // ---- batch entry points ----
-        function generateAllChapters() {
+        async function generateAllChapters() {
+            if (typeof nwBatchPauseHoldsSetupLock === 'function' && nwBatchPauseHoldsSetupLock()) {
+                if (typeof nwRefuseAiIfLocked === 'function') nwRefuseAiIfLocked('Generate All');
+                return Promise.resolve({ started: false, reason: 'paused' });
+            }
+            window.__nwPlanPhaseLog = [];
+            var buildEl = nwBatchEl('batchBuildPlansFirst');
+            var aiEl = nwBatchEl('batchBuildPlansUseAI');
+            var wantPlans = !!(buildEl && buildEl.checked);
+            if (wantPlans && typeof nwBuildPlansFirst === 'function') {
+                try { collectData(); } catch (e) { console.warn('[plans] collectData', e); }
+                var range = (typeof nwBatchReadOptions === 'function') ? nwBatchReadOptions() : { from: 1, to: (novelData && novelData.numChapters) || 1 };
+                var chapterNums = [];
+                for (var pn = range.from; pn <= range.to; pn++) chapterNums.push(pn);
+                await nwBuildPlansFirst(chapterNums, !!(aiEl && aiEl.checked));
+            }
+            window.__nwPlanPhaseLog.push('batch-start');
             nwBatchState.lastPromise = nwBatchStart(false);
             return nwBatchState.lastPromise;
+        }
+
+        async function cancelBatchRun() {
+            var br = typeof novelData !== 'undefined' && novelData && novelData.batchRun;
+            if (!br || br.reason !== 'paused' || (nwBatchState && nwBatchState.running)) return false;
+            if (typeof NW_S1_CANCEL_RELEASES_LOCK !== 'undefined' && !NW_S1_CANCEL_RELEASES_LOCK) {
+                nwBatchSetStatus(nwBatchState.lastStatus || 'Paused.', 'stopped');
+                nwBatchApplyLock();
+                return true;
+            }
+            br.reason = 'cancelled';
+            br.detail = 'cancelled while paused';
+            br.inFlight = null;
+            br.updatedAt = new Date().toISOString();
+            try { await nwBatchCheckpoint(false); } catch (e) { console.warn('[batch] cancel checkpoint', e); }
+            nwBatchApplyLock();
+            nwBatchSetStatus('Cancelled. Setup is unlocked. Completed: ' + ((br.completed && br.completed.length) ? br.completed.join(', ') : 'none') + '.', 'idle');
+            return true;
         }
 
         function resumeBatchRun() {
@@ -13151,7 +15161,7 @@ return c && c.name && c.backstory && c.arc; });
                 br.updatedAt = new Date().toISOString();
             }
             var text = stop
-                ? (stop.reason === 'paused' ? 'Paused before ch' + stop.at + '.' : 'Stopped at ch' + stop.at + ' (' + stop.reason + '): ' + nwBatchEndSentence(nwBatchShort(stop.detail, 240)))
+                ? (stop.reason === 'paused' ? 'Paused before ch' + stop.at + '. Setup is locked until the run ends or is cancelled.' : 'Stopped at ch' + stop.at + ' (' + stop.reason + '): ' + nwBatchEndSentence(nwBatchShort(stop.detail, 240)))
                 : 'Done: ch' + br.range.from + '-' + br.range.to + '.';
             if (stop && stop.reason === 'parse') text += ' Response could not be parsed (no retry); Resume regenerates ch' + stop.at + '.';
             else if (stop && stop.reason === 'provider') text += (stop.noRetry ? '' : (stop.timeoutInfo ? ' ' + nwBatchCap1(stop.timeoutInfo) + ';' : ' Provider error (retried once where retryable);')) + ' Resume regenerates ch' + stop.at + '.';
@@ -13215,7 +15225,12 @@ return c && c.name && c.backstory && c.arc; });
             if (!rec) return false;
             var keyEl = nwBatchEl('apiKey');
             var apiKey = keyEl ? keyEl.value : '';
-            novelData = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: JSON.parse(JSON.stringify(rec.novelData)) }).novelData;
+            var restored = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: JSON.parse(JSON.stringify(rec.novelData)) });
+            if (restored.warnings && restored.warnings.length) {
+                console.warn('Checkpoint restore warnings:', restored.warnings);
+            }
+            var migratedNovelData = (typeof nwMigrateSession === 'function') ? nwMigrateSession(restored.novelData) : restored.novelData;
+            novelData = migratedNovelData;
             novelData.apiKey = apiKey;
             var br = novelData.batchRun = JSON.parse(JSON.stringify(rec.batchRun));
             var was = br.inFlight;
@@ -13299,6 +15314,11 @@ return c && c.name && c.backstory && c.arc; });
         window.generateAllChapters = generateAllChapters;
         window.resumeBatchRun = resumeBatchRun;
         window.pauseBatchRun = pauseBatchRun;
+        window.cancelBatchRun = cancelBatchRun;
+        window.nwBatchIsLocked = nwBatchIsLocked;
+        window.nwBatchSetupIsLocked = nwBatchSetupIsLocked;
+        window.nwBatchPauseHoldsSetupLock = nwBatchPauseHoldsSetupLock;
+        window.nwBatchApplyLock = nwBatchApplyLock;
         // === NW_BATCH_END ===
 
 	    // ---- NW.T6: Chapter Editing Functions ----
@@ -13396,6 +15416,7 @@ return c && c.name && c.backstory && c.arc; });
 
 	    // Suggest initial story info via AI
 	    async function suggestStoryInfo() {
+		    if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('AI Suggest Story Info')) return;
 		    collectData();
 		    // Agent Skill I/O pack (tab1.suggestStoryInfo)
 		    window.__lastSkillPack = packSkillInputs('tab1.suggestStoryInfo', { novelData: novelData });
@@ -13514,6 +15535,7 @@ return c && c.name && c.backstory && c.arc; });
 		// NW.DOM.4: addSubplot() SHALL append a new blank subplot textarea to #subplotList and update the #minSubplots counter.
 		//addCharacter
 		function addCharacter() {
+			if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Add Character')) return;
 		    const charList = document.getElementById('characterList');
 		    const div = document.createElement('div');
 		    div.className = 'character';
@@ -13657,6 +15679,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		//addSubplot
 		function addSubplot() {
+			if (typeof nwRefuseAiIfLocked === 'function' && nwRefuseAiIfLocked('Add Subplot')) return;
 		    const subplotList = document.getElementById('subplotList');
 		    const index = subplotList.getElementsByClassName('subplot-section').length + 1;
 		    const div = document.createElement('div');
@@ -13690,19 +15713,18 @@ return c && c.name && c.backstory && c.arc; });
 	       novelData.chapterLength = parseInt(document.getElementById('chapterLength').value);
 	       novelData.authorStyle = document.getElementById('authorStyle').value;
 	       novelData.styleGuide = document.getElementById('styleGuide').value;
-	       novelData.characters = Array.from(document.getElementsByClassName('character')).map((c, i) => {
+	       novelData.characters = (typeof nwCollectCharactersFromDom === 'function')
+	           ? nwCollectCharactersFromDom()
+	           : Array.from(document.getElementsByClassName('character')).map((c, i) => {
 	           const existing = novelData.characters[i] || {};
 	           const domName = (c.querySelector('.charName') && c.querySelector('.charName').value) || '';
 	           const domBack = (c.querySelector('.charBackstory') && c.querySelector('.charBackstory').value) || '';
 	           const domArc = (c.querySelector('.charArc') && c.querySelector('.charArc').value) || '';
-	           // Prefer DOM when filled; keep novelData values when DOM blank (fixture inject / race).
-	           return {
+	           return normalizeCharacterItem(Object.assign({}, existing, {
 	               name: domName || existing.name || '',
 	               backstory: domBack || existing.backstory || '',
-	               arc: domArc || existing.arc || '',
-	               ...(existing.role !== undefined ? { role: existing.role } : {}),
-	               ...(existing.notes !== undefined ? { notes: existing.notes } : {})
-	           };
+	               arc: domArc || existing.arc || ''
+	           })) || existing;
 	       });
 	       {
 	           const existingSubs = Array.isArray(novelData.subplots) ? novelData.subplots : [];
@@ -13756,6 +15778,7 @@ return c && c.name && c.backstory && c.arc; });
 		   novelData.skipAutoRevision = !!document.getElementById('skipAutoRevision')?.checked;
 		   novelData.aiBeatCheck = !!document.getElementById('aiBeatCheck')?.checked;
 		   if (typeof nwCollectPlanFactsFromUi === 'function') nwCollectPlanFactsFromUi();
+		   if (typeof nwCollectWritingPlansFromUi === 'function') nwCollectWritingPlansFromUi();
 		   novelData.chapterContinuityPackets = Array.isArray(novelData.chapterContinuityPackets) ? novelData.chapterContinuityPackets : [];
 		   novelData.continuityFindings = Array.isArray(novelData.continuityFindings) ? novelData.continuityFindings : [];
 		   if (!novelData.continuityTracker || typeof novelData.continuityTracker !== 'object') {
@@ -13784,8 +15807,13 @@ return c && c.name && c.backstory && c.arc; });
 
 		// Reset state for tests with real API setup
 		function resetState() {
-		    // Generate All single writer: never wipe the session under a running (or interrupted) batch.
-		    if (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked()) {
+		    // Generate All single writer: never wipe the session under a running, interrupted, or paused batch.
+		    var pauseGuard = (typeof NW_S1_RESET_RESPECTS_PAUSE_LOCK === 'undefined' || NW_S1_RESET_RESPECTS_PAUSE_LOCK);
+		    var locked = pauseGuard
+		        ? (typeof nwBatchSetupIsLocked === 'function' && nwBatchSetupIsLocked())
+		        : (typeof nwBatchIsLocked === 'function' && nwBatchIsLocked());
+		    if (locked) {
+		        if (typeof nwRefuseAiIfLocked === 'function') nwRefuseAiIfLocked('Reset state');
 		        throw new Error('resetState locked: Generate All Chapters run is active or awaiting restore.');
 		    }
 		    novelData = {
@@ -13809,7 +15837,8 @@ return c && c.name && c.backstory && c.arc; });
 				continuityTracker: { chapters: [], characterArcProgress: [], storyArcProgress: {} },
 				continuityFindings: [],
 				tokenUsage: null,
-				qualitySamples: []
+				qualitySamples: [],
+				nwSchemaVersion: 1
 		    };
 		    requestLog = { lastPrompt: 'No requests made yet.', status: 'Idle', returnedInfo: 'No response yet.', tokenUsage: 'Not available', cost: 'Not available', originTab: null };
 		    // PRODUCT RULE: clear book-level token rollup for a fresh book/session test
@@ -14472,5 +16501,3 @@ return c && c.name && c.backstory && c.arc; });
 	    <div id="nwToast" role="status" aria-live="polite" data-testid="nw-toast" hidden style="position: fixed; right: 1em; bottom: 1em; max-width: 32em; padding: 0.6em 0.9em; background: #333; color: #fff; border-radius: 4px; z-index: 10000;"></div>
 	</body>
 </html>
-
-

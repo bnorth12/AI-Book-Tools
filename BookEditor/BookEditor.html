@@ -827,12 +827,12 @@ Synced: 2026-04-19
             novelData.numChapters = chapters.length;
             novelData.requestLog = [...requestLog];
 
-            const data = {
+            const data = stripSecretFields({
                 schemaVersion: "1.0",
                 sourceTool: "BookEditor",
                 sourceVersion: "0.4.0",
                 novelData: novelData
-            };
+            });
 
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
             const link = document.createElement("a");
@@ -993,24 +993,71 @@ Synced: 2026-04-19
 
 
 
+        const SECRET_FIELD_DENYLIST = {
+            exact: ["apiKey", "api_key", "accessToken", "access_token", "authToken", "authorization", "privateKey"],
+            patterns: [/secret/i, /password/i, /^bearer/i]
+        };
+
+        function isSecretField(name) {
+            const normalized = String(name).toLowerCase();
+            return SECRET_FIELD_DENYLIST.exact.some(field => field.toLowerCase() === normalized)
+                || SECRET_FIELD_DENYLIST.patterns.some(pattern => pattern.test(normalized));
+        }
+
+        function isSensitiveUrl(value) {
+            if (typeof value !== "string") return false;
+            try {
+                const url = new URL(value);
+                if (url.username || url.password) return true;
+                const fragment = url.hash.slice(1);
+                const fragmentParams = fragment.includes("=")
+                    ? new URLSearchParams(fragment.includes("?") ? fragment.slice(fragment.indexOf("?") + 1) : fragment)
+                    : new URLSearchParams();
+                return [...url.searchParams.keys(), ...fragmentParams.keys()].some(name =>
+                    ["key", "token"].includes(name.toLowerCase()) || isSecretField(name)
+                );
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function findRemovedSecretFields(value, fieldName = "") {
+            if (Array.isArray(value)) {
+                return [...new Set(value.flatMap(item => isSensitiveUrl(item)
+                    ? [fieldName || "URL value"]
+                    : findRemovedSecretFields(item, fieldName)))];
+            }
+            if (!value || typeof value !== "object") return [];
+            return [...new Set(Object.entries(value).flatMap(([name, nested]) => {
+                if (isSecretField(name) || isSensitiveUrl(nested)) return [name];
+                return findRemovedSecretFields(nested, name);
+            }))];
+        }
+
+        function stripSecretFields(value) {
+            if (Array.isArray(value)) return Array.from(value, item => isSensitiveUrl(item) ? null : stripSecretFields(item));
+            if (!value || typeof value !== "object") return value;
+            return Object.fromEntries(Object.entries(value)
+                .filter(([name, nested]) => !isSecretField(name) && !isSensitiveUrl(nested))
+                .map(([name, nested]) => [name, stripSecretFields(nested)]));
+        }
+
         // Export the current session state as a JSON file
-                // Export the current session state as a JSON file
-		        function exportSession() {
-		            const sessionData = {
-		                apiKey: document.getElementById("apiKey")?.value || "",
-                        model: document.getElementById("model")?.value || DEFAULT_MODEL,
-                        maxTokens: parseInt(document.getElementById("maxTokens")?.value) || 6000,
-		                genre: document.getElementById("genre")?.value || "",
-		                bookText: document.getElementById("bookText")?.value || "",
-		                improvements: Array.from(document.getElementById("improvementsTableBody").rows).map(row => row.cells[1].innerText),
-		                chapters: chapters,          // Original chapters
-		                editedChapters: editedChapters // Edited chapters (nulls for unincorporated)
-		            };
-		            const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: "application/json" });
-		            const link = document.createElement("a");
-		            link.href = URL.createObjectURL(blob);
-		            link.download = "BookEditorSession.json";
-		            link.click();
+        function exportSession() {
+            const sessionData = stripSecretFields({
+                model: document.getElementById("model")?.value || DEFAULT_MODEL,
+                maxTokens: parseInt(document.getElementById("maxTokens")?.value) || 6000,
+                genre: document.getElementById("genre")?.value || "",
+                bookText: document.getElementById("bookText")?.value || "",
+                improvements: Array.from(document.getElementById("improvementsTableBody").rows).map(row => row.cells[1].innerText),
+                chapters: chapters,          // Original chapters
+                editedChapters: editedChapters // Edited chapters (nulls for unincorporated)
+            });
+            const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: "application/json" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "BookEditorSession.json";
+            link.click();
         }
 
 
@@ -1026,8 +1073,9 @@ Synced: 2026-04-19
 			const file = event.target.files[0];
 			const reader = new FileReader();
 			reader.onload = function(e) {
-				const sessionData = JSON.parse(e.target.result);
-				document.getElementById("apiKey").value = sessionData.apiKey || "";
+				const rawSessionData = JSON.parse(e.target.result);
+				const removedFields = findRemovedSecretFields(rawSessionData);
+				const sessionData = stripSecretFields(rawSessionData);
                 sessionData.model = applyModelSelection(sessionData.model);
                 document.getElementById("maxTokens").value = sessionData.maxTokens || 6000;
 				document.getElementById("genre").value = sessionData.genre || "";
@@ -1053,6 +1101,9 @@ Synced: 2026-04-19
 					}
 				});
 				console.log("Imported session: chapters:", chapters.length, "editedChapters:", editedChapters.filter(ch => ch !== null).length);
+                if (removedFields.length) {
+                    alert(`Sensitive fields removed: ${removedFields.join(", ")}. If the file was shared, rotate your API key at console.x.ai.`);
+                }
 			};
 			reader.readAsText(file);
 		}
@@ -1069,12 +1120,14 @@ Synced: 2026-04-19
                 reader.onload = function(e) {
                     try {
                         const data = JSON.parse(e.target.result);
-                        const importedNovelData = (data && data.schemaVersion && data.novelData) ? data.novelData : data;
+                        const sourceNovelData = (data && data.schemaVersion && data.novelData) ? data.novelData : data;
+                        const removedFields = findRemovedSecretFields(data);
+                        const importedNovelData = stripSecretFields(sourceNovelData);
                         if (!importedNovelData || typeof importedNovelData !== "object") {
                             throw new Error("Invalid schema payload.");
                         }
 
-                        novelData = { ...novelData, ...importedNovelData };
+                        novelData = stripSecretFields({ ...novelData, ...importedNovelData });
                         document.getElementById("genre").value = novelData.genre || "";
                         document.getElementById("bookText").value = novelData.bookText || "";
                         chapters = Array.isArray(novelData.chapters) ? novelData.chapters : [];
@@ -1098,7 +1151,9 @@ Synced: 2026-04-19
                             }
                         });
 
-                        alert("Book imported successfully!");
+                        alert(removedFields.length
+                            ? `Book imported successfully. Sensitive fields removed: ${removedFields.join(", ")}. If the file was shared, rotate your API key at console.x.ai.`
+                            : "Book imported successfully!");
                     } catch (error) {
                         alert("Error parsing JSON file: " + error.message);
                     }

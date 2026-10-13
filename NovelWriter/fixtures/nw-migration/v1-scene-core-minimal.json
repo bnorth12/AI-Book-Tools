@@ -1,0 +1,58 @@
+{
+  "input": {
+    "title": "SCM",
+    "genre": "scifi",
+    "numChapters": 2,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 2 original prose. The dock clock disagreed with the log after the first choice."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y"
+      }
+    ],
+    "chapterIds": [
+      "ch_a",
+      "ch_b"
+    ],
+    "chapterScenes": [
+      {
+        "version": 1,
+        "textHash": "a",
+        "scenes": [
+          {
+            "id": "sc_min",
+            "chapterId": "ch_a",
+            "order": 1,
+            "breakApproved": true
+          }
+        ]
+      },
+      {
+        "version": 1,
+        "textHash": "b",
+        "scenes": [
+          {
+            "id": "sc_imp",
+            "chapterId": "ch_b",
+            "order": 1,
+            "breakApproved": false,
+            "source": "import"
+          }
+        ]
+      }
+    ]
+  },
+  "expectedAddedKeys": [
+    "chapterFingerprints[0]",
+    "chapterFingerprints[1]",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "core-minimal + unapproved import round-trip"
+}

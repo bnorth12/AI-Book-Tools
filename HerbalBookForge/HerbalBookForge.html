@@ -689,6 +689,70 @@
             };
         }
 
+        const SECRET_FIELD_DENYLIST = {
+            exact: ["apiKey", "api_key", "accessToken", "access_token", "authToken", "authorization", "privateKey"],
+            patterns: [/secret/i, /password/i, /^bearer/i]
+        };
+
+        function isSecretField(name) {
+            const normalized = String(name).toLowerCase();
+            return SECRET_FIELD_DENYLIST.exact.some(field => field.toLowerCase() === normalized)
+                || SECRET_FIELD_DENYLIST.patterns.some(pattern => pattern.test(normalized));
+        }
+
+        function isSensitiveUrl(value) {
+            if (typeof value !== "string") return false;
+            try {
+                const url = new URL(value);
+                if (url.username || url.password) return true;
+                const fragment = url.hash.slice(1);
+                const fragmentParams = fragment.includes("=")
+                    ? new URLSearchParams(fragment.includes("?") ? fragment.slice(fragment.indexOf("?") + 1) : fragment)
+                    : new URLSearchParams();
+                return [...url.searchParams.keys(), ...fragmentParams.keys()].some(name =>
+                    ["key", "token"].includes(name.toLowerCase()) || isSecretField(name)
+                );
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function findRemovedSecretFields(value, fieldName = "") {
+            if (Array.isArray(value)) {
+                return [...new Set(value.flatMap(item => isSensitiveUrl(item)
+                    ? [fieldName || "URL value"]
+                    : findRemovedSecretFields(item, fieldName)))];
+            }
+            if (!value || typeof value !== "object") return [];
+            return [...new Set(Object.entries(value).flatMap(([name, nested]) => {
+                if (isSecretField(name) || isSensitiveUrl(nested)) return [name];
+                return findRemovedSecretFields(nested, name);
+            }))];
+        }
+
+        function stripSecretFields(value) {
+            if (Array.isArray(value)) return Array.from(value, item => isSensitiveUrl(item) ? null : stripSecretFields(item));
+            if (!value || typeof value !== 'object') return value;
+            return Object.fromEntries(Object.entries(value)
+                .filter(([name, nested]) => !isSecretField(name) && !isSensitiveUrl(nested))
+                .map(([name, nested]) => [name, stripSecretFields(nested)]));
+        }
+
+        function stripSecretFieldsInPlace(value) {
+            if (Array.isArray(value)) {
+                for (let index = value.length - 1; index >= 0; index--) {
+                    if (isSensitiveUrl(value[index])) value[index] = null;
+                    else stripSecretFieldsInPlace(value[index]);
+                }
+                return;
+            }
+            if (!value || typeof value !== 'object') return;
+            Object.entries(value).forEach(([name, nested]) => {
+                if (isSecretField(name) || isSensitiveUrl(nested)) delete value[name];
+                else stripSecretFieldsInPlace(nested);
+            });
+        }
+
         const DEFAULT_MODEL = 'grok-4.7';
         let project = {
             meta: { version: "1.0.0", created: new Date().toISOString(), lastEdited: new Date().toISOString(), name: "New Herbal Medicine Book" },
@@ -737,6 +801,16 @@
         let setupListenersBound = false;
         let goalsListenersBound = false;
         let previewListenersBound = false;
+
+        function getStoredProject() {
+            const { setup, ...projectData } = project;
+            const { apiKey: _apiKey, ...safeSetup } = setup;
+            return { ...projectData, setup: safeSetup };
+        }
+
+        function projectStorageReplacer(name, value) {
+            return (isSecretField(name) || isSensitiveUrl(value)) ? undefined : value;
+        }
 
         function escapeHtml(text) {
             return String(text)
@@ -794,16 +868,19 @@
             if (tabId === 'preview') renderPreviewTab();
         }
 
-        function loadProject() {
-            const saved = localStorage.getItem('herbalBookForgeProject_v1.0.0')
+        function loadProject(importedProject) {
+            const saved = importedProject ? null : localStorage.getItem('herbalBookForgeProject_v1.0.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.14.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.11.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.10.0')
                 || localStorage.getItem('herbalBookForgeProject_v0.9.5')
                 || localStorage.getItem('herbalBookForgeProject_v0.9.3');
-            if (saved) {
+            if (importedProject || saved) {
                 try {
-                    const parsed = JSON.parse(saved);
+                    const currentApiKey = project.setup.apiKey || document.getElementById('api-key')?.value || '';
+                    const parsed = importedProject || JSON.parse(saved);
+                    stripSecretFieldsInPlace(parsed);
+                    stripSecretFieldsInPlace(project);
                     project = {
                         ...project,
                         ...parsed,
@@ -817,6 +894,7 @@
                         // HBF.PR4: preserve preview state from saved state with schema-safe defaults
                         preview: normalizePreviewState(parsed.preview)
                     };
+                    project.setup.apiKey = currentApiKey;
                 } catch (e) {}
             }
 
@@ -830,6 +908,10 @@
             if (!Array.isArray(project.setup.collectionIds)) {
                 project.setup.collectionIds = ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"];
             }
+            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject(), projectStorageReplacer));
+            ['v0.14.0', 'v0.11.0', 'v0.10.0', 'v0.9.5', 'v0.9.3'].forEach(version => {
+                localStorage.removeItem(`herbalBookForgeProject_${version}`);
+            });
 
             renderSetupForm();
             renderGoalsForm();
@@ -850,7 +932,7 @@
 
         function saveProject() {
             project.meta.lastEdited = new Date().toISOString();
-            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(project));
+            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject(), projectStorageReplacer));
             const status = document.getElementById('save-status');
             if (status) {
                 status.innerHTML = `Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
@@ -874,7 +956,7 @@
 
         function exportProject() {
             const fileName = `${(project.meta.name || "herbal-book").replace(/[^a-z0-9-_ ]/gi, "").trim() || "herbal-book"}_session.json`;
-            const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+            const blob = new Blob([JSON.stringify(stripSecretFields(project), null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -889,22 +971,15 @@
             const reader = new FileReader();
             reader.onload = e => {
                 try {
-                    const parsed = JSON.parse(e.target.result);
-                    project = {
-                        ...project,
-                        ...parsed,
-                        setup: { ...project.setup, ...(parsed.setup || {}) },
-                        prompts: { ...project.prompts, ...(parsed.prompts || {}) },
-                        goals: { ...project.goals, ...(parsed.goals || {}) },
-                        // HBF.DR7: preserve drafts on import; fall back to empty array
-                        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
-                        // HBF.PR4: preserve preview metadata on import with schema-safe defaults
-                        preview: normalizePreviewState(parsed.preview)
-                    };
+                    const rawProject = JSON.parse(e.target.result);
+                    const removedFields = findRemovedSecretFields(rawProject);
+                    stripSecretFieldsInPlace(rawProject);
                     project.meta.version = "1.0.0";
-                    loadProject();
+                    loadProject(rawProject);
                     saveProject();
-                    alert('Project imported successfully.');
+                    alert(removedFields.length
+                        ? `Project imported successfully. Sensitive fields removed: ${removedFields.join(", ")}. If the file was shared, rotate your API key at console.x.ai.`
+                        : 'Project imported successfully.');
                 } catch (err) {
                     alert(`Import failed: ${err.message}`);
                 }

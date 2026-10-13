@@ -421,6 +421,7 @@ async function r19SkipThenResume(page, OLD2, reloadRestore) {
   const expPrior1 = s.expPrior && s.expPrior[1];
   check('R1', 'batchRegenerate on: priorDrafts[1] = {text: original, at} (new draft kept separately)', !!(prior1 && prior1.text === OLD2 && typeof prior1.at === 'string' && prior1.at && s.chapters[1] !== OLD2), JSON.stringify({ prior: prior1, ch2: s.chapters[1] }));
   check('R1', 'batchRegenerate on: checkpoint and export include priorDrafts original text', !!(recPrior1 && recPrior1.text === OLD2 && expPrior1 && expPrior1.text === OLD2), JSON.stringify({ recPrior: recPrior1, expPrior: expPrior1 }));
+  check('R1', 'sparse priorDrafts keeps its chapter index through export', s.expPrior && s.expPrior.length === 2 && s.expPrior[0] === null && expPrior1 && expPrior1.text === OLD2, JSON.stringify(s.expPrior));
   check('R1', 'batchRegenerate on: coverage box shows "Your previous text is saved; Skip restores it."', (s.coverageMsg || '').indexOf('Your previous text is saved; Skip restores it.') >= 0, s.coverageMsg);
   await page.close();
 }

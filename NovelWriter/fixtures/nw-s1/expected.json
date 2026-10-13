@@ -1,0 +1,17 @@
+{
+  "seed": 1395720193,
+  "chapterIds": [
+    "ch_zwu1ac8ap3",
+    "ch_9hxu3vf2hb",
+    "ch_vtom1npfxa"
+  ],
+  "sceneIds": [
+    "sc_4ojjyuc0yo",
+    "sc_x0pggsbd9r"
+  ],
+  "nwSchemaVersion": 1,
+  "migratedBy": "S1",
+  "source": "import",
+  "breakApproved": false,
+  "noSpan": true
+}

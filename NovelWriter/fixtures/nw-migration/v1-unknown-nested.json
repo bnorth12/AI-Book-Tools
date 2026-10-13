@@ -1,0 +1,76 @@
+{
+  "input": {
+    "title": "UN",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      ""
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y",
+        "extraChar": true,
+        "knows": [
+          {
+            "conceptId": "c1",
+            "learnedIn": 1,
+            "extraKnows": true
+          }
+        ]
+      }
+    ],
+    "chapterIds": [
+      "ch_preset0001"
+    ],
+    "chapterThemeTags": [
+      {
+        "tags": [
+          "t1"
+        ],
+        "source": "user",
+        "extraTag": true
+      }
+    ],
+    "storyWorld": {
+      "version": 1,
+      "extraWorld": true,
+      "role": {
+        "value": "backdrop",
+        "source": "user",
+        "extraRole": true
+      },
+      "immersionWeight": {
+        "culture": 0.1,
+        "science": 0.2,
+        "tech": 0.3,
+        "extraImm": true
+      },
+      "structureTemplate": {
+        "id": "threeAct",
+        "beats": [
+          {
+            "name": "a",
+            "pct": 10,
+            "extraBeat": true
+          }
+        ]
+      },
+      "systems": [
+        {
+          "id": "s1",
+          "name": "Relay",
+          "kind": "tech",
+          "hardness": "hard",
+          "extraSys": true
+        }
+      ]
+    }
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "unknown keys survive migrate/import/restore and one nwStoryWorldUpdate"
+}

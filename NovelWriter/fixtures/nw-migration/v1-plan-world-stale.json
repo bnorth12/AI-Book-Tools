@@ -1,0 +1,90 @@
+{
+  "input": {
+    "title": "PWS",
+    "genre": "scifi",
+    "numChapters": 3,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "chapterIds": [
+      "ch_a",
+      "ch_b",
+      "ch_c"
+    ],
+    "chapterWritingPlans": [
+      {
+        "items": [
+          {
+            "kind": "beat",
+            "label": "plain"
+          }
+        ],
+        "builtFrom": "PLACEHOLDER"
+      },
+      {
+        "items": [
+          {
+            "kind": "worldBeat",
+            "conceptId": "c-used",
+            "deliveryMode": "dialogue"
+          }
+        ],
+        "builtFrom": "PLACEHOLDER",
+        "worldFrom": "PLACEHOLDER"
+      },
+      {
+        "items": [
+          {
+            "kind": "worldBeat",
+            "conceptId": "c-used",
+            "deliveryMode": "action"
+          }
+        ],
+        "builtFrom": "PLACEHOLDER"
+      }
+    ],
+    "storyWorld": {
+      "version": 1,
+      "role": {
+        "value": "rules",
+        "source": "user"
+      },
+      "genreProfiles": [
+        "hard-scifi"
+      ],
+      "structureTemplate": {
+        "id": "threeAct"
+      },
+      "immersionWeight": {
+        "culture": 0.1,
+        "science": 0.2,
+        "tech": 0.3
+      },
+      "concepts": [
+        {
+          "id": "c-used",
+          "name": "Used",
+          "mustExplain": true,
+          "familiarity": "new",
+          "locked": false,
+          "source": "user",
+          "approvedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "c-new",
+          "name": "New",
+          "mustExplain": false,
+          "familiarity": "new",
+          "locked": false,
+          "source": "ai"
+        }
+      ]
+    }
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "helper: lock alone fresh; approve/role stale; pre-W1 no worldBeats fresh; worldBeat no worldFrom stale"
+}

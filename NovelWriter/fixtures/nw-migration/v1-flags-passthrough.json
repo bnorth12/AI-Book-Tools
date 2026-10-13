@@ -1,0 +1,32 @@
+{
+  "input": {
+    "title": "FP",
+    "genre": "scifi",
+    "numChapters": 3,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      "",
+      "",
+      ""
+    ],
+    "chapterFlags": [
+      {
+        "extra": true,
+        "coverageFailed": false
+      },
+      {
+        "replay": {
+          "internal": 1,
+          "at": "t"
+        }
+      },
+      "bad"
+    ]
+  },
+  "expectedAddedKeys": [
+    "chapterIds",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "wrong-type entry becomes null in 6b passthrough; unknown keys kept on objects"
+}

@@ -1,0 +1,22 @@
+{
+  "input": {
+    "title": "NWT",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      ""
+    ],
+    "chapterThemeTags": "x",
+    "storyWorld": {
+      "version": 1,
+      "systems": {}
+    }
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [
+    "chapterThemeTags",
+    "systems"
+  ],
+  "notes": "kept as-is, readers treat absent"
+}

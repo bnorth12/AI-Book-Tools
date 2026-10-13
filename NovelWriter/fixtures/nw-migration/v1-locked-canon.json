@@ -1,0 +1,113 @@
+{
+  "input": {
+    "title": "LC",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      ""
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y",
+        "knows": [
+          {
+            "conceptId": "c1",
+            "learnedIn": 1,
+            "locked": true,
+            "source": "user"
+          },
+          {
+            "conceptId": "c2",
+            "learnedIn": 1,
+            "locked": false,
+            "source": "ai"
+          }
+        ]
+      }
+    ],
+    "storyWorld": {
+      "version": 1,
+      "concepts": [
+        {
+          "id": "c1",
+          "name": "Locked",
+          "locked": true,
+          "source": "user"
+        },
+        {
+          "id": "c2",
+          "name": "Open",
+          "locked": false,
+          "source": "ai"
+        }
+      ],
+      "rules": [
+        {
+          "id": "r1",
+          "name": "LockedR",
+          "locked": true,
+          "source": "user"
+        },
+        {
+          "id": "r2",
+          "name": "OpenR",
+          "locked": false,
+          "source": "ai"
+        }
+      ],
+      "locations": [
+        {
+          "id": "l1",
+          "name": "LockedL",
+          "locked": true,
+          "source": "user"
+        },
+        {
+          "id": "l2",
+          "name": "OpenL",
+          "locked": false,
+          "source": "ai"
+        }
+      ],
+      "systems": [
+        {
+          "id": "s1",
+          "name": "LockedS",
+          "kind": "tech",
+          "hardness": "hard",
+          "locked": true,
+          "source": "user"
+        },
+        {
+          "id": "s2",
+          "name": "OpenS",
+          "kind": "tech",
+          "hardness": "soft",
+          "locked": false,
+          "source": "ai"
+        }
+      ],
+      "themes": [
+        {
+          "id": "t1",
+          "text": "LockedT",
+          "locked": true,
+          "source": "user"
+        },
+        {
+          "id": "t2",
+          "text": "OpenT",
+          "locked": false,
+          "source": "ai"
+        }
+      ]
+    }
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "helper test origin ai"
+}
