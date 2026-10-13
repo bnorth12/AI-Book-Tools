@@ -7066,7 +7066,15 @@ return c && c.name && c.backstory && c.arc; });
 			var lines = [];
 			if (!bp || typeof bp !== 'object') return lines;
 			['sceneGoal', 'castArcBeat', 'subplotPressure', 'dialogueTurn', 'turnOrPayoff', 'sensoryWorldHook'].forEach(function (k) {
-				if (bp[k] && typeof bp[k] !== 'object') lines.push(String(bp[k]).trim());
+				var v = bp[k];
+				if (Array.isArray(v)) {
+					v.forEach(function (item) {
+						var t = String(item == null ? '' : item).trim();
+						if (t) lines.push(t);
+					});
+				} else if (v && typeof v !== 'object') {
+					lines.push(String(v).trim());
+				}
 			});
 			(Array.isArray(bp.characterBeats) ? bp.characterBeats : []).forEach(function (b) {
 				if (!b) return;
