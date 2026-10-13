@@ -258,6 +258,62 @@ async function runSuite(page, only) {
       } catch (e) { fail('WP05', e && e.stack || e); }
     }
 
+    if (want('REFUSE01')) {
+      try {
+        applyBook(book);
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const marker = 'UNSAVED-EDITOR-TEXT-174';
+        const unsaved = marker + ' Mira left this paragraph in the editor and did not save the chapter.';
+        novelData.chapters[0] = '';
+        const gen = document.getElementById('chapterGenContent1');
+        if (!gen) fail('REFUSE01', 'chapterGenContent1 missing');
+        else {
+          gen.value = unsaved;
+          // collectData copies chapterGenContent into novelData.chapters. This gate is the
+          // empty-saved fallback at the audit, so the copy must not run.
+          const realCollect = window.collectData;
+          window.collectData = function () {};
+          const alerts = [];
+          const prevAlert = window.alert;
+          window.alert = function (msg) { alerts.push(String(msg)); };
+          const toast = document.getElementById('nwToast');
+          if (toast) { toast.textContent = ''; toast.hidden = true; }
+          let prompted = '';
+          window.callAI = async function (messages) {
+            prompted = JSON.stringify(messages || '');
+            return {
+              chapterSummary: 'stub audit',
+              unresolvedThreads: [],
+              storyArcProgress: { currentBeat: 'a', nextBeat: 'b', riskLevel: 'low' },
+              characterArcProgress: [],
+              continuityRisks: [],
+              recommendedFixes: []
+            };
+          };
+          let result = null;
+          let threw = '';
+          try {
+            result = await runChapterContinuityAudit(1);
+          } catch (err) {
+            threw = String(err && err.stack || err);
+          } finally {
+            window.collectData = realCollect;
+            window.alert = prevAlert;
+          }
+          const toastText = toast ? String(toast.textContent || '') : '';
+          const toastVisible = !!(toast && toast.hidden === false);
+          const notice = (toastVisible ? toastText : '') + '\n' + alerts.join('\n');
+          const usedUnsaved = prompted.indexOf(marker) >= 0;
+          if (threw) fail('REFUSE01', threw);
+          else if (gen.value !== unsaved) fail('REFUSE01', 'editor content changed before the audit read it');
+          else if (String((novelData.chapters || [])[0] || '').indexOf(marker) >= 0) fail('REFUSE01', 'saved chapter text became the unsaved editor text');
+          else if (usedUnsaved || (result && typeof result === 'object')) fail('REFUSE01', 'audit used the unsaved editor text');
+          else if (notice.indexOf('Save the chapter first') < 0) fail('REFUSE01', 'missing visible message; toast=' + JSON.stringify(toastText) + ' hidden=' + (toast ? toast.hidden : 'none') + ' alerts=' + JSON.stringify(alerts));
+          else pass('REFUSE01');
+        }
+      } catch (e) { fail('REFUSE01', e && e.stack || e); }
+    }
+
     return out;
   }, { book: smallBook(), only: only || null }), EVAL_MS, '167-gates runSuite');
 }
@@ -275,7 +331,8 @@ const names = {
   TR02a: 'when blueprintWins is set, chapter cast exactly equals the blueprint cast',
   TR02b: 'when blueprintWins is false, the plan cast merges in with no duplicates',
   WP01: 'subplotPressure value survives the writing-plan round-trip',
-  WP05: 'builtFrom is the pre-call fingerprint and nwPlanIsStale is true after an in-flight edit'
+  WP05: 'builtFrom is the pre-call fingerprint and nwPlanIsStale is true after an in-flight edit',
+  REFUSE01: 'empty saved chapter text refuses unsaved chapterGenContent and tells the user to save first'
 };
 Object.keys(names).forEach((id) => {
   if (ONLY && ONLY !== id) return;
@@ -295,7 +352,11 @@ const mutations = [
   ['MUT-WP05-late-builtFrom',
     'plan.builtFrom = nwComputeBuiltFrom(n);',
     'plan.builtFrom = nwComputeBuiltFrom(n);\n\t\t\tbuiltFrom = null;',
-    'WP05']
+    'WP05'],
+  ['MUT-REFUSE01-fallback',
+    "if (!String(savedChapterText).trim()) {\n\t\t\t\tnwToast('Save the chapter first');\n\t\t\t\treturn null;\n\t\t\t}\n\t\t\tconst chapterText = savedChapterText;",
+    "const chapterText = String(savedChapterText).trim() ? savedChapterText : (document.getElementById(`chapterGenContent${chapterNum}`)?.value || '');\n\t\t\tif (!chapterText.trim()) {\n\t\t\t\tif (!options.silent) alert(`Chapter ${chapterNum} has no content to audit.`);\n\t\t\t\treturn null;\n\t\t\t}",
+    'REFUSE01']
 ];
 
 for (const [id, from, to, kills] of mutations) {
