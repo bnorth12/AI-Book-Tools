@@ -7065,7 +7065,7 @@ return c && c.name && c.backstory && c.arc; });
 		function nwBlueprintBeatTexts(bp) {
 			var lines = [];
 			if (!bp || typeof bp !== 'object') return lines;
-			['sceneGoal', 'castArcBeat', 'dialogueTurn', 'turnOrPayoff', 'sensoryWorldHook'].forEach(function (k) {
+			['sceneGoal', 'castArcBeat', 'subplotPressure', 'dialogueTurn', 'turnOrPayoff', 'sensoryWorldHook'].forEach(function (k) {
 				if (bp[k] && typeof bp[k] !== 'object') lines.push(String(bp[k]).trim());
 			});
 			(Array.isArray(bp.characterBeats) ? bp.characterBeats : []).forEach(function (b) {
@@ -7187,7 +7187,7 @@ return c && c.name && c.backstory && c.arc; });
 						if (present) castOut.push(name);
 					}
 				});
-				planCast.forEach(function (p) {
+				if (!blueprintWins) planCast.forEach(function (p) {
 					var pl = p.toLowerCase();
 					var have = castOut.some(function (c) { return String(c).toLowerCase() === pl || pl.indexOf(String(c).toLowerCase()) >= 0; });
 					if (!have) castOut.push(p);
@@ -7382,13 +7382,14 @@ return c && c.name && c.backstory && c.arc; });
 			return items;
 		}
 
-		function nwStoreWritingPlan(n, items, builtBy) {
+		function nwStoreWritingPlan(n, items, builtBy, builtFrom) {
 			if (nwPlansAreLocked()) return { ok: false, reason: 'locked' };
 			if (!Array.isArray(novelData.chapterWritingPlans)) novelData.chapterWritingPlans = [];
 			var prev = novelData.chapterWritingPlans[n - 1];
 			var plan = { items: (items || []).map(nwNormalizePlanItem), builtBy: builtBy || 'heuristic', builtAt: new Date().toISOString() };
 			if (prev && typeof prev === 'object' && !Array.isArray(prev) && prev.worldFrom) plan.worldFrom = prev.worldFrom;
 			plan.builtFrom = nwComputeBuiltFrom(n);
+			if (builtFrom != null) plan.builtFrom = builtFrom;
 			novelData.chapterWritingPlans[n - 1] = plan;
 			var old = document.getElementById('writingPlanPanel' + n);
 			if (old && old.parentNode) old.parentNode.replaceChild(nwRenderWritingPlanPanel(n), old);
@@ -7397,6 +7398,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		async function nwBuildWritingPlanAI(n) {
 			var sent = [n];
+			var capturedFrom = nwComputeBuiltFrom(n);
 			var response = null;
 			try {
 				response = await callAI([
@@ -7412,15 +7414,15 @@ return c && c.name && c.backstory && c.arc; });
 				});
 			} catch (e) {
 				if (typeof nwNotify === 'function') nwNotify('Writing plan AI failed for chapter ' + n + '; used the heuristic.', { level: 'warn' });
-				return nwStoreWritingPlan(n, nwHeuristicWritingPlan(n), 'heuristic');
+				return nwStoreWritingPlan(n, nwHeuristicWritingPlan(n), 'heuristic', capturedFrom);
 			}
 			var items = response && Array.isArray(response.items) ? response.items : null;
 			if (!items) {
 				if (typeof nwNotify === 'function') nwNotify('Writing plan AI returned no items for chapter ' + n + '; used the heuristic.', { level: 'warn' });
 				items = nwHeuristicWritingPlan(n);
-				return nwStoreWritingPlan(n, items, 'heuristic');
+				return nwStoreWritingPlan(n, items, 'heuristic', capturedFrom);
 			}
-			return nwStoreWritingPlan(n, items, 'ai');
+			return nwStoreWritingPlan(n, items, 'ai', capturedFrom);
 		}
 
 		async function nwBuildWritingPlan(n, opts) {
