@@ -66,15 +66,18 @@ namespaced and app-owned, not a shared dumping ground.
 ## No-secrets hard rule
 
 The schema recursively rejects secret-bearing property names at every depth,
-including `ext.*` and arrays. The case-insensitive denylist is:
-`api[_-]?key`, `apikey`, `secret`, `client[_-]?secret`, `password`, `passwd`,
-`authorization`, `bearer`, `access[_-]?token`, `refresh[_-]?token`,
-`id[_-]?token`, `private[_-]?key`, and `x-api-key`. This includes the
-`refreshToken` and `idToken` cases aligned with issues #157 and #166.
-String values under `endpoint` or `url` are also rejected if they contain URL
-userinfo (`://user:pass@` form). Usage metadata such as `tokenCounts`,
-`promptTokens`, `completionTokens`, and `maxTokens`, and ordinary names such
-as `keywords` and `keyBeats`, are not secret keys. The denylist applies to
+including `ext.*` and arrays. The case-insensitive denylist includes exact
+names `api[_-]?key`, `apikey`, `auth[_-]?token`, `passwd`, `authorization`,
+`access[_-]?token`, `refresh[_-]?token`, `id[_-]?token`, `private[_-]?key`,
+and `x-api-key`; any key containing `secret` or `password`; and any key
+starting with `bearer`. This includes the `refreshToken` and `idToken` cases
+aligned with issues #157 and #166. Any string value is rejected if it contains
+URL userinfo (`://user:pass@` form) or a query parameter whose name matches
+the denylist, regardless of the containing property name. Query checks also
+cover the explicit names `token` and `key`; a bare property named `token`
+remains allowed. Usage metadata such as `tokenCounts`, `promptTokens`,
+`completionTokens`, and `maxTokens`, and ordinary names such as `api`,
+`keywords`, and `keyBeats`, are not secret keys. The denylist applies to
 property names, not prose values (for example, a `passwordHint` in prose).
 
 **A file that has been written must contain no denylisted key or credential.**

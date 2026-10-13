@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "schema/story-core-2.0.json",
   "title": "AI Book Tools Story Core 2.0",
-  "description": "Additive shared book/story contract. Unknown fields are preserved, but secret-bearing keys and URL userinfo are forbidden.",
+  "description": "Additive shared book/story contract. Unknown fields are preserved, but secret-bearing keys and credential-bearing URL values are forbidden.",
   "type": "object",
   "properties": {
     "schemaVersion": {
@@ -250,7 +250,7 @@
           "then": {
             "type": "object",
             "patternProperties": {
-              "^(?:[aA][pP][iI](?:[_-]?[kK][eE][yY])|[sS][eE][cC][rR][eE][tT]|[cC][lL][iI][eE][nN][tT](?:[_-]?[sS][eE][cC][rR][eE][tT])|[pP][aA][sS][sS][wW][oO][rR][dD]|[pP][aA][sS][sS][wW][dD]|[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]|[bB][eE][aA][rR][eE][rR]|[aA][cC][cC][eE][sS][sS][_-]?[tT][oO][kK][eE][nN]|[rR][eE][fF][rR][eE][sS][hH][_-]?[tT][oO][kK][eE][nN]|[iI][dD][_-]?[tT][oO][kK][eE][nN]|[pP][rR][iI][vV][aA][tT][eE][_-]?[kK][eE][yY]|[xX]-[aA][pP][iI]-[kK][eE][yY])$": false
+              "^(?:[aA][pP][iI][_-]?[kK][eE][yY]|[aA][pP][iI][kK][eE][yY]|[aA][uU][tT][hH][_-]?[tT][oO][kK][eE][nN]|.*[sS][eE][cC][rR][eE][tT].*|.*[pP][aA][sS][sS][wW][oO][rR][dD].*|[pP][aA][sS][sS][wW][dD]|[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]|[bB][eE][aA][rR][eE][rR].*|[aA][cC][cC][eE][sS][sS][_-]?[tT][oO][kK][eE][nN]|[rR][eE][fF][rR][eE][sS][hH][_-]?[tT][oO][kK][eE][nN]|[iI][dD][_-]?[tT][oO][kK][eE][nN]|[pP][rR][iI][vV][aA][tT][eE][_-]?[kK][eE][yY]|[xX]-[aA][pP][iI]-[kK][eE][yY])$": false
             },
             "properties": {
               "endpoint": {
@@ -293,6 +293,17 @@
             "type": "array",
             "items": {
               "$ref": "#/$defs/noSecrets"
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "string"
+          },
+          "then": {
+            "type": "string",
+            "not": {
+              "pattern": "://[^/@\\s]+:[^/@\\s]*@|[?&](?:[aA][pP][iI][_-]?[kK][eE][yY]|[aA][uU][tT][hH][_-]?[tT][oO][kK][eE][nN]|[aA][cC][cC][eE][sS][sS][_-]?[tT][oO][kK][eE][nN]|[rR][eE][fF][rR][eE][sS][hH][_-]?[tT][oO][kK][eE][nN]|[iI][dD][_-]?[tT][oO][kK][eE][nN]|[pP][rR][iI][vV][aA][tT][eE][_-]?[kK][eE][yY]|[xX]-[aA][pP][iI]-[kK][eE][yY]|[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]|[pP][aA][sS][sS][wW][dD]|[tT][oO][kK][eE][nN]|[kK][eE][yY]|[^?&=]*[sS][eE][cC][rR][eE][tT][^?&=]*|[^?&=]*[pP][aA][sS][sS][wW][oO][rR][dD][^?&=]*|[bB][eE][aA][rR][eE][rR][^?&=]*)="
             }
           }
         }
