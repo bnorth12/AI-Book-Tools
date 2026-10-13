@@ -10311,11 +10311,11 @@ return c && c.name && c.backstory && c.arc; });
 		    // Agent Skill I/O pack (tab5.continuityAudit)
 		    window.__lastSkillPack = packSkillInputs('tab5.continuityAudit', { novelData: novelData, chapterNum: chapterNum });
 
-			const chapterText = String(savedChapterText).trim() ? savedChapterText : (document.getElementById(`chapterGenContent${chapterNum}`)?.value || '');
-			if (!chapterText.trim()) {
-				if (!options.silent) alert(`Chapter ${chapterNum} has no content to audit.`);
+			if (!String(savedChapterText).trim()) {
+				nwToast('Save the chapter first');
 				return null;
 			}
+			const chapterText = savedChapterText;
 			const packet = buildChapterContinuityPacket(chapterNum);
 			const messages = [
 				{ role: 'system', content: getSkillSystemPrompt('tab5.continuityAudit', 'You are a meticulous fiction continuity editor. Detect timeline drift, character-arc inconsistency, subplot drop-off, and story-arc misalignment. Return strict JSON only.') },
