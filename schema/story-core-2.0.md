@@ -72,10 +72,15 @@ names `api[_-]?key`, `apikey`, `auth[_-]?token`, `passwd`, `authorization`,
 and `x-api-key`; any key containing `secret` or `password`; and any key
 starting with `bearer`. This includes the `refreshToken` and `idToken` cases
 aligned with issues #157 and #166. Any string value is rejected if it contains
-URL userinfo (`://user:pass@` form) or a query parameter whose name matches
-the denylist, regardless of the containing property name. Query checks also
-cover the explicit names `token` and `key`; a bare property named `token`
-remains allowed. Usage metadata such as `tokenCounts`, `promptTokens`,
+URL userinfo (`://user:pass@` form), regardless of the containing property
+name. Per #170's round-2 URL addendum, query parameter names are checked
+case-insensitively for `secret`, `password`, or `token` anywhere, except the
+exact name `tokens`. Exact query names `authorization`, `api_key`, `apikey`,
+and `access_key` are also forbidden. Bare `key` and `tokens` query parameters
+are preserved. Query checks also cover valueless parameters, terminated by
+`&`, `#`, or the end of the string. Ordinary HTTPS/mailto links, pagination, search terms,
+and `@` in paths are preserved. This query policy differs from the property-name denylist:
+a bare property named `token` remains allowed. Usage metadata such as `tokenCounts`, `promptTokens`,
 `completionTokens`, and `maxTokens`, and ordinary names such as `api`,
 `keywords`, and `keyBeats`, are not secret keys. The denylist applies to
 property names, not prose values (for example, a `passwordHint` in prose).

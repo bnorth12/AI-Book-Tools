@@ -1,8 +1,24 @@
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
+
+function runWorker(workerArgs, timeout = 240_000) {
+  return spawnSync(process.execPath, workerArgs, {
+    env: { ...process.env, STORY_CORE_SMOKE_WORKER: '1' },
+    stdio: 'inherit',
+    timeout,
+    killSignal: 'SIGKILL'
+  });
+}
+
+if (process.env.STORY_CORE_SMOKE_WORKER !== '1') {
+  const result = runWorker([fileURLToPath(import.meta.url), ...process.argv.slice(2)]);
+  if (result.error) console.error(`FAIL smoke watchdog: ${result.error.message}`);
+  process.exit(result.status ?? 1);
+}
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURES = path.join(ROOT, 'schema', 'fixtures', 'story-core-2.0');
@@ -18,18 +34,14 @@ for (let index = 2; index < process.argv.length; index += 1) {
 let mutation = args.get('mutation')?.toUpperCase();
 const schemaMutation = args.get('mutate-schema');
 const SECRET_KEY = /^(?:api[_-]?key|apikey|auth[_-]?token|.*secret.*|.*password.*|passwd|authorization|bearer.*|access[_-]?token|refresh[_-]?token|id[_-]?token|private[_-]?key|x-api-key)$/i;
-const URL_CREDENTIAL = /:\/\/[^/@\s]+:[^/@\s]*@|[?&](?:api[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|id[_-]?token|private[_-]?key|x-api-key|authorization|passwd|token|key|[^?&=]*secret[^?&=]*|[^?&=]*password[^?&=]*|bearer[^?&=]*)=/i;
-const URL_QUERY_SCHEMA_PATTERN = '[?&](?:[aA][pP][iI][_-]?[kK][eE][yY]|[aA][uU][tT][hH][_-]?[tT][oO][kK][eE][nN]|[aA][cC][cC][eE][sS][sS][_-]?[tT][oO][kK][eE][nN]|[rR][eE][fF][rR][eE][sS][hH][_-]?[tT][oO][kK][eE][nN]|[iI][dD][_-]?[tT][oO][kK][eE][nN]|[pP][rR][iI][vV][aA][tT][eE][_-]?[kK][eE][yY]|[xX]-[aA][pP][iI]-[kK][eE][yY]|[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]|[pP][aA][sS][sS][wW][dD]|[tT][oO][kK][eE][nN]|[kK][eE][yY]|[^?&=]*[sS][eE][cC][rR][eE][tT][^?&=]*|[^?&=]*[pP][aA][sS][sS][wW][oO][rR][dD][^?&=]*|[bB][eE][aA][rR][eE][rR][^?&=]*)=';
+const URL_CREDENTIAL = /:\/\/[^/@\s]+:[^/@\s]*@|[?&](?!tokens(?:=|&|#|$))(?:api_key|apikey|access_key|authorization|[^?&=#]*(?:secret|password|token)[^?&=#]*)(?:=|&|#|$)/i;
+const URL_QUERY_SCHEMA_PATTERN = '[?&](?![tT][oO][kK][eE][nN][sS](?:=|&|#|$))(?:[aA][pP][iI]_[kK][eE][yY]|[aA][pP][iI][kK][eE][yY]|[aA][cC][cC][eE][sS][sS]_[kK][eE][yY]|[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]|[^?&=#]*(?:[sS][eE][cC][rR][eE][tT]|[pP][aA][sS][sS][wW][oO][rR][dD]|[tT][oO][kK][eE][nN])[^?&=#]*)(?:=|&|#|$)';
 const URL_USERINFO_SCHEMA_PATTERN = '://[^/@\\s]+:[^/@\\s]*@';
 const CASE_SENSITIVE_DENYLIST = '^(?:api[_-]?key|apikey|auth[_-]?token|.*secret.*|.*password.*|passwd|authorization|bearer.*|access[_-]?token|refresh[_-]?token|id[_-]?token|private[_-]?key|x-api-key)$';
 const BENIGN_NAME_OVERBLOCK = '^(?:.*[tT][oO][kK][eE][nN].*|[aA][pP][iI]|[kK][eE][yY][wW][oO][rR][dD][sS]|[kK][eE][yY][bB][eE][aA][tT][sS])$';
 const checks = [];
 const check = (name, ok, detail = '') => checks.push({ name, ok: Boolean(ok), detail });
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const timeout = setTimeout(() => {
-  console.error('FAIL timeout: Story Core contract smoke exceeded 240 seconds');
-  process.exit(1);
-}, 240_000);
 
 if (!fs.existsSync(SCHEMA_PATH)) {
   console.error('FAIL schema: schema/story-core-2.0.json missing');
@@ -53,7 +65,7 @@ if (schemaMutation && schemaMutation !== 'drop-denylist') {
   throw new Error(`Unknown schema mutation: ${schemaMutation}`);
 }
 if (schemaMutation) mutation = 'M5';
-if (mutation && !/^M(?:[1-9]|1[01])$/.test(mutation)) throw new Error(`Unknown mutation: ${mutation}`);
+if (mutation && !/^M(?:[1-9]|1[0-7])$/.test(mutation)) throw new Error(`Unknown mutation: ${mutation}`);
 
 const mutatedPasses = [];
 if (mutation === 'M1') {
@@ -92,6 +104,16 @@ if (mutation === 'M8') {
 if (mutation === 'M9') {
   schema.$defs.noSecrets.allOf[2].then.not.pattern = URL_USERINFO_SCHEMA_PATTERN;
 }
+if (mutation === 'M12') {
+  schema.$defs.noSecrets.allOf[2].then.not.pattern += '|[?&](?:[kK][eE][yY]|[tT][oO][kK][eE][nN][sS])=';
+}
+if (mutation === 'M13') {
+  schema.$defs.noSecrets.allOf[2].then.not.pattern = `${URL_USERINFO_SCHEMA_PATTERN}|[?&](?:api_key|apikey|authorization|token)=`;
+}
+if (mutation === 'M17') {
+  schema.$defs.noSecrets.allOf[2].then.not.pattern =
+    `${URL_USERINFO_SCHEMA_PATTERN}|${URL_QUERY_SCHEMA_PATTERN.replace(/\(\?:=\|&\|#\|\$\)$/, '=')}`;
+}
 
 function removeDenylistRefs(node) {
   if (!node || typeof node !== 'object') return;
@@ -108,7 +130,8 @@ if (mutation === 'M7') {
   schema.$defs.story.required.push('characters');
 }
 function secretLookingValues(value) {
-  if (typeof value === 'string') return [value].filter((item) => /xai-|sk-|bearer\s/i.test(item) || URL_CREDENTIAL.test(item));
+  if (typeof value === 'string') return [value].filter((item) =>
+    (mutation === 'M14' ? /xai-|sk-|bearer\s/i : /xai-|sk-|bearer\s|\*{6}/i).test(item) || URL_CREDENTIAL.test(item));
   if (Array.isArray(value)) return value.flatMap(secretLookingValues);
   if (value && typeof value === 'object') return Object.values(value).flatMap(secretLookingValues);
   return [];
@@ -119,7 +142,8 @@ const permittedRedactionFiles = new Set([
   'authorization-export-stripped.json',
   'secret-import-stripped.json',
   'credential-url-userinfo.json',
-  'credential-url-query-token.json'
+  'credential-url-query-token.json',
+  'credential-url-query-secret.json'
 ]);
 const isPermittedRedaction = (file, value) => {
   if (!permittedRedactionFiles.has(file)) return false;
@@ -128,7 +152,8 @@ const isPermittedRedaction = (file, value) => {
     value === '******' ||
     value === ['Bearer', 'REDACTED-TEST-VALUE'].join(' ') ||
     /^https:\/\/user:REDACTED-TEST-VALUE@(?:provider\.example\.test\/v1|example\.test\/book)$/.test(value) ||
-    /^https:\/\/example\.test\/book\?token=REDACTED-TEST-VALUE$/.test(value);
+    /^https:\/\/example\.test\/book\?token=REDACTED-TEST-VALUE$/.test(value) ||
+    /^https:\/\/example\.test\/book\?(?:client_secret|authorization|authToken|access_token|access_key)=?$/.test(value);
 };
 check(
   'schema and fixture values contain no secret-looking strings',
@@ -176,7 +201,7 @@ function stripSecrets(value, pointer = '', foundPointers = []) {
         foundPointers.push(`${pointer}/${index + removed}`);
         removed += 1;
       } else {
-        stripSecrets(value[index], `${pointer}/${index}`, foundPointers);
+        stripSecrets(value[index], `${pointer}/${mutation === 'M15' ? index : index + removed}`, foundPointers);
         index += 1;
       }
     }
@@ -213,6 +238,7 @@ const passFiles = [
   'hbf-core-only.json',
   'unknown-ext-roundtrip.json',
   'token-counts-pass.json',
+  'credential-url-pass.json',
   'secret-import-stripped.expected.json'
 ];
 for (const name of passFiles) expectValid(`must pass ${name}`, requiredFixture(name));
@@ -273,9 +299,11 @@ for (const key of denylistedKeys) {
 }
 
 const urlSecretParameters = [
-  'api_key', 'apikey', 'api-key', 'authToken', 'auth_token', 'access_token',
-  'token', 'key', 'secret', 'password', 'bearerToken', 'refreshToken',
-  'idToken', 'privateKey', 'x-api-key', 'authorization', 'passwd', 'clientSecret'
+  'api_key', 'apikey', 'access_key', 'authorization', 'authToken', 'auth_token',
+  'access_token', 'token', 'secret', 'password', 'bearerToken', 'refreshToken',
+  'idToken', 'client_secret', 'clientSecret', 'sessionToken', 'myTokenValue',
+  'dbPassword', 'mySecretValue', 'API_KEY', 'ACCESS_KEY', 'AUTHORIZATION',
+  'SESSIONTOKEN', 'CLIENT_SECRET', 'DBPASSWORD'
 ];
 const queryFixture = structuredClone(requiredFixture('2.0-minimal.json'));
 queryFixture.ext = {
@@ -285,7 +313,7 @@ queryFixture.ext = {
 };
 const expectedUrlPointers = urlSecretParameters.map((_, index) => `/ext/futureTool/links/${index}`);
 for (const pointer of expectedUrlPointers) {
-  expectDenylisted(`credential URL query parameter rejected at ${pointer}`, queryFixture, pointer);
+  expectDenylisted(`credential URL query parameter ${urlSecretParameters[expectedUrlPointers.indexOf(pointer)]} rejected at ${pointer}`, queryFixture, pointer);
 }
 const strippedQueryFixture = structuredClone(queryFixture);
 const strippedQueryPointers = [];
@@ -294,6 +322,74 @@ check(
   'reference stripper removes all denylisted credential URL query parameters',
   equal(strippedQueryPointers, expectedUrlPointers) && strippedQueryFixture.ext.futureTool.links.length === 0,
   JSON.stringify(strippedQueryPointers)
+);
+
+for (const [name, url] of Object.entries(requiredFixture('credential-url-pass.json').ext.futureTool)) {
+  const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+  fixture.link = url;
+  fixture.novelData.sourceUrl = url;
+  fixture.ext = { futureTool: { url, links: [url] } };
+  expectValid(`benign URL ${name} passes at every depth`, fixture);
+  const before = structuredClone(fixture);
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check(`benign URL ${name} remains unchanged`, equal(fixture, before) && pointers.length === 0);
+  check(`value scan allows benign URL ${name}`, secretLookingValues(url).length === 0);
+}
+for (const parameter of ['KEY', 'TOKENS', 'api-key', 'access_key_hint', 'authorizations']) {
+  const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+  fixture.link = `https://example.test/book?${parameter}=benign`;
+  expectValid(`benign query parameter ${parameter} passes`, fixture);
+  const before = structuredClone(fixture);
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check(`benign query parameter ${parameter} remains unchanged`, equal(fixture, before) && pointers.length === 0);
+}
+for (const parameter of ['key', 'tokens', 'TOKENS']) {
+  for (const suffix of ['', '&page=2', '#section']) {
+    const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+    fixture.link = `https://example.test/book?${parameter}${suffix}`;
+    expectValid(`benign valueless query ${parameter}${suffix} passes`, fixture);
+    const before = structuredClone(fixture);
+    const pointers = [];
+    stripSecrets(fixture, '', pointers);
+    check(`benign valueless query ${parameter}${suffix} remains unchanged`, equal(fixture, before) && pointers.length === 0);
+  }
+}
+for (const parameter of urlSecretParameters) {
+  for (const suffix of ['', '&page=2', '#section']) {
+    const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+    fixture.link = `https://example.test/book?${parameter}${suffix}`;
+    expectDenylisted(`credential valueless query ${parameter}${suffix} rejected`, fixture, '/link');
+    check(`value scan detects valueless query ${parameter}${suffix}`, secretLookingValues(fixture.link).length === 1);
+    const pointers = [];
+    stripSecrets(fixture, '', pointers);
+    check(`reference stripper removes valueless query ${parameter}${suffix}`, !('link' in fixture) && equal(pointers, ['/link']));
+  }
+}
+
+const secretUrlFixture = requiredFixture('credential-url-query-secret.json');
+const secretUrlCases = [
+  ['/link', secretUrlFixture.link],
+  ['/sourceUrl', secretUrlFixture.sourceUrl],
+  ...secretUrlFixture.ext.futureTool.links.map((url, index) => [`/ext/futureTool/links/${index}`, url])
+];
+for (const [pointer, url] of secretUrlCases) {
+  expectDenylisted(`must strip credential query ${url} at ${pointer}`, secretUrlFixture, pointer);
+  const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+  fixture.link = url;
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check(`reference stripper removes credential query ${url}`, !('link' in fixture) && equal(pointers, ['/link']));
+  check(`value scan detects credential query ${url}`, secretLookingValues(url).length === 1);
+}
+const mixedArray = ['https://example.test/?token=', { link: 'https://example.test/?access_key=' }, 'https://example.test/?page=2'];
+const mixedArrayPointers = [];
+stripSecrets(mixedArray, '/links', mixedArrayPointers);
+check(
+  'reference stripper reports original pointers after array removals',
+  equal(mixedArrayPointers, ['/links/0', '/links/1/link']) &&
+    equal(mixedArray, [{}, 'https://example.test/?page=2'])
 );
 
 const mustPassKeys = [
@@ -327,6 +423,28 @@ check(
   'redaction gate rejects appended placeholder',
   !isPermittedRedaction('secret-export-stripped.json', placeholderAttack)
 );
+for (const value of ['xai-example', 'sk-example', '******', '****** REDACTED-TEST-VALUE', placeholderAttack]) {
+  check(`value scan detects suspicious value ${value}`, secretLookingValues(value).length === 1);
+}
+check(
+  'redaction gate rejects masked value with appended placeholder',
+  !isPermittedRedaction('secret-export-stripped.json', '****** REDACTED-TEST-VALUE')
+);
+for (const value of [
+  'REDACTED-TEST-VALUE', '******', ['Bearer', 'REDACTED-TEST-VALUE'].join(' '),
+  ['https://user:', 'REDACTED-TEST-VALUE', '@example.test/book'].join('')
+]) {
+  check(`redaction gate permits exact synthetic form ${value}`, isPermittedRedaction('secret-export-stripped.json', value));
+  check(`redaction gate rejects synthetic form in pass fixture ${value}`, !isPermittedRedaction('credential-url-pass.json', value));
+}
+const watchdogProbe = runWorker(
+  ['-e', 'const stop = Date.now() + 250; while (Date.now() < stop) {}'],
+  mutation === 'M16' ? 0 : 100
+);
+check(
+  'process watchdog interrupts synchronous work',
+  watchdogProbe.error?.code === 'ETIMEDOUT' && watchdogProbe.signal === 'SIGKILL'
+);
 
 const unknown = requiredFixture('unknown-ext-roundtrip.json');
 check('unknown extension and core keys survive round-trip', equal(JSON.parse(JSON.stringify(unknown)), unknown));
@@ -338,5 +456,4 @@ console.log(`Story Core 2.0 contract smoke${mutation ? ` (${mutation} injected)`
 for (const item of checks) {
   console.log(`${item.ok ? 'PASS' : 'FAIL'} ${item.name}${item.ok ? '' : ` :: ${item.detail}`}`);
 }
-clearTimeout(timeout);
 if (failed.length) process.exitCode = 1;

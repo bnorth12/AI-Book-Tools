@@ -13,10 +13,16 @@
 | `authorization-export-stripped.json` | Fail | Denylist catches authorization fields and URL userinfo | M5: remove schema denylist |
 | `credential-url-userinfo.json` | Fail | Userinfo is forbidden under an arbitrary `link` property | M8: remove userinfo URL check |
 | `credential-url-query-token.json` | Fail | Query credentials are forbidden under an arbitrary `sourceUrl` property | M9: remove query-parameter URL check |
+| `credential-url-pass.json` | Pass | Ordinary links, bare `key`, and `tokens` query parameters are preserved | M12: over-block `key`/`tokens` |
+| `credential-url-query-secret.json` | Fail | Empty/valueless secret queries are rejected at wrapper and extension-array depth | M13: omit substring and `access_key` checks; M17: require `=` |
 
 The export fixtures are synthetic, unstripped attempts. A conforming exporter
 removes their sensitive fields and notifies using `secret-export-stripped` or
 `authorization-export-stripped` before writing. M1–M7 are generated as temporary
-in-memory copies by `scripts/_smoke_story_core_contract.mjs`; M8–M11 additionally
-mutate the URL checks, redaction exception, and benign-name allowlist. No
-mutation files are shipped with the fixtures.
+in-memory copies by `scripts/_smoke_story_core_contract.mjs`; M8–M17 additionally
+mutate the URL checks, redaction exception, benign-name allowlist, and masked-value
+scan. M10 rejects appended placeholders; M14 proves `******` detection is active.
+M15 restores shifted array pointers; M16 disables the synchronous-work watchdog
+probe's timeout. Both must make their targeted assertions fail.
+M17 restores the valueless-query bypass.
+No mutation files are shipped with the fixtures.
