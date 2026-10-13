@@ -95,6 +95,7 @@ const argv = process.argv.slice(2);
 const onlyIdx = argv.indexOf('--only');
 const ONLY = (onlyIdx >= 0 ? argv[onlyIdx + 1] : argv.find((a) => a && !a.startsWith('-'))) || process.env.NW_SMOKE_ONLY || null;
 let browser = null;
+const pageErrors = [];
 const hardTimer = setTimeout(() => {
   console.error('HARD TIMEOUT after ' + HARD_MS + ' ms; closing the browser');
   const closing = browser ? browser.close().catch(() => {}) : Promise.resolve();
@@ -113,6 +114,7 @@ async function openPage(htmlPath) {
   const page = await browser.newPage();
   page.setDefaultTimeout(EVAL_MS);
   page.setDefaultNavigationTimeout(20000);
+  page.on('pageerror', (e) => pageErrors.push(String(e && e.message || e)));
   page.on('dialog', (d) => d.accept().catch(() => {}));
   await page.route('**/*', async (route) => {
     const url = route.request().url();
@@ -217,6 +219,23 @@ async function runSuite(page, only) {
         else if (!PRESSURE || blob.indexOf(PRESSURE) < 0) fail('WP01', 'subplotPressure value dropped; plan labels=' + labels.join(' | '));
         else pass('WP01');
       } catch (e) { fail('WP01', e && e.stack || e); }
+    }
+
+    if (want('WP01b')) {
+      try {
+        applyBook(book);
+        const raw = ['  A pressure.  ', '   ', 'B pressure.'];
+        const wanted = ['A pressure.', 'B pressure.'];
+        novelData.chapterBlueprints[0].subplotPressure = raw.slice();
+        const bp = getChapterBlueprint(1);
+        const lines = nwBlueprintBeatTexts(bp);
+        const pressureLines = Array.isArray(lines) ? lines.filter((l) => wanted.indexOf(l) >= 0) : [];
+        if (!bp || !Array.isArray(bp.subplotPressure)) fail('WP01b', 'subplotPressure was not an array on the blueprint');
+        else if (!Array.isArray(lines)) fail('WP01b', 'nwBlueprintBeatTexts did not return an array');
+        else if (lines.some((l) => !String(l).trim())) fail('WP01b', 'blank subplotPressure item became a beat line; lines=' + JSON.stringify(lines));
+        else if (pressureLines.length !== wanted.length || pressureLines.join('\n') !== wanted.join('\n')) fail('WP01b', 'array subplotPressure did not yield one trimmed beat line per item; wanted=' + JSON.stringify(wanted) + ' lines=' + JSON.stringify(lines));
+        else pass('WP01b');
+      } catch (e) { fail('WP01b', e && e.stack || e); }
     }
 
     if (want('WP05')) {
@@ -331,6 +350,7 @@ const names = {
   TR02a: 'when blueprintWins is set, chapter cast exactly equals the blueprint cast',
   TR02b: 'when blueprintWins is false, the plan cast merges in with no duplicates',
   WP01: 'subplotPressure value survives the writing-plan round-trip',
+  WP01b: 'array subplotPressure yields one trimmed beat line per item from nwBlueprintBeatTexts',
   WP05: 'builtFrom is the pre-call fingerprint and nwPlanIsStale is true after an in-flight edit',
   REFUSE01: 'empty saved chapter text refuses unsaved chapterGenContent and tells the user to save first'
 };
@@ -372,6 +392,8 @@ for (const [id, from, to, kills] of mutations) {
   const turnedRed = result && result[kills] && result[kills].ok === false;
   check(id, 'mutation turns ' + kills + ' red', turnedRed, turnedRed ? '' : ('still green: ' + JSON.stringify(result && result[kills])));
 }
+
+if (pageErrors.length) check('PAGE', 'no uncaught pageerror events', false, pageErrors.join(' | '));
 
 let failed = 0;
 checks.forEach((c) => {
