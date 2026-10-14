@@ -1,0 +1,59 @@
+{
+  "input": {
+    "title": "CORE",
+    "genre": "scifi",
+    "numChapters": 2,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 2 original prose. The dock clock disagreed with the log after the first choice."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y"
+      }
+    ],
+    "chapterIds": [
+      "ch_already01",
+      "ch_already02"
+    ],
+    "chapterScenes": [
+      {
+        "version": 1,
+        "textHash": "aaaaaaaa",
+        "scenes": [
+          {
+            "id": "sc_already01",
+            "chapterId": "ch_already01",
+            "order": 1,
+            "breakApproved": true,
+            "source": "user"
+          }
+        ]
+      },
+      {
+        "version": 1,
+        "textHash": "bbbbbbbb",
+        "scenes": [
+          {
+            "id": "sc_already02",
+            "chapterId": "ch_already02",
+            "order": 1,
+            "breakApproved": true,
+            "source": "user"
+          }
+        ]
+      }
+    ]
+  },
+  "expectedAddedKeys": [
+    "chapterFingerprints[0]",
+    "chapterFingerprints[1]",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "no new ids, no placeholders"
+}

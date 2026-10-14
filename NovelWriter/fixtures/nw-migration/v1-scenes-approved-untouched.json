@@ -1,0 +1,45 @@
+{
+  "input": {
+    "title": "SAU",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y"
+      }
+    ],
+    "chapterIds": [
+      "ch_ok"
+    ],
+    "chapterScenes": [
+      {
+        "version": 1,
+        "textHash": "keep",
+        "extraRec": true,
+        "scenes": [
+          {
+            "id": "sc_ok",
+            "chapterId": "ch_ok",
+            "order": 1,
+            "breakApproved": true,
+            "source": "user",
+            "extraScene": true
+          }
+        ]
+      }
+    ]
+  },
+  "expectedAddedKeys": [
+    "chapterFingerprints[0]",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "approved entry + unknown keys deep-equal; fingerprint may add"
+}

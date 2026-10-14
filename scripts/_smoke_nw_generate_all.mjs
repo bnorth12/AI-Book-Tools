@@ -417,7 +417,7 @@ const batchDialogTotals = [];
   const pauseEnabled = await page.evaluate(() => window.__h.pauseBtnEnabled);
   check('G3', 'Pause button enabled while the run is active (clicked during ch2 Part 1)', pauseEnabled === true, pauseEnabled);
   check('G3', 'pause during ch2: ch2 finishes, reason paused, stoppedAt 3, ch3 not started', s.br.reason === 'paused' && s.br.stoppedAt === 3 && eq(s.br.completed, [1, 2]) && callsFor(s, 2) === 2 && callsFor(s, 3) === 0 && s.chapters[1] && !s.chapters[2], JSON.stringify(s.br));
-  check('G3', 'Resume enabled after pause, Pause disabled, status "Paused before ch3"', !s.resumeDisabled && s.pauseDisabled && /^Paused before ch3\. Completed: 1, 2\./.test(s.status), s.status);
+  check('G3', 'Resume enabled after pause, Pause disabled, status "Paused before ch3"', !s.resumeDisabled && s.pauseDisabled && /^Paused before ch3\. Setup is locked until the run ends or is cancelled\. Completed: 1, 2\./.test(s.status), s.status);
   const r = await batch(page, { resume: true, resetCounters: true });
   check('G3', 'resume starts at 3 (first call ch3) and finishes: completed [1,2,3,4], reason done', r.calls.length === 4 && r.calls[0].ch === 3 && callsFor(r, 1) === 0 && callsFor(r, 2) === 0 && eq(r.br.completed, [1, 2, 3, 4]) && r.br.reason === 'done' && r.br.id === s.br.id, JSON.stringify(r.calls));
   check('G3', 'tokensUsed carries across resume (8 x 1000)', r.br.tokensUsed === 8000, r.br.tokensUsed);

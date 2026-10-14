@@ -322,6 +322,7 @@
                 <h2>What This Guide Covers</h2>
                 <p>Novel Writer is a browser-based tool for planning, drafting, and refining a full novel with AI assistance while keeping the author in control of every accepted change.</p>
                 <p>Use this guide as a workflow map if you are starting from scratch, importing a saved session, or checking where a feature lives before running it in the app.</p>
+                <p><strong>API key safety:</strong> Session exports omit your API key, and imported files cannot set it. Older exports may contain your API key; if you shared one, rotate it at <a href="https://console.x.ai">console.x.ai</a>.</p>
             </div>
             <div class="guide-card">
                 <h3>Quick Start</h3>
@@ -447,6 +448,7 @@
             <h3>How to Use</h3>
             <ul>
                 <li><strong>Chapter Subpages</strong>: Select a chapter, then click <button class="example">Generate Chapter</button> to create its first draft.</li>
+                <li><strong>Generate All Pause</strong>: Pause stops after the current chapter. Setup stays locked (Import, chapter count, and Generate All included) until the run ends or you click Cancel run. Resume continues; Cancel run ends the run and unlocks Setup. Status reads e.g. "Paused before chN. Setup is locked until the run ends or is cancelled."</li>
                 <li><strong>Coverage-failed flag</strong>: If Generate All stops because a chapter is missing required story points, the new draft is kept and flagged on Tab 5 and Tab 6. Choose Accept (keep it and update continuity from it), Regenerate (write the chapter again), or Skip (move on without using it for later chapters). Your previous text is saved; Skip restores it. Your choice is saved with the session, so Resume won't ask again.</li>
                 <li><strong>Skip automatic revision passes (draft only)</strong>: Writes each chapter from your outline and blueprint with no automatic rewrite passes. Use it when you want to revise by hand; quality scores are still shown. A note in Tab 5 confirms when draft-only is on. Importing an older session without this setting keeps your current checkbox value; an explicit true or false in the session overrides it.</li>
                 <li><strong>AI beat check (1 extra call per chapter)</strong>: Optional. Off by default. When on, scoring makes one extra call per chapter to judge blueprint beats as present, partial, or missing. It does not rewrite text. Draft-only skips this unless both boxes are ticked.</li>

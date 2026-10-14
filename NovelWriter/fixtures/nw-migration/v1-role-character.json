@@ -1,0 +1,34 @@
+{
+  "input": {
+    "title": "RC",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      ""
+    ],
+    "storyWorld": {
+      "version": 1,
+      "role": {
+        "value": "character",
+        "source": "user"
+      },
+      "arc": [
+        {
+          "stage": "a",
+          "chapterPos": 0.1,
+          "change": "x"
+        }
+      ],
+      "subplots": [
+        {
+          "index": 0,
+          "textHash": "cccccccc"
+        }
+      ]
+    }
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "helper: ai role patch refused; user downgrade keeps arc/subplots"
+}

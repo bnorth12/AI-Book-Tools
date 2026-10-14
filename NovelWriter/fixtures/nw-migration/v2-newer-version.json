@@ -1,0 +1,26 @@
+{
+  "input": {
+    "title": "V2",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 2,
+    "futureKey": {
+      "keep": true
+    },
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed."
+      }
+    ]
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [
+    "newer"
+  ],
+  "notes": "read-through"
+}

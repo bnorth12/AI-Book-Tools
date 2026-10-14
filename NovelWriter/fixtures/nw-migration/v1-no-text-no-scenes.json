@@ -1,0 +1,26 @@
+{
+  "input": {
+    "title": "NT",
+    "genre": "scifi",
+    "numChapters": 2,
+    "chapters": [
+      "",
+      "   "
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed."
+      }
+    ]
+  },
+  "expectedAddedKeys": [
+    "nwSchemaVersion",
+    "chapterIds",
+    "characters[0].id",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "chapterIds assigned, no chapterScenes"
+}

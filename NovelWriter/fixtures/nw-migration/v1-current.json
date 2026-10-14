@@ -1,0 +1,46 @@
+{
+  "input": {
+    "title": "CUR",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      ""
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed.",
+        "id": "mira"
+      }
+    ],
+    "chapterIds": [
+      "ch_preset0001"
+    ],
+    "chapterScenes": [
+      {
+        "version": 1,
+        "textHash": "deadbeef",
+        "scenes": [
+          {
+            "id": "sc_preset0001",
+            "chapterId": "ch_preset0001",
+            "order": 1,
+            "breakApproved": false,
+            "source": "import",
+            "boundaryReasons": []
+          }
+        ]
+      }
+    ],
+    "ext": {
+      "novelWriter": {
+        "migratedBy": "S1"
+      }
+    }
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "idempotence: none added. fingerprint may refresh if hash mismatches stored deadbeef."
+}

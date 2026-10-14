@@ -1,0 +1,26 @@
+{
+  "input": {
+    "title": "BL",
+    "genre": "scifi",
+    "numChapters": 1,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      ""
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y"
+      }
+    ],
+    "storyWorld": {
+      "version": 1,
+      "notes": "keep"
+    }
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "helper: stub locked, user writes refused"
+}

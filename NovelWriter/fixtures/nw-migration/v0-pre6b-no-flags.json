@@ -1,0 +1,87 @@
+{
+  "input": {
+    "title": "Pre-6b No Flags",
+    "genre": "scifi",
+    "numChapters": 2,
+    "chapterLength": 2000,
+    "storyArc": "A two-chapter dock-clock observation.",
+    "generalPlot": "Mira names the mismatch, then pays for it.",
+    "setting": "Wet dock, failing lights.",
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 2 original prose. The dock clock disagreed with the log after the first choice."
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "backstory": "Dock tech who watches the relay.",
+        "arc": "Guarded to committed."
+      }
+    ],
+    "subplots": [
+      "The dock clock vs the relay log."
+    ],
+    "chapterBlueprints": [
+      {
+        "chapter": 1,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      },
+      {
+        "chapter": 2,
+        "role": "setup",
+        "arcStep": "Observe then pay.",
+        "characterBeats": [
+          {
+            "name": "Mira",
+            "beat": "Names the mismatch."
+          }
+        ],
+        "worldHooks": [
+          "Wet dock"
+        ],
+        "subplotPressure": [
+          "Clock vs log"
+        ],
+        "allowedPayoffs": [
+          "Name the cost"
+        ],
+        "deferredThreads": [
+          "Later price"
+        ]
+      }
+    ]
+  },
+  "expectedAddedKeys": [
+    "nwSchemaVersion",
+    "chapterIds",
+    "chapterScenes[0]",
+    "chapterScenes[1]",
+    "chapterRequirements[0]",
+    "chapterRequirements[1]",
+    "chapterFingerprints[0]",
+    "chapterFingerprints[1]",
+    "characters[0].id",
+    "ext.novelWriter.migratedBy"
+  ],
+  "expectedWarnings": [],
+  "notes": "REQ-SCH-05: no chapterFlags, no storyLedger after load."
+}

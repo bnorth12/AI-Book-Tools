@@ -94,6 +94,169 @@ test.describe('HerbalBookForge Smoke Test', () => {
     await expect(page.locator('[data-testid="import-project-input"]')).toBeAttached();
   });
 
+  test('HBF-SEC-01 project export, storage, and import omit API keys', async ({ page }) => {
+    await page.goto('/HerbalBookForge/HerbalBookForge.html');
+    const secret = 'xai-TESTKEY-123';
+    const proseFixture = 'She kept the #secret close. Who holds the key?key=yes. The word password stayed in the sentence.';
+    const importNotices = [];
+    page.on('dialog', async dialog => {
+      importNotices.push(dialog.message());
+      await dialog.accept();
+    });
+
+    const { exportedJson, storedProject } = await page.evaluate(({ apiKey, prose }) => new Promise((resolve) => {
+      document.getElementById('api-key').value = apiKey;
+      project.outline = prose;
+      project.setup.apiKey = apiKey;
+      project.setup.authorization = apiKey;
+      project.setup.API_KEY = apiKey;
+      project.setup.privateKey = apiKey;
+      project.setup.endpointWithCredentials = `https://${'user:pass'}@example.com/service`;
+      project.setup.endpointWithUsername = 'https://user@example.com/service';
+      project.setup.endpointWithPassword = `https://${':pass'}@example.com/service`;
+      project.setup.endpointWithToken = 'https://example.com/service?token=hidden';
+      project.setup.endpointWithFragment = 'https://example.com/callback#access_token=hidden';
+      project.setup.serviceSecret = 'hidden-secret';
+      project.setup.savedPassword = 'hidden-password';
+      project.setup.bearerToken = 'hidden-bearer';
+      project.key = 'sort-key';
+      project.token = 'ordinary-token';
+      project.tokenUsage = { calls: 2, promptTokens: 17 };
+      project.maxTokens = 4321;
+      project.promptTokens = 17;
+      project.agentKey = 'fetchAuthors';
+      const originalCreateObjectURL = URL.createObjectURL;
+      URL.createObjectURL = function (blob) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          URL.createObjectURL = originalCreateObjectURL;
+          resolve({
+            exportedJson: reader.result,
+            storedProject: localStorage.getItem('herbalBookForgeProject_v1.0.0'),
+          });
+        };
+        reader.readAsText(blob);
+        return 'blob:mock';
+      };
+      saveProject();
+      exportProject();
+    }), { apiKey: secret, prose: proseFixture });
+
+    expect(exportedJson).not.toContain(secret);
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('apiKey');
+    expect(JSON.parse(exportedJson).outline).toBe(proseFixture);
+    expect(JSON.parse(storedProject).outline).toBe(proseFixture);
+    expect(await page.evaluate((prose) => {
+      const url = new URL(prose, window.location.href);
+      const fragment = url.hash.slice(1);
+      const params = new URLSearchParams(fragment.includes('?') ? fragment.slice(fragment.indexOf('?') + 1) : fragment);
+      return params.has('key');
+    }, proseFixture)).toBe(true);
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('authorization');
+    expect(exportedJson).not.toContain('user:pass@');
+    expect(exportedJson).not.toContain('token=hidden');
+    expect(exportedJson).not.toContain('access_token=hidden');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('API_KEY');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('privateKey');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithCredentials');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithUsername');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithPassword');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithToken');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('endpointWithFragment');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('serviceSecret');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('savedPassword');
+    expect(JSON.parse(exportedJson).setup).not.toHaveProperty('bearerToken');
+    expect(storedProject).not.toContain(secret);
+    expect(storedProject).not.toContain('user:pass@');
+    expect(storedProject).not.toContain('token=hidden');
+    expect(storedProject).not.toContain('access_token=hidden');
+    expect(JSON.parse(storedProject).setup).not.toHaveProperty('apiKey');
+    expect(JSON.parse(storedProject).setup).not.toHaveProperty('authorization');
+    expect(JSON.parse(storedProject).setup).not.toHaveProperty('API_KEY');
+    expect(JSON.parse(storedProject).setup).not.toHaveProperty('privateKey');
+    expect(JSON.parse(exportedJson)).toMatchObject({
+      key: 'sort-key',
+      token: 'ordinary-token',
+      tokenUsage: { calls: 2, promptTokens: 17 },
+      maxTokens: 4321,
+      promptTokens: 17,
+      agentKey: 'fetchAuthors',
+    });
+
+    await page.evaluate(() => { const el = document.getElementById('api-key'); el.value = 'existing-user-key'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+    await page.locator('#import-file').setInputFiles({
+      name: 'project-with-key.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify({
+        setup: {
+          apiKey: secret,
+          endpointWithUsername: 'https://user@example.com/service',
+          endpointWithPassword: `https://${':pass'}@example.com/service`,
+          bearer: secret,
+          API_KEY: secret,
+          privateKey: secret,
+          endpoint: 'https://example.com/?access_token=hidden',
+          callback: 'https://example.com/callback#access_token=hidden',
+          serviceSecret: 'hidden-secret',
+          savedPassword: 'hidden-password',
+          bearerToken: 'hidden-bearer',
+        },
+        meta: { name: 'Imported project' },
+        outline: proseFixture,
+        key: 'sort-key',
+        token: 'ordinary-token',
+        tokenUsage: { calls: 3, promptTokens: 19 },
+        maxTokens: 5432,
+        promptTokens: 19,
+        agentKey: 'importedAgent',
+      })),
+    });
+    await expect(page.locator('#api-key')).toHaveValue('existing-user-key');
+    expect(await page.evaluate(() => project.setup.apiKey)).toBe('existing-user-key');
+    await expect(page.locator('#project-name')).toHaveValue('Imported project');
+    await expect(page.locator('#outline-editor')).toHaveValue(proseFixture);
+    expect(await page.evaluate(() => project.outline)).toBe(proseFixture);
+    await expect.poll(() => page.evaluate(() => ({
+      metaName: project.meta.name,
+      key: project.key,
+      token: project.token,
+      tokenUsage: project.tokenUsage,
+      maxTokens: project.maxTokens,
+      promptTokens: project.promptTokens,
+      agentKey: project.agentKey,
+    }))).toEqual({
+      metaName: 'Imported project',
+      key: 'sort-key',
+      token: 'ordinary-token',
+      tokenUsage: { calls: 3, promptTokens: 19 },
+      maxTokens: 5432,
+      promptTokens: 19,
+      agentKey: 'importedAgent',
+    });
+    const importedSetup = await page.evaluate(() => project.setup);
+    expect(importedSetup).not.toHaveProperty('API_KEY');
+    expect(importedSetup).not.toHaveProperty('privateKey');
+    expect(importedSetup).not.toHaveProperty('endpoint');
+    expect(importedSetup).not.toHaveProperty('endpointWithUsername');
+    expect(importedSetup).not.toHaveProperty('endpointWithPassword');
+    expect(importedSetup).not.toHaveProperty('callback');
+    expect(importedSetup).not.toHaveProperty('serviceSecret');
+    expect(importedSetup).not.toHaveProperty('savedPassword');
+    expect(importedSetup).not.toHaveProperty('bearerToken');
+    expect(importNotices.some(message => message.includes('API_KEY') && message.includes('endpoint') && message.includes('console.x.ai'))).toBe(true);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('herbalBookForgeProject_v1.0.0'))).not.toContain(secret);
+    expect(JSON.parse(await page.evaluate(() => localStorage.getItem('herbalBookForgeProject_v1.0.0')))).toMatchObject({
+      meta: { name: 'Imported project' },
+      outline: proseFixture,
+      key: 'sort-key',
+      token: 'ordinary-token',
+      tokenUsage: { calls: 3, promptTokens: 19 },
+      maxTokens: 5432,
+      promptTokens: 19,
+      agentKey: 'importedAgent',
+    });
+  });
+
   // HBFST.7 (Sprint 6): Tab order — Prompts tab appears after Preview; footer has author-facing label
   test('Prompts tab appears after Preview tab in DOM order (HBFST.7)', async ({ page }) => {
     await page.goto('/HerbalBookForge/HerbalBookForge.html');

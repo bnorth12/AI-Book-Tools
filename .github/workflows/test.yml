@@ -33,9 +33,11 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: NovelWriter integrate smoke
+        timeout-minutes: 5
         run: npm run test:smoke:nw-integrate
 
       - name: NovelWriter retention smoke
+        timeout-minutes: 5
         run: npm run test:smoke:nw-retention
 
       - name: "Smoke: qe5 (offline)"
@@ -43,6 +45,29 @@ jobs:
 
       - name: "Smoke: b2 lean (offline)"
         run: npm run test:smoke:b2-lean
+      - name: NovelWriter S1 migration smoke
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-migration
+
+      - name: NovelWriter S1 Setup lock smoke (LOCK:setup-midrun, LOCK:pause-held)
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-setup-lock
+
+      - name: NovelWriter S1 pinned-fixture smoke
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-s1-pin
+
+      - name: NovelWriter QCAT harness smoke (QH:23 REQ-SCH-07)
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-qcat-harness
+
+      - name: NovelWriter Q1-Q3 trust smoke
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-trust-q1q3
+
+      - name: NovelWriter 4p writing-plans smoke
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-writing-plans
 
       - name: Lint HTML files
         run: |

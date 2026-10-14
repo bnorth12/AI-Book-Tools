@@ -1,0 +1,90 @@
+{
+  "input": {
+    "title": "RSZ",
+    "genre": "scifi",
+    "numChapters": 3,
+    "nwSchemaVersion": 1,
+    "chapters": [
+      "Chapter 1 original prose. Mira counted the relay clicks under failing lights on the wet dock.",
+      "Chapter 2 original prose. The dock clock disagreed with the log after the first choice.",
+      "third"
+    ],
+    "characters": [
+      {
+        "name": "Mira",
+        "id": "mira",
+        "backstory": "x",
+        "arc": "y"
+      }
+    ],
+    "chapterIds": [
+      "ch_a",
+      "ch_b",
+      "ch_c"
+    ],
+    "chapterRequiredFacts": [
+      { "items": [{ "id": "f-a", "text": "fact-a" }] },
+      { "items": [{ "id": "f-b", "text": "fact-b" }] },
+      { "items": [{ "id": "f-c", "text": "fact-c-stale" }] }
+    ],
+    "chapterRequirements": [
+      { "cast": ["mira"], "setting": "a" },
+      { "cast": ["mira"], "setting": "b" },
+      { "cast": ["mira"], "setting": "stale-req" }
+    ],
+    "chapterFingerprints": [
+      { "textHash": "fp-a" },
+      { "textHash": "fp-b" },
+      { "textHash": "fp-stale" }
+    ],
+    "chapterWritingPlans": [
+      { "builtFrom": "plan-a" },
+      { "builtFrom": "plan-b" },
+      { "builtFrom": "plan-stale" }
+    ],
+    "chapterScenes": [
+      {
+        "version": 1,
+        "textHash": "a",
+        "scenes": [
+          {
+            "id": "sc_a1",
+            "chapterId": "ch_a",
+            "order": 1,
+            "breakApproved": false,
+            "source": "import"
+          }
+        ]
+      },
+      {
+        "version": 1,
+        "textHash": "b",
+        "scenes": [
+          {
+            "id": "sc_b1",
+            "chapterId": "ch_b",
+            "order": 1,
+            "breakApproved": false,
+            "source": "import"
+          }
+        ]
+      },
+      {
+        "version": 1,
+        "textHash": "c",
+        "scenes": [
+          {
+            "id": "sc_c1",
+            "chapterId": "ch_c",
+            "order": 1,
+            "breakApproved": false,
+            "source": "import"
+          }
+        ]
+      }
+    ]
+  },
+  "expectedAddedKeys": [],
+  "expectedWarnings": [],
+  "notes": "helper: resize up to 5 and down to 2; shrink-then-grow must not restore stale S1 per-chapter records"
+}
