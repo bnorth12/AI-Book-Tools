@@ -23,6 +23,7 @@
     "test:smoke:nw-s1-pin": "node scripts/_smoke_nw_s1_pin.mjs",
     "test:smoke:nw-trust-q1q3": "node scripts/_smoke_nw_trust_q1q3.mjs",
     "test:smoke:nw-writing-plans": "node scripts/_smoke_nw_writing_plans.mjs",
+    "smoke:nw-167": "node scripts/_smoke_nw_167_gates.mjs",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:install": "playwright install chromium",
     "test:regression": "npm run test:governance && npm run test:e2e",

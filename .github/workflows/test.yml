@@ -64,6 +64,10 @@ jobs:
         timeout-minutes: 5
         run: npm run test:smoke:nw-writing-plans
 
+      - name: NovelWriter 167 gates smoke
+        timeout-minutes: 5
+        run: npm run smoke:nw-167
+
       - name: Lint HTML files
         run: |
           npx htmlhint "**/*.html"
