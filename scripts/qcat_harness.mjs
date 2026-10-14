@@ -72,9 +72,10 @@ function appSha() {
   return 'unknown';
 }
 
-function defaultOutRoot() {
+// Per-book output root: <home>/OneDrive/Documents/NovelWriter Outputs/<Book Title>/runs
+function defaultOutRoot(bookTitle) {
   if (process.env.QCAT_OUT_DIR) return path.resolve(process.env.QCAT_OUT_DIR);
-  return path.join(os.homedir(), 'Downloads', 'QuantumCat-Outputs', 'runs');
+  return path.join(os.homedir(), 'OneDrive', 'Documents', 'NovelWriter Outputs', sanitizeTitle(bookTitle), 'runs');
 }
 
 function sanitizeTitle(t) {
@@ -114,7 +115,7 @@ export async function runQcatHarness(opts) {
       return { exitCode: 2, log: logLines };
     }
   }
-  const outRoot = opts.out ? path.resolve(opts.out) : defaultOutRoot();
+  const outRoot = opts.out ? path.resolve(opts.out) : defaultOutRoot((bookRaw && (bookRaw.title || (bookRaw.novelData && bookRaw.novelData.title))) || 'Quantum Cats');
   const runDir = path.join(outRoot, stampLocal() + '_' + (opts.label || 'qcat'));
   fs.mkdirSync(path.join(runDir, 'chapters'), { recursive: true });
   fs.mkdirSync(path.join(runDir, 'sessions'), { recursive: true });
