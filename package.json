@@ -22,6 +22,8 @@
     "test:smoke:qe5": "node scripts/_qe5_smoke.cjs",
     "test:smoke:b2-lean": "node scripts/_smoke_b2_lean.mjs",
     "test:ci:smoke-guards": "node scripts/_ci_guard_163_smokes.mjs",
+    "test:ci:nw-smokes-wired": "node scripts/_ci_guard_nw_smokes_wired.mjs",
+    "test:smoke:nw-mock-ai": "node scripts/_smoke_nw_mock_ai.mjs",
     "test:smoke:nw-migration": "node scripts/_smoke_nw_migration.mjs",
     "test:smoke:nw-setup-lock": "node scripts/_smoke_nw_setup_lock.mjs",
     "test:smoke:nw-s1-pin": "node scripts/_smoke_nw_s1_pin.mjs",
