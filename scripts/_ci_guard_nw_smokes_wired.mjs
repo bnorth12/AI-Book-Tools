@@ -37,10 +37,11 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 //  - every job in `needs:` exists and passes the same job rule (recursively).
 //  - the step's whole `run` is exactly one `npm run <script>` (no args, `&&`, `;`, `||`, newlines,
 //    echo or comments): one smoke per step, each with its own timeout-minutes (#178 round 2).
-//  - the package.json body behind it exists and isn't hollow (`|| true`, `|| :`, `exit 0`, `echo`).
+//  - the package.json body behind it is exactly `node scripts/<file>.mjs` (allow-list; nothing else,
+//    and an `npm run <other>` body is denied without following it).
 const ALWAYS_TRUE_IF = new Set(['always()', 'success()', 'true']);
 const NPM_RUN = /^npm run ([A-Za-z0-9:._-]+)$/;
-const HOLLOW_BODY = /\|\|\s*(?:true\b|:)|\bexit\s+0\b|\becho\b/;
+const SCRIPT_BODY_ALLOW = /^node scripts\/[\w.-]+\.mjs$/;
 const ROOT_DIRS = new Set(['.', './']);
 const fmt = (v) => JSON.stringify(v);
 
@@ -168,7 +169,7 @@ export function guard(pkgScripts, workflowSource, deferred = DEFERRED) {
     const short = script.slice('test:smoke:'.length);
     if (deferredNames.has(short)) continue;
     const body = pkgScripts[script];
-    if (typeof body !== 'string' || !body.trim() || HOLLOW_BODY.test(body)) {
+    if (typeof body !== 'string' || !SCRIPT_BODY_ALLOW.test(body)) {
       errors.push(`${short} is not wired for pull_request: package.json body ${fmt(body)} is hollow`);
       continue;
     }
@@ -373,6 +374,13 @@ if (isMain) {
     check(`[R2 item ${item}] still wired: ${label}`, () => assert.deepEqual(guard(P2, yml, []), []));
   }
 
+  {
+    const realNw = Object.entries(JSON.parse(readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts || {}).filter(([k]) => k.startsWith(PREFIX));
+    check(`G-WIRE package.json: every real test:smoke:nw-* body matches the allow-list (${realNw.length} bodies)`, () => {
+      const bad = realNw.filter(([, v]) => !SCRIPT_BODY_ALLOW.test(v));
+      assert.ok(realNw.length > 0 && bad.length === 0, JSON.stringify(bad));
+    });
+  }
   const pkgScripts = JSON.parse(readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts || {};
   const yml = readFileSync(path.join(REPO, '.github', 'workflows', 'test.yml'), 'utf8');
   const errors = guard(pkgScripts, yml);
