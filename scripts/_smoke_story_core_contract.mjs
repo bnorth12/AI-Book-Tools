@@ -773,6 +773,66 @@ for (const distance of [4095, 4096, 4097, 65536]) {
   check('ReDoS2 seeded fuzz: key rule (:253 and M4 copy) matches the 735eb4f patterns on 40000 keys', keyDiff === 0, examples.join(' ; '));
   check('ReDoS2 seeded fuzz: every userinfo pattern matches the 735eb4f pattern on 40000 strings', uiDiff === 0, examples.join(' ; '));
 }
+// Round 3 (Copilot on ca62ec4, CoS rulings 11:45 PM): (a) r4301070240: U+212A KELVIN SIGN lowercases to 'k' in JS, so the stripper
+// denies 'api\u212Aey'; the schema :253 key rule must deny it too. (b) r4301070268: the query-name branches of schema :306,
+// harness URL_CREDENTIAL and URL_QUERY_SCHEMA_PATTERN stay linear on repeated apikey/secret/password names with a non-matching tail.
+{
+  const schemaDoc3 = readJson(SCHEMA_PATH);
+  const keyRule3 = new RegExp(Object.keys(schemaDoc3.$defs.noSecrets.allOf[0].then.patternProperties)[0], 'u');
+  const kelvinKeys = ['api\u212Aey', 'API\u212AEY', 'x_api_\u212Aey', 'private\u212Aey', 'private_\u212Aey', 'PRIVATE\u212AEY',
+    'access\u212Aey', 'secret\u212Aey', 'openai\u212Aey', 'xai\u212Aey', 'anthropic\u212Aey', 'gemini\u212Aey', 'github\u212Aey',
+    'google\u212Aey', 'aws\u212Aey', 'to\u212Aen', 'access_to\u212Aen', 'TO\u212AEN'];
+  for (const key of kelvinKeys) {
+    check(`Kelvin ${JSON.stringify(key)}: harness SECRET_KEY denies (JS lowercase)`, SECRET_KEY.test(key));
+    check(`Kelvin ${JSON.stringify(key)}: schema :253 key rule denies`, keyRule3.test(key));
+    for (const [location, place] of [
+      ['wrapper', (f) => { f[key] = 'REDACTED-TEST-VALUE'; return `/${escapePointer(key)}`; }],
+      ['extension', (f) => { f.ext = { futureTool: { [key]: 'REDACTED-TEST-VALUE' } }; return `/ext/futureTool/${escapePointer(key)}`; }],
+      ['array', (f) => { f.ext = { futureTool: { nested: [{ [key]: 'REDACTED-TEST-VALUE' }] } }; return `/ext/futureTool/nested/0/${escapePointer(key)}`; }]
+    ]) {
+      const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+      const pointer = place(fixture);
+      expectDenylisted(`Kelvin denylist rejects ${JSON.stringify(key)} at ${location}`, fixture, pointer);
+      const pointers = [];
+      stripSecrets(fixture, '', pointers);
+      check(`Kelvin import stripper removes ${JSON.stringify(key)} at ${location}`, equal(pointers, [pointer]), JSON.stringify(pointers));
+    }
+  }
+  for (const key of ['api\u212A', '\u212Aey', 'monkey', 'K', '\u212A', 'apiK', 'donkey']) {
+    check(`Kelvin ${JSON.stringify(key)}: schema and SECRET_KEY agree`, keyRule3.test(key) === SECRET_KEY.test(key));
+  }
+  // schema :253 and the reference stripper give the same verdict on random keys, including U+212A and other case-mapping letters
+  let seed3 = 170170;
+  const rand3 = () => { seed3 = (seed3 + 0x6D2B79F5) | 0; let t = Math.imul(seed3 ^ (seed3 >>> 15), 1 | seed3); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const parts3 = ['api', 'private', 'access', 'secret', 'to', 'en', 'ey', 'k', 'K', '\u212A', '\u0130', '\u017F', 'i', 'I', '_', '-', '\n', 'x', 'pass', 'word', 'bearer', 'aws', 'xai', ' '];
+  let agreeDiff = 0; const agreeEx = [];
+  for (let i = 0; i < 40000; i += 1) {
+    let k = ''; for (let j = 0, L = Math.floor(rand3() * 6); j < L; j += 1) k += parts3[Math.floor(rand3() * parts3.length)];
+    if (keyRule3.test(k) !== SECRET_KEY.test(k)) { agreeDiff += 1; if (agreeEx.length < 5) agreeEx.push(JSON.stringify(k)); }
+  }
+  check('Kelvin seeded fuzz: schema :253 and harness SECRET_KEY agree on 40000 keys (U+212A, U+0130, U+017F included)', agreeDiff === 0, agreeEx.join(' ; '));
+  // r4301070268 timing rows
+  const reTime3 = (re, s) => { let best = Infinity; for (let r = 0; r < 3; r += 1) { const t0 = performance.now(); re.test(s); best = Math.min(best, performance.now() - t0); } return best; };
+  const queryRes = [['schema :306', new RegExp(schemaDoc3.$defs.noSecrets.allOf[2].then.not.pattern, 'u')],
+    ['harness URL_CREDENTIAL', URL_CREDENTIAL], ['harness URL_QUERY_SCHEMA_PATTERN', new RegExp(URL_QUERY_SCHEMA_PATTERN, 'u')]];
+  for (const [name, re] of queryRes) {
+    for (const stem of ['apikey', 'secret', 'password']) {
+      for (const tail of ['', '?x=1']) {
+        const make = (n) => 'https://example.test/?' + stem.repeat(Math.ceil(n / stem.length)) + tail;
+        re.test(make(256));
+        const t = Object.fromEntries([2048, 8192, 32768].map((n) => [n, reTime3(re, make(n))]));
+        for (const [a, b] of [[2048, 8192], [8192, 32768]]) {
+          const ratio = (t[b] + 1) / (t[a] + 1);
+          check(`ReDoS3 ${name} '?'+'${stem}'*N+${JSON.stringify(tail)} linear ${a}->${b}: (t4N+1)/(tN+1) < 8`, ratio < 8, `t(${a})=${t[a].toFixed(1)} ms, t(${b})=${t[b].toFixed(1)} ms, ratio ${ratio.toFixed(2)}`);
+        }
+      }
+    }
+    // meaning on those shapes: no tail / '?x=1' = valueless name at end or before '?': stripped iff a stem is present and the name ends at $ / '='/'&'/'#'
+    check(`ReDoS3 ${name}: '?apikey' x N at end of string is still denied`, re.test('https://example.test/?' + 'apikey'.repeat(4)));
+    check(`ReDoS3 ${name}: '?secret' x N then space is still denied`, re.test('https://example.test/?' + 'secret'.repeat(4) + ' next'));
+    check(`ReDoS3 ${name}: '?password' x N then '?x=1' is not a valueless-name match`, re.test('https://example.test/?' + 'password'.repeat(4) + '?x=1') === re.test('https://example.test/?' + 'password' + '?x=1'));
+  }
+}
 // F6 linearity: time(4N)/time(N) stays well under quadratic growth (16x). Ratio, not wall clock, so slow runners do not flake.
 function timeIt(text) {
   const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
