@@ -101,7 +101,8 @@ provider names above (including `accesskey`), `authorization`, or `passwd`.
 So `access_token`, `api_key`, `api-key`, `access_key`, `sig_token`, and
 `client_secret` are denied, while `key`, `tokens`, `tokenCount`,
 `token_budget`, `tokenizer`, `keywords`, and `term` are preserved.
-`accessKeyId` is not an exact provider name and is preserved. Query checks also
+`accessKeyId` is not an exact provider name and is preserved.
+When a parameter has a value (`=` follows), its name is also split on `[^A-Za-z0-9_-]` (empty pieces ignored, no percent-decoding) and denied if any piece matches, so `?token;=`, `?auth[token]=`, and `?user.token=` are denied while `?tokenizer;=x` is preserved. Query checks also
 cover valueless parameters, terminated by `=`, `&`, `#`, or the end of the
 string. Ordinary HTTPS/mailto links, pagination, search terms, and `@` in paths
 are preserved. Prose that only resembles a query string, with no URL-like run
