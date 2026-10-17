@@ -801,16 +801,16 @@ for (const distance of [4095, 4096, 4097, 65536]) {
   for (const key of ['api\u212A', '\u212Aey', 'monkey', 'K', '\u212A', 'apiK', 'donkey']) {
     check(`Kelvin ${JSON.stringify(key)}: schema and SECRET_KEY agree`, keyRule3.test(key) === SECRET_KEY.test(key));
   }
-  // schema :253 and the reference stripper give the same verdict on random keys, including U+212A and other case-mapping letters
+  // schema :253 and the reference stripper give the same verdict on random keys, including U+212A (U+0130/U+017F: SEC-SWEEP)
   let seed3 = 170170;
   const rand3 = () => { seed3 = (seed3 + 0x6D2B79F5) | 0; let t = Math.imul(seed3 ^ (seed3 >>> 15), 1 | seed3); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  const parts3 = ['api', 'private', 'access', 'secret', 'to', 'en', 'ey', 'k', 'K', '\u212A', '\u0130', '\u017F', 'i', 'I', '_', '-', '\n', 'x', 'pass', 'word', 'bearer', 'aws', 'xai', ' '];
+  const parts3 = ['api', 'private', 'access', 'secret', 'to', 'en', 'ey', 'k', 'K', '\u212A', 'i', 'I', '_', '-', '\n', 'x', 'pass', 'word', 'bearer', 'aws', 'xai', ' '];
   let agreeDiff = 0; const agreeEx = [];
   for (let i = 0; i < 40000; i += 1) {
     let k = ''; for (let j = 0, L = Math.floor(rand3() * 6); j < L; j += 1) k += parts3[Math.floor(rand3() * parts3.length)];
     if (keyRule3.test(k) !== SECRET_KEY.test(k)) { agreeDiff += 1; if (agreeEx.length < 5) agreeEx.push(JSON.stringify(k)); }
   }
-  check('Kelvin seeded fuzz: schema :253 and harness SECRET_KEY agree on 40000 keys (U+212A, U+0130, U+017F included)', agreeDiff === 0, agreeEx.join(' ; '));
+  check('Kelvin seeded fuzz: schema :253 and harness SECRET_KEY agree on 40000 keys (U+212A included)', agreeDiff === 0, agreeEx.join(' ; '));
   // r4301070268 timing rows
   const reTime3 = (re, s) => { let best = Infinity; for (let r = 0; r < 3; r += 1) { const t0 = performance.now(); re.test(s); best = Math.min(best, performance.now() - t0); } return best; };
   const queryRes = [['schema :306', new RegExp(schemaDoc3.$defs.noSecrets.allOf[2].then.not.pattern, 'u')],
@@ -832,6 +832,29 @@ for (const distance of [4095, 4096, 4097, 65536]) {
     check(`ReDoS3 ${name}: '?secret' x N then space is still denied`, re.test('https://example.test/?' + 'secret'.repeat(4) + ' next'));
     check(`ReDoS3 ${name}: '?password' x N then '?x=1' is not a valueless-name match`, re.test('https://example.test/?' + 'password'.repeat(4) + '?x=1') === re.test('https://example.test/?' + 'password' + '?x=1'));
   }
+  // Round 3b (CoS 11:45 PM ruling 2, probe a409edbc section 11): U+212A wherever the key rule's k is matched, including its copies:
+  // the query-name stems of schema :306 / harness URL_CREDENTIAL / URL_QUERY_SCHEMA_PATTERN, and the smoke M4 copy (lowercase names only;
+  // M4 stays case-sensitive by design, so 'API\u212AEY' is not expected there).
+  const urlKelvin = ['api\u212Aey', 'private\u212Aey', 'to\u212Aen', 'access_to\u212Aen', 'To\u212AEN', 'access\u212Aey', 'my_api\u212Aey'];
+  for (const n of urlKelvin) {
+    for (const url of [`https://x.example/a?${n}=abc`, `https://x.example/a?x=1&${n}=abc`]) {
+      for (const [name, re] of queryRes) check(`Kelvin URL ${JSON.stringify(url)}: ${name} denies`, re.test(url));
+      const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+      fixture.ext = { futureTool: { url, nested: [{ link: url, keep: 1 }] } };
+      expectDenylisted(`Kelvin URL ${JSON.stringify(url)} rejected at /ext/futureTool/url`, fixture, '/ext/futureTool/url');
+      const pointers = [];
+      stripSecrets(fixture, '', pointers);
+      check(`Kelvin URL import stripper removes ${JSON.stringify(url)} at every depth`, equal([...pointers].sort(), ['/ext/futureTool/nested/0/link', '/ext/futureTool/url']), JSON.stringify(pointers));
+    }
+  }
+  for (const url of ['https://x.example/a?ta\u212Ae=abc', 'https://x.example/a?\u212Aelvin=abc']) {
+    for (const [name, re] of queryRes) check(`Kelvin URL must-pass ${JSON.stringify(url)}: ${name} allows`, !re.test(url));
+  }
+  const m4Copy = new RegExp(CASE_SENSITIVE_DENYLIST, 'u');
+  for (const n of ['api\u212Aey', 'my_api\u212Aey', 'private\u212Aey', 'access\u212Aey', 'openai\u212Aey', 'github\u212Aey', 'to\u212Aen', 'auth_to\u212Aen', 'access_to\u212Aen']) {
+    check(`Kelvin smoke M4 copy (CASE_SENSITIVE_DENYLIST) denies ${JSON.stringify(n)}`, m4Copy.test(n));
+  }
+  for (const n of ['\u212Aelvin', 'ta\u212Ae']) check(`Kelvin must-pass ${JSON.stringify(n)}: schema :253 allows`, !keyRule3.test(n));
 }
 // F6 linearity: time(4N)/time(N) stays well under quadratic growth (16x). Ratio, not wall clock, so slow runners do not flake.
 function timeIt(text) {
