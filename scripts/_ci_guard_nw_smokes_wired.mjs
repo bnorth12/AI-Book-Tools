@@ -74,7 +74,8 @@ const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPat
 if (isMain) {
   const URL1 = 'https://github.com/bnorth12/AI-Book-Tools/issues/1';
   const pkg = { 'test:smoke:nw-a': 'x', 'test:smoke:nw-b': 'x', 'test:smoke:nw-later': 'x', 'smoke:nw-other': 'x' };
-  const ok = `jobs:
+  const PR_ON = 'on:\n  pull_request:\n    branches: [main]\n';
+  const ok = `${PR_ON}jobs:
   test:
     steps:
       - name: A smoke
@@ -113,6 +114,76 @@ if (isMain) {
     assert.deepEqual(guard({ 'test:smoke:nw-a': 'x', 'test:smoke:nw-b': 'x' }, ok, []), []));
   check('G-WIRE fixture: with DEFERRED empty, an unwired script is required', () =>
     assert.deepEqual(guard(pkg, ok, []), ['nw-later has no step']));
+
+  // Copilot r:33 / r:57 + Engineering scope (2026-10-17): a smoke counts as wired only if it runs,
+  // and its failure fails the job, on every pull_request to main. `run` is always a block literal
+  // so `#`, `;`, `||` and `${{ }}` reach the guard verbatim.
+  const P2 = { 'test:smoke:nw-a': 'x', 'test:smoke:nw-b': 'x' };
+  const RA = 'npm run test:smoke:nw-a';
+  const RB = 'npm run test:smoke:nw-b';
+  const block = (text, ind) => text.split('\n').map((l) => ind + l).join('\n');
+  const step = (name, run, extra = '') =>
+    `      - name: ${name}\n        timeout-minutes: 5\n${extra}        run: |-\n${block(run, '          ')}\n`;
+  const job = (id, steps, extra = '') => `  ${id}:\n    runs-on: ubuntu-latest\n${extra}    steps:\n${steps}`;
+  const wf = (jobs, on = PR_ON) => `${on}jobs:\n${jobs}`;
+  const stepB = step('B smoke', RB);
+  const wfStepA = (run, extra = '') => wf(job('test', step('A smoke', run, extra) + stepB));
+  const wfJobA = (extra) => wf(job('test', stepB) + job('a', step('A smoke', RA), extra));
+  const wfOnA = (on) => wf(job('test', step('A smoke', RA) + stepB), on);
+  const notWired = (errs, short) => errs.some((e) => e === `${short} has no step` || e.startsWith(`${short} is not wired`));
+  const NOT_WIRED = [
+    // step level
+    ['step if: false', wfStepA(RA, '        if: false\n')],
+    ['step if: ${{ false }}', wfStepA(RA, '        if: ${{ false }}\n')],
+    ["step if: github.event_name == 'workflow_dispatch'", wfStepA(RA, "        if: github.event_name == 'workflow_dispatch'\n")],
+    ["step if: github.ref == 'refs/heads/main' (never true on pull_request)", wfStepA(RA, "        if: github.ref == 'refs/heads/main'\n")],
+    ['step continue-on-error: true', wfStepA(RA, '        continue-on-error: true\n')],
+    ['run ends || true', wfStepA(`${RA} || true`)],
+    ['run ends ; exit 0', wfStepA(`${RA}; exit 0`)],
+    ['smoke only inside a multi-line echo', wfStepA(`echo "\n${RA}\n"`)],
+    ['smoke only in a single-line echo', wfStepA(`echo ${RA}`)],
+    ['smoke only in a shell comment', wfStepA(`# ${RA}\necho skipped`)],
+    ['smoke only in a YAML comment', wf(job('test', `      # - name: A smoke\n      #   run: ${RA}\n` + stepB))],
+    ['r:57 a; b in one step (a masked without set -e)', wf(job('test', step('A+B', `${RA}; ${RB}`)))],
+    ['r:57 a || true && b in one step', wf(job('test', step('A+B', `${RA} || true && ${RB}`)))],
+    ['r:57 a and b on separate lines in one step', wf(job('test', step('A+B', `${RA}\n${RB}`)))],
+    // job level
+    ['job if: false', wfJobA('    if: false\n')],
+    ['job if: ${{ false }}', wfJobA('    if: ${{ false }}\n')],
+    ["job if: github.event_name == 'workflow_dispatch'", wfJobA("    if: github.event_name == 'workflow_dispatch'\n")],
+    ['job continue-on-error: true', wfJobA('    continue-on-error: true\n')],
+    ['job needs a dispatch-only job', wf(job('test', stepB) + job('gate', step('noop', 'npm run lint'), "    if: github.event_name == 'workflow_dispatch'\n") + job('a', step('A smoke', RA), '    needs: gate\n'))],
+    ['job needs [plain, gated-off] jobs', wf(job('test', stepB) + job('gate', step('noop', 'npm run lint'), '    if: false\n') + job('a', step('A smoke', RA), '    needs: [test, gate]\n'))],
+    ['job needs a missing job', wf(job('test', stepB) + job('a', step('A smoke', RA), '    needs: nope\n'))],
+    // workflow triggers
+    ['on: workflow_dispatch only', wfOnA('on: workflow_dispatch\n')],
+    ['on: [push, workflow_dispatch]', wfOnA('on: [push, workflow_dispatch]\n')],
+    ['on: pull_request with paths: filter', wfOnA("on:\n  pull_request:\n    paths: ['docs/**']\n")],
+    ['on: pull_request with paths-ignore: filter', wfOnA("on:\n  pull_request:\n    paths-ignore: ['scripts/**']\n")],
+    ['on: pull_request branches: excludes main', wfOnA('on:\n  pull_request:\n    branches: [release]\n')],
+  ];
+  for (const [label, yml] of NOT_WIRED) {
+    check(`G-WIRE not wired: ${label}`, () => {
+      const errs = guard(P2, yml, []);
+      assert.ok(notWired(errs, 'nw-a'), `nw-a counted as wired; errors: ${JSON.stringify(errs)}`);
+    });
+  }
+  const WIRED = [
+    ['step if: always()', wfStepA(RA, '        if: always()\n')],
+    ['step if: ${{ always() }}', wfStepA(RA, '        if: ${{ always() }}\n')],
+    ['step with no if', wfStepA(RA)],
+    ['step continue-on-error: false', wfStepA(RA, '        continue-on-error: false\n')],
+    ['a && b in one step wires both (Engineering ruling)', wf(job('test', step('A+B', `${RA} && ${RB}`)))],
+    ['job if: always()', wfJobA('    if: always()\n')],
+    ['job needs a plain job', wfJobA('    needs: test\n')],
+    ['on: pull_request (string)', wfOnA('on: pull_request\n')],
+    ['on: [push, pull_request]', wfOnA('on: [push, pull_request]\n')],
+  ];
+  for (const [label, yml] of WIRED) {
+    check(`G-WIRE still wired: ${label}`, () => assert.deepEqual(guard(P2, yml, []), []));
+  }
+  check('G-WIRE fixture: a && b plus a separate a step is 2 steps for a', () =>
+    assert.match(guard(P2, wf(job('test', step('A+B', `${RA} && ${RB}`) + step('A again', RA))), []).join('|'), /nw-a has 2 steps/));
 
   const pkgScripts = JSON.parse(readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts || {};
   const yml = readFileSync(path.join(REPO, '.github', 'workflows', 'test.yml'), 'utf8');
