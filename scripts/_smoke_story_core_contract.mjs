@@ -276,13 +276,30 @@ for (const [name, pointer] of [
   );
 }
 
+const SPEC_DENY_KEYS = [
+  'xaiApiKey', 'sessionToken', 'session_token', 'token', 'apiToken', 'api_token', 'githubToken',
+  'X_API_KEY', 'x_api_key', 'XAI-API-KEY', 'Api-Key', 'apiKeyValue', 'openaiKey', 'xaiKey',
+  'anthropicKey', 'geminiKey', 'githubKey', 'googleKey', 'awsKey', 'AwsKey', 'privateKey', 'secretKey',
+  'csrfToken', 'SESSION_TOKEN'
+];
+// Keys carrying line terminators must never slip through: the rule strips them before matching (pinned).
+const LINE_TERMINATOR_KEYS = [
+  'api\nKey', 'session\u2028Token', 'my\nSecretValue', 'bearer\nToken', 'db\nPassword',
+  'x\rApiKey', 'csrf\u2029Token', 'xai\r\nKey', 'private\u2028Key'
+];
+const SPEC_ALLOW_KEYS = [
+  'tokens', 'promptTokens', 'maxTokens', 'tokenCount', 'tokenizer', 'tokenBudget', 'keyword',
+  'keywords', 'monkey', 'sessionId', 'sortKey', 'primaryKey', 'donkey'
+];
 const denylistedKeys = [
   'apiKey', 'api_key', 'api-key', 'apikey', 'API_KEY', 'APIKEY', 'secret',
   'clientSecret', 'client_secret', 'client-secret', 'password', 'passwd',
   'authorization', 'bearer', 'accessToken', 'access_token', 'access-token',
   'authToken', 'AUTHTOKEN', 'bearerToken', 'mySecretValue', 'dbPassword',
   'userPassword', 'refreshToken', 'refresh_token', 'refresh-token', 'idToken', 'id_token',
-  'id-token', 'privateKey', 'private_key', 'private-key', 'x-api-key'
+  'id-token', 'privateKey', 'private_key', 'private-key', 'x-api-key',
+  // #170 round 3 DENY cases (normalize: lowercase, strip _ and -; deny *token, *apikey*, provider names)
+  ...SPEC_DENY_KEYS, ...LINE_TERMINATOR_KEYS
 ];
 for (const key of denylistedKeys) {
   const placements = [
@@ -297,6 +314,22 @@ for (const key of denylistedKeys) {
     expectDenylisted(`denylist rejects ${key} at ${location}`, fixture, pointer);
   }
 }
+
+for (const key of denylistedKeys) {
+  check(`harness SECRET_KEY denies ${JSON.stringify(key)}`, SECRET_KEY.test(key));
+  const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+  fixture[key] = 'REDACTED-TEST-VALUE';
+  fixture.novelData.testContainer = { [key]: 'REDACTED-TEST-VALUE', keep: 1 };
+  fixture.ext = { futureTool: { [key]: 'REDACTED-TEST-VALUE', nested: [{ [key]: 'REDACTED-TEST-VALUE', keep: 1 }] } };
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  const k = escapePointer(key);
+  check(`import stripper removes ${JSON.stringify(key)} at every depth`,
+    equal([...pointers].sort(), [`/${k}`, `/novelData/testContainer/${k}`, `/ext/futureTool/${k}`, `/ext/futureTool/nested/0/${k}`].sort()) &&
+      equal(fixture.novelData.testContainer, { keep: 1 }) && equal(fixture.ext.futureTool.nested, [{ keep: 1 }]),
+    JSON.stringify(pointers));
+}
+for (const key of SPEC_ALLOW_KEYS) check(`harness SECRET_KEY allows ${key}`, !SECRET_KEY.test(key));
 
 const urlSecretParameters = [
   'api_key', 'apikey', 'access_key', 'authorization', 'authToken', 'auth_token',
@@ -393,12 +426,11 @@ check(
 );
 
 const mustPassKeys = [
-  'sessionToken', 'token', 'tokenCounts', 'promptTokens', 'completionTokens',
-  'maxTokens', 'api', 'keywords', 'keyBeats'
+  'tokenCounts', 'completionTokens', 'api', 'keyBeats', ...SPEC_ALLOW_KEYS
 ];
 const benignValues = Object.fromEntries(mustPassKeys.map((key) => [
   key,
-  key === 'keywords' || key === 'keyBeats' ? ['benign'] : 1
+  key === 'keywords' || key === 'keyword' || key === 'keyBeats' ? ['benign'] : 1
 ]));
 const benignKeyFixture = structuredClone(requiredFixture('2.0-minimal.json'));
 Object.assign(benignKeyFixture, structuredClone(benignValues));
@@ -417,6 +449,68 @@ check(
   'reference stripper preserves benign token and metadata names',
   equal(benignKeyFixture, benignKeyBeforeStrip) && benignKeyPointers.length === 0
 );
+
+// HBF reference links pass the schema and the import stripper byte-for-byte under sources[].url and ext.*, top-level and nested.
+const HBF_ALLOW_URLS = {
+  libraryCatalogKey: 'https://catalog.library.example/search?key=abc&term=echinacea',
+  sheetsKey: 'https://docs.google.com/spreadsheet/ccc?key=0AbCdEfGhIjKlMnOp&output=csv',
+  pubmedTerm: 'https://pubmed.ncbi.nlm.nih.gov/?term=echinacea+purpurea',
+  doi: 'https://doi.org/10.1016/j.jep.2006.01.001',
+  tokensParam: 'https://example.org/report?tokens=5',
+  termThenKey: 'https://catalog.library.example/search?term=valerian+sleep&key=X'
+};
+for (const [name, url] of Object.entries(HBF_ALLOW_URLS)) {
+  const fixture = structuredClone(requiredFixture('hbf-core-only.json'));
+  fixture.sources = [{ title: name, url }];
+  fixture.novelData.sources = [{ title: name, url }];
+  fixture.ext = { herbalBookForge: { url, sources: [{ url }], nested: { deeper: [{ sources: [{ title: name, url }], link: url }] } } };
+  const bytesBefore = JSON.stringify(fixture);
+  expectValid(`HBF URL ${name} passes under sources[].url and ext.* at every depth`, fixture);
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check(`HBF URL ${name} passes the import stripper byte-for-byte`, JSON.stringify(fixture) === bytesBefore && pointers.length === 0, JSON.stringify(pointers));
+  check(`value scan allows HBF URL ${name}`, secretLookingValues(url).length === 0);
+}
+{
+  const doiTokenUrl = 'https://doi.org/10.1016/j.jep.2006.01.001?access_token=REDACTED-TEST-VALUE';
+  const fixture = structuredClone(requiredFixture('hbf-core-only.json'));
+  fixture.sources = [{ title: 'keep', url: doiTokenUrl }];
+  fixture.ext = { herbalBookForge: { url: doiTokenUrl, nested: { links: [doiTokenUrl, HBF_ALLOW_URLS.doi] } } };
+  const doiPointers = ['/sources/0/url', '/ext/herbalBookForge/url', '/ext/herbalBookForge/nested/links/0'];
+  for (const pointer of doiPointers) expectDenylisted(`DOI ?access_token= rejected at ${pointer}`, fixture, pointer);
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check('import stripper removes DOI ?access_token= links and keeps siblings',
+    equal(pointers, doiPointers) && equal(fixture.sources, [{ title: 'keep' }]) &&
+      equal(fixture.ext.herbalBookForge, { nested: { links: [HBF_ALLOW_URLS.doi] } }),
+    JSON.stringify(pointers));
+}
+// r4257680868: URL credential checks apply to URLs only; prose in unknown fields that merely looks like a query is preserved.
+for (const prose of [
+  'Chapter beat: what?token=1 means to the villain',
+  'Old form label &password= appears in chapter 3',
+  'Ask?secret=later is the working title'
+]) {
+  const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+  fixture.novelData.testContainer = { note: prose };
+  fixture.ext = { futureTool: { note: prose, nested: [{ note: prose }], list: [prose] } };
+  const bytesBefore = JSON.stringify(fixture);
+  expectValid(`non-URL prose ${JSON.stringify(prose)} passes in unknown fields`, fixture);
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check(`import stripper preserves non-URL prose ${JSON.stringify(prose)}`, JSON.stringify(fixture) === bytesBefore && pointers.length === 0, JSON.stringify(pointers));
+}
+for (const text of [
+  'Draft at https://example.test/book?token=REDACTED-TEST-VALUE for review',
+  'https://example.test/book?page=2&client_secret=REDACTED-TEST-VALUE'
+]) {
+  const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+  fixture.ext = { futureTool: { note: text } };
+  expectDenylisted(`credential URL inside text rejected: ${text}`, fixture, '/ext/futureTool/note');
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check(`import stripper removes credential URL inside text: ${text}`, equal(pointers, ['/ext/futureTool/note']));
+}
 
 const placeholderAttack = ['Bearer', 'real-key', 'REDACTED-TEST-VALUE'].join(' ');
 check(
