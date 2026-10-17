@@ -18,15 +18,10 @@ const PREFIX = 'test:smoke:nw-';
 const ISSUE_URL = /^https:\/\/github\.com\/bnorth12\/AI-Book-Tools\/issues\/\d+$/;
 
 // Smokes deliberately kept out of CI (M-STAB plan WP0, Reviewer MF6). Every entry needs a
-// follow-up issue URL. Do not add an entry without one; the guard fails on an empty `issue`.
-export const DEFERRED = [
-  {
-    // nw-draft-only: runtime unmeasured; CoS kept draft-only out of CI for M-STAB.
-    // Follow-up issue (Fiction): body in /workspace/reviews/PR170-card-batch.md section 3.
-    script: 'nw-draft-only',
-    issue: '',
-  },
-];
+// follow-up issue URL; the guard fails on an empty `issue`. Empty since the CoS ruling of
+// 2026-10-16 (~11:56 PM CT): nw-draft-only is wired in CI instead of deferred.
+// Entry shape: { script: 'nw-<name>', issue: 'https://github.com/bnorth12/AI-Book-Tools/issues/<n>' }
+export const DEFERRED = [];
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -112,8 +107,12 @@ if (isMain) {
   check('G-WIRE fixture: non-nw / non-test:smoke scripts ignored', () =>
     assert.deepEqual(guard({ 'smoke:nw-167': 'x', 'test:smoke:qe5': 'x' }, 'jobs: {}\n', []), []));
 
-  check('G-WIRE DEFERRED list is exactly [nw-draft-only]', () =>
-    assert.deepEqual(DEFERRED.map((d) => d.script), ['nw-draft-only']));
+  check('G-WIRE DEFERRED list is empty (nw-draft-only wired, CoS ruling)', () =>
+    assert.deepEqual(DEFERRED.map((d) => d.script), []));
+  check('G-WIRE fixture: empty DEFERRED list passes when everything is wired', () =>
+    assert.deepEqual(guard({ 'test:smoke:nw-a': 'x', 'test:smoke:nw-b': 'x' }, ok, []), []));
+  check('G-WIRE fixture: with DEFERRED empty, an unwired script is required', () =>
+    assert.deepEqual(guard(pkg, ok, []), ['nw-later has no step']));
 
   const pkgScripts = JSON.parse(readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts || {};
   const yml = readFileSync(path.join(REPO, '.github', 'workflows', 'test.yml'), 'utf8');
