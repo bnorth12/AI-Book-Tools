@@ -67,6 +67,10 @@ jobs:
         timeout-minutes: 5
         run: npm run test:smoke:nw-qcat-harness
 
+      - name: Story Core 2.0 contract smoke
+        timeout-minutes: 5
+        run: npm run test:contract:story-core
+
       - name: NovelWriter Q1-Q3 trust smoke
         timeout-minutes: 5
         run: npm run test:smoke:nw-trust-q1q3

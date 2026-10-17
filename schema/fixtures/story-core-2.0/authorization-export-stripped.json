@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "2.0",
+  "coreVersion": "2.0",
+  "sourceTool": "fixture",
+  "sourceVersion": "1.0",
+  "exportedAt": "2026-10-12T00:00:00Z",
+  "workType": "nonfiction",
+  "novelData": {
+    "title": "Authorization Test"
+  },
+  "providerConfig": {
+    "endpoint": "https://user\u003aREDACTED-TEST-VALUE\u0040provider.example.test/v1"
+  },
+  "ext": {
+    "futureTool": {
+      "headers": {
+        "Authorization": "\u0042earer REDACTED-TEST-VALUE"
+      }
+    }
+  }
+}

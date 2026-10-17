@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "2.0",
+  "coreVersion": "2.0",
+  "sourceTool": "fixture",
+  "sourceVersion": "1.0",
+  "exportedAt": "2026-10-12T00:00:00Z",
+  "workType": "fiction",
+  "novelData": {
+    "title": "A Quiet Orbit",
+    "story": {
+      "book": {
+        "id": "bk_quiet_orbit",
+        "title": "A Quiet Orbit"
+      },
+      "chapters": [],
+      "scenes": []
+    }
+  }
+}
