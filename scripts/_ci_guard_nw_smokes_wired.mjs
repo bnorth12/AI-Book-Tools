@@ -181,7 +181,7 @@ if (isMain) {
   const D = [{ script: 'nw-later', issue: URL1 }];
   check('G-WIRE fixture: wired scripts + deferred entry with issue accepted', () => assert.deepEqual(guard(pkg, ok, D), []));
   check('G-WIRE fixture: unwired script rejected', () =>
-    assert.deepEqual(guard(pkg, ok.replace('test:smoke:nw-b', 'test:smoke:nw-zzz'), D), ['b has no step'].map((s) => 'nw-' + s)));
+    assert.deepEqual(guard(pkg, ok.replace('test:smoke:nw-b', 'test:ci:zzz'), D), ['b has no step'].map((s) => 'nw-' + s)));
   check('G-WIRE fixture: job-level timeout does not count', () =>
     assert.match(guard(pkg, ok.replace('    steps:', '    timeout-minutes: 30\n    steps:').replace(/      - name: B smoke\n        timeout-minutes: 5\n/, '      - name: B smoke\n'), D).join('|'), /nw-b step "B smoke" has no step-level timeout-minutes/));
   check('G-WIRE fixture: step env and secrets rejected', () => {
@@ -266,7 +266,6 @@ if (isMain) {
     ['step if: ${{ always() }}', wfStepA(RA, '        if: ${{ always() }}\n')],
     ['step with no if', wfStepA(RA)],
     ['step continue-on-error: false', wfStepA(RA, '        continue-on-error: false\n')],
-    ['a && b in one step wires both (Engineering ruling)', wf(job('test', step('A+B', `${RA} && ${RB}`)))],
     ['job if: always()', wfJobA('    if: always()\n')],
     ['job needs a plain job', wfJobA('    needs: test\n')],
     ['on: pull_request (string)', wfOnA('on: pull_request\n')],
@@ -275,8 +274,59 @@ if (isMain) {
   for (const [label, yml] of WIRED) {
     check(`G-WIRE still wired: ${label}`, () => assert.deepEqual(guard(P2, yml, []), []));
   }
-  check('G-WIRE fixture: a && b plus a separate a step is 2 steps for a', () =>
-    assert.match(guard(P2, wf(job('test', step('A+B', `${RA} && ${RB}`) + step('A again', RA))), []).join('|'), /nw-a has 2 steps/));
+
+  // #178 round 2 (CoS final round, 2026-10-17 12:41 AM CT). Item 1 reverses round 1: a step's run
+  // must be exactly one `npm run test:smoke:nw-*`, so `a && b` no longer wires either smoke.
+  const PB = (body) => ({ 'test:smoke:nw-a': body, 'test:smoke:nw-b': 'node scripts/b.mjs' });
+  const onPr = (filter) => `on:\n  pull_request:\n${filter}`;
+  const jobDefaults = (k, v) => `    defaults:\n      run:\n        ${k}: ${v}\n`;
+  const wfDefaults = (k, v) => `${PR_ON}defaults:\n  run:\n    ${k}: ${v}\n`;
+  const R2_NOT_WIRED = [
+    // [item, label, yml, pkg, subject]
+    [1, 'a && b in one step does not wire a', wf(job('test', step('A+B', `${RA} && ${RB}`))), P2, 'nw-a'],
+    [1, 'a && b in one step does not wire b', wf(job('test', step('A+B', `${RA} && ${RB}`))), P2, 'nw-b'],
+    [1, 'a && b plus a separate a step does not wire b', wf(job('test', step('A+B', `${RA} && ${RB}`) + step('A again', RA))), P2, 'nw-b'],
+    [1, 'npm run a -- --grep x (extra args)', wfStepA(`${RA} -- --grep x`), P2, 'nw-a'],
+    [2, "branches: [main, '!main']", wfOnA(onPr("    branches: [main, '!main']\n")), P2, 'nw-a'],
+    [2, "branches: ['**', '!main']", wfOnA(onPr("    branches: ['**', '!main']\n")), P2, 'nw-a'],
+    [2, "branches: ['!main']", wfOnA(onPr("    branches: ['!main']\n")), P2, 'nw-a'],
+    [2, 'branches-ignore: [main]', wfOnA(onPr('    branches-ignore: [main]\n')), P2, 'nw-a'],
+    [3, "step shell: bash -c 'true' {0}", wfStepA(RA, "        shell: bash -c 'true' {0}\n"), P2, 'nw-a'],
+    [3, 'step shell: bash {0}', wfStepA(RA, "        shell: 'bash {0}'\n"), P2, 'nw-a'],
+    [3, 'step shell: sh', wfStepA(RA, '        shell: sh\n'), P2, 'nw-a'],
+    [3, "job defaults.run.shell: 'echo {0}'", wf(job('test', step('A smoke', RA) + stepB, jobDefaults('shell', "'echo {0}'"))), P2, 'nw-a'],
+    [3, 'job defaults.run.shell: pwsh', wf(job('test', step('A smoke', RA) + stepB, jobDefaults('shell', 'pwsh'))), P2, 'nw-a'],
+    [3, "workflow defaults.run.shell: 'echo {0}'", wf(job('test', step('A smoke', RA) + stepB), wfDefaults('shell', "'echo {0}'")), P2, 'nw-a'],
+    [4, 'types: [labeled]', wfOnA(onPr('    types: [labeled]\n')), P2, 'nw-a'],
+    [4, 'types: [closed]', wfOnA(onPr('    types: [closed]\n')), P2, 'nw-a'],
+    [4, 'types: [opened] (no synchronize)', wfOnA(onPr('    types: [opened]\n')), P2, 'nw-a'],
+    [5, 'script body ends || true', wfStepA(RA), PB('node scripts/a.mjs || true'), 'nw-a'],
+    [5, 'script body ends ; exit 0', wfStepA(RA), PB('node scripts/a.mjs; exit 0'), 'nw-a'],
+    [5, 'script body is echo', wfStepA(RA), PB('echo skipped'), 'nw-a'],
+    [5, 'script body is bare exit 0', wfStepA(RA), PB('exit 0'), 'nw-a'],
+    [5, 'script body is empty', wfStepA(RA), PB(''), 'nw-a'],
+    [5, 'step runs an nw smoke missing from package.json', wf(job('test', step('A smoke', RA) + stepB + step('Ghost', 'npm run test:smoke:nw-ghost'))), P2, 'nw-ghost'],
+    [6, 'step working-directory: NovelWriter', wfStepA(RA, '        working-directory: NovelWriter\n'), P2, 'nw-a'],
+    [6, 'job defaults.run.working-directory: sub', wf(job('test', step('A smoke', RA) + stepB, jobDefaults('working-directory', 'sub'))), P2, 'nw-a'],
+    [6, 'workflow defaults.run.working-directory: sub', wf(job('test', step('A smoke', RA) + stepB), wfDefaults('working-directory', 'sub')), P2, 'nw-a'],
+  ];
+  for (const [item, label, yml, pk, subject] of R2_NOT_WIRED) {
+    check(`[R2 item ${item}] not wired: ${label}`, () => {
+      const errs = guard(pk, yml, []);
+      const hit = subject === 'nw-ghost' ? errs.some((e) => e.startsWith('nw-ghost ')) : notWired(errs, subject);
+      assert.ok(hit, `${subject} counted as wired; errors: ${JSON.stringify(errs)}`);
+    });
+  }
+  const R2_WIRED = [
+    [3, 'step shell: bash', wfStepA(RA, '        shell: bash\n')],
+    [3, 'job defaults.run.shell: bash', wf(job('test', step('A smoke', RA) + stepB, jobDefaults('shell', 'bash')))],
+    [4, 'types: [opened, synchronize]', wfOnA(onPr('    types: [opened, synchronize]\n'))],
+    [4, 'types: [opened, synchronize, reopened] with branches: [main]', wfOnA(onPr('    branches: [main]\n    types: [opened, synchronize, reopened]\n'))],
+    [6, 'step working-directory: .', wfStepA(RA, "        working-directory: '.'\n")],
+  ];
+  for (const [item, label, yml] of R2_WIRED) {
+    check(`[R2 item ${item}] still wired: ${label}`, () => assert.deepEqual(guard(P2, yml, []), []));
+  }
 
   const pkgScripts = JSON.parse(readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts || {};
   const yml = readFileSync(path.join(REPO, '.github', 'workflows', 'test.yml'), 'utf8');

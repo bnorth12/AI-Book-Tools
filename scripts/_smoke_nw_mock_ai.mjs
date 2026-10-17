@@ -54,6 +54,31 @@ if (harness) {
   const { MOCK_KEY, installMockAI } = harness;
   check('M0.key', 'MOCK_KEY is the literal mock-key-not-real', MOCK_KEY === 'mock-key-not-real', String(MOCK_KEY));
 
+  // Copilot r:110 (#178 round 2 item 7): a /g stage matcher must classify the same request the same
+  // way every time (RegExp.test() with /g advances lastIndex). Driven through a fake route target, no browser.
+  {
+    let handler = null;
+    const fake = { route: async (_p, h) => { handler = h; }, unroute: async () => {} };
+    const g = await installMockAI(fake, {
+      fixtures: { default: { which: 'default' }, selftest: { which: 'selftest' } },
+      stages: { selftest: /MOCKSTAGE:selftest/g },
+    });
+    const reqBody = JSON.stringify({ messages: [{ role: 'user', content: 'MOCKSTAGE:selftest' }] });
+    const send = async () => {
+      let out = null;
+      await handler({
+        request: () => ({ url: () => 'https://api.x.ai/v1/chat/completions', method: () => 'POST', postData: () => reqBody, headers: () => ({ authorization: `Bearer ${MOCK_KEY}` }) }),
+        fulfill: async (r) => { out = r; }, abort: async () => {}, continue: async () => {},
+      });
+      try { return JSON.parse(JSON.parse(out.body).choices[0].message.content).which; } catch (_) { return null; }
+    };
+    const got = [await send(), await send()];
+    const stagesSeen = g.requests.map((r) => r.stage);
+    check('M0.stage', '/g stage matcher: the same request twice gets the selftest stage and fixture both times',
+      got.join(',') === 'selftest,selftest' && stagesSeen.join(',') === 'selftest,selftest', JSON.stringify({ got, stagesSeen }));
+    await g.dispose();
+  }
+
   const FIXTURE = { items: [
     { name: 'alpha', text: 'First item. '.repeat(20) },
     { name: 'beta', text: 'Second item. '.repeat(20) },
