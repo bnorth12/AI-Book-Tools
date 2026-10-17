@@ -197,7 +197,7 @@ function check(name, fn) {
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   const URL1 = 'https://github.com/bnorth12/AI-Book-Tools/issues/1';
-  const pkg = { 'test:smoke:nw-a': 'x', 'test:smoke:nw-b': 'x', 'test:smoke:nw-later': 'x', 'smoke:nw-other': 'x' };
+  const pkg = { 'test:smoke:nw-a': 'node scripts/a.mjs', 'test:smoke:nw-b': 'node scripts/b.mjs', 'test:smoke:nw-later': 'node scripts/later.mjs', 'smoke:nw-other': 'node scripts/other.mjs' };
   const PR_ON = 'on:\n  pull_request:\n    branches: [main]\n';
   const ok = `${PR_ON}jobs:
   test:
@@ -235,14 +235,14 @@ if (isMain) {
   check('G-WIRE DEFERRED list is empty (nw-draft-only wired, CoS ruling)', () =>
     assert.deepEqual(DEFERRED.map((d) => d.script), []));
   check('G-WIRE fixture: empty DEFERRED list passes when everything is wired', () =>
-    assert.deepEqual(guard({ 'test:smoke:nw-a': 'x', 'test:smoke:nw-b': 'x' }, ok, []), []));
+    assert.deepEqual(guard({ 'test:smoke:nw-a': 'node scripts/a.mjs', 'test:smoke:nw-b': 'node scripts/b.mjs' }, ok, []), []));
   check('G-WIRE fixture: with DEFERRED empty, an unwired script is required', () =>
     assert.deepEqual(guard(pkg, ok, []), ['nw-later has no step']));
 
   // Copilot r:33 / r:57 + Engineering scope (2026-10-17): a smoke counts as wired only if it runs,
   // and its failure fails the job, on every pull_request to main. `run` is always a block literal
   // so `#`, `;`, `||` and `${{ }}` reach the guard verbatim.
-  const P2 = { 'test:smoke:nw-a': 'x', 'test:smoke:nw-b': 'x' };
+  const P2 = { 'test:smoke:nw-a': 'node scripts/a.mjs', 'test:smoke:nw-b': 'node scripts/b.mjs' };
   const RA = 'npm run test:smoke:nw-a';
   const RB = 'npm run test:smoke:nw-b';
   const block = (text, ind) => text.split('\n').map((l) => ind + l).join('\n');
@@ -336,6 +336,20 @@ if (isMain) {
     [5, 'script body is echo', wfStepA(RA), PB('echo skipped'), 'nw-a'],
     [5, 'script body is bare exit 0', wfStepA(RA), PB('exit 0'), 'nw-a'],
     [5, 'script body is empty', wfStepA(RA), PB(''), 'nw-a'],
+    [5, 'script body ends ; true', wfStepA(RA), PB('node scripts/a.mjs; true'), 'nw-a'],
+    [5, 'script body ends ; :', wfStepA(RA), PB('node scripts/a.mjs; :'), 'nw-a'],
+    [5, 'script body is bare true', wfStepA(RA), PB('true'), 'nw-a'],
+    [5, 'script body is bare :', wfStepA(RA), PB(':'), 'nw-a'],
+    [5, 'script body pipes into | cat', wfStepA(RA), PB('node scripts/a.mjs | cat'), 'nw-a'],
+    [5, 'script body ends with a trailing &', wfStepA(RA), PB('node scripts/a.mjs &'), 'nw-a'],
+    [5, 'script body ends || node -e 0', wfStepA(RA), PB('node scripts/a.mjs || node -e 0'), 'nw-a'],
+    [5, 'script body is node -e ""', wfStepA(RA), PB('node -e ""'), 'nw-a'],
+    [5, 'script body is npm run noop (not followed; noop is defined)', wfStepA(RA), { ...PB('npm run noop'), noop: 'node scripts/noop.mjs' }, 'nw-a'],
+    [5, 'script body ends ;true', wfStepA(RA), PB('node scripts/a.mjs;true'), 'nw-a'],
+    [5, 'script body ends |true', wfStepA(RA), PB('node scripts/a.mjs |true'), 'nw-a'],
+    [5, 'script body has true on its own line after the smoke', wfStepA(RA), PB('node scripts/a.mjs\ntrue'), 'nw-a'],
+    [5, 'script body is printf ok', wfStepA(RA), PB('printf ok'), 'nw-a'],
+    [5, 'script body is node -e 0', wfStepA(RA), PB('node -e 0'), 'nw-a'],
     [5, 'step runs an nw smoke missing from package.json', wf(job('test', step('A smoke', RA) + stepB + step('Ghost', 'npm run test:smoke:nw-ghost'))), P2, 'nw-ghost'],
     [6, 'step working-directory: NovelWriter', wfStepA(RA, '        working-directory: NovelWriter\n'), P2, 'nw-a'],
     [6, 'job defaults.run.working-directory: sub', wf(job('test', step('A smoke', RA) + stepB, jobDefaults('working-directory', 'sub'))), P2, 'nw-a'],
