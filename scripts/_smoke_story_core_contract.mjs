@@ -343,7 +343,7 @@ for (const key of SPEC_ALLOW_KEYS) check(`harness SECRET_KEY allows ${key}`, !SE
 const urlSecretParameters = [
   'api_key', 'apikey', 'access_key', 'authorization', 'authToken', 'auth_token',
   'access_token', 'token', 'secret', 'password', 'bearerToken', 'refreshToken',
-  'idToken', 'client_secret', 'clientSecret', 'sessionToken', 'myTokenValue',
+  'idToken', 'client_secret', 'clientSecret', 'sessionToken', 'api-key', 'sig_token',
   'dbPassword', 'mySecretValue', 'API_KEY', 'ACCESS_KEY', 'AUTHORIZATION',
   'SESSIONTOKEN', 'CLIENT_SECRET', 'DBPASSWORD'
 ];
@@ -378,7 +378,7 @@ for (const [name, url] of Object.entries(requiredFixture('credential-url-pass.js
   check(`benign URL ${name} remains unchanged`, equal(fixture, before) && pointers.length === 0);
   check(`value scan allows benign URL ${name}`, secretLookingValues(url).length === 0);
 }
-for (const parameter of ['KEY', 'TOKENS', 'api-key', 'access_key_hint', 'authorizations']) {
+for (const parameter of ['KEY', 'TOKENS', 'access_key_hint', 'authorizations', 'myTokenValue', 'tokenCount', 'token_budget', 'tokenizer', 'keywords']) {
   const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
   fixture.link = `https://example.test/book?${parameter}=benign`;
   expectValid(`benign query parameter ${parameter} passes`, fixture);
@@ -519,6 +519,73 @@ for (const text of [
   const pointers = [];
   stripSecrets(fixture, '', pointers);
   check(`import stripper removes credential URL inside text: ${text}`, equal(pointers, ['/ext/futureTool/note']));
+}
+
+// F6 (#170 r4): scheme-less, protocol-relative and www. URLs and #fragment params are URLs too.
+const F6_DENY_URLS = {
+  doiNoScheme: 'doi.org/10.1000/xyz?access_token=REDACTED-TEST-VALUE',
+  protocolRelative: '//cdn.example.com/a?token=REDACTED-TEST-VALUE',
+  wwwApiKey: 'www.example.com/p?api_key=REDACTED-TEST-VALUE',
+  fragmentWithScheme: 'https://example.com/callback#access_token=REDACTED-TEST-VALUE',
+  fragmentNoScheme: 'example.com/callback#access_token=REDACTED-TEST-VALUE',
+  fragmentProtocolRelative: '//example.com/callback#state=1&access_token=REDACTED-TEST-VALUE'
+};
+for (const [name, url] of Object.entries(F6_DENY_URLS)) {
+  const fixture = structuredClone(requiredFixture('hbf-core-only.json'));
+  fixture.link = url;
+  fixture.sources = [{ title: 'keep', url }];
+  fixture.ext = { herbalBookForge: { url, nested: { deeper: [{ url, keep: 1 }] } } };
+  const f6Pointers = ['/link', '/sources/0/url', '/ext/herbalBookForge/url', '/ext/herbalBookForge/nested/deeper/0/url'];
+  for (const pointer of f6Pointers) expectDenylisted(`F6 ${name} rejected at ${pointer}`, fixture, pointer);
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check(`F6 import stripper removes ${name} top-level, under sources[].url and nested ext.*`,
+    equal([...pointers].sort(), [...f6Pointers].sort()) && equal(fixture.sources, [{ title: 'keep' }]) &&
+      equal(fixture.ext.herbalBookForge, { nested: { deeper: [{ keep: 1 }] } }),
+    JSON.stringify(pointers));
+  check(`F6 value scan detects ${name}`, secretLookingValues(url).length === 1);
+}
+// F6 ALLOW: scheme-less HBF links and usage-count parameters pass byte-for-byte at every depth.
+const F6_ALLOW_URLS = {
+  bareDoi: 'doi.org/10.1000/xyz',
+  barePubmed: 'pubmed.ncbi.nlm.nih.gov/?term=valerian+sleep',
+  bareCatalogKey: 'catalog.library.example/search?key=abc&term=echinacea',
+  bareSheetsKey: 'docs.google.com/spreadsheet/ccc?key=0AbCdEfGhIjKlMnOp',
+  bareTokens: 'example.org/report?tokens=5',
+  wwwTermKey: 'www.catalog.example/search?term=valerian+sleep&key=X',
+  protocolRelativeTerm: '//pubmed.ncbi.nlm.nih.gov/?term=valerian',
+  tokenCount: 'https://example.org/usage?tokenCount=3',
+  tokenBudget: 'https://example.org/usage?token_budget=1',
+  tokenizer: 'https://example.org/usage?tokenizer=x',
+  tokensFive: 'https://example.org/usage?tokens=5',
+  bareTokenCount: 'example.org/usage?tokenCount=3&token_budget=1&tokenizer=x&tokens=5',
+  fragmentSection: 'https://example.org/guide#section-2',
+  sourceNoteProse: 'see doi.org/10.1/abc and www.example.com/page for the valerian sleep trial'
+};
+for (const [name, url] of Object.entries(F6_ALLOW_URLS)) {
+  const fixture = structuredClone(requiredFixture('hbf-core-only.json'));
+  fixture.link = url;
+  fixture.sources = [{ title: name, url, note: url }];
+  fixture.ext = { herbalBookForge: { url, note: url, nested: { deeper: [{ sources: [{ url }], note: url }] } } };
+  const bytesBefore = JSON.stringify(fixture);
+  expectValid(`F6 allow ${name} passes top-level, under sources[].url and nested ext.*`, fixture);
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check(`F6 allow ${name} passes the import stripper byte-for-byte`, JSON.stringify(fixture) === bytesBefore && pointers.length === 0, JSON.stringify(pointers));
+  check(`F6 value scan allows ${name}`, secretLookingValues(url).length === 0);
+}
+// F6 linearity: long single-run inputs finish quickly in both the schema and the harness.
+for (const [name, text] of [
+  ['long prose run', 'a.bc/' + '?&#x'.repeat(20000)],
+  ['long query run', 'https://example.org/p?' + 'tokenx&'.repeat(20000)],
+  ['long name run', 'www.example.org/p?' + 'to'.repeat(30000)]
+]) {
+  const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+  fixture.ext = { futureTool: { note: text } };
+  const started = Date.now();
+  validate(fixture);
+  URL_CREDENTIAL.test(text);
+  check(`F6 URL matching stays linear on ${name}`, Date.now() - started < 2000, `${Date.now() - started} ms`);
 }
 
 const placeholderAttack = ['Bearer', 'real-key', 'REDACTED-TEST-VALUE'].join(' ');
