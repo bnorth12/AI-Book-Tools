@@ -1,7 +1,7 @@
 // M-STAB WP0 G-WIRE: every `test:smoke:nw-*` script in package.json must run in CI.
-// Each one needs exactly one step in .github/workflows/test.yml (found by the script name in
-// its `npm run` line), and that step needs its own name, its own timeout-minutes, no `env:` and
-// no secrets. Scripts that are deliberately kept out of CI go in DEFERRED, each with a follow-up
+// Each one needs exactly one step in .github/workflows/test.yml that runs it on every
+// pull_request to main with its failure failing the job (see `wiredScripts` for the policy), and
+// that step needs its own name, its own timeout-minutes, no `env:` and no secrets. Scripts that are deliberately kept out of CI go in DEFERRED, each with a follow-up
 // issue URL; the guard also fails if a DEFERRED entry loses its issue, disappears from
 // package.json, or gets wired (then it must come off the list).
 //
@@ -25,15 +25,105 @@ export const DEFERRED = [];
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-function stepsRunning(workflow, script) {
-  const runLine = new RegExp(`^\\s*npm run ${escapeRe(script)}(?:\\s+--\\s.*)?\\s*$`, 'm');
-  const out = [];
-  for (const job of Object.values(workflow.jobs || {})) {
-    for (const step of job.steps || []) {
-      if (typeof step.run === 'string' && runLine.test(step.run)) out.push(step);
+// What counts as wired for pull requests. Conservative: anything the guard can't prove runs on
+// every pull_request to main, with a failure that fails the job, is NOT wired.
+//  - workflow `on:` includes pull_request; its only allowed filter is `branches:` containing main
+//    (no paths/paths-ignore/types/branches-ignore).
+//  - job and step `if:` absent or one of always() / success() / true (with or without ${{ }}).
+//  - job and step `continue-on-error` absent or false; step `shell` absent or bash.
+//  - every job in `needs:` exists and passes the same job rule (recursively).
+//  - the step's whole `run` is `npm run <script>` commands joined only by `&&` (optional plain
+//    `-- args`): no `;`, `||`, newlines, pipes, echo or comments. `a && b` wires both a and b.
+const ALWAYS_TRUE_IF = new Set(['always()', 'success()', 'true']);
+const NPM_RUN = /^npm run ([A-Za-z0-9:._-]+)(?: -- [A-Za-z0-9=._:/@-]+(?: [A-Za-z0-9=._:/@-]+)*)?$/;
+const fmt = (v) => JSON.stringify(v);
+
+function condAlwaysTrue(v) {
+  if (v === undefined || v === true) return true;
+  if (typeof v !== 'string') return false;
+  let s = v.trim();
+  const m = /^\$\{\{([\s\S]*)\}\}$/.exec(s);
+  if (m) s = m[1].trim();
+  return ALWAYS_TRUE_IF.has(s.replace(/\s+/g, ''));
+}
+
+function triggerReason(on) {
+  const notPr = 'workflow does not run on pull_request';
+  if (typeof on === 'string') return on === 'pull_request' ? null : notPr;
+  if (Array.isArray(on)) return on.includes('pull_request') ? null : notPr;
+  if (!on || typeof on !== 'object' || !Object.hasOwn(on, 'pull_request')) return notPr;
+  const pr = on.pull_request;
+  if (pr === null || pr === undefined) return null;
+  if (typeof pr !== 'object' || Array.isArray(pr)) return `pull_request trigger has an unrecognised shape ${fmt(pr)}`;
+  for (const k of Object.keys(pr)) if (k !== 'branches') return `pull_request trigger has a ${k}: filter`;
+  if (pr.branches !== undefined && !(Array.isArray(pr.branches) && pr.branches.some((b) => ['main', '*', '**'].includes(b)))) {
+    return `pull_request branches: ${fmt(pr.branches)} excludes main`;
+  }
+  return null;
+}
+
+function jobReason(jobs, id, path = []) {
+  const job = jobs[id];
+  if (!job || typeof job !== 'object') return `needs missing job ${id}`;
+  if (path.includes(id)) return `needs cycle at job ${id}`;
+  if (!condAlwaysTrue(job.if)) return `job ${id} has if: ${fmt(job.if)}`;
+  const needs = job.needs === undefined ? [] : Array.isArray(job.needs) ? job.needs : [job.needs];
+  for (const n of needs) {
+    if (typeof n !== 'string') return `job ${id} has needs: ${fmt(job.needs)}`;
+    const r = jobReason(jobs, n, [...path, id]);
+    if (r) return `job ${id} needs ${n}: ${r}`;
+  }
+  return null;
+}
+
+function runScripts(run) {
+  const scripts = [];
+  for (const part of run.trim().split(/[ \t]*&&[ \t]*/)) {
+    const m = NPM_RUN.exec(part);
+    if (!m) return null;
+    scripts.push(m[1]);
+  }
+  return scripts;
+}
+
+const coe = (v) => v !== undefined && v !== false;
+
+function stepReason(jobs, id, job, step, script, trig) {
+  const scripts = runScripts(step.run);
+  if (!scripts || !scripts.includes(script)) return 'run is not only `npm run` commands joined by && (masked, echoed, commented or extra commands)';
+  if (trig) return trig;
+  const jr = jobReason(jobs, id);
+  if (jr) return jr;
+  if (coe(job['continue-on-error'])) return `job ${id} has continue-on-error: ${fmt(job['continue-on-error'])}`;
+  if (!condAlwaysTrue(step.if)) return `has if: ${fmt(step.if)}`;
+  if (coe(step['continue-on-error'])) return `has continue-on-error: ${fmt(step['continue-on-error'])}`;
+  if (step.shell !== undefined && step.shell !== 'bash') return `has shell: ${fmt(step.shell)}`;
+  return null;
+}
+
+// For one package.json script: the steps that wire it, and why each other step mentioning it doesn't.
+function wiredScripts(workflow, script) {
+  const mention = new RegExp(`(?<![\\w:.-])${escapeRe(script)}(?![\\w:.-])`);
+  const wired = [];
+  const reasons = [];
+  const jobs = workflow && typeof workflow.jobs === 'object' && workflow.jobs ? workflow.jobs : {};
+  const trig = triggerReason(workflow ? workflow.on : undefined);
+  for (const [id, job] of Object.entries(jobs)) {
+    for (const step of (job && Array.isArray(job.steps) ? job.steps : [])) {
+      if (!step || typeof step.run !== 'string' || !mention.test(step.run)) continue;
+      const label = `step "${step.name ?? '(unnamed)'}"`;
+      const r = stepReason(jobs, id, job, step, script, trig);
+      if (r) reasons.push(`${label} ${r}`);
+      else wired.push(step);
     }
   }
-  return out;
+  return { wired, reasons };
+}
+
+function mentionedAnywhere(workflow, script) {
+  const mention = new RegExp(`(?<![\\w:.-])${escapeRe(script)}(?![\\w:.-])`);
+  return Object.values((workflow && workflow.jobs) || {}).some((job) =>
+    (job && Array.isArray(job.steps) ? job.steps : []).some((st) => st && typeof st.run === 'string' && mention.test(st.run)));
 }
 
 export function guard(pkgScripts, workflowSource, deferred = DEFERRED) {
@@ -45,14 +135,17 @@ export function guard(pkgScripts, workflowSource, deferred = DEFERRED) {
   for (const d of deferred) {
     if (!ISSUE_URL.test(String(d.issue || ''))) errors.push(`DEFERRED ${d.script} has no follow-up issue URL`);
     if (!nwScripts.includes(PREFIX + d.script.replace(/^nw-/, ''))) errors.push(`DEFERRED ${d.script} no longer exists in package.json`);
-    else if (stepsRunning(workflow, PREFIX + d.script.replace(/^nw-/, '')).length) errors.push(`DEFERRED ${d.script} is wired in test.yml; remove it from DEFERRED`);
+    else if (mentionedAnywhere(workflow, PREFIX + d.script.replace(/^nw-/, ''))) errors.push(`DEFERRED ${d.script} is wired in test.yml; remove it from DEFERRED`);
   }
 
   for (const script of nwScripts) {
     const short = script.slice('test:smoke:'.length);
     if (deferredNames.has(short)) continue;
-    const steps = stepsRunning(workflow, script);
-    if (steps.length === 0) { errors.push(`${short} has no step`); continue; }
+    const { wired: steps, reasons } = wiredScripts(workflow, script);
+    if (steps.length === 0) {
+      errors.push(reasons.length ? `${short} is not wired for pull_request: ${reasons.join('; ')}` : `${short} has no step`);
+      continue;
+    }
     if (steps.length > 1) { errors.push(`${short} has ${steps.length} steps, expected 1`); continue; }
     const s = steps[0];
     if (typeof s.name !== 'string' || !s.name.trim()) errors.push(`${short} step has no name`);
