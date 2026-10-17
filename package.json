@@ -10,6 +10,7 @@
     "lint:md": "markdownlint -c .markdownlint.jsonc -p .markdownlintignore \"**/*.md\"",
     "lint:js": "echo 'JavaScript linting not configured yet'",
     "test": "npm run lint && npm run validate-json",
+    "test:ci:xai-guard": "node scripts/_ci_guard_xai_dispatch_only.mjs",
     "test:governance": "node scripts/governance/check-requirements-governance.js",
     "test:e2e": "playwright test",
     "test:e2e:novelwriter": "playwright test tests/e2e/novelwriter.regression.spec.js",
@@ -24,6 +25,7 @@
     "test:contract:story-core": "node scripts/_smoke_story_core_contract.mjs",
     "test:smoke:nw-trust-q1q3": "node scripts/_smoke_nw_trust_q1q3.mjs",
     "test:smoke:nw-writing-plans": "node scripts/_smoke_nw_writing_plans.mjs",
+    "smoke:nw-167": "node scripts/_smoke_nw_167_gates.mjs",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:install": "playwright install chromium",
     "test:regression": "npm run test:governance && npm run test:e2e",
@@ -57,6 +59,7 @@
     "@playwright/test": "^1.63.0",
     "ajv": "^8.20.0",
     "htmlhint": "^1.1.4",
+    "js-yaml": "^5.4.2",
     "markdownlint-cli": "^0.49.1"
   },
   "browserslist": [
