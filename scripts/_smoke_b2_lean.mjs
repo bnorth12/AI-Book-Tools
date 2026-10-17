@@ -1,7 +1,17 @@
 ﻿import { chromium } from 'playwright';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const htmlSetting = process.env.NW_HTML;
+const htmlPath = htmlSetting
+  ? (/^file:/i.test(htmlSetting) ? fileURLToPath(new URL(htmlSetting)) : path.isAbsolute(htmlSetting) ? htmlSetting : '')
+  : path.resolve(SCRIPT_DIR, '..', 'NovelWriter', 'NovelWriter.html');
+if (!htmlPath) throw new Error('NW_HTML must be an absolute path or file URL');
+if (!fs.existsSync(htmlPath)) throw new Error(`HTML file does not exist: ${htmlPath}`);
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-await page.goto('file:///C:/NovelWriterSite/NovelWriter/NovelWriter.html', { waitUntil: 'domcontentloaded', timeout: 60000 });
+await page.goto(pathToFileURL(htmlPath).href, { waitUntil: 'domcontentloaded', timeout: 60000 });
 const r = await page.evaluate(() => {
   const ok = (typeof runQe6Smoke === 'function') ? runQe6Smoke() : false;
   const txt = (document.getElementById('qe6SmokeResult') || document.getElementById('qe5SmokeResult') || {}).textContent || '';

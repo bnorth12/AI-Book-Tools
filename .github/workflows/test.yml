@@ -40,6 +40,14 @@ jobs:
         timeout-minutes: 5
         run: npm run test:smoke:nw-retention
 
+      - name: "Smoke: qe5 (offline)"
+        timeout-minutes: 5
+        run: npm run test:smoke:qe5
+
+      - name: "Smoke: b2 lean (offline)"
+        timeout-minutes: 5
+        run: npm run test:smoke:b2-lean
+
       - name: "CI guard: XAI smoke dispatch-only"
         run: npm run test:ci:xai-guard
 
