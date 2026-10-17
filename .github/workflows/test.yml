@@ -83,6 +83,10 @@ jobs:
         timeout-minutes: 5
         run: npm run test:smoke:nw-callai-timeout
 
+      - name: NovelWriter draft-only smoke
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-draft-only
+
       - name: NovelWriter mock-AI harness self-test (M-STAB M0)
         timeout-minutes: 5
         run: npm run test:smoke:nw-mock-ai
