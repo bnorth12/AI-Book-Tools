@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "2.0",
+  "coreVersion": "2.0",
+  "sourceTool": "NovelWriter",
+  "sourceVersion": "2.0",
+  "exportedAt": "2026-10-12T00:00:00Z",
+  "workType": "fiction",
+  "novelData": {
+    "title": "The Lantern Atlas",
+    "genre": "speculative",
+    "story": {
+      "book": {
+        "id": "bk_lantern_atlas",
+        "title": "The Lantern Atlas",
+        "synopsis": "Two cartographers map an island that moves at night.",
+        "seriesId": "series_tidemark",
+        "bookNumber": 2,
+        "templateRefs": ["save-the-cat", "save-the-cat-writes-a-novel"],
+        "commandments": {},
+        "rag": {}
+      },
+      "chapters": [
+        {
+          "id": "ch_arrival",
+          "number": 1,
+          "title": "The Arrival",
+          "source": "user",
+          "approved": true,
+          "locked": false,
+          "span": {
+            "chapter": "ch_arrival",
+            "start": 0,
+            "end": 42
+          }
+        }
+      ],
+      "scenes": [
+        {
+          "id": "sc_first_light",
+          "chapterId": "ch_arrival",
+          "order": 1,
+          "breakApproved": true,
+          "source": "ai",
+          "confidence": 0.85,
+          "approved": true,
+          "approvedAt": "2026-10-12T00:00:00Z",
+          "locked": false,
+          "span": {
+            "chapter": "ch_arrival",
+            "start": 0,
+            "end": 42
+          }
+        },
+        {
+          "id": "sc_map_room",
+          "chapterId": "ch_arrival",
+          "order": 2,
+          "breakApproved": false,
+          "source": "import",
+          "approved": false,
+          "locked": false
+        }
+      ]
+    }
+  },
+  "ext": {
+    "novelWriter": {
+      "characters": [
+        {
+          "id": "chara_iona",
+          "name": "Iona Vale",
+          "arc": "Learns to trust shared maps."
+        }
+      ],
+      "arcs": [
+        {
+          "id": "arc_shared_maps",
+          "title": "The Shared Map"
+        }
+      ],
+      "setupPayoff": null,
+      "requestLog": []
+    },
+    "bookEditor": {
+      "review": {
+        "status": "not-started"
+      }
+    },
+    "bookDecomposer": {
+      "analysis": {
+        "status": "not-started"
+      }
+    }
+  }
+}

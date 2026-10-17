@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "2.0",
+  "coreVersion": "2.0",
+  "sourceTool": "fixture",
+  "sourceVersion": "1.0",
+  "exportedAt": "2026-10-12T00:00:00Z",
+  "workType": "fiction",
+  "futureCoreField": {
+    "kept": true
+  },
+  "novelData": {
+    "title": "Unknown Keys Stay",
+    "story": {
+      "book": {
+        "id": "bk_unknowns",
+        "title": "Unknown Keys Stay",
+        "futureBookField": ["kept", 2]
+      },
+      "chapters": [],
+      "scenes": [],
+      "futureStoryField": {
+        "kept": true
+      }
+    }
+  },
+  "ext": {
+    "futureTool": {
+      "opaque": {
+        "items": [1, "preserved", null]
+      }
+    }
+  }
+}
