@@ -583,6 +583,44 @@ for (const [name, url] of Object.entries(F6_ALLOW_URLS)) {
   check(`F6 allow ${name} passes the import stripper byte-for-byte`, JSON.stringify(fixture) === bytesBefore && pointers.length === 0, JSON.stringify(pointers));
   check(`F6 value scan allows ${name}`, secretLookingValues(url).length === 0);
 }
+// F6c: scheme:// and // start URL context at any position in a run (as at 10d0045); a bare name.tld starts it after any
+// non-URL character. The schema pattern on its own must reject these, not only the stripper.
+const F6_MIDRUN_DENY = [
+  '[docs](https://e.com/?token=1)', 'see the [link](https://e.com/?api_key=1).', '<a href="https://e.com/?token=1">x</a>',
+  '**https://e.com/?token=1**', 'url=https://e.com/?token=1', 'see:https://ex.com/?token=1', 'foo:https://e.com/?password=1',
+  'text,https://e.com/?token=1', 'x,https://ex.com/?password=1', 'src=//cdn.ex.com/?token=1',
+  'see:https://x.example/a?access_token=abc', 'url=https://x.example/a?client_secret=abc',
+  'see:example.com/x?api_key=1', '(www.example.com/p?api_key=a)', 'https://e.com/?token next'
+];
+const schemaUrlOnly = new RegExp(readJson(SCHEMA_PATH).$defs.noSecrets.allOf[2].then.not.pattern, 'u');
+for (const text of F6_MIDRUN_DENY) {
+  check(`F6c schema :306 alone rejects ${JSON.stringify(text)}`, schemaUrlOnly.test(text));
+  const fixture = structuredClone(requiredFixture('hbf-core-only.json'));
+  fixture.link = text;
+  fixture.sources = [{ title: 'keep', url: text }];
+  fixture.ext = { herbalBookForge: { url: text, nested: { deeper: [{ url: text, keep: 1 }] } } };
+  const midPointers = ['/link', '/sources/0/url', '/ext/herbalBookForge/url', '/ext/herbalBookForge/nested/deeper/0/url'];
+  for (const pointer of midPointers) expectDenylisted(`F6c mid-run ${JSON.stringify(text)} rejected at ${pointer}`, fixture, pointer);
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check(`F6c import stripper removes mid-run ${JSON.stringify(text)} at every depth`, equal([...pointers].sort(), [...midPointers].sort()), JSON.stringify(pointers));
+}
+const F6_MIDRUN_ALLOW = [
+  'see:https://ncbi.nlm.nih.gov/books/NBK92774/#ch5.s3', 'url=https://e.com/a?tokenizer=5&key=abc',
+  'what?token=1', 'e.g.?token=1', 'Fig.2?token=x', ...Object.values(HBF_ALLOW_URLS).map((u) => `see:${u}`)
+];
+for (const text of F6_MIDRUN_ALLOW) {
+  check(`F6c schema :306 alone allows ${JSON.stringify(text)}`, !schemaUrlOnly.test(text));
+  const fixture = structuredClone(requiredFixture('hbf-core-only.json'));
+  fixture.link = text;
+  fixture.sources = [{ title: 'keep', url: text }];
+  fixture.ext = { herbalBookForge: { url: text, nested: { deeper: [{ url: text, note: text }] } } };
+  const bytesBefore = JSON.stringify(fixture);
+  expectValid(`F6c must-pass ${JSON.stringify(text)} at every depth`, fixture);
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check(`F6c must-pass ${JSON.stringify(text)} byte-for-byte through the stripper`, JSON.stringify(fixture) === bytesBefore && pointers.length === 0, JSON.stringify(pointers));
+}
 // F6 distance: a credential parameter is caught however far into the URL-like run it sits (no look-back cap).
 for (const distance of [4095, 4096, 4097, 65536]) {
   for (const [prefix, label] of [['https://example.org/', 'scheme'], ['//cdn.example.org/', 'protocol-relative'], ['doi.org/', 'bare domain']]) {
@@ -617,7 +655,10 @@ for (const [name, make] of [
   ['long query run', (n) => 'https://example.org/p?' + 'tokenx&'.repeat(Math.ceil(n / 7))],
   ['long name run', (n) => 'www.example.org/p?' + 'to'.repeat(n / 2)],
   ['many domains run', (n) => 'a.bc.'.repeat(n / 5) + '?x'],
-  ['many spaced domains', (n) => 'a.bc/?tok '.repeat(n / 10)]
+  ['many spaced domains', (n) => 'a.bc/?tok '.repeat(n / 10)],
+  ['x=http:// repeats', (n) => 'x=http://'.repeat(Math.ceil(n / 9))],
+  ['comma host repeats', (n) => ',a.bc'.repeat(n / 5) + '?x'],
+  ['//a.bc repeats', (n) => '//a.bc'.repeat(Math.ceil(n / 6))]
 ]) {
   const small = timeIt(make(16384));
   const large = timeIt(make(65536));
