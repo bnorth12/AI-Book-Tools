@@ -45,6 +45,10 @@ jobs:
 
       - name: "Smoke: b2 lean (offline)"
         run: npm run test:smoke:b2-lean
+
+      - name: "CI guard: XAI smoke dispatch-only"
+        run: npm run test:ci:xai-guard
+
       - name: NovelWriter S1 migration smoke
         timeout-minutes: 5
         run: npm run test:smoke:nw-migration
@@ -69,6 +73,10 @@ jobs:
         timeout-minutes: 5
         run: npm run test:smoke:nw-writing-plans
 
+      - name: NovelWriter 167 gates smoke
+        timeout-minutes: 5
+        run: npm run smoke:nw-167
+
       - name: Lint HTML files
         run: |
           npx htmlhint "**/*.html"
@@ -92,7 +100,7 @@ jobs:
           echo "OK: All JSON files are valid"
 
       - name: Grok endpoint smoke test
-        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch'
         env:
           XAI_API_KEY: '${{ secrets.XAI_API_KEY }}'
           XAI_SMOKE_MODEL: '${{ vars.XAI_SMOKE_MODEL }}'
