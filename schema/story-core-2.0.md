@@ -83,11 +83,14 @@ as `keyword`, `keywords`, `monkey`, `sessionId`, `sortKey`, `primaryKey`,
 
 Any string value is rejected if it contains URL userinfo (`://user:pass@`
 form), regardless of the containing property name. A credential query or
-fragment parameter counts only inside a URL-like run: a run with no spaces that
-starts (after optional opening punctuation) at `scheme://`, at protocol-relative
-`//host`, or at a host-like `name.tld` (`www.` and bare `domain.tld/path` links
-such as `doi.org/x`). The run is scanned forward to its end, so a credential is
-caught however far into the run it appears. After `?` or `&`, a matching
+fragment parameter counts only inside URL context. URL context starts at
+`scheme://` or protocol-relative `//` at any position (so `[docs](https://...)`,
+`url=https://...`, `see:https://...`, `text,https://...`, and `src=//cdn...`
+are covered), or at a host-like `name.tld` (`www.` and bare `domain.tld/path`
+links such as `doi.org/x`) whose first label is not preceded by a URL character
+(letter, digit, or `._~%+/@-`). Context runs forward to the next whitespace, so a
+credential is caught however far into the run it appears. A valueless parameter
+followed by whitespace also counts. After `?` or `&`, a matching
 parameter name counts with or without a value; after `#`, it counts only when
 `=` follows, so OAuth-style `#access_token=` fragments are stripped while
 document anchors such as `#api-keys`, `#password-reset`, or `#token` are
@@ -102,9 +105,8 @@ So `access_token`, `api_key`, `api-key`, `access_key`, `sig_token`, and
 cover valueless parameters, terminated by `=`, `&`, `#`, or the end of the
 string. Ordinary HTTPS/mailto links, pagination, search terms, and `@` in paths
 are preserved. Prose that only resembles a query string, with no URL-like run
-(for example `what?token=1`), is preserved. Matching is linear: each
-whitespace-delimited run is scanned from one start, and name matching does not
-backtrack. The denylist applies to property
+(for example `what?token=1`), is preserved. Matching is linear: the scan from one start stops at the next start, so each
+character is scanned once, and name matching does not backtrack. The denylist applies to property
 names, not prose values (for example, a `passwordHint` in prose).
 
 **A file that has been written must contain no denylisted key or credential.**
