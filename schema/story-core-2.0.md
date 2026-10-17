@@ -82,17 +82,24 @@ as `keyword`, `keywords`, `monkey`, `sessionId`, `sortKey`, `primaryKey`,
 `donkey`, `api`, and `keyBeats`, are not secret keys.
 
 Any string value is rejected if it contains URL userinfo (`://user:pass@`
-form), regardless of the containing property name. A credential query
-parameter counts only when it is inside a URL: it must follow `scheme://` in
-the same whitespace-free run. Query parameter names are checked
-case-insensitively for `secret`, `password`, or `token` anywhere, except the
-exact name `tokens`. Exact query names `authorization`, `api_key`, `apikey`,
-and `access_key` are also forbidden. Bare `key` and `tokens` query parameters
-are preserved. Query checks also cover valueless parameters, terminated by
-`=`, `&`, `#`, whitespace, or the end of the string. Ordinary HTTPS/mailto
-links, pagination, search terms, and `@` in paths are preserved. Prose that
-only resembles a query string, with no `scheme://` in the same run (for
-example `what?token=1`), is preserved. The denylist applies to property
+form), regardless of the containing property name. A credential query or
+fragment parameter counts only when it is inside a URL-like run (no spaces):
+one containing `//` (`scheme://` or protocol-relative `//host`) or a host-like
+`name.tld` (`www.` and bare `domain.tld/path` links such as `doi.org/x`).
+Parameters after `?`, `&`, or `#` are checked, so OAuth-style
+`#access_token=` fragments are covered. A parameter name is normalized like a
+property name (lowercase, strip `_` and `-`) and denied if it ends with
+`token`; contains `apikey`, `secret`, or `password`; starts with `bearer`; or
+is exactly one of the provider names above, `authorization`, `passwd`, or
+`accesskey`. So `access_token`, `api_key`, `api-key`, `sig_token`, and
+`client_secret` are denied, while `key`, `tokens`, `tokenCount`,
+`token_budget`, `tokenizer`, `keywords`, and `term` are preserved. Query checks
+also cover valueless parameters, terminated by `=`, `&`, `#`, or the end of
+the string. Ordinary HTTPS/mailto links, pagination, search terms, and `@` in
+paths are preserved. Prose that only resembles a query string, with no URL-like
+run (for example `what?token=1`), is preserved. Matching is linear: the
+URL-like lookbehind is bounded to 4096 characters and name matching does not
+backtrack. The denylist applies to property
 names, not prose values (for example, a `passwordHint` in prose).
 
 **A file that has been written must contain no denylisted key or credential.**
