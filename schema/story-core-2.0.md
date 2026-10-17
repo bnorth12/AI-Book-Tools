@@ -70,7 +70,7 @@ including `ext.*` and arrays. A property name is normalized by lowercasing it
 and stripping every `_`, `-`, and line terminator (`\n`, `\r`, `\u2028`,
 `\u2029`). The normalized name is denied if it ends with `token`; contains
 `apikey`; is exactly one of `openaikey`, `xaikey`, `anthropickey`,
-`geminikey`, `githubkey`, `googlekey`, `awskey`, `privatekey`, `secretkey`;
+`geminikey`, `githubkey`, `googlekey`, `awskey`, `privatekey`, `secretkey`, `accesskey`;
 contains `secret`; contains `password`; is exactly `passwd`; is exactly
 `authorization`; or starts with `bearer`. That includes `refreshToken` and
 `idToken` from issues #157 and #166, plus `sessionToken`, `apiKey`,
@@ -83,22 +83,27 @@ as `keyword`, `keywords`, `monkey`, `sessionId`, `sortKey`, `primaryKey`,
 
 Any string value is rejected if it contains URL userinfo (`://user:pass@`
 form), regardless of the containing property name. A credential query or
-fragment parameter counts only when it is inside a URL-like run (no spaces):
-one containing `//` (`scheme://` or protocol-relative `//host`) or a host-like
-`name.tld` (`www.` and bare `domain.tld/path` links such as `doi.org/x`).
-Parameters after `?`, `&`, or `#` are checked, so OAuth-style
-`#access_token=` fragments are covered. A parameter name is normalized like a
-property name (lowercase, strip `_` and `-`) and denied if it ends with
-`token`; contains `apikey`, `secret`, or `password`; starts with `bearer`; or
-is exactly one of the provider names above, `authorization`, `passwd`, or
-`accesskey`. So `access_token`, `api_key`, `api-key`, `sig_token`, and
+fragment parameter counts only inside a URL-like run: a run with no spaces that
+starts (after optional opening punctuation) at `scheme://`, at protocol-relative
+`//host`, or at a host-like `name.tld` (`www.` and bare `domain.tld/path` links
+such as `doi.org/x`). The run is scanned forward to its end, so a credential is
+caught however far into the run it appears. After `?` or `&`, a matching
+parameter name counts with or without a value; after `#`, it counts only when
+`=` follows, so OAuth-style `#access_token=` fragments are stripped while
+document anchors such as `#api-keys`, `#password-reset`, or `#token` are
+preserved. A parameter name is normalized like a property name (lowercase,
+strip `_` and `-`) and denied if it ends with `token`; contains `apikey`,
+`secret`, or `password`; starts with `bearer`; or is exactly one of the
+provider names above (including `accesskey`), `authorization`, or `passwd`.
+So `access_token`, `api_key`, `api-key`, `access_key`, `sig_token`, and
 `client_secret` are denied, while `key`, `tokens`, `tokenCount`,
-`token_budget`, `tokenizer`, `keywords`, and `term` are preserved. Query checks
-also cover valueless parameters, terminated by `=`, `&`, `#`, or the end of
-the string. Ordinary HTTPS/mailto links, pagination, search terms, and `@` in
-paths are preserved. Prose that only resembles a query string, with no URL-like
-run (for example `what?token=1`), is preserved. Matching is linear: the
-URL-like lookbehind is bounded to 4096 characters and name matching does not
+`token_budget`, `tokenizer`, `keywords`, and `term` are preserved.
+`accessKeyId` is not an exact provider name and is preserved. Query checks also
+cover valueless parameters, terminated by `=`, `&`, `#`, or the end of the
+string. Ordinary HTTPS/mailto links, pagination, search terms, and `@` in paths
+are preserved. Prose that only resembles a query string, with no URL-like run
+(for example `what?token=1`), is preserved. Matching is linear: each
+whitespace-delimited run is scanned from one start, and name matching does not
 backtrack. The denylist applies to property
 names, not prose values (for example, a `passwordHint` in prose).
 
