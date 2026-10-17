@@ -1,7 +1,8 @@
 // M-STAB WP0 G-WIRE: every `test:smoke:nw-*` script in package.json must run in CI.
 // Each one needs exactly one step in .github/workflows/test.yml that runs it on every
 // pull_request to main with its failure failing the job (see `wiredScripts` for the policy), and
-// that step needs its own name, its own timeout-minutes, no `env:` and no secrets. Scripts that are deliberately kept out of CI go in DEFERRED, each with a follow-up
+// that step needs its own name, its own timeout-minutes, no `env:` and no secrets. Scripts that
+// are deliberately kept out of CI go in DEFERRED, each with a follow-up
 // issue URL; the guard also fails if a DEFERRED entry loses its issue, disappears from
 // package.json, or gets wired (then it must come off the list).
 //
@@ -27,15 +28,20 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // What counts as wired for pull requests. Conservative: anything the guard can't prove runs on
 // every pull_request to main, with a failure that fails the job, is NOT wired.
-//  - workflow `on:` includes pull_request; its only allowed filter is `branches:` containing main
-//    (no paths/paths-ignore/types/branches-ignore).
+//  - workflow `on:` includes pull_request; allowed filters are `branches:` (must contain main, no
+//    `!` negations) and `types:` (must include opened and synchronize). No paths/paths-ignore/branches-ignore.
 //  - job and step `if:` absent or one of always() / success() / true (with or without ${{ }}).
-//  - job and step `continue-on-error` absent or false; step `shell` absent or bash.
+//  - job and step `continue-on-error` absent or false.
+//  - step `shell:` and job/workflow `defaults.run.shell` absent or exactly `bash`; step
+//    `working-directory:` and job/workflow `defaults.run.working-directory` absent or the repo root.
 //  - every job in `needs:` exists and passes the same job rule (recursively).
-//  - the step's whole `run` is `npm run <script>` commands joined only by `&&` (optional plain
-//    `-- args`): no `;`, `||`, newlines, pipes, echo or comments. `a && b` wires both a and b.
+//  - the step's whole `run` is exactly one `npm run <script>` (no args, `&&`, `;`, `||`, newlines,
+//    echo or comments): one smoke per step, each with its own timeout-minutes (#178 round 2).
+//  - the package.json body behind it exists and isn't hollow (`|| true`, `|| :`, `exit 0`, `echo`).
 const ALWAYS_TRUE_IF = new Set(['always()', 'success()', 'true']);
-const NPM_RUN = /^npm run ([A-Za-z0-9:._-]+)(?: -- [A-Za-z0-9=._:/@-]+(?: [A-Za-z0-9=._:/@-]+)*)?$/;
+const NPM_RUN = /^npm run ([A-Za-z0-9:._-]+)$/;
+const HOLLOW_BODY = /\|\|\s*(?:true\b|:)|\bexit\s+0\b|\becho\b/;
+const ROOT_DIRS = new Set(['.', './']);
 const fmt = (v) => JSON.stringify(v);
 
 function condAlwaysTrue(v) {
@@ -55,9 +61,15 @@ function triggerReason(on) {
   const pr = on.pull_request;
   if (pr === null || pr === undefined) return null;
   if (typeof pr !== 'object' || Array.isArray(pr)) return `pull_request trigger has an unrecognised shape ${fmt(pr)}`;
-  for (const k of Object.keys(pr)) if (k !== 'branches') return `pull_request trigger has a ${k}: filter`;
-  if (pr.branches !== undefined && !(Array.isArray(pr.branches) && pr.branches.some((b) => ['main', '*', '**'].includes(b)))) {
-    return `pull_request branches: ${fmt(pr.branches)} excludes main`;
+  for (const k of Object.keys(pr)) if (k !== 'branches' && k !== 'types') return `pull_request trigger has a ${k}: filter`;
+  if (pr.branches !== undefined) {
+    const b = pr.branches;
+    if (!Array.isArray(b) || b.some((x) => typeof x !== 'string' || x.startsWith('!')) || !b.some((x) => ['main', '*', '**'].includes(x))) {
+      return `pull_request branches: ${fmt(b)} may exclude main (negations are not allowed)`;
+    }
+  }
+  if (pr.types !== undefined && !(Array.isArray(pr.types) && pr.types.includes('opened') && pr.types.includes('synchronize'))) {
+    return `pull_request types: ${fmt(pr.types)} does not include opened and synchronize`;
   }
   return null;
 }
@@ -77,27 +89,31 @@ function jobReason(jobs, id, path = []) {
 }
 
 function runScripts(run) {
-  const scripts = [];
-  for (const part of run.trim().split(/[ \t]*&&[ \t]*/)) {
-    const m = NPM_RUN.exec(part);
-    if (!m) return null;
-    scripts.push(m[1]);
-  }
-  return scripts;
+  const m = NPM_RUN.exec(run.trim());
+  return m ? [m[1]] : null;
 }
+
+const runDefault = (scope, key) => (scope && scope.defaults && scope.defaults.run ? scope.defaults.run[key] : undefined);
+const exactBash = (v) => v === undefined || v === 'bash';
+const atRoot = (v) => v === undefined || ROOT_DIRS.has(v);
 
 const coe = (v) => v !== undefined && v !== false;
 
-function stepReason(jobs, id, job, step, script, trig) {
+function stepReason(workflow, jobs, id, job, step, script, trig) {
   const scripts = runScripts(step.run);
-  if (!scripts || !scripts.includes(script)) return 'run is not only `npm run` commands joined by && (masked, echoed, commented or extra commands)';
+  if (!scripts || !scripts.includes(script)) return 'run is not exactly one `npm run <script>` (combined, masked, echoed, commented or extra commands/args)';
   if (trig) return trig;
   const jr = jobReason(jobs, id);
   if (jr) return jr;
   if (coe(job['continue-on-error'])) return `job ${id} has continue-on-error: ${fmt(job['continue-on-error'])}`;
   if (!condAlwaysTrue(step.if)) return `has if: ${fmt(step.if)}`;
   if (coe(step['continue-on-error'])) return `has continue-on-error: ${fmt(step['continue-on-error'])}`;
-  if (step.shell !== undefined && step.shell !== 'bash') return `has shell: ${fmt(step.shell)}`;
+  if (!exactBash(step.shell)) return `has shell: ${fmt(step.shell)}`;
+  if (!exactBash(runDefault(job, 'shell'))) return `job ${id} has defaults.run.shell: ${fmt(runDefault(job, 'shell'))}`;
+  if (!exactBash(runDefault(workflow, 'shell'))) return `workflow has defaults.run.shell: ${fmt(runDefault(workflow, 'shell'))}`;
+  if (!atRoot(step['working-directory'])) return `has working-directory: ${fmt(step['working-directory'])}`;
+  if (!atRoot(runDefault(job, 'working-directory'))) return `job ${id} has defaults.run.working-directory: ${fmt(runDefault(job, 'working-directory'))}`;
+  if (!atRoot(runDefault(workflow, 'working-directory'))) return `workflow has defaults.run.working-directory: ${fmt(runDefault(workflow, 'working-directory'))}`;
   return null;
 }
 
@@ -112,7 +128,7 @@ function wiredScripts(workflow, script) {
     for (const step of (job && Array.isArray(job.steps) ? job.steps : [])) {
       if (!step || typeof step.run !== 'string' || !mention.test(step.run)) continue;
       const label = `step "${step.name ?? '(unnamed)'}"`;
-      const r = stepReason(jobs, id, job, step, script, trig);
+      const r = stepReason(workflow, jobs, id, job, step, script, trig);
       if (r) reasons.push(`${label} ${r}`);
       else wired.push(step);
     }
@@ -138,9 +154,24 @@ export function guard(pkgScripts, workflowSource, deferred = DEFERRED) {
     else if (mentionedAnywhere(workflow, PREFIX + d.script.replace(/^nw-/, ''))) errors.push(`DEFERRED ${d.script} is wired in test.yml; remove it from DEFERRED`);
   }
 
+  // A step running an nw smoke that package.json doesn't define runs nothing.
+  for (const job of Object.values((workflow && workflow.jobs) || {})) {
+    for (const st of (job && Array.isArray(job.steps) ? job.steps : [])) {
+      const ran = st && typeof st.run === 'string' ? runScripts(st.run) : null;
+      if (ran && ran[0].startsWith(PREFIX) && !Object.hasOwn(pkgScripts, ran[0])) {
+        errors.push(`${ran[0].slice('test:smoke:'.length)} step "${st.name ?? '(unnamed)'}" runs a script missing from package.json`);
+      }
+    }
+  }
+
   for (const script of nwScripts) {
     const short = script.slice('test:smoke:'.length);
     if (deferredNames.has(short)) continue;
+    const body = pkgScripts[script];
+    if (typeof body !== 'string' || !body.trim() || HOLLOW_BODY.test(body)) {
+      errors.push(`${short} is not wired for pull_request: package.json body ${fmt(body)} is hollow`);
+      continue;
+    }
     const { wired: steps, reasons } = wiredScripts(workflow, script);
     if (steps.length === 0) {
       errors.push(reasons.length ? `${short} is not wired for pull_request: ${reasons.join('; ')}` : `${short} has no step`);

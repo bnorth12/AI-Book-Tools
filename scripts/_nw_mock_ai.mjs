@@ -105,8 +105,12 @@ export async function installMockAI(target, opts = {}) {
   const disposed = new Promise((r) => { releaseAll = r; });
   let isDisposed = false;
 
+  // Non-global, non-sticky copies: RegExp.test() on a /g or /y matcher advances lastIndex, so the
+  // same request body would classify differently on its second send (Copilot r:110).
+  const stageTests = Object.entries(stages).map(([key, test]) =>
+    [key, test instanceof RegExp ? new RegExp(test.source, test.flags.replace(/[gy]/g, '')) : test]);
   const classify = typeof opts.classify === 'function' ? opts.classify : (bodyText) => {
-    for (const [key, test] of Object.entries(stages)) {
+    for (const [key, test] of stageTests) {
       if (typeof test === 'function' ? test(bodyText) : test.test(bodyText)) return key;
     }
     return 'default';
