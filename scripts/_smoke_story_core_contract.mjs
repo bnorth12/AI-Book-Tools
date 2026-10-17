@@ -289,7 +289,7 @@ const SPEC_DENY_KEYS = [
   'xaiApiKey', 'sessionToken', 'session_token', 'token', 'apiToken', 'api_token', 'githubToken',
   'X_API_KEY', 'x_api_key', 'XAI-API-KEY', 'Api-Key', 'apiKeyValue', 'openaiKey', 'xaiKey',
   'anthropicKey', 'geminiKey', 'githubKey', 'googleKey', 'awsKey', 'AwsKey', 'privateKey', 'secretKey',
-  'csrfToken', 'SESSION_TOKEN'
+  'csrfToken', 'SESSION_TOKEN', 'accessKey', 'ACCESS_KEY', 'access-key'
 ];
 // Keys carrying line terminators must never slip through: the rule strips them before matching (pinned).
 const LINE_TERMINATOR_KEYS = [
@@ -560,7 +560,16 @@ const F6_ALLOW_URLS = {
   tokensFive: 'https://example.org/usage?tokens=5',
   bareTokenCount: 'example.org/usage?tokenCount=3&token_budget=1&tokenizer=x&tokens=5',
   fragmentSection: 'https://example.org/guide#section-2',
-  sourceNoteProse: 'see doi.org/10.1/abc and www.example.com/page for the valerian sleep trial'
+  sourceNoteProse: 'see doi.org/10.1/abc and www.example.com/page for the valerian sleep trial',
+  // Reviewer must-fix: after '#', a name is a parameter only when '=' follows it (doc anchors pass).
+  anchorApiKeys: 'https://docs.x.ai/docs/quickstart#api-keys',
+  anchorPasswordReset: 'https://help.example.com/faq#password-reset',
+  anchorPersonalAccessToken: 'https://docs.github.com/en/authentication#personal-access-token',
+  anchorToken: 'https://e.com/guide#token',
+  ncbiBookAnchor: 'https://www.ncbi.nlm.nih.gov/books/NBK92774/#ch5.s3',
+  monographAnchor: 'https://example.org/monograph#contraindications',
+  longProseTokenizer: 'Source doi.org/10.1/abc first. ' + 'Valerian and sleep notes. '.repeat(190) + 'Then example.org/usage?tokenizer=5 late.',
+  longRunTokenizer: 'doi.org/10.1/' + 'a'.repeat(5000) + '?tokenizer=5'
 };
 for (const [name, url] of Object.entries(F6_ALLOW_URLS)) {
   const fixture = structuredClone(requiredFixture('hbf-core-only.json'));
@@ -574,18 +583,54 @@ for (const [name, url] of Object.entries(F6_ALLOW_URLS)) {
   check(`F6 allow ${name} passes the import stripper byte-for-byte`, JSON.stringify(fixture) === bytesBefore && pointers.length === 0, JSON.stringify(pointers));
   check(`F6 value scan allows ${name}`, secretLookingValues(url).length === 0);
 }
-// F6 linearity: long single-run inputs finish quickly in both the schema and the harness.
-for (const [name, text] of [
-  ['long prose run', 'a.bc/' + '?&#x'.repeat(20000)],
-  ['long query run', 'https://example.org/p?' + 'tokenx&'.repeat(20000)],
-  ['long name run', 'www.example.org/p?' + 'to'.repeat(30000)]
-]) {
+// F6 distance: a credential parameter is caught however far into the URL-like run it sits (no look-back cap).
+for (const distance of [4095, 4096, 4097, 65536]) {
+  for (const [prefix, label] of [['https://example.org/', 'scheme'], ['//cdn.example.org/', 'protocol-relative'], ['doi.org/', 'bare domain']]) {
+    const deny = prefix + 'a'.repeat(distance) + '?access_token=REDACTED-TEST-VALUE';
+    const allow = prefix + 'a'.repeat(distance) + '?tokenizer=5';
+    const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
+    fixture.ext = { futureTool: { url: deny, nested: [{ url: deny }], keep: allow } };
+    expectDenylisted(`F6 ${label} credential at distance ${distance} rejected`, fixture, '/ext/futureTool/url');
+    const pointers = [];
+    stripSecrets(fixture, '', pointers);
+    check(`F6 ${label} credential at distance ${distance} stripped, benign sibling kept`,
+      equal(pointers, ['/ext/futureTool/url', '/ext/futureTool/nested/0/url']) && fixture.ext.futureTool.keep === allow);
+    const allowFixture = structuredClone(requiredFixture('2.0-minimal.json'));
+    allowFixture.ext = { futureTool: { url: allow } };
+    expectValid(`F6 ${label} benign param at distance ${distance} passes`, allowFixture);
+  }
+}
+// F6 linearity: time(4N)/time(N) stays well under quadratic growth (16x). Ratio, not wall clock, so slow runners do not flake.
+function timeIt(text) {
   const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
   fixture.ext = { futureTool: { note: text } };
-  const started = Date.now();
-  validate(fixture);
-  URL_CREDENTIAL.test(text);
-  check(`F6 URL matching stays linear on ${name}`, Date.now() - started < 2000, `${Date.now() - started} ms`);
+  let best = Infinity;
+  for (let run = 0; run < 3; run += 1) {
+    const started = performance.now();
+    for (let i = 0; i < 5; i += 1) { validate(fixture); URL_CREDENTIAL.test(text); }
+    best = Math.min(best, performance.now() - started);
+  }
+  return best;
+}
+for (const [name, make] of [
+  ['long prose run', (n) => 'a.bc/' + '?&#x'.repeat(n / 4)],
+  ['long query run', (n) => 'https://example.org/p?' + 'tokenx&'.repeat(Math.ceil(n / 7))],
+  ['long name run', (n) => 'www.example.org/p?' + 'to'.repeat(n / 2)],
+  ['many domains run', (n) => 'a.bc.'.repeat(n / 5) + '?x'],
+  ['many spaced domains', (n) => 'a.bc/?tok '.repeat(n / 10)]
+]) {
+  const small = timeIt(make(16384));
+  const large = timeIt(make(65536));
+  const ratio = (large + 1) / (small + 1);
+  check(`F6 URL matching stays linear on ${name}: time(4N)/time(N) < 8`, ratio < 8, `N=${Math.round(small)} ms, 4N=${Math.round(large)} ms, ratio ${ratio.toFixed(2)}`);
+}
+
+{
+  const fileUrlPattern = readJson(SCHEMA_PATH).$defs.noSecrets.allOf[2].then.not.pattern;
+  check('schema URL pattern equals harness URL_USERINFO_SCHEMA_PATTERN|URL_QUERY_SCHEMA_PATTERN',
+    fileUrlPattern === `${URL_USERINFO_SCHEMA_PATTERN}|${URL_QUERY_SCHEMA_PATTERN}`);
+  check('harness URL_CREDENTIAL equals the schema URL pattern (source and u flag)',
+    URL_CREDENTIAL.source === new RegExp(fileUrlPattern, 'u').source && URL_CREDENTIAL.flags === 'u');
 }
 
 const placeholderAttack = ['Bearer', 'real-key', 'REDACTED-TEST-VALUE'].join(' ');
