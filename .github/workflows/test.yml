@@ -83,6 +83,22 @@ jobs:
         timeout-minutes: 5
         run: npm run smoke:nw-167
 
+      - name: NovelWriter callAI timeout smoke
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-callai-timeout
+
+      - name: NovelWriter draft-only smoke
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-draft-only
+
+      - name: NovelWriter mock-AI harness self-test (M-STAB M0)
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-mock-ai
+
+      - name: "CI guard: NovelWriter smokes wired (M-STAB G-WIRE)"
+        timeout-minutes: 5
+        run: npm run test:ci:nw-smokes-wired
+
       - name: Lint HTML files
         run: |
           npx htmlhint "**/*.html"
