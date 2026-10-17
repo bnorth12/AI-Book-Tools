@@ -680,7 +680,39 @@ for (const distance of [4095, 4096, 4097, 65536]) {
     expectValid(`F6 ${label} benign param at distance ${distance} passes`, allowFixture);
   }
 }
-// F6 linearity: time(4N)/time(N) stays well under quadratic growth (16x). Ratio, not wall clock, so slow runners do not flake.
+// ReDoS (Copilot r4300894368, r4300894384, r4300929421): the key rule (:253) on underscore runs and every userinfo pattern
+// (:261 endpoint, :274 url, :306, harness URL_CREDENTIAL / URL_USERINFO_SCHEMA_PATTERN) on colon runs stay linear:
+// (t(4N)+1)/(t(N)+1) < 8 for N = 2k -> 8k and 8k -> 32k, schema-alone and harness copies separately.
+{
+  const schemaDoc = readJson(SCHEMA_PATH);
+  const schemaKeyRe = new RegExp(Object.keys(schemaDoc.$defs.noSecrets.allOf[0].then.patternProperties)[0], 'u');
+  const fileText = fs.readFileSync(SCHEMA_PATH, 'utf8').split(/\r?\n/);
+  const userinfoLines = fileText.map((l, i) => [i + 1, l.trim()]).filter(([, l]) => /^"pattern": "::?\/\/\[\^\/@/.test(l) || /^"pattern": ":\/\/\(\?=/.test(l) || /^"pattern": ":\/\/\[/.test(l));
+  check('ReDoS: schema has userinfo patterns at the endpoint, url and string-rule lines', userinfoLines.length >= 3, JSON.stringify(userinfoLines.map(([n]) => n)));
+  const reTime = (re, s) => { let best = Infinity; for (let r = 0; r < 3; r += 1) { const t0 = performance.now(); re.test(s); best = Math.min(best, performance.now() - t0); } return best; };
+  const rows = [
+    ['schema :253 key rule', schemaKeyRe, (n) => '_'.repeat(n) + 'x'],
+    ['harness CASE_SENSITIVE_DENYLIST (M4 copy of :253)', new RegExp(CASE_SENSITIVE_DENYLIST, 'u'), (n) => '_'.repeat(n) + 'x'],
+    ...userinfoLines.flatMap(([line, l]) => {
+      const re = new RegExp(JSON.parse(l.replace(/^"pattern": /, '').replace(/,$/, '')), 'u');
+      return [[`schema :${line} userinfo`, re, (n) => 'https://a' + ':'.repeat(n)], [`schema :${line} userinfo (query note)`, re, (n) => 'https://example.test?note=' + ':'.repeat(n)]];
+    }),
+    ['harness URL_CREDENTIAL userinfo', URL_CREDENTIAL, (n) => 'https://a' + ':'.repeat(n)],
+    ['harness URL_CREDENTIAL userinfo (query note)', URL_CREDENTIAL, (n) => 'https://example.test?note=' + ':'.repeat(n)],
+    ['harness URL_USERINFO_SCHEMA_PATTERN', new RegExp(URL_USERINFO_SCHEMA_PATTERN, 'u'), (n) => 'https://a' + ':'.repeat(n)]
+  ];
+  for (const [name, re, make] of rows) {
+    re.test(make(256));
+    const t = Object.fromEntries([2048, 8192, 32768].map((n) => [n, reTime(re, make(n))]));
+    for (const [a, b] of [[2048, 8192], [8192, 32768]]) {
+      const ratio = (t[b] + 1) / (t[a] + 1);
+      check(`ReDoS ${name} linear ${a}->${b}: (t4N+1)/(tN+1) < 8`, ratio < 8, `t(${a})=${t[a].toFixed(1)} ms, t(${b})=${t[b].toFixed(1)} ms, ratio ${ratio.toFixed(2)}`);
+    }
+  }
+  // meaning unchanged on the shapes the rows use: none of these is a secret key or a userinfo URL
+  check('ReDoS: underscore-run key normalizes to an allowed name', !schemaKeyRe.test('_'.repeat(2048) + 'x'));
+  check('ReDoS: colon run without @ is not userinfo', !URL_CREDENTIAL.test('https://a' + ':'.repeat(2048)));
+}// F6 linearity: time(4N)/time(N) stays well under quadratic growth (16x). Ratio, not wall clock, so slow runners do not flake.
 function timeIt(text) {
   const fixture = structuredClone(requiredFixture('2.0-minimal.json'));
   fixture.ext = { futureTool: { note: text } };
