@@ -66,24 +66,34 @@ namespaced and app-owned, not a shared dumping ground.
 ## No-secrets hard rule
 
 The schema recursively rejects secret-bearing property names at every depth,
-including `ext.*` and arrays. The case-insensitive denylist includes exact
-names `api[_-]?key`, `apikey`, `auth[_-]?token`, `passwd`, `authorization`,
-`access[_-]?token`, `refresh[_-]?token`, `id[_-]?token`, `private[_-]?key`,
-and `x-api-key`; any key containing `secret` or `password`; and any key
-starting with `bearer`. This includes the `refreshToken` and `idToken` cases
-aligned with issues #157 and #166. Any string value is rejected if it contains
-URL userinfo (`://user:pass@` form), regardless of the containing property
-name. Per #170's round-2 URL addendum, query parameter names are checked
+including `ext.*` and arrays. A property name is normalized by lowercasing it
+and stripping every `_`, `-`, and line terminator (`\n`, `\r`, `\u2028`,
+`\u2029`). The normalized name is denied if it ends with `token`; contains
+`apikey`; is exactly one of `openaikey`, `xaikey`, `anthropickey`,
+`geminikey`, `githubkey`, `googlekey`, `awskey`, `privatekey`, `secretkey`;
+contains `secret`; contains `password`; is exactly `passwd`; is exactly
+`authorization`; or starts with `bearer`. That includes `refreshToken` and
+`idToken` from issues #157 and #166, plus `sessionToken`, `apiKey`,
+`X_API_KEY`, `openaiKey`, `csrfToken`, and keys that hide the match behind
+`_`, `-`, or a line terminator such as `api\nKey`. Usage metadata such as
+`tokens`, `promptTokens`, `maxTokens`, `tokenCount`, `tokenizer`,
+`tokenBudget`, `tokenCounts`, and `completionTokens`, and ordinary names such
+as `keyword`, `keywords`, `monkey`, `sessionId`, `sortKey`, `primaryKey`,
+`donkey`, `api`, and `keyBeats`, are not secret keys.
+
+Any string value is rejected if it contains URL userinfo (`://user:pass@`
+form), regardless of the containing property name. A credential query
+parameter counts only when it is inside a URL: it must follow `scheme://` in
+the same whitespace-free run. Query parameter names are checked
 case-insensitively for `secret`, `password`, or `token` anywhere, except the
 exact name `tokens`. Exact query names `authorization`, `api_key`, `apikey`,
 and `access_key` are also forbidden. Bare `key` and `tokens` query parameters
 are preserved. Query checks also cover valueless parameters, terminated by
-`&`, `#`, or the end of the string. Ordinary HTTPS/mailto links, pagination, search terms,
-and `@` in paths are preserved. This query policy differs from the property-name denylist:
-a bare property named `token` remains allowed. Usage metadata such as `tokenCounts`, `promptTokens`,
-`completionTokens`, and `maxTokens`, and ordinary names such as `api`,
-`keywords`, and `keyBeats`, are not secret keys. The denylist applies to
-property names, not prose values (for example, a `passwordHint` in prose).
+`=`, `&`, `#`, whitespace, or the end of the string. Ordinary HTTPS/mailto
+links, pagination, search terms, and `@` in paths are preserved. Prose that
+only resembles a query string, with no `scheme://` in the same run (for
+example `what?token=1`), is preserved. The denylist applies to property
+names, not prose values (for example, a `passwordHint` in prose).
 
 **A file that has been written must contain no denylisted key or credential.**
 Exporting tools strip those fields and notify the user before writing, using
