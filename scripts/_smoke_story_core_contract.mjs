@@ -621,7 +621,49 @@ for (const text of F6_MIDRUN_ALLOW) {
   stripSecrets(fixture, '', pointers);
   check(`F6c must-pass ${JSON.stringify(text)} byte-for-byte through the stripper`, JSON.stringify(fixture) === bytesBefore && pointers.length === 0, JSON.stringify(pointers));
 }
-// F6 distance: a credential parameter is caught however far into the URL-like run it sits (no look-back cap).
+// M1 (corrected, CoS must-fix): when a parameter has a value, its name is split on [^A-Za-z0-9_-] (empty pieces ignored) and denied
+// if the whole name or any piece matches the locked rule. Applies after '?', '&' and '#'. No percent-decoding. Valueless names unchanged.
+const M1_BASE = 'https://x.example/a';
+const M1_DENY = [
+  '?token;=abc', '?p=1&token;=abc', '?token)=abc', '?token,=abc', '?token.=abc', '?token!=abc', '?token:=abc', "?token'=abc", '?token%3B=abc', '?token;x=abc',
+  '?authorization;=abc', '#access_token;=abc', '?access_token;=abc', '?access_token)=abc', '?sessionToken;=abc', '?sessionToken)=abc',
+  '?bearer_x;=1', '?passwd)=1', '?a=1&token;=abc&page=2', '?auth[token]=abc'
+];
+const M1_STAY_STRIPPED = [
+  '?x;password=abc', '?x:token=abc', '?a.client_secret=abc', '?cfg.access_token=abc', '?x%3Bpassword=abc', '?my.api_key=abc',
+  '?user.token=abc', '?oauth.access_token=abc', '?password;=abc', '?api_key;=abc', '?client_secret;=abc'
+];
+for (const [label, list] of [['M1 deny', M1_DENY], ['M1 must-stay-stripped', M1_STAY_STRIPPED]]) {
+  for (const q of list) {
+    const text = M1_BASE + q;
+    check(`${label} schema :306 alone rejects ${JSON.stringify(text)}`, schemaUrlOnly.test(text));
+    const fixture = structuredClone(requiredFixture('hbf-core-only.json'));
+    fixture.link = text;
+    fixture.sources = [{ title: 'keep', url: text }];
+    fixture.ext = { herbalBookForge: { url: text, nested: { deeper: [{ url: text, keep: 1 }] } } };
+    const m1Pointers = ['/link', '/sources/0/url', '/ext/herbalBookForge/url', '/ext/herbalBookForge/nested/deeper/0/url'];
+    for (const pointer of m1Pointers) expectDenylisted(`${label} ${JSON.stringify(text)} rejected at ${pointer}`, fixture, pointer);
+    const pointers = [];
+    stripSecrets(fixture, '', pointers);
+    check(`${label} import stripper removes ${JSON.stringify(text)} at every depth`, equal([...pointers].sort(), [...m1Pointers].sort()), JSON.stringify(pointers));
+  }
+}
+const M1_ALLOW = [
+  ...['?tokenizer=x', '?tokens=5', '?tokenCount=3', '?token_budget=1', '?myTokenValue=1', '?accessKeyId=1', '?tokenizer;=x', '?token;'].map((q) => M1_BASE + q),
+  ...Object.values(HBF_ALLOW_URLS), ...Object.values(F6_ALLOW_URLS)
+];
+for (const text of M1_ALLOW) {
+  check(`M1 schema :306 alone allows ${JSON.stringify(text)}`, !schemaUrlOnly.test(text));
+  const fixture = structuredClone(requiredFixture('hbf-core-only.json'));
+  fixture.link = text;
+  fixture.sources = [{ title: 'keep', url: text }];
+  fixture.ext = { herbalBookForge: { url: text, nested: { deeper: [{ url: text, note: text }] } } };
+  const bytesBefore = JSON.stringify(fixture);
+  expectValid(`M1 must-pass ${JSON.stringify(text)} at every depth`, fixture);
+  const pointers = [];
+  stripSecrets(fixture, '', pointers);
+  check(`M1 must-pass ${JSON.stringify(text)} byte-for-byte through the stripper`, JSON.stringify(fixture) === bytesBefore && pointers.length === 0, JSON.stringify(pointers));
+}// F6 distance: a credential parameter is caught however far into the URL-like run it sits (no look-back cap).
 for (const distance of [4095, 4096, 4097, 65536]) {
   for (const [prefix, label] of [['https://example.org/', 'scheme'], ['//cdn.example.org/', 'protocol-relative'], ['doi.org/', 'bare domain']]) {
     const deny = prefix + 'a'.repeat(distance) + '?access_token=REDACTED-TEST-VALUE';
