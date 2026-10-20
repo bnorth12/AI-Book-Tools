@@ -155,3 +155,8 @@ jobs:
         run: |
           echo "File sizes:"
           find . -name "*.html" -o -name "*.js" -o -name "*.css" | xargs ls -lh | head -20
+
+      - name: 'SEC-SWEEP #180 locked-rule v2.2 (node --test "tests/sec/**/*.test.mjs")'
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        run: node --test "tests/sec/**/*.test.mjs"
