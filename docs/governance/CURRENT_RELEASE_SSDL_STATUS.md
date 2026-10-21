@@ -46,6 +46,7 @@ This file backfills the Secure SDLC checklist for the current capability release
   - Gap: No explicit classification artifact found for this release.
 - [ ] Define retention and redaction expectations for logs/artifacts.
   - Gap: Artifact locations documented, retention/redaction policy not fully defined.
+  - Deferred redaction gaps (password-in-link, long/escaped/continuation key names) are listed as known open gaps, not fixed, in `docs/architecture/book-tools-contract/UNIVERSAL_CONTRACT_CHECKLIST.md` ("Deferred: multi-user/auth (redaction)"); trigger: MULTIUSER-BACKLOG.
 
 ## 3) Implement Securely
 
