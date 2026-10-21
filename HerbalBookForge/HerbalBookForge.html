@@ -787,7 +787,7 @@ function regexSpans(f) {
 const URL_START_G = new RegExp(URL_START, 'g');
 const PSEP = (c) => c === '?' || c === '&' || c === '#' || c === ';'; // v2.2 G3: `;` added
 function decodeNameOnce(n) { try { return decodeURIComponent(n); } catch { return null; } }
-// raw = the name as it sits in the scan copy. Only a COPY is decoded (once); malformed => secret (fail closed)
+// raw = the name as it sits in the scan copy. Only a COPY is decoded (until stable, see below); malformed => secret (fail closed)
 // fix7.5-D: decode until stable with normParamName's cap (PARAM_DECODE_CAP); malformed % or cap reached => secret (fail closed). No '+' rule.
 function paramNameIsSecret(raw) { if (!raw.includes('%')) return isSecretParam(raw); let d = raw;
   for (let i = 0; i <= PARAM_DECODE_CAP; i++) { if (i === PARAM_DECODE_CAP) { d = null; break; } const x = decodeNameOnce(d); if (x === null) { d = null; break; } if (x === d) break; d = x; }
