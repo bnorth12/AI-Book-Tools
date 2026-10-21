@@ -773,9 +773,16 @@ for (const distance of [4095, 4096, 4097, 65536]) {
     }
   }
   check('ReDoS2 seeded fuzz: key rule (:253 and M4 copy) matches the 735eb4f patterns on 40000 keys', keyDiff === 0, examples.join(' ; '));
-  // fix7.4: the userinfo verdict rule, applied to the per-pattern diff sets (current rule: no diff at all).
-  const uiRuleAccepts = (d) => Object.values(d).every((l) => l.length === 0);
-  check('ReDoS2 seeded fuzz: every userinfo pattern matches the 735eb4f pattern on 40000 strings', uiRuleAccepts(uiDiffs), examples.join(' ; '));
+  // fix7.4: each pattern's diff set must equal the pinned TIGHTEN set exactly (both ways), and every diff must be TIGHTEN
+  // (any LOOSEN is red). Pin: Fiction's 735eb4f re-pin against fix7.4 SUMS 8238ee8a (48 strings x 5 patterns), sha256 below.
+  const PIN_FILE = path.join(ROOT, 'scripts', 'redos2-pinned-tighten-set-8238ee8a.json');
+  const PIN_SHA256 = '2524368298f2967359bec4256d89a7147c8d162214010c0b255520747c261b6e';
+  const pinBytes = fs.readFileSync(PIN_FILE); const pinSha = createHash('sha256').update(pinBytes).digest('hex');
+  check('ReDoS2 pinned TIGHTEN set file sha256 == pin', pinSha === PIN_SHA256, pinSha);
+  const PIN = new Set(JSON.parse(pinBytes.toString('utf8')));
+  const uiRuleAccepts = (d) => Object.values(d).every((l) => l.every((x) => x.dir === 'TIGHTEN') && l.length === PIN.size && new Set(l.map((x) => x.s)).size === PIN.size && l.every((x) => PIN.has(x.s)));
+  const bad = Object.entries(uiDiffs).filter(([, l]) => !uiRuleAccepts({ x: l })).map(([n, l]) => `${n}: ${l.length} diffs, out-of-pin ${JSON.stringify(l.filter((x) => !PIN.has(x.s) || x.dir !== 'TIGHTEN').slice(0, 3))}, missing ${JSON.stringify([...PIN].filter((s) => !l.some((x) => x.s === s)).slice(0, 3))}`);
+  check('ReDoS2 seeded fuzz: every userinfo pattern\'s diff set vs the 735eb4f patterns == pinned TIGHTEN set (40000 strings)', uiRuleAccepts(uiDiffs), bad.join(' ; '));
   // Red-first probe (fix7.4): PROBE is not in the pinned set and every userinfo pattern tightens on it, so the rule must accept the
   // fuzz diff sets as they are and reject them once PROBE's diffs are added.
   const PROBE = 'https://u :p@x.com'; const withProbe = structuredClone(uiDiffs); for (const [n, d] of uiDiffOf(PROBE)) withProbe[n].push(d);
