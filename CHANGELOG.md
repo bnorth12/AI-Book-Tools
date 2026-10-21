@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Post-release follow-up items only.
 
+### Security
+
+- HerbalBookForge credential redaction NEL fix (fix7.4): HBF `HerbalBookForge.html` sha256 `d824f617`, schema `6abefa05`,
+  smoke `3d79b90f` base; `tests/sec/hbf` rows and NEL tests; frozen `fixtures/ref-v23-rows.json` (`1ee8e5fe`) sha-pinned.
+  Gates: fix7.4 SUMS `8238ee8a` (Engineering `ba692fa3`, Reviewer `ecb5c93b`).
+- Smoke ReDoS2: the userinfo seeded-fuzz check now compares each pattern's diff set with the pinned TIGHTEN set
+  (`scripts/redos2-pinned-tighten-set-8238ee8a.json`, sha256 `25243682`) exactly, both ways; any LOOSEN is red.
+
+### Notes
+
+- Timing (Engineering): `ps` elapsed time and wall-clock durations include time the box was paused or suspended.
+  Read run durations from `/proc/uptime` (monotonic) deltas, not wall clock or `ps` etime. Timing run of record on fix7.4:
+  SUMS `ef1bfb8a`; Node 20.19.2 86m05s wall / 2326.5 s uptime, Node 22.23.3 70m52s wall / 1708.5 s uptime
+  (sequential legs; the gap is box pause/suspend, not test time). Earlier concurrent-leg wall times are load, not a baseline.
+
 ## [1.2.0] - 2026-04-19
 
 ### Added
