@@ -788,11 +788,10 @@ const URL_START_G = new RegExp(URL_START, 'g');
 const PSEP = (c) => c === '?' || c === '&' || c === '#' || c === ';'; // v2.2 G3: `;` added
 function decodeNameOnce(n) { try { return decodeURIComponent(n); } catch { return null; } }
 // raw = the name as it sits in the scan copy. Only a COPY is decoded (once); malformed => secret (fail closed)
-function paramNameIsSecret(raw) { if (!raw.includes('%')) return isSecretParam(raw); const d = decodeNameStable(raw); return d === null || isSecretParam(d); }
-// fix7.5-D: decode until stable with normParamName's cap (PARAM_DECODE_CAP); malformed % or cap reached => null (caller fails closed). No '+' rule.
-function decodeNameStable(raw) { let s = raw;
-  for (let i = 0; i <= PARAM_DECODE_CAP; i++) { if (i === PARAM_DECODE_CAP) return null; const d = decodeNameOnce(s); if (d === null) return null; if (d === s) break; s = d; }
-  return s; }
+// fix7.5-D: decode until stable with normParamName's cap (PARAM_DECODE_CAP); malformed % or cap reached => secret (fail closed). No '+' rule.
+function paramNameIsSecret(raw) { if (!raw.includes('%')) return isSecretParam(raw); let d = raw;
+  for (let i = 0; i <= PARAM_DECODE_CAP; i++) { if (i === PARAM_DECODE_CAP) { d = null; break; } const x = decodeNameOnce(d); if (x === null) { d = null; break; } if (x === d) break; d = x; }
+  return d === null || isSecretParam(d); }
 function urlStartBefore(starts, q) { let lo = -1; for (const s of starts) { if (s < q) lo = s; else break; } return lo; }
 function nameSpans(f) { // f = a scan copy, same length as v: every index below is a raw index into v
   const out = []; let last = 0, i = 0; const L = f.length;
@@ -836,7 +835,9 @@ const BASIC_SOURCE = '(?:(?<![A-Za-z0-9])|(?<=%[0-9A-Fa-f]{2}))basic((?:' + REDA
 const JSON_PAIR_SOURCE = '"((?:[^"\\\\]|\\\\.){1,64})"' + REDACT_SEP + '*:' + REDACT_SEP + '*"((?:[^"\\\\]|\\\\.)*)"';
 const SESSION_COOKIE_NAMES = ['sid','sess','sessid','session','sessionid','phpsessid','jsessionid','connectsid','aspnetsessionid','laravelsession','csrftoken'];
 function cookieIsSecret(list) { return list.split(';').some((p) => { const i = p.indexOf('='); if (i <= 0) return false;
-  const raw = decodeNameStable(p.slice(0, i).replace(SEP_TRIM, '')), n = raw === null ? null : normalizeName(raw).replace(/\./g, ''), v = p.slice(i + 1).replace(SEP_TRIM, '').split(new RegExp(REDACT_SEP, 'u'))[0];
+  let raw = p.slice(0, i).replace(SEP_TRIM, ''); // fix7.5-D: same decode-until-stable loop as paramNameIsSecret; null => secret
+  for (let j = 0; j <= PARAM_DECODE_CAP; j++) { if (j === PARAM_DECODE_CAP) { raw = null; break; } const x = decodeNameOnce(raw); if (x === null) { raw = null; break; } if (x === raw) break; raw = x; }
+  const n = raw === null ? null : normalizeName(raw).replace(/\./g, ''), v = p.slice(i + 1).replace(SEP_TRIM, '').split(new RegExp(REDACT_SEP, 'u'))[0];
   return v !== '' && (n === null || SESSION_COOKIE_NAMES.includes(n) || isSecretField(n) || /^(?=[^0-9]*[0-9])[A-Za-z0-9._~+/=%-]{16,}$/.test(v)); }); }
 // SEP1 fix4 standalone param rule: [?&;] SEP* name SEP* = SEP* value, anywhere in the text, never across a line terminator.
 // A name right after a line-terminator run that follows a [?&;]-led fragment also counts (the `?api<LT>key=` shape); the match itself starts after the LT.
