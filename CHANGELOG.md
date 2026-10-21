@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- HerbalBookForge redaction fix7.5 (PR #185 T1/T2). T1: the userinfo patterns (V1_USERINFO, V2_USERINFO, SRC306,
+  schema/story-core-2.0.json :261/:274/:306 and the smoke harness copies) keep at most one line-break run between fixed
+  characters, and STANDALONE_PARAM_SOURCE checks the next character before its line-break lookbehind. Both match the
+  same strings as before and now run in linear time on long line-break runs. redactAll on 32768 newlines drops from
+  about 6.8 s to about 15 ms. T2: the free-text JSON pair pass decodes the key before isSecretField, and a key that does
+  not decode is treated as secret. tests/sec: 2546/2546 on Node 20 and 22. Smoke: 1798 PASS / 0 FAIL, pin 25243682 unchanged.
 - HerbalBookForge credential redaction NEL fix (fix7.4): HBF `HerbalBookForge.html` sha256 `d824f617`, schema `6abefa05`,
   smoke `3d79b90f` base; `tests/sec/hbf` rows and NEL tests; frozen `fixtures/ref-v23-rows.json` (`1ee8e5fe`) sha-pinned.
   Gates: fix7.4 SUMS `8238ee8a` (Engineering `ba692fa3`, Reviewer `ecb5c93b`).
