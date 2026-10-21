@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- HerbalBookForge fix185n (PR #185, narrowed by Brian's call): (b) is fixed. COOKIE_NL_SOURCE now checks for a token start
+  in O(1) before its COOKIE_GAP* lookbehind, so long space or tab runs after a Cookie header (:830/:833) are linear
+  (about 25 s down to a few ms at 64k). The matched set is unchanged (200k seeded fuzz: 0 differences vs 7a1cd426).
+  Out of scope by Brian's call: the password-in-link class (a) and the long/escaped key-name class (c). Both are
+  **not fixed**. They are tracked in the PR #185 follow-up issue under the multi-user/auth backlog item. Pins
+  25243682, d927e31a and 241bdd49 unchanged.
 - HerbalBookForge redaction fix7.5 (PR #185 T1/T2). T1: the userinfo patterns (V1_USERINFO, V2_USERINFO, SRC306,
   schema/story-core-2.0.json :261/:274/:306 and the smoke harness copies) keep at most one line-break run between fixed
   characters, and STANDALONE_PARAM_SOURCE checks the next character before its line-break lookbehind. Both match the
