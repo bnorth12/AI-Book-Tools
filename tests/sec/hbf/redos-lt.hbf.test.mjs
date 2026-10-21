@@ -14,7 +14,7 @@ import { loadHBF, readHBF } from './_hbf-load.mjs';
 
 const block = markedBlock(readHBF());
 const ctx = vm.createContext({});
-vm.runInContext(block + '\n;globalThis.__x = { V1_USERINFO, V2_USERINFO, SRC306, CREDENTIAL_URL_SOURCE, redactAll };', ctx);
+vm.runInContext(block + '\n;globalThis.__x = { V1_USERINFO, V2_USERINFO, SRC306, CREDENTIAL_URL_SOURCE, redactAll, STANDALONE_PARAM_SOURCE, standaloneParamSpans, SCAN_COPIES };', ctx);
 const PG = ctx.__x;
 const schemaLines = fs.readFileSync(path.join(REPO, 'schema', 'story-core-2.0.json'), 'utf8').split('\n');
 const schemaPat = (n) => { const m = schemaLines[n - 1].match(/"pattern": "(.*)"\s*$/); assert.ok(m, 'schema :' + n + ' is not a pattern line'); return JSON.parse('"' + m[1] + '"'); };
@@ -80,4 +80,27 @@ describe('HBF fix7.5 T2 JSON-escaped keys in free text (red on a079c774)', () =>
       const leaked = typeof v === 'string' && v.includes(V);
       if (secret) assert.ok(!leaked, `${p}: value leaked: ${JSON.stringify(v)}`); else assert.equal(v, 'pasted ' + text, `${p}: off-list key changed`); }
   });
+});
+
+// fix7.5 option A (CoS 21:27): STANDALONE_PARAM_SOURCE / standaloneParamSpans must stay linear on LT runs (red on 60f6d05).
+describe('HBF fix7.5-A STANDALONE_PARAM_SOURCE linear on LT runs (red on 60f6d05)', () => {
+  const A_SHAPES = [
+    ["'//'+'\\n'*N+'x'", (n) => '//' + '\n'.repeat(n) + 'x'],
+    ["'?a'+'\\n'*N+'b=1'", (n) => '?a' + '\n'.repeat(n) + 'b=1'],
+    ["'&a'+'\\u2028'*N+'x'", (n) => '&a' + '\u2028'.repeat(n) + 'x'],
+    ["';a'+'\\r'*N+'x'", (n) => ';a' + '\r'.repeat(n) + 'x'],
+  ];
+  const subjects = [
+    ['STANDALONE_PARAM_SOURCE', (s) => { const re = new RegExp(PG.STANDALONE_PARAM_SOURCE, 'gu'); while (re.exec(s)); }],
+    ['standaloneParamSpans x3 scan copies', (s) => { for (const cp of PG.SCAN_COPIES) PG.standaloneParamSpans(cp(s)); }],
+  ];
+  for (const [pn, run] of subjects) for (const [sn, mk] of A_SHAPES) {
+    test(`T1-A ${pn} ${sn} linear 2048->8192->32768: (t4N+1)/(tN+1) < 8`, () => {
+      run(mk(256));
+      const t = Object.fromEntries([2048, 8192, 32768].map((n) => { const s = mk(n); return [n, best3(() => run(s))]; }));
+      const r1 = (t[8192] + 1) / (t[2048] + 1), r2 = (t[32768] + 1) / (t[8192] + 1);
+      console.log(`# TIMING ${pn} | ${sn} | t2048=${t[2048].toFixed(2)} t8192=${t[8192].toFixed(2)} t32768=${t[32768].toFixed(2)} ms | r1=${r1.toFixed(2)} r2=${r2.toFixed(2)}`);
+      assert.ok(r1 < 8, `2048->8192 ratio ${r1.toFixed(2)}`); assert.ok(r2 < 8, `8192->32768 ratio ${r2.toFixed(2)}`);
+    });
+  }
 });
