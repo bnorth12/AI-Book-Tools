@@ -840,7 +840,9 @@ function cookieIsSecret(list) { return list.split(';').some((p) => { const i = p
 const PARAM_DECODE_CAP = 4;
 const SEP_NL = '(?:(?![' + LT_CH + '])' + REDACT_SEP + '|%20)';
 const PARAM_VALUE = '[^&#;<>"`' + JS_WS + '\\u0085\\u00ad\\u180e\\u200b-\\u200d\\u2060\\u0027]+';
-const STANDALONE_PARAM_SOURCE = '(?:(?<=[?&;])|(?<=[?&;]([^?&;=#<>"`' + LT_CH + ']{1,64})[' + LT_CH + ']+))([^?&;=#<>"`' + LT_CH + ']{1,64}?)' + SEP_NL + '*=' + SEP_NL + '*(' + PARAM_VALUE + ')';
+// fix7.5-A: the (?=[^?&;=#<>"`LT]) guard rejects positions inside an LT run in O(1) before the lookbehind walks back; group 2 below
+// already starts with a char of that same class, so the match set is unchanged.
+const STANDALONE_PARAM_SOURCE = '(?:(?<=[?&;])|(?=[^?&;=#<>"`' + LT_CH + '])(?<=[?&;]([^?&;=#<>"`' + LT_CH + ']{1,64})[' + LT_CH + ']+))([^?&;=#<>"`' + LT_CH + ']{1,64}?)' + SEP_NL + '*=' + SEP_NL + '*(' + PARAM_VALUE + ')';
 const SEP_STRIP = new RegExp(REDACT_SEP + '|[-_.]', 'gu');
 function normParamName(raw) { let s = raw;
   for (let i = 0; i <= PARAM_DECODE_CAP; i++) { if (i === PARAM_DECODE_CAP) return null; let d; try { d = decodeURIComponent(s.split('+').join(' ')); } catch { return null; } if (d === s) break; s = d; }
