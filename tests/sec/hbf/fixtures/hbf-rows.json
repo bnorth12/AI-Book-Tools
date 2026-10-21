@@ -1,0 +1,3223 @@
+{
+ "_about": "SEC-SWEEP #180 HBF rows: LOCKED-RULE-v2.2 r2 rows (v2, V21, M1, N1, N2, G1, G2, G3, N4, RV) plus Nonfiction HBF off-list rows (H01-H26, MF1, MF2). String rows: out = exact r2 output (null = field dropped), frozen from the r2 reference. cls: strip | keep | noleak (SEKRIT must not survive). gap F1 rows pin the v2.2 result. Generated on the box by sec-sweep-hbf/gen-hbf-fixture.mjs; do not hand-edit.",
+ "marker": "[credential link removed]",
+ "source": {
+  "lockedRule": "5236f45af8277e8de8d34b5442624d2ccba961d04b528500d573e30a6c3b7067",
+  "reference": "cf3f9ba011dd3b9b350f1c8190bf118a2cf755de8e9cb393f4ae0a361ff2a2e1",
+  "rows": "9a6d7c91989878adad821357b76d436ef8cdc3102926df0f0374fbc830ceb7e4",
+  "offlist": "80af2aaf7f7502c7f2ec3984cb9701737d69c34f7f4e876838393a82677bbbeb"
+ },
+ "rows": [
+  {
+   "id": "K0",
+   "grp": "V2",
+   "kind": "name",
+   "input": "apiKey",
+   "secret": true
+  },
+  {
+   "id": "K1",
+   "grp": "V2",
+   "kind": "name",
+   "input": "api_key",
+   "secret": true
+  },
+  {
+   "id": "K2",
+   "grp": "V2",
+   "kind": "name",
+   "input": "Api-Key",
+   "secret": true
+  },
+  {
+   "id": "K3",
+   "grp": "V2",
+   "kind": "name",
+   "input": "XAI-API-KEY",
+   "secret": true
+  },
+  {
+   "id": "K4",
+   "grp": "V2",
+   "kind": "name",
+   "input": "xaiApiKey",
+   "secret": true
+  },
+  {
+   "id": "K5",
+   "grp": "V2",
+   "kind": "name",
+   "input": "x-api-key",
+   "secret": true
+  },
+  {
+   "id": "K6",
+   "grp": "V2",
+   "kind": "name",
+   "input": "openai_key",
+   "secret": true
+  },
+  {
+   "id": "K7",
+   "grp": "V2",
+   "kind": "name",
+   "input": "OPENAI-KEY",
+   "secret": true
+  },
+  {
+   "id": "K8",
+   "grp": "V2",
+   "kind": "name",
+   "input": "xaiKey",
+   "secret": true
+  },
+  {
+   "id": "K9",
+   "grp": "V2",
+   "kind": "name",
+   "input": "anthropic_key",
+   "secret": true
+  },
+  {
+   "id": "K10",
+   "grp": "V2",
+   "kind": "name",
+   "input": "geminiKey",
+   "secret": true
+  },
+  {
+   "id": "K11",
+   "grp": "V2",
+   "kind": "name",
+   "input": "github-key",
+   "secret": true
+  },
+  {
+   "id": "K12",
+   "grp": "V2",
+   "kind": "name",
+   "input": "googleKey",
+   "secret": true
+  },
+  {
+   "id": "K13",
+   "grp": "V2",
+   "kind": "name",
+   "input": "aws_key",
+   "secret": true
+  },
+  {
+   "id": "K14",
+   "grp": "V2",
+   "kind": "name",
+   "input": "private_key",
+   "secret": true
+  },
+  {
+   "id": "K15",
+   "grp": "V2",
+   "kind": "name",
+   "input": "secret_key",
+   "secret": true
+  },
+  {
+   "id": "K16",
+   "grp": "V2",
+   "kind": "name",
+   "input": "accessKey",
+   "secret": true
+  },
+  {
+   "id": "K17",
+   "grp": "V2",
+   "kind": "name",
+   "input": "access-key",
+   "secret": true
+  },
+  {
+   "id": "K18",
+   "grp": "V2",
+   "kind": "name",
+   "input": "csrfToken",
+   "secret": true
+  },
+  {
+   "id": "K19",
+   "grp": "V2",
+   "kind": "name",
+   "input": "SESSION_TOKEN",
+   "secret": true
+  },
+  {
+   "id": "K20",
+   "grp": "V2",
+   "kind": "name",
+   "input": "refresh_token",
+   "secret": true
+  },
+  {
+   "id": "K21",
+   "grp": "V2",
+   "kind": "name",
+   "input": "idToken",
+   "secret": true
+  },
+  {
+   "id": "K22",
+   "grp": "V2",
+   "kind": "name",
+   "input": "token",
+   "secret": true
+  },
+  {
+   "id": "K23",
+   "grp": "V2",
+   "kind": "name",
+   "input": "auth-token",
+   "secret": true
+  },
+  {
+   "id": "K24",
+   "grp": "V2",
+   "kind": "name",
+   "input": "Authorization",
+   "secret": true
+  },
+  {
+   "id": "K25",
+   "grp": "V2",
+   "kind": "name",
+   "input": "passwd",
+   "secret": true
+  },
+  {
+   "id": "K26",
+   "grp": "V2",
+   "kind": "name",
+   "input": "PASSWD",
+   "secret": true
+  },
+  {
+   "id": "K27",
+   "grp": "V2",
+   "kind": "name",
+   "input": "clientSecret",
+   "secret": true
+  },
+  {
+   "id": "K28",
+   "grp": "V2",
+   "kind": "name",
+   "input": "bearer",
+   "secret": true
+  },
+  {
+   "id": "K29",
+   "grp": "V2",
+   "kind": "name",
+   "input": "BearerAuth",
+   "secret": true
+  },
+  {
+   "id": "K30",
+   "grp": "V2",
+   "kind": "name",
+   "input": "access_tok en",
+   "secret": true
+  },
+  {
+   "id": "K31",
+   "grp": "V2",
+   "kind": "name",
+   "input": "api\r\nkey",
+   "secret": true
+  },
+  {
+   "id": "K32",
+   "grp": "V2",
+   "kind": "name",
+   "input": "ſecret",
+   "secret": true
+  },
+  {
+   "id": "K33",
+   "grp": "V2",
+   "kind": "name",
+   "input": "paſſword",
+   "secret": true
+  },
+  {
+   "id": "K34",
+   "grp": "V2",
+   "kind": "name",
+   "input": "apİkey",
+   "secret": true
+  },
+  {
+   "id": "K35",
+   "grp": "V2",
+   "kind": "name",
+   "input": "APİKEY",
+   "secret": true
+  },
+  {
+   "id": "K36",
+   "grp": "V2",
+   "kind": "name",
+   "input": "apıkey",
+   "secret": true
+  },
+  {
+   "id": "K37",
+   "grp": "V2",
+   "kind": "name",
+   "input": "apiKey",
+   "secret": true
+  },
+  {
+   "id": "K38",
+   "grp": "V2",
+   "kind": "name",
+   "input": "toKen",
+   "secret": true
+  },
+  {
+   "id": "K39",
+   "grp": "V2",
+   "kind": "name",
+   "input": "passwordHint",
+   "secret": true
+  },
+  {
+   "id": "K40",
+   "grp": "V2",
+   "kind": "name",
+   "input": "secretaryNotes",
+   "secret": true
+  },
+  {
+   "id": "K41",
+   "grp": "V2",
+   "kind": "name",
+   "input": "myToken",
+   "secret": true
+  },
+  {
+   "id": "K42",
+   "grp": "V2",
+   "kind": "name",
+   "input": "gh_token",
+   "secret": true
+  },
+  {
+   "id": "K43",
+   "grp": "V2",
+   "kind": "name",
+   "input": "AWSKey",
+   "secret": true
+  },
+  {
+   "id": "K44",
+   "grp": "V2",
+   "kind": "name",
+   "input": "apİkey",
+   "secret": true
+  },
+  {
+   "id": "K45",
+   "grp": "V2",
+   "kind": "name",
+   "input": "api̇key",
+   "secret": true
+  },
+  {
+   "id": "K46",
+   "grp": "V2",
+   "kind": "name",
+   "input": "İ̇",
+   "secret": false
+  },
+  {
+   "id": "KP0",
+   "grp": "V2",
+   "kind": "name",
+   "input": "tokenUsage",
+   "secret": false
+  },
+  {
+   "id": "KP1",
+   "grp": "V2",
+   "kind": "name",
+   "input": "tokenCount",
+   "secret": false
+  },
+  {
+   "id": "KP2",
+   "grp": "V2",
+   "kind": "name",
+   "input": "maxTokens",
+   "secret": false
+  },
+  {
+   "id": "KP3",
+   "grp": "V2",
+   "kind": "name",
+   "input": "promptTokens",
+   "secret": false
+  },
+  {
+   "id": "KP4",
+   "grp": "V2",
+   "kind": "name",
+   "input": "tokens",
+   "secret": false
+  },
+  {
+   "id": "KP5",
+   "grp": "V2",
+   "kind": "name",
+   "input": "tokenizer",
+   "secret": false
+  },
+  {
+   "id": "KP6",
+   "grp": "V2",
+   "kind": "name",
+   "input": "access_tokenx",
+   "secret": false
+  },
+  {
+   "id": "KP7",
+   "grp": "V2",
+   "kind": "name",
+   "input": "tokensx",
+   "secret": false
+  },
+  {
+   "id": "KP8",
+   "grp": "V2",
+   "kind": "name",
+   "input": "key",
+   "secret": false
+  },
+  {
+   "id": "KP9",
+   "grp": "V2",
+   "kind": "name",
+   "input": "keywords",
+   "secret": false
+  },
+  {
+   "id": "KP10",
+   "grp": "V2",
+   "kind": "name",
+   "input": "keyBeats",
+   "secret": false
+  },
+  {
+   "id": "KP11",
+   "grp": "V2",
+   "kind": "name",
+   "input": "api",
+   "secret": false
+  },
+  {
+   "id": "KP12",
+   "grp": "V2",
+   "kind": "name",
+   "input": "agentKey",
+   "secret": false
+  },
+  {
+   "id": "KP13",
+   "grp": "V2",
+   "kind": "name",
+   "input": "monkey",
+   "secret": false
+  },
+  {
+   "id": "KP14",
+   "grp": "V2",
+   "kind": "name",
+   "input": "sortKey",
+   "secret": false
+  },
+  {
+   "id": "KP15",
+   "grp": "V2",
+   "kind": "name",
+   "input": "publicKey",
+   "secret": false
+  },
+  {
+   "id": "KP16",
+   "grp": "V2",
+   "kind": "name",
+   "input": "passage",
+   "secret": false
+  },
+  {
+   "id": "KP17",
+   "grp": "V2",
+   "kind": "name",
+   "input": "apiary",
+   "secret": false
+  },
+  {
+   "id": "KP18",
+   "grp": "V2",
+   "kind": "name",
+   "input": "unbearable",
+   "secret": false
+  },
+  {
+   "id": "KP19",
+   "grp": "V2",
+   "kind": "name",
+   "input": "tokenomics",
+   "secret": false
+  },
+  {
+   "id": "KP20",
+   "grp": "V2",
+   "kind": "name",
+   "input": "primaryKey",
+   "secret": false
+  },
+  {
+   "id": "KP21",
+   "grp": "V2",
+   "kind": "name",
+   "input": "title",
+   "secret": false
+  },
+  {
+   "id": "KP22",
+   "grp": "V2",
+   "kind": "name",
+   "input": "İstanbul",
+   "secret": false
+  },
+  {
+   "id": "KP23",
+   "grp": "V2",
+   "kind": "name",
+   "input": "maın",
+   "secret": false
+  },
+  {
+   "id": "U0",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://user:pass@example.com/service",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U1",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://user@example.com/service",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U2",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://:pass@example.com/service",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U3",
+   "grp": "V2",
+   "kind": "str",
+   "input": "redis://:pass@cache.example.com:6379/0",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U4",
+   "grp": "V2",
+   "kind": "str",
+   "input": "//user:pass@example.com/x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U5",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/service?token=hidden",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U6",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?X-Api-Key=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U7",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?page=2&client_secret=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U8",
+   "grp": "V2",
+   "kind": "str",
+   "input": "example.com/callback#access_token=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U9",
+   "grp": "V2",
+   "kind": "str",
+   "input": "www.example.com/p?api_key=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U10",
+   "grp": "V2",
+   "kind": "str",
+   "input": "doi.org/10.1000/xyz?access_token=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U11",
+   "grp": "V2",
+   "kind": "str",
+   "input": "//cdn.example.com/a?token=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U12",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?ſecret=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U13",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?apİkey=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U14",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?apİkey=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U15",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?apıkey=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U16",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?%74oken=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U17",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://ghp_x@github.com/o/r.git",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U18",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?token",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U19",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.test/book?key=abc&term=echinacea",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U20",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?key=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U21",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?KEY=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U22",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?a=1&key=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U23",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?ke%79=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U24",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/p#key=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U25",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?key",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U26",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?Key=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U27",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?k-e_y=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U28",
+   "grp": "V2",
+   "kind": "str",
+   "input": "example.com/?key=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "U29",
+   "grp": "V2",
+   "kind": "str",
+   "input": "//maps.example.com/js?key=AIzaTEST",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "UP0",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.test/book",
+   "cls": "keep",
+   "out": "https://example.test/book"
+  },
+  {
+   "id": "UP1",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.test/book?page=2",
+   "cls": "keep",
+   "out": "https://example.test/book?page=2"
+  },
+  {
+   "id": "UP2",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.test/book?keywords=x",
+   "cls": "keep",
+   "out": "https://example.test/book?keywords=x"
+  },
+  {
+   "id": "UP3",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.test/book?tokens=5",
+   "cls": "keep",
+   "out": "https://example.test/book?tokens=5"
+  },
+  {
+   "id": "UP4",
+   "grp": "V2",
+   "kind": "str",
+   "input": "mailto:reader@example.test",
+   "cls": "keep",
+   "out": "mailto:reader@example.test"
+  },
+  {
+   "id": "UP5",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.test/books/@reader",
+   "cls": "keep",
+   "out": "https://example.test/books/@reader"
+  },
+  {
+   "id": "UP6",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?keyword=x",
+   "cls": "keep",
+   "out": "https://example.com/?keyword=x"
+  },
+  {
+   "id": "UP7",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?monkey=x",
+   "cls": "keep",
+   "out": "https://example.com/?monkey=x"
+  },
+  {
+   "id": "UP8",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?my_key=x",
+   "cls": "keep",
+   "out": "https://example.com/?my_key=x"
+  },
+  {
+   "id": "UP9",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?publicKey=x",
+   "cls": "keep",
+   "out": "https://example.com/?publicKey=x"
+  },
+  {
+   "id": "UP10",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://pubmed.ncbi.nlm.nih.gov/?term=valerian+sleep",
+   "cls": "keep",
+   "out": "https://pubmed.ncbi.nlm.nih.gov/?term=valerian+sleep"
+  },
+  {
+   "id": "UP11",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://doi.org/10.1016/x",
+   "cls": "keep",
+   "out": "https://doi.org/10.1016/x"
+  },
+  {
+   "id": "UP12",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.com/?tokenCount=3",
+   "cls": "keep",
+   "out": "https://example.com/?tokenCount=3"
+  },
+  {
+   "id": "UP13",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://medium.com/@writer/post",
+   "cls": "keep",
+   "out": "https://medium.com/@writer/post"
+  },
+  {
+   "id": "P1",
+   "grp": "V2",
+   "kind": "str",
+   "input": "Note: see https://e.com/?token=1 and the dosage table",
+   "cls": "strip",
+   "out": "Note: see [credential link removed] and the dosage table"
+  },
+  {
+   "id": "P3",
+   "grp": "V2",
+   "kind": "str",
+   "input": "[x](doi.org/x?token=1)",
+   "cls": "strip",
+   "out": "[x]([credential link removed])"
+  },
+  {
+   "id": "P4",
+   "grp": "V2",
+   "kind": "str",
+   "input": "a https://a.com/?token=1 b https://ok.com/?page=2 c //c.com/?api_key=2 d",
+   "cls": "strip",
+   "out": "a [credential link removed] b https://ok.com/?page=2 c [credential link removed] d"
+  },
+  {
+   "id": "P5",
+   "grp": "V2",
+   "kind": "str",
+   "input": "db at https://user:pass@db.example.com/x today",
+   "cls": "strip",
+   "out": "db at [credential link removed] today"
+  },
+  {
+   "id": "P6",
+   "grp": "V2",
+   "kind": "str",
+   "input": "cache redis://:pass@host:6379 here",
+   "cls": "strip",
+   "out": "cache [credential link removed] here"
+  },
+  {
+   "id": "P7",
+   "grp": "V2",
+   "kind": "str",
+   "input": "at https://e.com/?token=abc.",
+   "cls": "strip",
+   "out": "at [credential link removed]."
+  },
+  {
+   "id": "P8",
+   "grp": "V2",
+   "kind": "str",
+   "input": "She kept the #secret close. Who holds the key?key=yes. The word password stayed in the sentence.",
+   "cls": "keep",
+   "out": "She kept the #secret close. Who holds the key?key=yes. The word password stayed in the sentence."
+  },
+  {
+   "id": "P9",
+   "grp": "V2",
+   "kind": "str",
+   "input": "He said token=5 at the door; see example.com/?page=2 or mail reader@example.test.",
+   "cls": "keep",
+   "out": "He said token=5 at the door; see example.com/?page=2 or mail reader@example.test."
+  },
+  {
+   "id": "P10",
+   "grp": "V2",
+   "kind": "str",
+   "input": "  https://e.com/?token=1  ",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "P11",
+   "grp": "V2",
+   "kind": "str",
+   "input": "clone https://ghp_x@github.com/o/r.git now",
+   "cls": "strip",
+   "out": "clone [credential link removed] now"
+  },
+  {
+   "id": "P12",
+   "grp": "V2",
+   "kind": "str",
+   "input": "link https://e.com/?apİkey=x end",
+   "cls": "strip",
+   "out": "link [credential link removed] end"
+  },
+  {
+   "id": "P13",
+   "grp": "V2",
+   "kind": "str",
+   "input": "x:https://e.com/?token=1",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "P14",
+   "grp": "V2",
+   "kind": "str",
+   "input": "see https://e.com/?token=1 ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "P16",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://example.test/book?key=<sheet id>",
+   "cls": "strip",
+   "out": "[credential link removed]<sheet id>"
+  },
+  {
+   "id": "P17",
+   "grp": "V2",
+   "kind": "str",
+   "input": "map at https://maps.example.com/js?key=AIzaTEST now",
+   "cls": "strip",
+   "out": "map at [credential link removed] now"
+  },
+  {
+   "id": "P18",
+   "grp": "V2",
+   "kind": "str",
+   "input": "see example.com/?KEY=abc, then",
+   "cls": "strip",
+   "out": "see [credential link removed], then"
+  },
+  {
+   "id": "P19",
+   "grp": "V2",
+   "kind": "str",
+   "input": "see https://e.com/?a=1&key=abc end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "P20",
+   "grp": "V2",
+   "kind": "str",
+   "input": "see https://e.com/p#key=abc end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "P21",
+   "grp": "V2",
+   "kind": "str",
+   "input": "see https://e.com/?keywords=abc&monkey=1 end",
+   "cls": "keep",
+   "out": "see https://e.com/?keywords=abc&monkey=1 end"
+  },
+  {
+   "id": "P22",
+   "grp": "V2",
+   "kind": "str",
+   "input": "A key?key=yes is not a link.",
+   "cls": "keep",
+   "out": "A key?key=yes is not a link."
+  },
+  {
+   "id": "P15",
+   "grp": "V2",
+   "kind": "str",
+   "input": "https://e.com/?token=1 https://f.com/?token=2",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "E1",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%74oken=abc end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E2",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?ke%79=abc end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E3",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%4Bey=abc end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E4",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%E2%84%AAey=abc end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E5",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%4bey=abc end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E6",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?a=1&api%5Fkey=abc end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E7",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/p#%61ccess_token=abc end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E8",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see example.com/?cl%69ent_secret=x, then",
+   "cls": "strip",
+   "out": "see [credential link removed], then"
+  },
+  {
+   "id": "E9",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see //cdn.e.com/a?pass%77ord=x end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E10",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%62earer=x end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E11",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%E2%84=x end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E12",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%ZZ=x end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E13",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?k%=x end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E14",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%C5%BFecret=x end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E15",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?xai%2Dkey=x end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E16",
+   "grp": "V21",
+   "kind": "str",
+   "input": "[x](doi.org/x?%74oken=1)",
+   "cls": "strip",
+   "out": "[x]([credential link removed])"
+  },
+  {
+   "id": "E17",
+   "grp": "V21",
+   "kind": "str",
+   "input": "at https://e.com/?ke%79=abc.",
+   "cls": "strip",
+   "out": "at [credential link removed]."
+  },
+  {
+   "id": "E18",
+   "grp": "V21",
+   "kind": "str",
+   "input": "https://e.com/?ke%79",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "E19",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%6B%65%79 end",
+   "cls": "strip",
+   "out": "see [credential link removed] end"
+  },
+  {
+   "id": "E20",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?page=2&%6Bey=1 and https://ok.com/?page=3 end",
+   "cls": "strip",
+   "out": "see [credential link removed] and https://ok.com/?page=3 end"
+  },
+  {
+   "id": "F1",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%2574oken=x end",
+   "cls": "keep",
+   "out": "see https://e.com/?%2574oken=x end"
+  },
+  {
+   "id": "F2",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?monkey%3D end",
+   "cls": "keep",
+   "out": "see https://e.com/?monkey%3D end"
+  },
+  {
+   "id": "F3",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?keyw%6Frds=x end",
+   "cls": "keep",
+   "out": "see https://e.com/?keyw%6Frds=x end"
+  },
+  {
+   "id": "F4",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?my%5Fkey=x end",
+   "cls": "keep",
+   "out": "see https://e.com/?my%5Fkey=x end"
+  },
+  {
+   "id": "F5",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%74okens=5 end",
+   "cls": "keep",
+   "out": "see https://e.com/?%74okens=5 end"
+  },
+  {
+   "id": "F6",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?q=%74oken end",
+   "cls": "keep",
+   "out": "see https://e.com/?q=%74oken end"
+  },
+  {
+   "id": "F7",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/a%20b?page=2 end",
+   "cls": "keep",
+   "out": "see https://e.com/a%20b?page=2 end"
+  },
+  {
+   "id": "F8",
+   "grp": "V21",
+   "kind": "str",
+   "input": "100% of 5?key=x is fine",
+   "cls": "keep",
+   "out": "100% of 5?key=x is fine"
+  },
+  {
+   "id": "F9",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%70ublicKey=x end",
+   "cls": "keep",
+   "out": "see https://e.com/?%70ublicKey=x end"
+  },
+  {
+   "id": "F10",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?ke%79words=x end",
+   "cls": "keep",
+   "out": "see https://e.com/?ke%79words=x end"
+  },
+  {
+   "id": "F11",
+   "grp": "V21",
+   "kind": "str",
+   "input": "see https://e.com/?%2565y=x end",
+   "cls": "keep",
+   "out": "see https://e.com/?%2565y=x end"
+  },
+  {
+   "id": "M1a",
+   "grp": "M1",
+   "kind": "obj",
+   "input": "{\"__proto__\":{\"x\":1},\"a\":1}"
+  },
+  {
+   "id": "M1b",
+   "grp": "M1",
+   "kind": "obj",
+   "input": "{\"b\":{\"__proto__\":{\"x\":1}}}"
+  },
+  {
+   "id": "M1c",
+   "grp": "M1",
+   "kind": "obj",
+   "input": "{\"__proto__\":{\"apiKey\":\"x\",\"n\":1},\"a\":1}"
+  },
+  {
+   "id": "M1d",
+   "grp": "M1",
+   "kind": "obj",
+   "input": "{\"constructor\":{\"a\":1},\"prototype\":\"p\",\"a\":1}"
+  },
+  {
+   "id": "M1e",
+   "grp": "M1",
+   "kind": "obj",
+   "input": "{\"__proto__\":\"https://u:p@h/\",\"a\":1}"
+  },
+  {
+   "id": "M1f",
+   "grp": "M1",
+   "kind": "obj",
+   "input": "[{\"__proto__\":{\"x\":1}}]"
+  },
+  {
+   "id": "M1g",
+   "grp": "M1",
+   "kind": "obj",
+   "input": "{\"constructor\":{\"prototype\":{\"apiKey\":\"x\",\"ok\":1}}}"
+  },
+  {
+   "id": "N1a",
+   "grp": "N1",
+   "kind": "obj",
+   "input": "\"https://u:p@h/\""
+  },
+  {
+   "id": "N2a",
+   "grp": "N2",
+   "kind": "str",
+   "input": "(see https://e.com/?key)",
+   "cls": "strip",
+   "out": "(see [credential link removed])"
+  },
+  {
+   "id": "N2b",
+   "grp": "N2",
+   "kind": "str",
+   "input": "[see https://e.com/?key]",
+   "cls": "strip",
+   "out": "[see [credential link removed]]"
+  },
+  {
+   "id": "N2c",
+   "grp": "N2",
+   "kind": "str",
+   "input": "Open https://e.com/?key.",
+   "cls": "strip",
+   "out": "Open [credential link removed]."
+  },
+  {
+   "id": "N2d",
+   "grp": "N2",
+   "kind": "str",
+   "input": "see [x](https://e.com/?key) ok",
+   "cls": "strip",
+   "out": "see [x]([credential link removed]) ok"
+  },
+  {
+   "id": "N2e",
+   "grp": "N2",
+   "kind": "str",
+   "input": "see https://e.com/?key), then",
+   "cls": "strip",
+   "out": "see [credential link removed]), then"
+  },
+  {
+   "id": "N2f",
+   "grp": "N2",
+   "kind": "str",
+   "input": "see https://e.com/?token]. ok",
+   "cls": "strip",
+   "out": "see [credential link removed]]. ok"
+  },
+  {
+   "id": "N2g",
+   "grp": "N2",
+   "kind": "str",
+   "input": "see https://e.com/?keyword) ok",
+   "cls": "keep",
+   "out": "see https://e.com/?keyword) ok"
+  },
+  {
+   "id": "N2h",
+   "grp": "N2",
+   "kind": "str",
+   "input": "Who holds the key?key.",
+   "cls": "keep",
+   "out": "Who holds the key?key."
+  },
+  {
+   "id": "N2i",
+   "grp": "N2",
+   "kind": "str",
+   "input": "see https://e.com/?page). ok",
+   "cls": "keep",
+   "out": "see https://e.com/?page). ok"
+  },
+  {
+   "id": "G1-01",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://acct.blob.core.windows.net/c/f?sv=2020-08-04&sig=abc123 ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G1-02",
+   "grp": "G1",
+   "kind": "str",
+   "input": "https://acct.blob.core.windows.net/c/f?sv=2020&sig=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "G1-03",
+   "grp": "G1",
+   "kind": "str",
+   "input": "get https://b.s3.amazonaws.com/k?X-Amz-Algorithm=AWS4&X-Amz-Credential=AKIA%2F2026&X-Amz-Signature=deadbeef now",
+   "cls": "strip",
+   "out": "get [credential link removed] now"
+  },
+  {
+   "id": "G1-04",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://b.s3.amazonaws.com/k?X-Amz-Signature=dead y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-05",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://b.s3.amazonaws.com/k?x-amz-credential=AKIA y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-06",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://b.s3.amazonaws.com/k?X-Amz-Security-Token=FQo y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-07",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://storage.googleapis.com/b/o?X-Goog-Algorithm=GOOG4&X-Goog-Credential=svc&X-Goog-Signature=ab y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-08",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://storage.googleapis.com/b/o?X-Goog-Signature=ab y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-09",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://storage.googleapis.com/b/o?x_goog_credential=svc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-10",
+   "grp": "G1",
+   "kind": "str",
+   "input": "join https://us02web.zoom.us/j/8512345678?pwd=Qm9vaw end",
+   "cls": "strip",
+   "out": "join [credential link removed] end"
+  },
+  {
+   "id": "G1-11",
+   "grp": "G1",
+   "kind": "str",
+   "input": "join https://zoom.us/j/1?PWD=x.",
+   "cls": "strip",
+   "out": "join [credential link removed]."
+  },
+  {
+   "id": "G1-12",
+   "grp": "G1",
+   "kind": "str",
+   "input": "logout https://idp.example.com/logout?id_token_hint=eyJhbGci&post_logout_redirect_uri=x done",
+   "cls": "strip",
+   "out": "logout [credential link removed] done"
+  },
+  {
+   "id": "G1-13",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://idp.example.com/logout?ID-TOKEN-HINT=eyJ y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-14",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://e.com/?SIG=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-15",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://e.com/?ſig=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-16",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://e.com/?X-Amz-ſignature=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-17",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://e.com/#sig=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-18",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://e.com/?a=1;sig=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-19",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://e.com/?%73ig=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-20",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x [file](https://acct.blob.core.windows.net/c/f?sp=r&sig=abc) y",
+   "cls": "strip",
+   "out": "x [file]([credential link removed]) y"
+  },
+  {
+   "id": "G1-21",
+   "grp": "G1",
+   "kind": "str",
+   "input": "https://us02web.zoom.us/j/85?pwd=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "G1-22",
+   "grp": "G1",
+   "kind": "str",
+   "input": "https://idp.example.com/logout?id_token_hint=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "G1-23",
+   "grp": "G1",
+   "kind": "str",
+   "input": "https://b.s3.amazonaws.com/k?X-Amz-Credential=AK",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "G1-24",
+   "grp": "G1",
+   "kind": "str",
+   "input": "https://storage.googleapis.com/b/o?X-Goog-Credential=svc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "G1-25",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x https://e.com/?sig y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-26",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x example.com/f?sig=abc, then",
+   "cls": "strip",
+   "out": "x [credential link removed], then"
+  },
+  {
+   "id": "G1-27",
+   "grp": "G1",
+   "kind": "str",
+   "input": "x //cdn.e.com/f?X-Amz-Signature=a y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G1-28",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?id_token_hint=a&state=1 and https://ok.com/?page=3 end",
+   "cls": "strip",
+   "out": "see [credential link removed] and https://ok.com/?page=3 end"
+  },
+  {
+   "id": "G1-K01",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?sign=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?sign=1 ok"
+  },
+  {
+   "id": "G1-K02",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?signup=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?signup=1 ok"
+  },
+  {
+   "id": "G1-K03",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?design=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?design=1 ok"
+  },
+  {
+   "id": "G1-K04",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?signal=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?signal=1 ok"
+  },
+  {
+   "id": "G1-K05",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?sigma=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?sigma=1 ok"
+  },
+  {
+   "id": "G1-K06",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?signature=1 ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G1-K07",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?sigs=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?sigs=1 ok"
+  },
+  {
+   "id": "G1-29",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?sig_=1 ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G1-K09",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?X-Amz-Date=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?X-Amz-Date=1 ok"
+  },
+  {
+   "id": "G1-K10",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?X-Amz-Algorithm=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?X-Amz-Algorithm=1 ok"
+  },
+  {
+   "id": "G1-K11",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?X-Amz-Expires=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?X-Amz-Expires=1 ok"
+  },
+  {
+   "id": "G1-K12",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?X-Goog-Date=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?X-Goog-Date=1 ok"
+  },
+  {
+   "id": "G1-K13",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?post_logout_redirect_uri=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?post_logout_redirect_uri=1 ok"
+  },
+  {
+   "id": "G1-K14",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?hint=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?hint=1 ok"
+  },
+  {
+   "id": "G1-K15",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?pwdreset=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?pwdreset=1 ok"
+  },
+  {
+   "id": "G1-K16",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?q=pwd&page=2 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?q=pwd&page=2 ok"
+  },
+  {
+   "id": "G1-K17",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/docs#sig ok",
+   "cls": "keep",
+   "out": "see https://e.com/docs#sig ok"
+  },
+  {
+   "id": "G1-K18",
+   "grp": "G1",
+   "kind": "str",
+   "input": "set id_token_hint=abc in config",
+   "cls": "keep",
+   "out": "set id_token_hint=abc in config"
+  },
+  {
+   "id": "G1-K19",
+   "grp": "G1",
+   "kind": "str",
+   "input": "https://e.com/?sigma=1&design=2",
+   "cls": "keep",
+   "out": "https://e.com/?sigma=1&design=2"
+  },
+  {
+   "id": "G1-K20",
+   "grp": "G1",
+   "kind": "str",
+   "input": "see https://e.com/?sign=1&signal=2&sigma=3 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?sign=1&signal=2&sigma=3 ok"
+  },
+  {
+   "id": "G2-01",
+   "grp": "G2",
+   "kind": "name",
+   "input": "xaiKey2",
+   "secret": true
+  },
+  {
+   "id": "G2-02",
+   "grp": "G2",
+   "kind": "name",
+   "input": "openaiKeyOld",
+   "secret": true
+  },
+  {
+   "id": "G2-03",
+   "grp": "G2",
+   "kind": "name",
+   "input": "privKey",
+   "secret": true
+  },
+  {
+   "id": "G2-04",
+   "grp": "G2",
+   "kind": "name",
+   "input": "credential",
+   "secret": true
+  },
+  {
+   "id": "G2-05",
+   "grp": "G2",
+   "kind": "name",
+   "input": "credentials",
+   "secret": true
+  },
+  {
+   "id": "G2-06",
+   "grp": "G2",
+   "kind": "name",
+   "input": "pwd",
+   "secret": true
+  },
+  {
+   "id": "G2-07",
+   "grp": "G2",
+   "kind": "name",
+   "input": "jwt",
+   "secret": true
+  },
+  {
+   "id": "G2-08",
+   "grp": "G2",
+   "kind": "name",
+   "input": "XAI_KEY_2",
+   "secret": true
+  },
+  {
+   "id": "G2-09",
+   "grp": "G2",
+   "kind": "name",
+   "input": "xai-key-backup",
+   "secret": true
+  },
+  {
+   "id": "G2-10",
+   "grp": "G2",
+   "kind": "name",
+   "input": "OPENAI_KEY_PROD",
+   "secret": true
+  },
+  {
+   "id": "G2-11",
+   "grp": "G2",
+   "kind": "name",
+   "input": "anthropicKeyNew",
+   "secret": true
+  },
+  {
+   "id": "G2-12",
+   "grp": "G2",
+   "kind": "name",
+   "input": "geminiKey1",
+   "secret": true
+  },
+  {
+   "id": "G2-13",
+   "grp": "G2",
+   "kind": "name",
+   "input": "githubKeyV2",
+   "secret": true
+  },
+  {
+   "id": "G2-14",
+   "grp": "G2",
+   "kind": "name",
+   "input": "googleKeyOld",
+   "secret": true
+  },
+  {
+   "id": "G2-15",
+   "grp": "G2",
+   "kind": "name",
+   "input": "awsKeyId",
+   "secret": true
+  },
+  {
+   "id": "G2-16",
+   "grp": "G2",
+   "kind": "name",
+   "input": "AWS_KEY_ID",
+   "secret": true
+  },
+  {
+   "id": "G2-17",
+   "grp": "G2",
+   "kind": "name",
+   "input": "privKeyPem",
+   "secret": true
+  },
+  {
+   "id": "G2-18",
+   "grp": "G2",
+   "kind": "name",
+   "input": "priv_key",
+   "secret": true
+  },
+  {
+   "id": "G2-19",
+   "grp": "G2",
+   "kind": "name",
+   "input": "accessKeyId",
+   "secret": true
+  },
+  {
+   "id": "G2-20",
+   "grp": "G2",
+   "kind": "name",
+   "input": "myXaiKey",
+   "secret": true
+  },
+  {
+   "id": "G2-21",
+   "grp": "G2",
+   "kind": "name",
+   "input": "oldOpenaiKey",
+   "secret": true
+  },
+  {
+   "id": "G2-22",
+   "grp": "G2",
+   "kind": "name",
+   "input": "openAIKey",
+   "secret": true
+  },
+  {
+   "id": "G2-23",
+   "grp": "G2",
+   "kind": "name",
+   "input": "XAIKey",
+   "secret": true
+  },
+  {
+   "id": "G2-24",
+   "grp": "G2",
+   "kind": "name",
+   "input": "Credentials",
+   "secret": true
+  },
+  {
+   "id": "G2-25",
+   "grp": "G2",
+   "kind": "name",
+   "input": "PWD",
+   "secret": true
+  },
+  {
+   "id": "G2-26",
+   "grp": "G2",
+   "kind": "name",
+   "input": "JWT",
+   "secret": true
+  },
+  {
+   "id": "G2-27",
+   "grp": "G2",
+   "kind": "name",
+   "input": "xaİKey2",
+   "secret": true
+  },
+  {
+   "id": "G2-28",
+   "grp": "G2",
+   "kind": "name",
+   "input": "privateKey_old",
+   "secret": true
+  },
+  {
+   "id": "G2-29",
+   "grp": "G2",
+   "kind": "name",
+   "input": "secret_key2",
+   "secret": true
+  },
+  {
+   "id": "G2-K01",
+   "grp": "G2",
+   "kind": "name",
+   "input": "keyboard",
+   "secret": false
+  },
+  {
+   "id": "G2-K02",
+   "grp": "G2",
+   "kind": "name",
+   "input": "monkey",
+   "secret": false
+  },
+  {
+   "id": "G2-K03",
+   "grp": "G2",
+   "kind": "name",
+   "input": "keywords",
+   "secret": false
+  },
+  {
+   "id": "G2-K04",
+   "grp": "G2",
+   "kind": "name",
+   "input": "turnkey",
+   "secret": false
+  },
+  {
+   "id": "G2-K05",
+   "grp": "G2",
+   "kind": "name",
+   "input": "hotkey",
+   "secret": false
+  },
+  {
+   "id": "G2-K06",
+   "grp": "G2",
+   "kind": "name",
+   "input": "keynote",
+   "secret": false
+  },
+  {
+   "id": "G2-K07",
+   "grp": "G2",
+   "kind": "name",
+   "input": "donkey",
+   "secret": false
+  },
+  {
+   "id": "G2-K08",
+   "grp": "G2",
+   "kind": "name",
+   "input": "jwtExpiry",
+   "secret": false
+  },
+  {
+   "id": "G2-K09",
+   "grp": "G2",
+   "kind": "name",
+   "input": "credentialsPage",
+   "secret": false
+  },
+  {
+   "id": "G2-K10",
+   "grp": "G2",
+   "kind": "name",
+   "input": "credentialing",
+   "secret": false
+  },
+  {
+   "id": "G2-K11",
+   "grp": "G2",
+   "kind": "name",
+   "input": "pwdreset",
+   "secret": false
+  },
+  {
+   "id": "G2-K12",
+   "grp": "G2",
+   "kind": "name",
+   "input": "jwtlib",
+   "secret": false
+  },
+  {
+   "id": "G2-K13",
+   "grp": "G2",
+   "kind": "name",
+   "input": "googleKeywords",
+   "secret": false
+  },
+  {
+   "id": "G2-K14",
+   "grp": "G2",
+   "kind": "name",
+   "input": "githubKeyboard",
+   "secret": false
+  },
+  {
+   "id": "G2-K15",
+   "grp": "G2",
+   "kind": "name",
+   "input": "xaikeyword",
+   "secret": false
+  },
+  {
+   "id": "G2-K16",
+   "grp": "G2",
+   "kind": "name",
+   "input": "awsKeynote",
+   "secret": false
+  },
+  {
+   "id": "G2-K17",
+   "grp": "G2",
+   "kind": "name",
+   "input": "privKeyring",
+   "secret": false
+  },
+  {
+   "id": "G2-K18",
+   "grp": "G2",
+   "kind": "name",
+   "input": "lawsKey",
+   "secret": false
+  },
+  {
+   "id": "G2-K19",
+   "grp": "G2",
+   "kind": "name",
+   "input": "keyId",
+   "secret": false
+  },
+  {
+   "id": "G2-K20",
+   "grp": "G2",
+   "kind": "name",
+   "input": "privacy",
+   "secret": false
+  },
+  {
+   "id": "G2-K21",
+   "grp": "G2",
+   "kind": "name",
+   "input": "OPENAIKEYOLD",
+   "secret": false
+  },
+  {
+   "id": "G2-K22",
+   "grp": "G2",
+   "kind": "name",
+   "input": "sig",
+   "secret": false
+  },
+  {
+   "id": "G2-K23",
+   "grp": "G2",
+   "kind": "name",
+   "input": "idTokenHint",
+   "secret": false
+  },
+  {
+   "id": "G2-K24",
+   "grp": "G2",
+   "kind": "name",
+   "input": "hotkeyMap",
+   "secret": false
+  },
+  {
+   "id": "G2-U1",
+   "grp": "G2",
+   "kind": "str",
+   "input": "see https://e.com/?xaiKey2=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G2-U2",
+   "grp": "G2",
+   "kind": "str",
+   "input": "see https://e.com/?jwt=eyJ ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G2-U3",
+   "grp": "G2",
+   "kind": "str",
+   "input": "see https://e.com/?credentials=x ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G2-U4",
+   "grp": "G2",
+   "kind": "str",
+   "input": "https://e.com/?privKey=x",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "G2-U5",
+   "grp": "G2",
+   "kind": "str",
+   "input": "see https://e.com/?openai_key_old=x ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G2-U6",
+   "grp": "G2",
+   "kind": "str",
+   "input": "see https://e.com/?jwtExpiry=3600 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?jwtExpiry=3600 ok"
+  },
+  {
+   "id": "G2-U7",
+   "grp": "G2",
+   "kind": "str",
+   "input": "see https://e.com/?keyboard=1&turnkey=2 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?keyboard=1&turnkey=2 ok"
+  },
+  {
+   "id": "G3-01",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https:\\/\\/e.com\\/?token=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G3-02",
+   "grp": "G3",
+   "kind": "str",
+   "input": "{\"u\":\"https:\\/\\/api.e.com\\/v1?api_key=abc\"}",
+   "cls": "strip",
+   "out": "{\"u\":\"[credential link removed]\"}"
+  },
+  {
+   "id": "G3-03",
+   "grp": "G3",
+   "kind": "str",
+   "input": "x http:\\/\\/e.com\\/p?access_token=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G3-04",
+   "grp": "G3",
+   "kind": "str",
+   "input": "x https:\\/\\/e.com\\/?a=1&token=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G3-05",
+   "grp": "G3",
+   "kind": "str",
+   "input": "x https:\\/\\/e.com\\/#access_token=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G3-06",
+   "grp": "G3",
+   "kind": "str",
+   "input": "x https:\\/\\/e.com\\/?key=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G3-07",
+   "grp": "G3",
+   "kind": "str",
+   "input": "x https:\\/\\/e.com\\/?sig=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G3-08",
+   "grp": "G3",
+   "kind": "str",
+   "input": "x https:\\/\\/e.com\\/?%74oken=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G3-09",
+   "grp": "G3",
+   "kind": "str",
+   "input": "x https:\\/\\/e.com\\/?client_secret=abc y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G3-10",
+   "grp": "G3",
+   "kind": "str",
+   "input": "https:\\/\\/e.com\\/?token=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "G3-11",
+   "grp": "G3",
+   "kind": "str",
+   "input": "x https:\\/\\/e.com\\/?token y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "G3-12",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https://e.com/p;token=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G3-13",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https://e.com/p;jsessionid=1;token=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G3-14",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https://e.com/p?a=1;token=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G3-15",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https://e.com/p;api_key=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G3-16",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https://e.com/p;key=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G3-17",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https://e.com/p;TOKEN=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G3-18",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https://e.com/p;%74oken=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G3-19",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see example.com/p;password=x, then",
+   "cls": "strip",
+   "out": "see [credential link removed], then"
+  },
+  {
+   "id": "G3-20",
+   "grp": "G3",
+   "kind": "str",
+   "input": "https://e.com/p;token=abc",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "G3-21",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see //cdn.e.com/a;sig=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G3-22",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see [l](https://e.com/p;token=abc) ok",
+   "cls": "strip",
+   "out": "see [l]([credential link removed]) ok"
+  },
+  {
+   "id": "G3-23",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https:\\/\\/e.com\\/a;token=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "G3-K1",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https:\\/\\/e.com\\/?page=2 ok",
+   "cls": "keep",
+   "out": "see https:\\/\\/e.com\\/?page=2 ok"
+  },
+  {
+   "id": "G3-K2",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https://e.com/p;jsessionid=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/p;jsessionid=1 ok"
+  },
+  {
+   "id": "G3-K3",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https://e.com/p;v=2 ok",
+   "cls": "keep",
+   "out": "see https://e.com/p;v=2 ok"
+  },
+  {
+   "id": "G3-K4",
+   "grp": "G3",
+   "kind": "str",
+   "input": "He said a;token=b at the door",
+   "cls": "keep",
+   "out": "He said a;token=b at the door"
+  },
+  {
+   "id": "G3-K5",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see e.com/?page=2; then",
+   "cls": "keep",
+   "out": "see e.com/?page=2; then"
+  },
+  {
+   "id": "G3-K6",
+   "grp": "G3",
+   "kind": "str",
+   "input": "{\"u\":\"https:\\/\\/e.com\\/?keywords=x\"}",
+   "cls": "keep",
+   "out": "{\"u\":\"https:\\/\\/e.com\\/?keywords=x\"}"
+  },
+  {
+   "id": "G3-K7",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https:\\/\\/e.com\\/a\\/b ok",
+   "cls": "keep",
+   "out": "see https:\\/\\/e.com\\/a\\/b ok"
+  },
+  {
+   "id": "G3-K8",
+   "grp": "G3",
+   "kind": "str",
+   "input": "see https://e.com/p;tokens=5 ok",
+   "cls": "keep",
+   "out": "see https://e.com/p;tokens=5 ok"
+  },
+  {
+   "id": "N4a",
+   "grp": "N4",
+   "kind": "str",
+   "input": "https://e.com/sale#50%off",
+   "cls": "strip",
+   "out": null,
+   "also": [
+    "see https://e.com/sale#50%off ok",
+    "see [credential link removed] ok"
+   ]
+  },
+  {
+   "id": "N4b",
+   "grp": "N4",
+   "kind": "str",
+   "input": "https://e.com/?100%",
+   "cls": "strip",
+   "out": null,
+   "also": [
+    "see https://e.com/?100% ok",
+    "see [credential link removed] ok"
+   ]
+  },
+  {
+   "id": "RV-01",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https:\\/\\/e.com\\/?token=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "RV-02",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https:\\\\u:p@e.com/ ok",
+   "gap": "F1",
+   "cls": "keep",
+   "out": "see https:\\\\u:p@e.com/ ok"
+  },
+  {
+   "id": "RV-03",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https:/u:p@e.com/ ok",
+   "gap": "F1",
+   "cls": "keep",
+   "out": "see https:/u:p@e.com/ ok"
+  },
+  {
+   "id": "RV-04",
+   "grp": "RV",
+   "kind": "str",
+   "input": "db pass:secret@db.example.com ok",
+   "gap": "F1",
+   "cls": "keep",
+   "out": "db pass:secret@db.example.com ok"
+  },
+  {
+   "id": "RV-05",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see <a href=\"https://e.com/?a=1&amp;token=abc\">x</a>",
+   "cls": "strip",
+   "out": "see <a href=\"[credential link removed]\">x</a>"
+  },
+  {
+   "id": "RV-06",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?a=1&#38;token=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "RV-07",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?id_token_hint=eyJabc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "RV-08",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://acct.blob.core.windows.net/c/f?sv=2020&sig=SECRET ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "RV-09",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://b.s3.amazonaws.com/k?X-Amz-Credential=AK&X-Amz-Signature=SIG ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "RV-10",
+   "grp": "RV",
+   "kind": "str",
+   "input": "join https://zoom.us/j/123?pwd=SECRET ok",
+   "cls": "strip",
+   "out": "join [credential link removed] ok"
+  },
+  {
+   "id": "RV-11",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/p;token=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "RV-12",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?redirect=https%3A%2F%2Fu%3Ap%40h ok",
+   "gap": "F1",
+   "cls": "keep",
+   "out": "see https://e.com/?redirect=https%3A%2F%2Fu%3Ap%40h ok"
+  },
+  {
+   "id": "RV-13",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see [x](https://e.com/?key) ok",
+   "cls": "strip",
+   "out": "see [x]([credential link removed]) ok"
+  },
+  {
+   "id": "RV-14",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?KEY=abc ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "RV-15",
+   "grp": "RV",
+   "kind": "str",
+   "input": "// TODO@brian fix",
+   "cls": "keep",
+   "out": "// TODO@brian fix"
+  },
+  {
+   "id": "RV-16",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://medium.com/@author/post ok",
+   "cls": "keep",
+   "out": "see https://medium.com/@author/post ok"
+  },
+  {
+   "id": "RV-17",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?keyboard=1 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?keyboard=1 ok"
+  },
+  {
+   "id": "RV-18",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?tokens=5 ok",
+   "cls": "keep",
+   "out": "see https://e.com/?tokens=5 ok"
+  },
+  {
+   "id": "RV-19",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?token_type=bearer ok",
+   "cls": "keep",
+   "out": "see https://e.com/?token_type=bearer ok"
+  },
+  {
+   "id": "RV-20",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/#section-key ok",
+   "cls": "keep",
+   "out": "see https://e.com/#section-key ok"
+  },
+  {
+   "id": "RV-21",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?q=password+reset ok",
+   "cls": "keep",
+   "out": "see https://e.com/?q=password+reset ok"
+  },
+  {
+   "id": "RV-22",
+   "grp": "RV",
+   "kind": "str",
+   "input": "email me at a@b.com",
+   "cls": "keep",
+   "out": "email me at a@b.com"
+  },
+  {
+   "id": "RV-23",
+   "grp": "RV",
+   "kind": "str",
+   "input": "ssh://git@github.com/o/r",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "RV-24",
+   "grp": "RV",
+   "kind": "str",
+   "input": "https://e.com/?api%5Fkey=1",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "RV-25",
+   "grp": "RV",
+   "kind": "str",
+   "input": "x https://e.com/?api%5Fkey=1 y",
+   "cls": "strip",
+   "out": "x [credential link removed] y"
+  },
+  {
+   "id": "RV-26",
+   "grp": "RV",
+   "kind": "str",
+   "input": "Ｈttps://e.com/?ｔｏｋｅｎ=1",
+   "gap": "F1",
+   "cls": "keep",
+   "out": "Ｈttps://e.com/?ｔｏｋｅｎ=1"
+  },
+  {
+   "id": "RV-27",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?to​ken=1 ok",
+   "gap": "F1",
+   "cls": "keep",
+   "out": "see https://e.com/?to​ken=1 ok"
+  },
+  {
+   "id": "RV-28",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?TOKEN=1 ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "RV-29",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see HTTPS://U:P@E.COM ok",
+   "cls": "strip",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "RV-30",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?token=a b ok",
+   "cls": "strip",
+   "out": "see [credential link removed] b ok"
+  },
+  {
+   "id": "RV-L1",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?token=SEKRIT ok",
+   "cls": "noleak",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "RV-L2",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://e.com/?redirect=a.bc&token=SEKRIT ok",
+   "cls": "noleak",
+   "out": "see https://e.com/?redirect=[credential link removed] ok"
+  },
+  {
+   "id": "RV-L3",
+   "grp": "RV",
+   "kind": "str",
+   "input": "see https://u:SEKRIT@e.com/x ok",
+   "cls": "noleak",
+   "out": "see [credential link removed] ok"
+  },
+  {
+   "id": "RV-L4",
+   "grp": "RV",
+   "kind": "str",
+   "input": "x [l](https://e.com/?api_key=SEKRIT) y",
+   "cls": "noleak",
+   "out": "x [l]([credential link removed]) y"
+  },
+  {
+   "id": "RV-N01",
+   "grp": "RV",
+   "kind": "name",
+   "input": "xaiKey2",
+   "secret": true
+  },
+  {
+   "id": "RV-N02",
+   "grp": "RV",
+   "kind": "name",
+   "input": "openaiKeyOld",
+   "secret": true
+  },
+  {
+   "id": "RV-N03",
+   "grp": "RV",
+   "kind": "name",
+   "input": "credentials",
+   "secret": true
+  },
+  {
+   "id": "RV-N04",
+   "grp": "RV",
+   "kind": "name",
+   "input": "credential",
+   "secret": true
+  },
+  {
+   "id": "RV-N05",
+   "grp": "RV",
+   "kind": "name",
+   "input": "pwd",
+   "secret": true
+  },
+  {
+   "id": "RV-N06",
+   "grp": "RV",
+   "kind": "name",
+   "input": "pass",
+   "secret": false
+  },
+  {
+   "id": "RV-N07",
+   "grp": "RV",
+   "kind": "name",
+   "input": "jwt",
+   "secret": true
+  },
+  {
+   "id": "RV-N08",
+   "grp": "RV",
+   "kind": "name",
+   "input": "cookie",
+   "secret": false
+  },
+  {
+   "id": "RV-N09",
+   "grp": "RV",
+   "kind": "name",
+   "input": "sessionId",
+   "secret": false
+  },
+  {
+   "id": "RV-N10",
+   "grp": "RV",
+   "kind": "name",
+   "input": "idTokenHint",
+   "secret": false
+  },
+  {
+   "id": "RV-N11",
+   "grp": "RV",
+   "kind": "name",
+   "input": "ａｐｉｋｅｙ",
+   "gap": "F1",
+   "secret": false
+  },
+  {
+   "id": "RV-N12",
+   "grp": "RV",
+   "kind": "name",
+   "input": "api​key",
+   "gap": "F1",
+   "secret": false
+  },
+  {
+   "id": "RV-N13",
+   "grp": "RV",
+   "kind": "name",
+   "input": "clientSecret",
+   "secret": true
+  },
+  {
+   "id": "RV-N14",
+   "grp": "RV",
+   "kind": "name",
+   "input": "refreshToken",
+   "secret": true
+  },
+  {
+   "id": "RV-N15",
+   "grp": "RV",
+   "kind": "name",
+   "input": "auth",
+   "secret": false
+  },
+  {
+   "id": "RV-N16",
+   "grp": "RV",
+   "kind": "name",
+   "input": "privKey",
+   "secret": true
+  },
+  {
+   "id": "RV-N17",
+   "grp": "RV",
+   "kind": "name",
+   "input": "x-api-key",
+   "secret": true
+  },
+  {
+   "id": "RV-N18",
+   "grp": "RV",
+   "kind": "name",
+   "input": "XAI_API_KEY",
+   "secret": true
+  },
+  {
+   "id": "RV-N19",
+   "grp": "RV",
+   "kind": "name",
+   "input": "token",
+   "secret": true
+  },
+  {
+   "id": "RV-N20",
+   "grp": "RV",
+   "kind": "name",
+   "input": "Token",
+   "secret": true
+  },
+  {
+   "id": "RV-N21",
+   "grp": "RV",
+   "kind": "name",
+   "input": "tokenHash",
+   "secret": false
+  },
+  {
+   "id": "H01",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Source PDF: https://acct.blob.core.windows.net/refs/valerian.pdf?sv=2022&sp=r&sig=SEKRIT. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. ",
+   "cls": "noleak",
+   "out": "Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. Source PDF: [credential link removed]. Valerian (Valeriana officinalis) root is a classic nervine. Traditional dose: 1-3 mL of a 1:5 tincture in 60% ethanol, up to 3x daily. Caution: may potentiate sedatives. "
+  },
+  {
+   "id": "H02",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Barnes J. Herbal Medicines, 3rd ed. Available at https://b.s3.amazonaws.com/refs/barnes.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIA%2F20261017&X-Amz-Signature=SEKRIT (accessed 2026-10-01).",
+   "cls": "strip",
+   "out": "Barnes J. Herbal Medicines, 3rd ed. Available at [credential link removed] (accessed 2026-10-01)."
+  },
+  {
+   "id": "H03",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "See [ESCOP monograph](https://storage.googleapis.com/escop/valerian.pdf?X-Goog-Credential=svc&X-Goog-Signature=SEKRIT) for dosing.",
+   "cls": "strip",
+   "out": "See [ESCOP monograph]([credential link removed]) for dosing."
+  },
+  {
+   "id": "H04",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Citations: https://pubmed.ncbi.nlm.nih.gov/12345678/ and https://www.ema.europa.eu/docs/valerian-monograph.pdf",
+   "cls": "keep",
+   "out": "Citations: https://pubmed.ncbi.nlm.nih.gov/12345678/ and https://www.ema.europa.eu/docs/valerian-monograph.pdf"
+  },
+  {
+   "id": "H05",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Use a 10% tincture; 1:5 50% ethanol; 100% of tested batches passed; 25%-30% glycerin.",
+   "cls": "keep",
+   "out": "Use a 10% tincture; 1:5 50% ethanol; 100% of tested batches passed; 25%-30% glycerin."
+  },
+  {
+   "id": "H06",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Dilute to 2% (about 12 drops per 30 mL)?key points below.",
+   "cls": "keep",
+   "out": "Dilute to 2% (about 12 drops per 30 mL)?key points below."
+  },
+  {
+   "id": "H07",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Store at 60% humidity; see https://e.com/herbs?page=2&q=50%25+ethanol for the chart.",
+   "cls": "keep",
+   "out": "Store at 60% humidity; see https://e.com/herbs?page=2&q=50%25+ethanol for the chart."
+  },
+  {
+   "id": "H08",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "cache redis://:SEKRIT@host:6379 here",
+   "cls": "strip",
+   "out": "cache [credential link removed] here"
+  },
+  {
+   "id": "H09",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "login https://:SEKRIT@host.example.com/x now",
+   "cls": "strip",
+   "out": "login [credential link removed] now"
+  },
+  {
+   "id": "H10",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "redis://:SEKRIT@host:6379",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "H11",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Note: https://e.com/?token=1",
+   "cls": "strip",
+   "out": "Note: [credential link removed]"
+  },
+  {
+   "id": "H12",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Note:https://e.com/?token=1",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "H13",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "see https://e.com/?token; then",
+   "cls": "strip",
+   "out": "see [credential link removed]; then"
+  },
+  {
+   "id": "H14",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "see https://e.com/?token;",
+   "cls": "strip",
+   "out": "see [credential link removed];"
+  },
+  {
+   "id": "H15",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "see https://e.com/?a=1;token=SEKRIT) ok",
+   "cls": "noleak",
+   "out": "see [credential link removed]) ok"
+  },
+  {
+   "id": "H16",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "see (https://e.com/?a=1;key=SEKRIT); ok",
+   "cls": "noleak",
+   "out": "see ([credential link removed]); ok"
+  },
+  {
+   "id": "H17",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "see https://e.com/?key;) ok",
+   "cls": "strip",
+   "out": "see [credential link removed];) ok"
+  },
+  {
+   "id": "H18",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "see (https://e.com/?token) ok",
+   "cls": "strip",
+   "out": "see ([credential link removed]) ok"
+  },
+  {
+   "id": "H19",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "see https://e.com/p;jsessionid=1?page=2 ok",
+   "cls": "keep",
+   "out": "see https://e.com/p;jsessionid=1?page=2 ok"
+  },
+  {
+   "id": "H20",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "see (https://e.com/?page=2;sort=asc) ok",
+   "cls": "keep",
+   "out": "see (https://e.com/?page=2;sort=asc) ok"
+  },
+  {
+   "id": "H21",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "https://e.com/?token=SEKRIT",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "H22",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Monograph link: https://e.com/?token=SEKRIT — verify dose.",
+   "cls": "strip",
+   "out": "Monograph link: [credential link removed] — verify dose."
+  },
+  {
+   "id": "H23",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Sources:\n1. https://acct.blob.core.windows.net/c/a.pdf?sig=SEKRIT\n2. https://doi.org/10.1016/j.jep.2020.1",
+   "cls": "strip",
+   "out": "Sources:\n1. [credential link removed]\n2. https://doi.org/10.1016/j.jep.2020.1"
+  },
+  {
+   "id": "H24",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Our #50%off sale and a 100% guarantee.",
+   "cls": "keep",
+   "out": "Our #50%off sale and a 100% guarantee."
+  },
+  {
+   "id": "H25",
+   "grp": "HBF",
+   "kind": "obj",
+   "input": "{\"meta\":{\"name\":\"Valerian\"},\"__proto__\":{\"apiKey\":\"SEKRIT\",\"isAdmin\":true},\"chapterOutlines\":[{\"__proto__\":{\"x\":1},\"title\":\"Ch1\"}]}"
+  },
+  {
+   "id": "H26",
+   "grp": "HBF",
+   "kind": "obj",
+   "input": "{\"setup\":{\"apiKey\":\"xai-SEKRIT\",\"preferredModel\":\"grok-4.7\"},\"drafts\":[{\"draftText\":\"see https://e.com/?token=SEKRIT ok\",\"sources\":[\"https://e.com/?sig=SEKRIT\",\"https://doi.org/10.1/x\"]}]}"
+  },
+  {
+   "id": "MF1-01",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https://d111.cloudfront.net/refs/hoffmann.pdf?Expires=1760000000&Signature=SEKRIT~abc&Key-Pair-Id=K2JCJMDEHXQW5F (accessed 2026-10-01).",
+   "cls": "strip",
+   "out": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: [credential link removed] (accessed 2026-10-01)."
+  },
+  {
+   "id": "MF1-02",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https://storage.googleapis.com/refs/hoffmann.pdf?GoogleAccessId=svc@p.iam.gserviceaccount.com&Expires=1760000000&Signature=SEKRIT%2Bx (accessed 2026-10-01).",
+   "cls": "strip",
+   "out": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: [credential link removed] (accessed 2026-10-01)."
+  },
+  {
+   "id": "MF1-03",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https://b.s3.amazonaws.com/refs/hoffmann.pdf?AWSAccessKeyId=AKIAEXAMPLE&Expires=1760000000&Signature=SEKRIT%3D (accessed 2026-10-01).",
+   "cls": "strip",
+   "out": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: [credential link removed] (accessed 2026-10-01)."
+  },
+  {
+   "id": "MF1-04",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https://e.com/refs/hoffmann.pdf?signature=SEKRIT (accessed 2026-10-01).",
+   "cls": "strip",
+   "out": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: [credential link removed] (accessed 2026-10-01)."
+  },
+  {
+   "id": "MF1-05",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "https://d111.cloudfront.net/x.pdf?Expires=1&Signature=SEKRIT&Key-Pair-Id=K",
+   "cls": "strip",
+   "out": null
+  },
+  {
+   "id": "MF1-06",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "see [PDF](https://e.com/a.pdf?Signature=SEKRIT) ok",
+   "cls": "strip",
+   "out": "see [PDF]([credential link removed]) ok"
+  },
+  {
+   "id": "MF1-K1",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https://e.com/sdk/docs?signatureVersion=v4&region=us-east-1 (accessed 2026-10-01).",
+   "cls": "keep",
+   "out": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https://e.com/sdk/docs?signatureVersion=v4&region=us-east-1 (accessed 2026-10-01)."
+  },
+  {
+   "id": "MF1-K2",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https://e.com/refs?Expires=1760000000&page=2 (accessed 2026-10-01).",
+   "cls": "keep",
+   "out": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https://e.com/refs?Expires=1760000000&page=2 (accessed 2026-10-01)."
+  },
+  {
+   "id": "MF2-01",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https:\\/\\/user:SEKRIT@e.com\\/x (accessed 2026-10-01).",
+   "cls": "strip",
+   "out": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: [credential link removed] (accessed 2026-10-01)."
+  },
+  {
+   "id": "MF2-02",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https:\\/\\/SEKRIT@e.com\\/x (accessed 2026-10-01).",
+   "cls": "strip",
+   "out": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: [credential link removed] (accessed 2026-10-01)."
+  },
+  {
+   "id": "MF2-03",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https:\\/\\/us%65r:SEKRIT@e.com\\/x (accessed 2026-10-01).",
+   "cls": "strip",
+   "out": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: [credential link removed] (accessed 2026-10-01)."
+  },
+  {
+   "id": "MF2-04",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "{\"src\":\"https:\\/\\/user:SEKRIT@e.com\\/x\"}",
+   "cls": "strip",
+   "out": "{\"src\":\"[credential link removed]\"}"
+  },
+  {
+   "id": "MF2-05",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https:\\/\\/:SEKRIT@e.com\\/x (accessed 2026-10-01).",
+   "cls": "strip",
+   "out": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: [credential link removed] (accessed 2026-10-01)."
+  },
+  {
+   "id": "MF2-K1",
+   "grp": "HBF",
+   "kind": "str",
+   "input": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https:\\/\\/medium.com\\/@author\\/post (accessed 2026-10-01).",
+   "cls": "keep",
+   "out": "Hoffmann D. Medical Herbalism (2003), ch. 4. PDF: https:\\/\\/medium.com\\/@author\\/post (accessed 2026-10-01)."
+  }
+ ]
+}

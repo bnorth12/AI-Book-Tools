@@ -1,0 +1,6 @@
+{"_about":"ref-nel-fix5 options flip (CoS 06:57, A approved): these hbf-rows.json keep rows are superseded by expected-redacted rows. hbf-rows.json stays byte-frozen; frozenOut pins its old expectation, out is the new exact output on all 3 paths. G3-K4 is an ACCEPTED FALSE POSITIVE (CHANGES-fix5.md).",
+ "fixtureSha256":"d927e31a8f914ff4345c92f6b5b030354042f826becf820a83a052ec7c2e4eb1",
+ "rows":[
+  {"id":"G3-K4","frozenOut":"He said a;token=b at the door","out":"He said a;[credential link removed] at the door","why":"standalone [?&;] param rule (ruling 2); accepted false positive"},
+  {"id":"F1","frozenOut":"see https://e.com/?%2574oken=x end","out":"see https://e.com/?[credential link removed] end","why":"repeated %-decode of the param name (ruling C)"},
+  {"id":"RV-27","frozenOut":"see https://e.com/?to\u200bken=1 ok","out":"see https://e.com/?[credential link removed] ok","why":"pinned-class strip inside the param name (ruling C)"}]}

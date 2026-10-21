@@ -1,0 +1,37 @@
+{
+ "_about": "ref-nel-fix7.3 (CoS ruling (a), CHANGES-r6.1.md:37): exactly these 3 rows x 3 paths = 9 re-pinned S -> SD. Frozen ref-v23-rows.json is untouched; its sha is asserted.",
+ "frozenFixture": "ref-v23-rows.json",
+ "frozenSha256": "1ee8e5fe7c2509534b4b71c7ac443c639753e627c319953eb32279ae3024fc7c",
+ "rows": {
+  "NS-Basic-word-U200B": {
+   "frozenExpect": "S",
+   "expect": "SD",
+   "paths": [
+    "export",
+    "import",
+    "storage"
+   ],
+   "input": "Basic\\u200bally"
+  },
+  "NS-Basic-word-U00AD": {
+   "frozenExpect": "S",
+   "expect": "SD",
+   "paths": [
+    "export",
+    "import",
+    "storage"
+   ],
+   "input": "Basic\\xadally"
+  },
+  "NS-Basic-word-U0085": {
+   "frozenExpect": "S",
+   "expect": "SD",
+   "paths": [
+    "export",
+    "import",
+    "storage"
+   ],
+   "input": "Basic\\x85ally"
+  }
+ }
+}
