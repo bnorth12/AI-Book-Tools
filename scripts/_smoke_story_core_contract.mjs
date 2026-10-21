@@ -760,18 +760,27 @@ for (const distance of [4095, 4096, 4097, 65536]) {
   const uiParts = ['://', 'https://', 'a', 'u', ':', '::', '@', '/', '_', '-', ' ', '?', '&', '#', '=', 'token', 'x.com', 'p', '.', '%3A'];
   const refKey = new RegExp(REF_KEY_735EB4F, 'u'), refKeyCs = new RegExp(REF_KEY_CS_735EB4F, 'u'), refUi = new RegExp(REF_USERINFO_735EB4F, 'u');
   const refFull = new RegExp(`${REF_USERINFO_735EB4F}|${URL_QUERY_SCHEMA_PATTERN}`, 'u');
-  let keyDiff = 0, uiDiff = 0; const examples = [];
+  let keyDiff = 0, uiDiff = 0; const examples = []; const uiDiffs = Object.fromEntries(userinfoAll.map(([n]) => [n, []]));
+  const uiWant = (name, u) => (name === 'harness URL_CREDENTIAL' || name === 'schema :306' ? refFull.test(u) : refUi.test(u)); // :769 split kept
+  const uiDiffOf = (u) => userinfoAll.flatMap(([name, re]) => (re.test(u) !== uiWant(name, u) ? [[name, { s: u, dir: re.test(u) ? 'TIGHTEN' : 'LOOSEN' }]] : []));
   for (let i = 0; i < 40000; i += 1) {
     const k = gen(keyParts, 8);
     if (refKey.test(k) !== keyRes[0][1].test(k) || refKeyCs.test(k) !== keyRes[1][1].test(k)) { keyDiff += 1; if (examples.length < 5) examples.push(JSON.stringify(k)); }
     const u = gen(uiParts, 12);
     for (const [name, re] of userinfoAll) {
       const want = name === 'harness URL_CREDENTIAL' || name === 'schema :306' ? refFull.test(u) : refUi.test(u);
-      if (re.test(u) !== want) { uiDiff += 1; if (examples.length < 5) examples.push(`${name} ${JSON.stringify(u)}`); }
+      if (re.test(u) !== want) { uiDiff += 1; uiDiffs[name].push({ s: u, dir: re.test(u) ? 'TIGHTEN' : 'LOOSEN' }); if (examples.length < 5) examples.push(`${name} ${JSON.stringify(u)}`); }
     }
   }
   check('ReDoS2 seeded fuzz: key rule (:253 and M4 copy) matches the 735eb4f patterns on 40000 keys', keyDiff === 0, examples.join(' ; '));
-  check('ReDoS2 seeded fuzz: every userinfo pattern matches the 735eb4f pattern on 40000 strings', uiDiff === 0, examples.join(' ; '));
+  // fix7.4: the userinfo verdict rule, applied to the per-pattern diff sets (current rule: no diff at all).
+  const uiRuleAccepts = (d) => Object.values(d).every((l) => l.length === 0);
+  check('ReDoS2 seeded fuzz: every userinfo pattern matches the 735eb4f pattern on 40000 strings', uiRuleAccepts(uiDiffs), examples.join(' ; '));
+  // Red-first probe (fix7.4): PROBE is not in the pinned set and every userinfo pattern tightens on it, so the rule must accept the
+  // fuzz diff sets as they are and reject them once PROBE's diffs are added.
+  const PROBE = 'https://u :p@x.com'; const withProbe = structuredClone(uiDiffs); for (const [n, d] of uiDiffOf(PROBE)) withProbe[n].push(d);
+  check('ReDoS2 pin probe: out-of-pin diff "https://u :p@x.com" is rejected while the fuzz diff sets are accepted',
+    uiDiffOf(PROBE).length === userinfoAll.length && uiRuleAccepts(uiDiffs) && !uiRuleAccepts(withProbe), `probe diffs ${uiDiffOf(PROBE).length}, fuzz accepted ${uiRuleAccepts(uiDiffs)}`);
 }
 // Round 3 (Copilot on ca62ec4, CoS rulings 11:45 PM): (a) r4301070240: U+212A KELVIN SIGN lowercases to 'k' in JS, so the stripper
 // denies 'api\u212Aey'; the schema :253 key rule must deny it too. (b) r4301070268: the query-name branches of schema :306,
