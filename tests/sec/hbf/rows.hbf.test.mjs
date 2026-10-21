@@ -47,6 +47,8 @@ const FLIP = JSON.parse(fs.readFileSync(new URL('./fixtures/hbf-rows-flip.json',
 const FLIP_IDS = new Set(FLIP.rows.map((r) => r.id));
 test('HBF/FLIP frozen: hbf-rows.json sha and each superseded row\'s old expectation are unchanged', () => {
   assert.equal(crypto.createHash('sha256').update(fs.readFileSync(new URL('./fixtures/hbf-rows.json', import.meta.url))).digest('hex'), FLIP.fixtureSha256);
+  // fix7.5-D3 (CoS (a)): pin the flip file itself; regenerate only with tools/hbf/gen-flip-f1.mjs.
+  assert.equal(crypto.createHash('sha256').update(fs.readFileSync(new URL('./fixtures/hbf-rows-flip.json', import.meta.url))).digest('hex'), '241bdd4931a7a79e4fdecb7a235e4d43d68e727657eff514e3b960d1709bbda7', 'hbf-rows-flip.json sha');
   for (const f of FLIP.rows) { const r = FX.rows.find((x) => x.id === f.id); assert.ok(r, f.id); assert.equal(r.out, f.frozenOut, f.id + ' frozen out'); assert.equal(r.cls, 'keep', f.id); } });
 for (const p of PATHS) for (const f of FLIP.rows) test(`HBF/${p}/FLIP/${f.id} redact (was keep)`, () => { const r = FX.rows.find((x) => x.id === f.id); checkStr(H.paths[p], r.input, f.out, 'strip', f.id + ' flip'); });
 for (const p of PATHS) {
