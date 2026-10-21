@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - HerbalBookForge fix7.5-D: URL param names (paramNameIsSecret) and Cookie names (cookieIsSecret) are decoded until
   stable, with the same 4-pass cap as the standalone param rule. A malformed name, or one still changing after 4 decodes,
   is treated as secret. FLIP/F1 (`?%2574oken=x`) now removes the whole URL; re-pinned with gen-flip-f1.mjs.
+- HerbalBookForge fix7.5-D3: the F1 flip generator is committed as `tools/hbf/gen-flip-f1.mjs` (asserts the spec
+  output on all 3 strip paths before writing), and `rows.hbf.test.mjs` pins `hbf-rows-flip.json` at sha256 `241bdd49`.
 - HerbalBookForge credential redaction NEL fix (fix7.4): HBF `HerbalBookForge.html` sha256 `d824f617`, schema `6abefa05`,
   smoke `3d79b90f` base; `tests/sec/hbf` rows and NEL tests; frozen `fixtures/ref-v23-rows.json` (`1ee8e5fe`) sha-pinned.
   Gates: fix7.4 SUMS `8238ee8a` (Engineering `ba692fa3`, Reviewer `ecb5c93b`).
