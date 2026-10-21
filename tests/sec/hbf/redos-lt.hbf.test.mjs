@@ -14,7 +14,7 @@ import { loadHBF, readHBF } from './_hbf-load.mjs';
 
 const block = markedBlock(readHBF());
 const ctx = vm.createContext({});
-vm.runInContext(block + '\n;globalThis.__x = { V1_USERINFO, V2_USERINFO, SRC306, CREDENTIAL_URL_SOURCE, redactAll, STANDALONE_PARAM_SOURCE, standaloneParamSpans, SCAN_COPIES };', ctx);
+vm.runInContext(block + '\n;globalThis.__x = { V1_USERINFO, V2_USERINFO, SRC306, CREDENTIAL_URL_SOURCE, redactAll, STANDALONE_PARAM_SOURCE, standaloneParamSpans, SCAN_COPIES, paramNameIsSecret, cookieIsSecret };', ctx);
 const PG = ctx.__x;
 const schemaLines = fs.readFileSync(path.join(REPO, 'schema', 'story-core-2.0.json'), 'utf8').split('\n');
 const schemaPat = (n) => { const m = schemaLines[n - 1].match(/"pattern": "(.*)"\s*$/); assert.ok(m, 'schema :' + n + ' is not a pattern line'); return JSON.parse('"' + m[1] + '"'); };
@@ -103,4 +103,35 @@ describe('HBF fix7.5-A STANDALONE_PARAM_SOURCE linear on LT runs (red on 60f6d05
       assert.ok(r1 < 8, `2048->8192 ratio ${r1.toFixed(2)}`); assert.ok(r2 < 8, `8192->32768 ratio ${r2.toFixed(2)}`);
     });
   }
+});
+
+// fix7.5-D (CoS 21:34): cookie names (:836 cookieIsSecret) and URL names (:791 paramNameIsSecret) decode until stable, 4-pass cap
+// like normParamName, fail closed (malformed % or still changing after 4 decodes => secret). Values are short, no digit shape.
+describe('HBF fix7.5-D encoded cookie / URL param names (red on bbd36d92)', () => {
+  const CAP5 = 't' + '%25'.repeat(1).replace('%25', '%2525252525') + '69tle'; // %69 under 5 layers of %25: still changing after 4 decodes
+  const rows = [
+    ['cookie api%4Bey short value', 'Cookie: api%4Bey=abcdef', 'abcdef', true],
+    ['cookie api%254Bey short value', 'Cookie: api%254Bey=abcdef', 'abcdef', true],
+    ['URL double-encoded api%254Bey', 'see https://x.com/p?api%254Bey=short ok', 'short', true],
+    ['cookie off-list t%69tle stays', 'Cookie: t%69tle=abcdef', 'abcdef', false],
+    ['URL off-list t%69tle stays', 'see https://x.com/p?t%69tle=short ok', 'short', false],
+    ['cookie malformed api%ZZkey fails closed', 'Cookie: api%ZZkey=abcdef', 'abcdef', true],
+    ['cookie still changing after 4 decodes fails closed', 'Cookie: ' + CAP5 + '=abcdef', 'abcdef', true],
+  ];
+  for (const [id, text, val, secret] of rows) test(`D ${id} -> ${secret ? 'redacted' : 'kept'}`, () => {
+    const H = loadHBF();
+    for (const [p, f] of Object.entries(H.paths)) { const o = f(H.clone({ notes: text })); const v = o && o.notes;
+      if (secret) assert.ok(!(typeof v === 'string' && v.includes(val)), `${p}: ${JSON.stringify(v)}`); else assert.equal(v, text, `${p}: off-list changed`); }
+  });
+  test('D :853 standalone pass on a double-encoded URL name: ?api%254Bey=short gives a span (decodes until stable)', () => {
+    for (const cp of PG.SCAN_COPIES) { const f = cp('https://x.com/p?api%254Bey=short'); const sp = PG.standaloneParamSpans(f);
+      assert.ok(sp.some(([a, b]) => f.slice(a, b).includes('short')), JSON.stringify(sp)); }
+  });
+  test('D direct: paramNameIsSecret / cookieIsSecret on encoded names (fail closed, off-list clear)', () => {
+    assert.equal(PG.paramNameIsSecret('api%254Bey'), true); assert.equal(PG.paramNameIsSecret('api%ZZkey'), true);
+    assert.equal(PG.paramNameIsSecret(CAP5), true); assert.equal(PG.paramNameIsSecret('t%69tle'), false);
+    assert.equal(PG.cookieIsSecret('api%4Bey=abcdef'), true); assert.equal(PG.cookieIsSecret('api%254Bey=abcdef'), true);
+    assert.equal(PG.cookieIsSecret('api%ZZkey=abcdef'), true); assert.equal(PG.cookieIsSecret(CAP5 + '=abcdef'), true);
+    assert.equal(PG.cookieIsSecret('t%69tle=abcdef'), false);
+  });
 });
