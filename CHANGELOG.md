@@ -18,7 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   characters, and STANDALONE_PARAM_SOURCE checks the next character before its line-break lookbehind. Both match the
   same strings as before and now run in linear time on long line-break runs. redactAll on 32768 newlines drops from
   about 6.8 s to about 15 ms. T2: the free-text JSON pair pass decodes the key before isSecretField, and a key that does
-  not decode is treated as secret. tests/sec: 2546/2546 on Node 20 and 22. Smoke: 1798 PASS / 0 FAIL, pin 25243682 unchanged.
+  not decode is treated as secret. tests/sec: 2555/2555 on Node 20 and 22. Smoke: 1798 PASS / 0 FAIL, pin 25243682 unchanged.
+- HerbalBookForge fix7.5-D: URL param names (paramNameIsSecret) and Cookie names (cookieIsSecret) are decoded until
+  stable, with the same 4-pass cap as the standalone param rule. A malformed name, or one still changing after 4 decodes,
+  is treated as secret. FLIP/F1 (`?%2574oken=x`) now removes the whole URL; re-pinned with gen-flip-f1.mjs.
 - HerbalBookForge credential redaction NEL fix (fix7.4): HBF `HerbalBookForge.html` sha256 `d824f617`, schema `6abefa05`,
   smoke `3d79b90f` base; `tests/sec/hbf` rows and NEL tests; frozen `fixtures/ref-v23-rows.json` (`1ee8e5fe`) sha-pinned.
   Gates: fix7.4 SUMS `8238ee8a` (Engineering `ba692fa3`, Reviewer `ecb5c93b`).
