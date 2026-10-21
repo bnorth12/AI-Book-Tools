@@ -788,7 +788,11 @@ const URL_START_G = new RegExp(URL_START, 'g');
 const PSEP = (c) => c === '?' || c === '&' || c === '#' || c === ';'; // v2.2 G3: `;` added
 function decodeNameOnce(n) { try { return decodeURIComponent(n); } catch { return null; } }
 // raw = the name as it sits in the scan copy. Only a COPY is decoded (once); malformed => secret (fail closed)
-function paramNameIsSecret(raw) { if (!raw.includes('%')) return isSecretParam(raw); const d = decodeNameOnce(raw); return d === null || isSecretParam(d); }
+function paramNameIsSecret(raw) { if (!raw.includes('%')) return isSecretParam(raw); const d = decodeNameStable(raw); return d === null || isSecretParam(d); }
+// fix7.5-D: decode until stable with normParamName's cap (PARAM_DECODE_CAP); malformed % or cap reached => null (caller fails closed). No '+' rule.
+function decodeNameStable(raw) { let s = raw;
+  for (let i = 0; i <= PARAM_DECODE_CAP; i++) { if (i === PARAM_DECODE_CAP) return null; const d = decodeNameOnce(s); if (d === null) return null; if (d === s) break; s = d; }
+  return s; }
 function urlStartBefore(starts, q) { let lo = -1; for (const s of starts) { if (s < q) lo = s; else break; } return lo; }
 function nameSpans(f) { // f = a scan copy, same length as v: every index below is a raw index into v
   const out = []; let last = 0, i = 0; const L = f.length;
@@ -832,8 +836,8 @@ const BASIC_SOURCE = '(?:(?<![A-Za-z0-9])|(?<=%[0-9A-Fa-f]{2}))basic((?:' + REDA
 const JSON_PAIR_SOURCE = '"((?:[^"\\\\]|\\\\.){1,64})"' + REDACT_SEP + '*:' + REDACT_SEP + '*"((?:[^"\\\\]|\\\\.)*)"';
 const SESSION_COOKIE_NAMES = ['sid','sess','sessid','session','sessionid','phpsessid','jsessionid','connectsid','aspnetsessionid','laravelsession','csrftoken'];
 function cookieIsSecret(list) { return list.split(';').some((p) => { const i = p.indexOf('='); if (i <= 0) return false;
-  const n = normalizeName(p.slice(0, i).replace(SEP_TRIM, '')).replace(/\./g, ''), v = p.slice(i + 1).replace(SEP_TRIM, '').split(new RegExp(REDACT_SEP, 'u'))[0];
-  return v !== '' && (SESSION_COOKIE_NAMES.includes(n) || isSecretField(n) || /^(?=[^0-9]*[0-9])[A-Za-z0-9._~+/=%-]{16,}$/.test(v)); }); }
+  const raw = decodeNameStable(p.slice(0, i).replace(SEP_TRIM, '')), n = raw === null ? null : normalizeName(raw).replace(/\./g, ''), v = p.slice(i + 1).replace(SEP_TRIM, '').split(new RegExp(REDACT_SEP, 'u'))[0];
+  return v !== '' && (n === null || SESSION_COOKIE_NAMES.includes(n) || isSecretField(n) || /^(?=[^0-9]*[0-9])[A-Za-z0-9._~+/=%-]{16,}$/.test(v)); }); }
 // SEP1 fix4 standalone param rule: [?&;] SEP* name SEP* = SEP* value, anywhere in the text, never across a line terminator.
 // A name right after a line-terminator run that follows a [?&;]-led fragment also counts (the `?api<LT>key=` shape); the match itself starts after the LT.
 // Name (joined across the LT for the continuation shape; the span still starts after the LT): decode %XX and + until stable (cap PARAM_DECODE_CAP); malformed %, cap reached or cap+1 => secret (fail closed); strip SEP - _ . ; compare via isSecretField (object-key list; URL-only PARAM_EXACT names such as `key` stay with the URL passes, so prose `key?key=yes` is kept).
