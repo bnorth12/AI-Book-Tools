@@ -830,7 +830,10 @@ const HEADER_SOURCE = '(?<![A-Za-z0-9-])(?:proxy-authorization|authorization|x-a
 const COOKIE_SOURCE = '(?<![A-Za-z0-9-])(?:set-cookie|cookie)["\']?' + REDACT_SEP + '*:' + COOKIE_GAP + '*["\']?([^\\r\\n"\']*)';
 // fix6 (CoS 07:44): COOKIE_NL_SOURCE, bare token on the line after a Cookie/Set-Cookie header; lookbehind only, so the break is not in the span.
 const COOKIE_BREAK = '(?:\\r\\n|[\\r\\n\\u2028\\u2029\\u0085])';
-const COOKIE_NL_SOURCE = '(?<=(?<![A-Za-z0-9-])(?:set-cookie|cookie)["\']?' + REDACT_SEP + '*:[^\\r\\n\\u2028\\u2029\\u0085]*' + COOKIE_BREAK + '{1,2}' + COOKIE_GAP + '*)(?=[A-Za-z0-9._~+/=-]*[0-9])[A-Za-z0-9._~+/=-]{20,}';
+// fix7.6-b: the O(1) guard (a token char here, none just before) runs before the lookbehind, so the lookbehind's COOKIE_GAP* walk-back
+// happens only at a token start, never at every position of a gap run (quadratic on 7a1cd426). Every match already starts at a token
+// char right after a gap or break char (neither is a token char), so the guard rejects no match: the matched set is unchanged.
+const COOKIE_NL_SOURCE = '(?=[A-Za-z0-9._~+/=-])(?<![A-Za-z0-9._~+/=-])(?<=(?<![A-Za-z0-9-])(?:set-cookie|cookie)["\']?' + REDACT_SEP + '*:[^\\r\\n\\u2028\\u2029\\u0085]*' + COOKIE_BREAK + '{1,2}' + COOKIE_GAP + '*)(?=[A-Za-z0-9._~+/=-]*[0-9])[A-Za-z0-9._~+/=-]{20,}';
 const BASIC_SOURCE = '(?:(?<![A-Za-z0-9])|(?<=%[0-9A-Fa-f]{2}))basic((?:' + REDACT_SEP + '|%20)+)([A-Za-z0-9+/=_-]{2,})';
 const JSON_PAIR_SOURCE = '"((?:[^"\\\\]|\\\\.){1,64})"' + REDACT_SEP + '*:' + REDACT_SEP + '*"((?:[^"\\\\]|\\\\.)*)"';
 const SESSION_COOKIE_NAMES = ['sid','sess','sessid','session','sessionid','phpsessid','jsessionid','connectsid','aspnetsessionid','laravelsession','csrftoken'];
