@@ -10,7 +10,7 @@ The tests for two redaction cases are deferred:
 - **(c) Long, escaped or continuation key names:** secret key names over 64 characters (raw or after decoding), plus parameter names continued across a line break, including short ones (e.g. `?x=1` then a newline then `abctoken=V`) and multi-line, `\r`, U+2028, `&`-newline and over-64-character continuation prefixes.
 
 - **Status:** (a) and (c) are **known open gaps**. They are **not fixed**, and no test in this folder claims they are.
-- **Trigger:** these tests stay deferred until multi-user/auth is built. Backlog item: MULTIUSER-BACKLOG
+- **Trigger:** these tests stay deferred until multi-user/auth is built. Backlog item: https://github.com/bnorth12/AI-Book-Tools/issues/186
 - **Gates:** until then, the deferred cases do not block CI or review gates.
 
 This note adds no code, no test rows and no pin changes.

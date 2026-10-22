@@ -102,7 +102,7 @@ Per Brian's rule (2026-10-21, 12:05 and 12:08 PM CT), these redaction cases are 
 - **(c) Long, escaped or continuation key names:** secret key names over 64 characters (raw or after decoding), plus parameter names continued across a line break, including short ones (e.g. `?x=1` then a newline then `abctoken=V`) and multi-line, `\r`, U+2028, `&`-newline and over-64-character continuation prefixes.
 
 - **Status:** (a) and (c) are **known open gaps**. They are **not fixed** and nothing in this contract claims they are.
-- **Trigger:** their tests are triggered only by the multi-user/auth backlog item: MULTIUSER-BACKLOG. That item is backlog only, with no planning, design or build work scheduled against it.
+- **Trigger:** their tests are triggered only by the multi-user/auth backlog item: https://github.com/bnorth12/AI-Book-Tools/issues/186. That item is backlog only, with no planning, design or build work scheduled against it.
 - **Gates:** until multi-user/auth is built, these cases do not block CI or review gates. Any fuzz for them is report-only.
 - **Reference (not a plan):** fix77 redesign sketches v2 (`3840cc00`) and v3 (`4647031a`, which adds the bounded fallback) are attached to the #185 follow-up issue.
 
