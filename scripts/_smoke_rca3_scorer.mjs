@@ -6,7 +6,8 @@
  *                        R1f: first names / aliases are case-sensitive (lowercase 'will' is not Will Turner)
  *   R2 phrase-echo cap   one echoed phrase can't dominate nwScoreRepetition (F2)
  *   R3 length band       nwScoreLength WARNs above 1.2x target; short side unchanged (F3)
- *   R4 arcStep advisory  scoreObligationCoverage no longer gates on arcStep keywords (F6)
+ *   R4 arcStep advisory  scoreObligationCoverage no longer gates on arcStep keywords (F6);
+ *                        R4e/R4f: arcStep-only blueprints (legacy string, {role, arcStep}) pass vacuously (B2)
  * Usage: node scripts/_smoke_rca3_scorer.mjs   Env: NW_HTML_PATH
  */
 import path from 'path';
@@ -116,6 +117,26 @@ try {
       t('R4b', 'arcStep not counted in required/misses', (cov.misses || []).indexOf('arcStep') < 0 && (cov.hits || []).indexOf('arcStep') < 0, { hits: cov.hits, misses: cov.misses });
       t('R4c', 'arcStep kept as advisory (hit=false recorded)', cov.advisory && cov.advisory.arcStep && cov.advisory.arcStep.hit === false, cov.advisory || null);
       t('R4d', 'gate passes when every other obligation is met', cov.passed === true, { failures: cov.failures });
+      // R4e/R4f (Engineering B2 on 6a5bc2c/e2e4362): with arcStep advisory, a blueprint whose only
+      // keyword obligation is arcStep has required=[]. Vacuous coverage must pass (ratio 1), not fail
+      // closed with obligation_coverage<0.5, and assertObligationCoverageOrThrow must not throw.
+      const arcText = 'Elena hardens the relay vault and repairs the corroded pressure manifold before nightfall.';
+      const arcPara = (i) => '"Hold the manifold," Elena said, and Bastian answered that the relay vault would hold. They repaired the corroded pressure seals before nightfall. ' + filler(40, 700 + i) + '. The pump ticked. The loop drifted. The board went quiet.';
+      const arcProse = [0, 1, 2, 3, 4, 5].map(arcPara).join('\n\n');
+      const savedCovLog = { last: novelData.lastObligationCoverage, log: novelData.obligationCoverageLog };
+      const arcOnly = (label, bpEntry) => {
+        novelData.chapterBlueprints = [{}, bpEntry];
+        const c = scoreObligationCoverage(arcProse, 2);
+        let threw = null;
+        try { assertObligationCoverageOrThrow(2, arcProse); } catch (e) { threw = String(e && e.message || e).slice(0, 160); }
+        t(label + '.pass', 'arcStep-only blueprint (' + (typeof bpEntry === 'string' ? 'legacy plain-text' : '{role, arcStep}') + ') with covering prose passes', c.passed === true && (c.failures || []).indexOf('obligation_coverage<0.5') < 0 && c.ratio === 1, { passed: c.passed, failures: c.failures, ratio: c.ratio, total: c.total, adv: c.advisory });
+        t(label + '.nothrow', 'assertObligationCoverageOrThrow does not throw for it', threw === null, { threw });
+        t(label + '.adv', 'arcStep still recorded as advisory hit', !!(c.advisory && c.advisory.arcStep && c.advisory.arcStep.hit === true), c.advisory || null);
+      };
+      arcOnly('R4e', arcText);
+      arcOnly('R4f', { chapter: 2, role: 'escalation', arcStep: arcText });
+      novelData.lastObligationCoverage = savedCovLog.last;
+      novelData.obligationCoverageLog = savedCovLog.log;
     } finally {
       novelData.characters = saved.characters;
       novelData.chapterBlueprints = saved.chapterBlueprints;
