@@ -6823,10 +6823,13 @@ const messages = [
 					failures: ['blueprint_missing']
 				};
 			}
+			// RCA option 3 / F6: arcStep is a meta-description a keyword gate can't match, so it is
+			// advisory only: recorded under `advisory.arcStep`, never in required/hits/misses/failures.
+			const advisory = {};
 			if (dig.arcStep) {
 				const toks = String(dig.arcStep).toLowerCase().split(/[^a-z0-9]+/).filter(function (t) { return t.length >= 5; }).slice(0, 8);
 				const hitCount = toks.filter(function (t) { return lower.indexOf(t) >= 0; }).length;
-				mark('arcStep', toks.length ? hitCount >= Math.min(2, toks.length) : true);
+				advisory.arcStep = { hit: toks.length ? hitCount >= Math.min(2, toks.length) : true, terms: toks.length, termHits: hitCount };
 			}
 			(dig.characterBeats || []).forEach(function (b) {
 				if (b && b.name) mark('char:' + b.name, namePresent(b.name));
@@ -6853,7 +6856,6 @@ const messages = [
 			const worldReq = (dig.worldHooks || []).length;
 			const worldMiss = misses.filter(function (m) { return m.indexOf('world:') === 0; });
 			if (worldReq && worldMiss.length === worldReq) failures.push('location_break');
-			if (misses.indexOf('arcStep') >= 0) failures.push('arcStep_missing');
 			if (ratio < 0.5) failures.push('obligation_coverage<0.5');
 			if (words < 120 && ratio < 0.75) failures.push('short_low_coverage');
 			// DRAFT_ENRICH_DENSIFY: dialogue / paragraph / beat coverage (line-control signals)
@@ -6878,6 +6880,7 @@ const messages = [
 				sentenceCount: sentences.length,
 				passed: failures.length === 0,
 				failures: failures,
+				advisory: advisory,
 				blueprint: dig
 			};
 		}
@@ -12529,6 +12532,10 @@ return c && c.name && c.backstory && c.arc; });
 		var NW_NOTE_LEAK_TERMS = ['fail closed', 'followable', 'this row', 'fenced header', 'blueprint', 'obligation', 'beat checklist', 'sceneGoal', 'turnOrPayoff', 'deferred thread', 'checklist', 'hard requirement', 'word count'];
 		var NW_QCAT_CAMEL_FIELDS = ['sceneGoal', 'castArcBeat', 'subplotPressure', 'dialogueTurn', 'sensoryWorldHook', 'turnOrPayoff', 'characterBeats', 'worldHooks', 'allowedPayoffs', 'deferredThreads', 'arcStep'];
 		var NW_QCAT_STOP = new Set(('a an the and or but if in on at to for of as by with from into over after before about against between through during without within along among upon than then so nor not no yes it its it\'s i me my we our you your he she they them his her their this that these those be is am are was were been being do did does doing have has had having will would can could should may might must shall').split(/\s+/));
+		// RCA option 3 (CH2-RCA.md §4.3): asymmetric length band (WARN only above 1.2x; short side unchanged)
+		// and the per-echo cap on repeated 5-gram penalties.
+		var NW_QCAT_LENGTH_WARN_ABOVE = 1.2;
+		var NW_QCAT_ECHO_CAP = 3;
 		var NW_QCAT_BEAT_FIELDS = ['sceneGoal', 'dialogueTurn', 'turnOrPayoff', 'subplotPressure', 'sensoryWorldHook'];
 
 		function nwQcatWorst(statuses) {
@@ -12707,13 +12714,50 @@ return c && c.name && c.backstory && c.arc; });
 			var m = String(text || '').match(re);
 			return m ? m.length : 0;
 		}
+		// RCA option 3 / F4a: alias-aware cast counting. Credits the full name, the surname (as before),
+		// the first name unless another known character shares that name token, and any explicit
+		// aliases / nicknames / shortName on the matching novelData.characters record.
+		// One regex alternation (longest first), so "Elena Voss" counts once, not twice.
+		function nwCastAliasTerms(name, otherNames) {
+			var stripped = nwQcatStripTitles(name) || String(name || '');
+			var key = nwQcatNameKey(name);
+			var clean = function (w) { return String(w || '').replace(/[^A-Za-z'-]/g, ''); };
+			var parts = String(stripped).trim().split(/\s+/).map(clean).filter(Boolean);
+			var terms = [];
+			var add = function (t) { t = String(t || '').trim(); if (t.length >= 2 && terms.indexOf(t) < 0) terms.push(t); };
+			if (!parts.length) return terms;
+			add(parts.join(' '));
+			if (parts[parts.length - 1].length >= 2) add(parts[parts.length - 1]);
+			var otherTokens = {};
+			(otherNames || []).forEach(function (o) {
+				if (!o || nwQcatNameKey(o) === key) return;
+				nwQcatNameKey(o).split(' ').forEach(function (tok) { if (tok) otherTokens[tok] = 1; });
+			});
+			if (parts.length >= 2 && parts[0].length >= 3 && !otherTokens[parts[0].toLowerCase()]) add(parts[0]);
+			(Array.isArray(novelData.characters) ? novelData.characters : []).forEach(function (c) {
+				if (!c || !c.name || nwQcatNameKey(c.name) !== key) return;
+				[].concat(c.aliases || [], c.nicknames || [], c.nickname || [], c.shortName || []).forEach(function (a) {
+					var aa = String(a || '').trim();
+					if (aa && !otherTokens[aa.toLowerCase()]) add(aa);
+				});
+			});
+			return terms;
+		}
+		function nwCountCastName(text, name, otherNames) {
+			var terms = nwCastAliasTerms(name, otherNames);
+			if (!terms.length) return 0;
+			terms.sort(function (a, b) { return b.length - a.length; });
+			var alt = terms.map(function (t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'); }).join('|');
+			var m = String(text || '').match(new RegExp('\\b(?:' + alt + ')\\b', 'gi'));
+			return m ? m.length : 0;
+		}
 		function nwScoreLength(text, target) {
 			var words = nwQcatWords(text);
 			var tgt = Math.max(1, Number(target) || 2000);
 			var ratio = words / tgt;
 			var status = 'PASS';
 			if (ratio < 0.5) status = 'FAIL';
-			else if (ratio < 0.75 || ratio > 1.4) status = 'WARN';
+			else if (ratio < 0.75 || ratio > NW_QCAT_LENGTH_WARN_ABOVE) status = 'WARN';
 			return { status: status, words: words, target: tgt, ratio: Math.round(ratio * 100) / 100 };
 		}
 		function nwChapterFactEntries(chapterNum, expect) {
@@ -12859,11 +12903,12 @@ return c && c.name && c.backstory && c.arc; });
 			var info = nwRequiredCastNames(bp);
 			var required = info.required;
 			var dialogueKeys = info.dialogueKeys;
+			var otherNames = required.concat((Array.isArray(novelData.characters) ? novelData.characters : []).map(function (c) { return c && c.name; }).filter(Boolean));
 			var counts = {};
 			var missing = [];
 			var missingDialogue = [];
 			required.forEach(function (n) {
-				var c = nwCountName(text, n);
+				var c = nwCountCastName(text, n, otherNames);
 				counts[n] = c;
 				if (c < 2) missing.push(n);
 				var key = nwQcatNameKey(n) || n;
@@ -13013,18 +13058,39 @@ return c && c.name && c.backstory && c.arc; });
 			var sh = nwQcatShingles(tokens, 5);
 			var counts = {};
 			sh.forEach(function (s) { counts[s] = (counts[s] || 0) + 1; });
-			var extra = 0;
+			var raw = 0;
 			var top = [];
 			Object.keys(counts).forEach(function (k) {
 				var n = counts[k];
-				if (n >= 2) extra += (n - 1);
+				if (n >= 2) raw += (n - 1);
 				if (n >= 3) top.push({ phrase: k, n: n });
 			});
 			top.sort(function (a, b) { return b.n - a.n; });
+			// RCA option 3 / F2 phrase-echo cap: overlapping repeated 5-grams with the same count that sit
+			// next to each other in the text are one echo (a repeated phrase). Each echo contributes
+			// min(occurrences - 1, NW_QCAT_ECHO_CAP), so one long phrase quoted N times can't dominate.
+			var parent = {};
+			var find = function (x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+			Object.keys(counts).forEach(function (k) { if (counts[k] >= 2) parent[k] = k; });
+			for (var i = 1; i < sh.length; i++) {
+				var a = sh[i - 1], b = sh[i];
+				if (counts[a] >= 2 && counts[b] >= 2 && counts[a] === counts[b] && a !== b) {
+					var ra = find(a), rb = find(b);
+					if (ra !== rb) parent[rb] = ra;
+				}
+			}
+			var echoMax = {};
+			Object.keys(parent).forEach(function (k) {
+				var r = find(k);
+				echoMax[r] = Math.max(echoMax[r] || 0, counts[k] - 1);
+			});
+			var extra = 0;
+			var echoes = 0;
+			Object.keys(echoMax).forEach(function (r) { extra += Math.min(echoMax[r], NW_QCAT_ECHO_CAP); echoes += 1; });
 			var status = 'PASS';
 			if (extra >= 150) status = 'FAIL';
 			else if (extra >= 60) status = 'WARN';
-			return { status: status, repeated5grams: extra, top: top.slice(0, 8) };
+			return { status: status, repeated5grams: extra, repeated5gramsRaw: raw, echoes: echoes, echoCap: NW_QCAT_ECHO_CAP, top: top.slice(0, 8) };
 		}
 		function nwScoreVoice(text) {
 			var words = Math.max(1, nwQcatWords(text));
