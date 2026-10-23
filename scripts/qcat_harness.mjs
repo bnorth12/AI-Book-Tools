@@ -236,7 +236,7 @@ export async function runQcatHarness(opts) {
     book: scored.result.book,
     chapters: scored.result.chapters,
     expectFile: opts.expect || null,
-    scorerVersion: '8d.1',
+    scorerVersion: NW_HARNESS_SCORER_VERSION,
     appSha: sha
   };
   fs.writeFileSync(path.join(runDir, 'scorecard.json'), JSON.stringify(scoreJson, null, 2));
@@ -255,6 +255,13 @@ export async function runQcatHarness(opts) {
   if (scored.timing) fs.writeFileSync(path.join(runDir, 'timing.json'), JSON.stringify(scored.timing, null, 2));
   await browser.close();
   return { exitCode: 0, runDir: runDir, scoreJson: scoreJson, md: scored.md, cards: scored.cards, log: logLines, stage: scored.stage, timing: scored.timing };
+}
+
+// Scorer version (must match NW_SCORER_VERSION in NovelWriter.html) and its calibration pins.
+export const NW_HARNESS_SCORER_VERSION = '8d.2';
+export function calibrationPinPaths(fixDir, version = NW_HARNESS_SCORER_VERSION) {
+  const sfx = version === '8d.2' ? '.8d2' : '';
+  return { pre: path.join(fixDir, 'calibration-pre-s1' + sfx + '.json'), post: path.join(fixDir, 'calibration-post-s1' + sfx + '.json') };
 }
 
 const isMain = process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;

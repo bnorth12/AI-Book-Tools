@@ -1,5 +1,5 @@
 {
-  "notes": "REQ-SCH-07 pre-S1 baseline. Scored scripts/fixtures/qcat/book-3ch.json on main ab2de89 with the same harness scorer (nwScoreBook). Numbers + text hashes only; no book text. Re-pinned for RCA option 3 echo cap: ch2 repetition WARN->PASS; no other field changed.",
+  "notes": "REQ-SCH-07 pre-S1 baseline. Scored scripts/fixtures/qcat/book-3ch.json on main ab2de89 with the same harness scorer (nwScoreBook). Numbers + text hashes only; no book text.",
   "scoredAt": "ab2de893c35259b1124b49cc6fdb80611efcb52c",
   "bookSha256": "d4f31b144a947ff098f247d80ef9eb6314f1e9eb29ad4dd995af4c8a2b2f85e8",
   "chapterTextSha256": [
@@ -35,7 +35,7 @@
       "factsStatus": "PASS",
       "noteLeak": "PASS",
       "cast": "PASS",
-      "repetition": "PASS"
+      "repetition": "WARN"
     },
     {
       "chapter": 3,

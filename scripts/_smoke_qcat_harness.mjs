@@ -10,7 +10,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { chromium } from 'playwright';
-import { runQcatHarness } from './qcat_harness.mjs';
+import { runQcatHarness, calibrationPinPaths, NW_HARNESS_SCORER_VERSION } from './qcat_harness.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -833,8 +833,9 @@ async function loadEnvelope(page, envelope) {
 
 // ---------------- 23. REQ-SCH-07: unmigrated==migrated==pre-s1 baseline; post-s1 pin includes repetition ----
 {
-  const prePath = path.join(FIX, 'calibration-pre-s1.json');
-  const postPath = path.join(FIX, 'calibration-post-s1.json');
+  const htmlVer = (/var NW_SCORER_VERSION = '([^']+)'/.exec(HTML) || [])[1];
+  check('23', 'harness scorer version matches NW_SCORER_VERSION', htmlVer === NW_HARNESS_SCORER_VERSION, 'html=' + htmlVer + ' harness=' + NW_HARNESS_SCORER_VERSION);
+  const { pre: prePath, post: postPath } = calibrationPinPaths(FIX, htmlVer);
   const page = await openPage();
   const pair = await page.evaluate(async (book) => {
     function rows(s) {
