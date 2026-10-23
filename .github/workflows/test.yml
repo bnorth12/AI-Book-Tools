@@ -67,6 +67,10 @@ jobs:
         timeout-minutes: 5
         run: npm run test:smoke:nw-qcat-harness
 
+      - name: NovelWriter RCA option 3 scorer smoke (8d.2)
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-rca3-scorer
+
       - name: Story Core 2.0 contract smoke
         timeout-minutes: 5
         run: npm run test:contract:story-core
