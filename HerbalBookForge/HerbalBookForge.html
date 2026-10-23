@@ -165,7 +165,7 @@
                                 <div>
                                     <label class="block text-xs uppercase tracking-widest mb-1.5 text-emerald-400">API Key</label>
                                     <div class="relative">
-                                        <input id="api-key" type="password" class="w-full bg-black/40 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-6 py-4 text-lg" placeholder="gsk_...">
+                                        <input id="api-key" type="password" autocomplete="off" spellcheck="false" class="w-full bg-black/40 border border-emerald-700 focus:border-emerald-400 rounded-2xl px-6 py-4 text-lg" placeholder="gsk_...">
                                         <button onclick="toggleApiKeyVisibility()" id="api-key-toggle" class="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-emerald-300 text-sm font-medium">SHOW</button>
                                     </div>
                                 </div>
@@ -689,68 +689,384 @@
             };
         }
 
-        const SECRET_FIELD_DENYLIST = {
-            exact: ["apiKey", "api_key", "accessToken", "access_token", "authToken", "authorization", "privateKey"],
-            patterns: [/secret/i, /password/i, /^bearer/i]
-        };
+// SEC-SWEEP #180 shared copy: begin
+// Reference implementation of LOCKED-RULE-v2.2 (box only, not committed). Base: ref-v2.mjs 6d23f94f + ref-v2.1.mjs 0ee19530. Verbatim #170 tail read from schema :306.
+// ref-v2.3 NEL fix (v1.2.4): REDACT_SEP is the ONE separator class for every redaction source. Bytes = sep-class.js.txt;
+// set = sep-codepoints.txt (every JS \s code point + U+0085 U+00AD U+180E U+200B-U+200D U+2060, plus the %20 alternative). Never \s, never \p{White_Space}.
+const REDACT_SEP = '[\\t\\n\\v\\f\\r \\u0085\\u00a0\\u00ad\\u1680\\u180e\\u2000-\\u200d\\u2028\\u2029\\u202f\\u205f\\u2060\\u3000\\ufeff]';
+// JS_WS: exactly the code points JS \s matches, written out. Used ONLY inside negated sets ([^...]), where adding code points would stop a match early (loosen).
+const JS_WS = '\\t\\n\\v\\f\\r \\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff';
+// COOKIE_GAP: REDACT_SEP minus the line terminators CR, LF, U+2028, U+2029, derived from REDACT_SEP (no second list) so the value after Cookie: never starts on the next line (Fiction r6).
+const COOKIE_GAP = '(?:(?![\\r\\n\\u2028\\u2029])' + REDACT_SEP + ')';
+// SEP_TRIM: strip REDACT_SEP at both ends (String.prototype.trim misses U+0085 U+00AD U+180E U+200B-U+200D U+2060).
+const SEP_TRIM = new RegExp('^(?:' + REDACT_SEP + ')+|(?:' + REDACT_SEP + ')+$', 'gu');
+const SRC306 = "://(?=[^/@])[\\r\\n\\u2028\\u2029]*[^/@\\r\\n\\u2028\\u2029][^/@\\r\\n\\u2028\\u2029:]*[\\r\\n\\u2028\\u2029]*:[\\r\\n\\u2028\\u2029]*(?:[^/@\\r\\n\\u2028\\u2029]+[\\r\\n\\u2028\\u2029]*)?@|(?://|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})(?:(?!//|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})[^\\r\\n\\u2028\\u2029])*?[?&#](?=[^?&=#\\r\\n\\u2028\\u2029]*[\\r\\n\\u2028\\u2029]*=)[^?&=#\\r\\n\\u2028\\u2029]*?(?:(?<![A-Za-z0-9_-])[A-Za-z0-9_-]*?[tT][-_]*[oO][-_]*[kK\\u212A][-_]*[eE][-_]*[nN][-_]*(?![A-Za-z0-9_-])|[aA][-_]*[pP][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY]|[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT]|[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[oO][-_]*[rR][-_]*[dD]|(?<![A-Za-z0-9_-])(?:[-_]*[oO][-_]*[pP][-_]*[eE][-_]*[nN][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[xX][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[nN][-_]*[tT][-_]*[hH][-_]*[rR][-_]*[oO][-_]*[pP][-_]*[iI][-_]*[cC][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[eE][-_]*[mM][-_]*[iI][-_]*[nN][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[iI][-_]*[tT][-_]*[hH][-_]*[uU][-_]*[bB][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[oO][-_]*[oO][-_]*[gG][-_]*[lL][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[wW][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[pP][-_]*[rR][-_]*[iI][-_]*[vV][-_]*[aA][-_]*[tT][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[cC][-_]*[cC][-_]*[eE][-_]*[sS][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[uU][-_]*[tT][-_]*[hH][-_]*[oO][-_]*[rR][-_]*[iI][-_]*[zZ][-_]*[aA][-_]*[tT][-_]*[iI][-_]*[oO][-_]*[nN][-_]*|[-_]*[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[dD][-_]*)(?![A-Za-z0-9_-])|(?<![A-Za-z0-9_-])[-_]*[bB][-_]*[eE][-_]*[aA][-_]*[rR][-_]*[eE][-_]*[rR])|(?://|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})(?:(?!//|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})[^\\r\\n\\u2028\\u2029])*?[?&](?:(?=[^?&=#\\r\\n\\u2028\\u2029]*(?:[aA][-_]*[pP][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY]|[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT]|[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[oO][-_]*[rR][-_]*[dD]))(?=([^?&=#\\r\\n\\u2028\\u2029]*))\\1|[^?&=#\\r\\n\\u2028\\u2029]*[tT][-_]*[oO][-_]*[kK\\u212A][-_]*[eE][-_]*[nN][-_]*|(?:[-_]*[oO][-_]*[pP][-_]*[eE][-_]*[nN][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[xX][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[nN][-_]*[tT][-_]*[hH][-_]*[rR][-_]*[oO][-_]*[pP][-_]*[iI][-_]*[cC][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[eE][-_]*[mM][-_]*[iI][-_]*[nN][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[iI][-_]*[tT][-_]*[hH][-_]*[uU][-_]*[bB][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[oO][-_]*[oO][-_]*[gG][-_]*[lL][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[wW][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[pP][-_]*[rR][-_]*[iI][-_]*[vV][-_]*[aA][-_]*[tT][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[cC][-_]*[cC][-_]*[eE][-_]*[sS][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[uU][-_]*[tT][-_]*[hH][-_]*[oO][-_]*[rR][-_]*[iI][-_]*[zZ][-_]*[aA][-_]*[tT][-_]*[iI][-_]*[oO][-_]*[nN][-_]*|[-_]*[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[dD][-_]*)|[-_]*[bB][-_]*[eE][-_]*[aA][-_]*[rR][-_]*[eE][-_]*[rR](?=([^?&=#\\r\\n\\u2028\\u2029]*))\\2)(?=[\\t\\n\\v\\f\\r \\u0085\\u00a0\\u00ad\\u1680\\u180e\\u2000-\\u200d\\u2028\\u2029\\u202f\\u205f\\u2060\\u3000\\ufeff]|[/@?#&=\\u0022\\u0027]|;(?!$)|$)|(?://|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})(?:(?!//|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})[^\\r\\n\\u2028\\u2029])*?[?&](?:(?=[^?&=#\\r\\n\\u2028\\u2029]*(?:[aA][-_]*[pP][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY]|[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT]|[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[oO][-_]*[rR][-_]*[dD]))(?=([^?&=#\\r\\n\\u2028\\u2029]*))\\3|[^?&=#\\r\\n\\u2028\\u2029]*[tT][-_]*[oO][-_]*[kK\\u212A][-_]*[eE][-_]*[nN][-_]*|(?:[-_]*[oO][-_]*[pP][-_]*[eE][-_]*[nN][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[xX][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[nN][-_]*[tT][-_]*[hH][-_]*[rR][-_]*[oO][-_]*[pP][-_]*[iI][-_]*[cC][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[eE][-_]*[mM][-_]*[iI][-_]*[nN][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[iI][-_]*[tT][-_]*[hH][-_]*[uU][-_]*[bB][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[oO][-_]*[oO][-_]*[gG][-_]*[lL][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[wW][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[pP][-_]*[rR][-_]*[iI][-_]*[vV][-_]*[aA][-_]*[tT][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[cC][-_]*[cC][-_]*[eE][-_]*[sS][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[uU][-_]*[tT][-_]*[hH][-_]*[oO][-_]*[rR][-_]*[iI][-_]*[zZ][-_]*[aA][-_]*[tT][-_]*[iI][-_]*[oO][-_]*[nN][-_]*|[-_]*[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[dD][-_]*)|[-_]*[bB][-_]*[eE][-_]*[aA][-_]*[rR][-_]*[eE][-_]*[rR](?=([^?&=#\\r\\n\\u2028\\u2029]*))\\4)(?:[\\r\\n\\u2028\\u2029]*=|&|#|$)";
+const V1_USERINFO = '://(?=[^/@])[\\r\\n\\u2028\\u2029]*[^/@\\r\\n\\u2028\\u2029][^/@\\r\\n\\u2028\\u2029:]*[\\r\\n\\u2028\\u2029]*:[\\r\\n\\u2028\\u2029]*(?:[^/@\\r\\n\\u2028\\u2029]+[\\r\\n\\u2028\\u2029]*)?@';
+// SEP1 fix4 (DESIGN-fix4-v2.md): value classes stop only at LT (+ their structural delimiters); U+0020 and every other SEP code point sit inside them.
+// SEP_CS = the consumed line-terminator run around // : @ = (SEP = (SEP inside the class) + SEP_CS, set-equality row). LT ends URL_SCAN.
+const LT_CH = '\\r\\n\\u2028\\u2029';
+const SEP_CS = '[' + LT_CH + ']*';
+// fix7.5 T1: at most one LT run between fixed characters (SEP_CS (body+ SEP_CS)?), same language as before, linear on LT runs.
+// RV-15: a separator run after a bare `//` is consumed only on the colon branch; the no-colon branch may start with a separator only after a real scheme.
+const V2_USERINFO = '//(?:' + SEP_CS + '(?:[^/@' + LT_CH + ':]+' + SEP_CS + ')?:' + SEP_CS + '(?:[^/@' + LT_CH + ']+' + SEP_CS + ')?@|(?:(?<=[A-Za-z][A-Za-z0-9+.\\-]*://)' + SEP_CS + '|(?!' + REDACT_SEP + '))[^/?#@' + LT_CH + ':]+' + SEP_CS + '@)';
+const TAIL = SRC306.slice(V1_USERINFO.length + 1);
+const URL_START = '(?://|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})';
+const URL_SCAN = '(?:(?!//|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})[^\\r\\n\\u2028\\u2029])*?';
+if (!TAIL.startsWith(URL_START + URL_SCAN)) throw new Error('tail prefix drift');
+const V2_KEYPARAM = URL_START + URL_SCAN + '[?&#][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*(?=[=&#]|' + REDACT_SEP + '|$)';
+const CREDENTIAL_URL_SOURCE = V2_USERINFO + '|' + V2_KEYPARAM + '|' + TAIL; // v2.2: byte-identical to v2 (81b979c0)
+const FOLD = { '\u017F': 's', '\u0131': 'i', '\u0130': 'I', '\u212A': 'K', '\u0307': '-' };
+const foldCase = (s) => s.replace(/[\u017F\u0131\u0130\u212A\u0307]/g, (c) => FOLD[c]);
+// v2.2 G3 (r2, MF2): scan copy = fold + JSON-escaped slashes. `:\/\/` (5 units) -> `++://` (5); any other `\/\/` (4) -> `++//` (4). Fillers sit BEFORE the slashes and `+` is a scheme char, so `//` is followed directly by the authority. Length and indices unchanged.
+const scanCopy = (s) => foldCase(s).split(':\\/\\/').join('++:' + '//').split('\\/\\/').join('++' + '//');
+const EXACT = ['openaikey','xaikey','anthropickey','geminikey','githubkey','googlekey','awskey','privatekey','secretkey','accesskey','authorization','passwd'];
+// v2.2 G2: exact credential names (normalized), and provider-key stems matched as whole consecutive words
+const CRED_EXACT = ['credential','credentials','pwd','jwt','auth','sessionid']; // v2.3: exact (normalized) only; author/authorStyle unaffected
+const KEY_STEMS = ['openaikey','xaikey','anthropickey','geminikey','githubkey','googlekey','awskey','privatekey','privkey','secretkey','accesskey'];
+const STEM_MAX = 12; // longest stem: anthropickey
+// v2.2 G1: URL param/fragment names only (never object keys), normalized. r2 MF1: + `signature` (CloudFront, GCS V2, S3 SigV2)
+const PARAM_EXACT = ['key','sig','signature','xamzsignature','xamzcredential','xamzsecuritytoken','xgoogsignature','xgoogcredential','pwd','idtokenhint','code']; // v2.3: `code` in URL names only, never object keys
+const normalizeName = (k) => foldCase(String(k)).toLowerCase().replace(/[-_\r\n\u2028\u2029]/g, '');
+// word split of a folded name: separators = ASCII non-alphanumerics and U+2028/9; breaks at letter|digit, lower|Upper, and UPPER|Upper-lower (XAIKey -> XAI|Key)
+const cls = (c) => { const x = c.charCodeAt(0); if (x >= 97 && x <= 122) return 'l'; if (x >= 65 && x <= 90) return 'u'; if (x >= 48 && x <= 57) return 'd'; return (x < 128 || x === 0x2028 || x === 0x2029) ? 's' : 'l'; };
+function nameWords(k) {
+  const s = foldCase(String(k)); const w = []; let cur = '';
+  for (let i = 0; i < s.length; i++) {
+    const t = cls(s[i]); if (t === 's') { if (cur) w.push(cur); cur = ''; continue; }
+    const p = cur ? cls(s[i - 1]) : 's', nx = i + 1 < s.length ? cls(s[i + 1]) : 's';
+    if (cur && ((t === 'd') !== (p === 'd') || (p === 'l' && t === 'u') || (p === 'u' && t === 'u' && nx === 'l'))) { w.push(cur); cur = ''; }
+    cur += s[i];
+  }
+  if (cur) w.push(cur);
+  return w.map((x) => x.toLowerCase());
+}
+function hasProviderKeyWords(k) { const w = nameWords(k);
+  for (let i = 0; i < w.length; i++) { let acc = ''; for (let j = i; j < w.length; j++) { acc += w[j]; if (acc.length > STEM_MAX) break; if (KEY_STEMS.includes(acc)) return true; } }
+  return false; }
+function isSecretField(k) { const n = normalizeName(k);
+  return n.endsWith('token') || n.includes('apikey') || n.includes('secret') || n.includes('password') || n.startsWith('bearer') || EXACT.includes(n)
+    || CRED_EXACT.includes(n) || hasProviderKeyWords(k)
+    || n.endsWith('cookie') || n.endsWith('cookies'); } // v2.3 N2(5)
+const isSecretParam = (k) => isSecretField(k) || PARAM_EXACT.includes(normalizeName(k)); // D2 + G1: URL names only
+const MARK = '[credential link removed]';
+function isSensitiveWholeUrl(v) {
+  const t = v.trim(); if (t === '' || /\s/.test(t)) return false;
+  let u; try { u = new URL(t); } catch { return false; }
+  if (u.username || u.password) return true;
+  const f = u.hash.slice(1);
+  const fp = f.includes('=') ? new URLSearchParams(f.includes('?') ? f.slice(f.indexOf('?') + 1) : f) : new URLSearchParams();
+  return [...u.searchParams.keys(), ...fp.keys()].some(isSecretParam);
+}
+const SCHEME_CH = /[A-Za-z0-9+.\-]/, STOP = /[\s<>"'`]/, TRIM = /[.,;:!?)\]}]/;
+// r2: three length-preserving scan copies. Cuts are the UNION of the spans found on each, so v2.2 never keeps text that v2 (S0) or v2.2 r1 (S1) removes.
+const scanCopyV2 = (s) => foldCase(s);                                          // S0: exactly v2's scan string
+const scanCopyR1 = (s) => foldCase(s).split(':\\/\\/').join(':/' + '/\\/');      // S1: exactly v2.2 r1 (98cde1ac)
+const SCAN_COPIES = [scanCopyV2, scanCopyR1, scanCopy];                         // S2: scanCopy (:18), MF2
+// SEP1 fix4: span extension stops where 8f1f9993 did (STOP). A SEP run touching = : @ is carried; a carried span is not TRIM-shortened.
+const XSTOP = STOP, SEP_ONE = new RegExp(REDACT_SEP, 'u'); // XSTOP = v2.2 STOP (JS \\s + <>"'`): extension stops exactly where 8f1f9993 stopped (P14: U+0020 and U+00A0)
+function extendSpan(f, en) { const L = f.length; let carried = false;
+  while (en < L) { if (!XSTOP.test(f[en])) { en++; continue; }
+    if (SEP_ONE.test(f[en])) { let k = en; while (k < L && SEP_ONE.test(f[k])) k++; const p = f[en - 1]; let q = f[k]; if (q === ';') { let k2 = k; while (k2 < L && (f[k2] === ';' || SEP_ONE.test(f[k2]))) k2++; if (f[k2] === '=') q = '='; } // `token<sep>;=T`
+      if (p === '=' || p === ':' || p === '@' || q === '=' || q === ':' || q === '@') { en = k; carried = true; continue; } }
+    break; }
+  return [en, carried]; }
+// spans of the section-3 regex on scan copy f (indices are raw: |f| === |v|)
+function regexSpans(f) {
+  const re = new RegExp(CREDENTIAL_URL_SOURCE, 'gu'); const out = []; let last = 0, m;
+  while ((m = re.exec(f))) {
+    let st = m.index;
+    if (f.startsWith('//', st) && st - 1 >= last && f[st - 1] === ':') { st--; while (st - 1 >= last && SCHEME_CH.test(f[st - 1])) st--; }
+    const mEnd = m.index + m[0].length; let en = mEnd;
+    const ext = extendSpan(f, en); en = ext[0];
+    if (!ext[1]) while (en > mEnd && TRIM.test(f[en - 1])) en--;
+    out.push(ext[1] ? [st, en, true] : [st, en]); last = en; re.lastIndex = Math.max(en, re.lastIndex);
+  }
+  return out;
+}
+// ---- name pass (v2.1 decode step, generalized in v2.2): every param name in a URL token is checked with isSecretParam ----
+const URL_START_G = new RegExp(URL_START, 'g');
+const PSEP = (c) => c === '?' || c === '&' || c === '#' || c === ';'; // v2.2 G3: `;` added
+function decodeNameOnce(n) { try { return decodeURIComponent(n); } catch { return null; } }
+// raw = the name as it sits in the scan copy. Only a COPY is decoded (until stable, see below); malformed => secret (fail closed)
+// fix7.5-D: decode until stable with normParamName's cap (PARAM_DECODE_CAP); malformed % or cap reached => secret (fail closed). No '+' rule.
+function paramNameIsSecret(raw) { if (!raw.includes('%')) return isSecretParam(raw); let d = raw;
+  for (let i = 0; i <= PARAM_DECODE_CAP; i++) { if (i === PARAM_DECODE_CAP) { d = null; break; } const x = decodeNameOnce(d); if (x === null) { d = null; break; } if (x === d) break; d = x; }
+  return d === null || isSecretParam(d); }
+function urlStartBefore(starts, q) { let lo = -1; for (const s of starts) { if (s < q) lo = s; else break; } return lo; }
+function nameSpans(f) { // f = a scan copy, same length as v: every index below is a raw index into v
+  const out = []; let last = 0, i = 0; const L = f.length;
+  while (i < L) {
+    while (i < L && STOP.test(f[i])) i++;
+    const ts = i; let hasSep = false;
+    while (i < L && !STOP.test(f[i])) { if (PSEP(f[i])) hasSep = true; i++; }
+    const te = i; if (!hasSep) continue;
+    const tok = f.slice(ts, te);
+    const starts = []; URL_START_G.lastIndex = 0; let m;
+    while ((m = URL_START_G.exec(tok))) { starts.push(m.index); if (m[0].length === 0) URL_START_G.lastIndex++; }
+    if (!starts.length) continue;
+    let j = 0, hit = -1;
+    while (j < tok.length) {
+      if (!PSEP(tok[j])) { j++; continue; }
+      const q = j; j++; const ns = j;
+      while (j < tok.length && tok[j] !== '=' && !PSEP(tok[j])) j++;
+      let ne = j; if (ne === tok.length) while (ne > ns && TRIM.test(tok[ne - 1])) ne--; // N2: valueless name at token end drops trailing .,;:!?)]}
+      const raw = tok.slice(ns, ne);
+      const anchor = tok[q] === '#' && tok[j] !== '=' && !(raw.includes('%') && decodeNameOnce(raw) === null); // `#name` with no `=` is a page anchor, not a param, unless malformed (N4: fail closed)
+      if (raw && !anchor && paramNameIsSecret(raw)) { const u = urlStartBefore(starts, q); if (u >= 0) { hit = u; break; } }
+      while (j < tok.length && !PSEP(tok[j])) j++;
+    }
+    if (hit < 0) continue;
+    let st = ts + hit;
+    if (f.startsWith('//', st) && st - 1 >= Math.max(last, ts) && f[st - 1] === ':') { st--; while (st - 1 >= Math.max(last, ts) && SCHEME_CH.test(f[st - 1])) st--; }
+    let en = te; while (en > st && TRIM.test(f[en - 1])) en--;
+    out.push([st, en]); last = en;
+  }
+  return out;
+}
+// ---- ref-v2.3 text pass (plan REF-V2.3-N2 v1.2.1 8921015a §3): credential-shaped values only; prose survives because a space breaks the token ----
+const XAI_KEY_SOURCE = '(?:(?<![A-Za-z0-9_])|(?<=%[0-9A-Fa-f]{2}))xai(?:-|%2[dD]|\\\\u002[dD])[A-Za-z0-9]{20,}(?![A-Za-z0-9])';
+const BEARER_SOURCE = '(?:(?<![A-Za-z0-9])|(?<=%[0-9A-Fa-f]{2}))bearer(?:' + REDACT_SEP + '|%20)+[A-Za-z0-9._~+/=-]{20,}';
+const HEADER_SOURCE = '(?<![A-Za-z0-9-])(?:proxy-authorization|authorization|x-api-key|x-auth-token)["\']?' + REDACT_SEP + '*(?:[:=]|%3[aA])(?:' + REDACT_SEP + '|%20)*["\']?(?:(?:bearer|basic|token|digest)(?:' + REDACT_SEP + '|%20)+[A-Za-z0-9._~+/=-]{20,}|(?=[A-Za-z0-9._~+/=-]*[0-9])[A-Za-z0-9._~+/=-]{20,})';
+const COOKIE_SOURCE = '(?<![A-Za-z0-9-])(?:set-cookie|cookie)["\']?' + REDACT_SEP + '*:' + COOKIE_GAP + '*["\']?([^\\r\\n"\']*)';
+// fix6 (CoS 07:44): COOKIE_NL_SOURCE, bare token on the line after a Cookie/Set-Cookie header; lookbehind only, so the break is not in the span.
+const COOKIE_BREAK = '(?:\\r\\n|[\\r\\n\\u2028\\u2029\\u0085])';
+// fix7.6-b: the O(1) guard (a token char here, none just before) runs before the lookbehind, so the lookbehind's COOKIE_GAP* walk-back
+// happens only at a token start, never at every position of a gap run (quadratic on 7a1cd426). Every match already starts at a token
+// char right after a gap or break char (neither is a token char), so the guard rejects no match: the matched set is unchanged.
+const COOKIE_NL_SOURCE = '(?=[A-Za-z0-9._~+/=-])(?<![A-Za-z0-9._~+/=-])(?<=(?<![A-Za-z0-9-])(?:set-cookie|cookie)["\']?' + REDACT_SEP + '*:[^\\r\\n\\u2028\\u2029\\u0085]*' + COOKIE_BREAK + '{1,2}' + COOKIE_GAP + '*)(?=[A-Za-z0-9._~+/=-]*[0-9])[A-Za-z0-9._~+/=-]{20,}';
+const BASIC_SOURCE = '(?:(?<![A-Za-z0-9])|(?<=%[0-9A-Fa-f]{2}))basic((?:' + REDACT_SEP + '|%20)+)([A-Za-z0-9+/=_-]{2,})';
+const JSON_PAIR_SOURCE = '"((?:[^"\\\\]|\\\\.){1,64})"' + REDACT_SEP + '*:' + REDACT_SEP + '*"((?:[^"\\\\]|\\\\.)*)"';
+const SESSION_COOKIE_NAMES = ['sid','sess','sessid','session','sessionid','phpsessid','jsessionid','connectsid','aspnetsessionid','laravelsession','csrftoken'];
+function cookieIsSecret(list) { return list.split(';').some((p) => { const i = p.indexOf('='); if (i <= 0) return false;
+  let raw = p.slice(0, i).replace(SEP_TRIM, ''); // fix7.5-D: same decode-until-stable loop as paramNameIsSecret; null => secret
+  for (let j = 0; j <= PARAM_DECODE_CAP; j++) { if (j === PARAM_DECODE_CAP) { raw = null; break; } const x = decodeNameOnce(raw); if (x === null) { raw = null; break; } if (x === raw) break; raw = x; }
+  const n = raw === null ? null : normalizeName(raw).replace(/\./g, ''), v = p.slice(i + 1).replace(SEP_TRIM, '').split(new RegExp(REDACT_SEP, 'u'))[0];
+  return v !== '' && (n === null || SESSION_COOKIE_NAMES.includes(n) || isSecretField(n) || /^(?=[^0-9]*[0-9])[A-Za-z0-9._~+/=%-]{16,}$/.test(v)); }); }
+// SEP1 fix4 standalone param rule: [?&;] SEP* name SEP* = SEP* value, anywhere in the text, never across a line terminator.
+// A name right after a line-terminator run that follows a [?&;]-led fragment also counts (the `?api<LT>key=` shape); the match itself starts after the LT.
+// Name (joined across the LT for the continuation shape; the span still starts after the LT): decode %XX and + until stable (cap PARAM_DECODE_CAP); malformed %, cap reached or cap+1 => secret (fail closed); strip SEP - _ . ; compare via isSecretField (object-key list; URL-only PARAM_EXACT names such as `key` stay with the URL passes, so prose `key?key=yes` is kept).
+const PARAM_DECODE_CAP = 4;
+const SEP_NL = '(?:(?![' + LT_CH + '])' + REDACT_SEP + '|%20)';
+const PARAM_VALUE = '[^&#;<>"`' + JS_WS + '\\u0085\\u00ad\\u180e\\u200b-\\u200d\\u2060\\u0027]+';
+// fix7.5-A: the (?=[^?&;=#<>"`LT]) guard rejects positions inside an LT run in O(1) before the lookbehind walks back; group 2 below
+// already starts with a char of that same class, so the match set is unchanged.
+const STANDALONE_PARAM_SOURCE = '(?:(?<=[?&;])|(?=[^?&;=#<>"`' + LT_CH + '])(?<=[?&;]([^?&;=#<>"`' + LT_CH + ']{1,64})[' + LT_CH + ']+))([^?&;=#<>"`' + LT_CH + ']{1,64}?)' + SEP_NL + '*=' + SEP_NL + '*(' + PARAM_VALUE + ')';
+const SEP_STRIP = new RegExp(REDACT_SEP + '|[-_.]', 'gu');
+function normParamName(raw) { let s = raw;
+  for (let i = 0; i <= PARAM_DECODE_CAP; i++) { if (i === PARAM_DECODE_CAP) return null; let d; try { d = decodeURIComponent(s.split('+').join(' ')); } catch { return null; } if (d === s) break; s = d; }
+  return foldCase(s).replace(SEP_STRIP, '').toLowerCase(); }
+function standaloneParamSpans(f) { const out = []; const re = new RegExp(STANDALONE_PARAM_SOURCE, 'gu'); let m;
+  while ((m = re.exec(f))) { const n = normParamName((m[1] || '') + m[2]); let e = m.index + m[0].length; const vs = e - m[3].length;
+    while (e > vs && TRIM.test(f[e - 1])) e--; // value keeps no trailing .,;:!?)]} (prose punctuation stays, as in regexSpans)
+    if (e > vs && (n === null || (n !== '' && isSecretField(n)))) out.push([m.index, e]); }
+  return out; }
+function textSecretSpans(f) { const out = [];
+  for (const src of [XAI_KEY_SOURCE, BEARER_SOURCE, HEADER_SOURCE, COOKIE_NL_SOURCE]) { const re = new RegExp(src, 'giu'); let m; while ((m = re.exec(f))) out.push([m.index, m.index + m[0].length]); }
+  { // explicit Basic scheme (header or bare), plan v1.2.1. Run = [A-Za-z0-9+/_-] data then '=' padding (base64 and base64url).
+    // RED if: (1) 2+ chars and the lenient decode has ':' or fails; (2) 20+ chars; (3) 16+ chars with a digit or + / = - _;
+    // (4) 4+ chars ending at line end / quote / ; , } with a digit or + / = - _; or malformed padding ('=' not at the end,
+    // more than 2, or (data + pad) % 4 != 0 when padded). A decode error (data length % 4 == 1) never counts as "no colon".
+    const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const colonOrBad = (d) => { if (d.length % 4 === 1) return true; let bits = 0, n = 0;
+      for (const c of d) { const x = c === '-' ? 62 : c === '_' ? 63 : B64.indexOf(c); if (x < 0) return true; bits = (bits << 6) | x; n += 6; if (n >= 8) { n -= 8; if (((bits >> n) & 255) === 58) return true; bits &= (1 << n) - 1; } } return false; };
+    const re = new RegExp(BASIC_SOURCE, 'giu'); let m;
+    while ((m = re.exec(f))) { const run = m[2], forced = /[^ ]/u.test(m[1].split('%20').join('')), end = m.index + m[0].length, nx = f[end];
+      const pm = /^([A-Za-z0-9+/_-]+)(=*)$/.exec(run); const data = pm ? pm[1] : '', pad = pm ? pm[2].length : 0;
+      const malformed = !pm || pad > 2 || (pad > 0 && (data.length + pad) % 4 !== 0);
+      const atEnd = nx === undefined || /[\r\n\u2028\u2029"'`;,}]/.test(nx);
+      const sym = /[0-9+/=_-]/.test(run), L = run.length;
+      if (forced || malformed || colonOrBad(data) || L >= 20 || (L >= 16 && sym) || (L >= 4 && atEnd && sym)) out.push([m.index, end]); } }
+  { const re = new RegExp(COOKIE_SOURCE, 'giu'); let m; while ((m = re.exec(f))) if (cookieIsSecret(m[1])) out.push([m.index, m.index + m[0].length]); }
+  { const re = new RegExp(JSON_PAIR_SOURCE, 'gu'); let m; while ((m = re.exec(f))) if (m[2] !== '' && (() => { let k; try { k = JSON.parse('"' + m[1] + '"'); } catch { return true; } return typeof k !== 'string' || isSecretField(k); })()) { const e = m.index + m[0].length - 1; out.push([e - m[2].length, e]); } }
+  for (const x of standaloneParamSpans(f)) out.push(x);
+  return out; }
+// union of all spans (regex + name pass + v2.3 text pass) over the three scan copies; overlapping spans merge into one marker; output slices the ORIGINAL v
+// T1: a merged group holding a carried span also takes a trailing .,;:!?)]} run that reaches XSTOP or the end (only ever removes more).
+function carriedTail(v, e, cx) { if (!cx) return e; let k = e; while (k < v.length && TRIM.test(v[k])) k++; return (k > e && (k === v.length || XSTOP.test(v[k]))) ? k : e; }
+// fix6 (CoS 07:46/07:49): NEL ends a span; the NELs a span covered are re-emitted after its MARK (nothing else in the span is un-redacted).
+const keptNel = (v, s, e) => v.slice(s, e).replace(/[^\u0085]/g, '');
+const RESCAN_TOKEN = new RegExp('(?=[A-Za-z0-9._~+/=-]*[0-9])[A-Za-z0-9._~+/=-]{20,}', 'y');
+function breakRescan(v, sp) { // fix6: a span ending at a break run restarts scanning after it
+  for (let i = 0; i < sp.length; i++) { let k = sp[i][1]; const k0 = k; while (k < v.length && /[\r\n\u2028\u2029\u0085]/.test(v[k])) k++;
+    if (k === k0) continue; RESCAN_TOKEN.lastIndex = k; const m = RESCAN_TOKEN.exec(v);
+    if (m && !sp.some((s) => s[0] <= k && s[1] >= k + m[0].length)) sp.push([k, k + m[0].length]); } }
+function redactAll(v) {
+  const sp = [];
+  for (const copy of SCAN_COPIES) { const f = copy(v); for (const x of regexSpans(f)) sp.push(x); for (const x of nameSpans(f)) sp.push(x); for (const x of textSecretSpans(f)) sp.push(x); }
+  if (!sp.length) return v;
+  breakRescan(v, sp);
+  sp.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  let out = '', last = 0, cs = -1, ce = -1, cx = false;
+  for (const [st, en, x] of sp) { if (en <= st) continue;
+    if (cs >= 0 && st < ce) { if (en > ce) ce = en; if (x) cx = true; continue; }
+    if (cs >= 0) { ce = carriedTail(v, ce, cx); out += v.slice(last, cs) + MARK + keptNel(v, cs, ce); last = ce; }
+    cs = st; ce = en; cx = !!x; }
+  if (cs < 0) return v;
+  ce = carriedTail(v, ce, cx); out += v.slice(last, cs) + MARK + keptNel(v, cs, ce); last = ce;
+  return out + v.slice(last);
+}
+// returns undefined for "drop"
+function sanitizeString(v) { if (isSensitiveWholeUrl(v)) return undefined; const r = redactAll(v); return r !== v && r.split(MARK).join('').replace(/\u0085/g, '').trim() === '' ? undefined : r; }
+// N1: input MUST be an object or array; a top-level string (or number, boolean, null) is returned unchanged.
+function stripSecretFields(value, path = '', report = { dropped: [], redacted: [] }) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map((x, i) => {
+    if (typeof x === 'string') { const r = sanitizeString(x); if (r === undefined) { report.dropped.push(`${path}[${i}]`); return null; } if (r !== x) report.redacted.push(`${path}[${i}]`); return r; }
+    return stripSecretFields(x, `${path}[${i}]`, report); });
+  if (!value || typeof value !== 'object') return value;
+  const kept = []; // M1: entries list, then Object.fromEntries (own data properties; `__proto__` stays a key, prototype stays Object.prototype)
+  for (const [k, x] of Object.entries(value)) {
+    const p = path ? `${path}.${k}` : k;
+    if (isSecretField(k)) { report.dropped.push(p); continue; }
+    if (typeof x === 'string') { const r = sanitizeString(x); if (r === undefined) { report.dropped.push(p); continue; } if (r !== x) report.redacted.push(p); kept.push([k, r]); }
+    else kept.push([k, stripSecretFields(x, p, report)]);
+  }
+  return Object.fromEntries(kept);
+}
+// D7 (CoS 9:31): plain-words export notice with the count of stripped fields. Field paths only; never a value.
+function exportNotice(rep) { const n = rep.dropped.length + rep.redacted.length; if (!n) return null;
+  const parts = []; if (rep.dropped.length) parts.push(rep.dropped.join(', ') + '.'); if (rep.redacted.length) parts.push('Credential links redacted in: ' + rep.redacted.join(', ') + '.');
+  return `Removed before export (${n} field${n === 1 ? '' : 's'}): ${parts.join(' ')} The exported file does not contain them.`; }
 
-        function isSecretField(name) {
-            const normalized = String(name).toLowerCase();
-            return SECRET_FIELD_DENYLIST.exact.some(field => field.toLowerCase() === normalized)
-                || SECRET_FIELD_DENYLIST.patterns.some(pattern => pattern.test(normalized));
+const CREDENTIAL_URL = new RegExp(CREDENTIAL_URL_SOURCE, 'gu');
+const IMPORT_CLAUSE = 'Credential links redacted in: ';
+
+// SEC-SWEEP #180 shared copy: end
+
+        // D7: user-facing export notice. Receives exportNotice(report) text only (field paths, never values).
+        function showExportNotice(text) {
+            if (typeof text === 'string' && text) alert(text);
         }
 
-        function isSensitiveUrl(value) {
-            if (typeof value !== "string") return false;
-            try {
-                const url = new URL(value);
-                if (url.username || url.password) return true;
-                const fragment = url.hash.slice(1);
-                const fragmentParams = fragment.includes("=")
-                    ? new URLSearchParams(fragment.includes("?") ? fragment.slice(fragment.indexOf("?") + 1) : fragment)
-                    : new URLSearchParams();
-                return [...url.searchParams.keys(), ...fragmentParams.keys()].some(name =>
-                    ["key", "token"].includes(name.toLowerCase()) || isSecretField(name)
-                );
-            } catch (error) {
-                return false;
+        // Deterministic identity of the credential rule: two-lane FNV-1a-style hash (two 32-bit lanes, h2 mixed with h1) over
+        // the value of EVERY top-level binding of the SEC-SWEEP #180 shared copy, in block order (all of them except
+        // exportNotice, which only formats the D7 notice and does not feed the strip). Each binding is resolved by name at
+        // call time (a closure per name), so a replaced rule function changes the id by itself. A missing binding throws:
+        // a page without its rule is broken, never hashed as null. Functions hash by source, regexes by source + flags,
+        // arrays/objects element-wise (object keys sorted), everything else as JSON. Stable across page loads (no time or
+        // randomness). CACHE-04c (tests/sec/hbf) mutates each binding of the block and requires a new id.
+        function secRuleId() {
+            const bindings = [
+                ['REDACT_SEP', () => REDACT_SEP],
+                ['JS_WS', () => JS_WS],
+                ['COOKIE_GAP', () => COOKIE_GAP],
+                ['SEP_TRIM', () => SEP_TRIM],
+                ['SRC306', () => SRC306],
+                ['V1_USERINFO', () => V1_USERINFO],
+                ['V2_USERINFO', () => V2_USERINFO],
+                ['TAIL', () => TAIL],
+                ['URL_START', () => URL_START],
+                ['URL_SCAN', () => URL_SCAN],
+                ['V2_KEYPARAM', () => V2_KEYPARAM],
+                ['CREDENTIAL_URL_SOURCE', () => CREDENTIAL_URL_SOURCE],
+                ['FOLD', () => FOLD],
+                ['foldCase', () => foldCase],
+                ['scanCopy', () => scanCopy],
+                ['EXACT', () => EXACT],
+                ['CRED_EXACT', () => CRED_EXACT],
+                ['KEY_STEMS', () => KEY_STEMS],
+                ['STEM_MAX', () => STEM_MAX],
+                ['PARAM_EXACT', () => PARAM_EXACT],
+                ['normalizeName', () => normalizeName],
+                ['cls', () => cls],
+                ['nameWords', () => nameWords],
+                ['hasProviderKeyWords', () => hasProviderKeyWords],
+                ['isSecretField', () => isSecretField],
+                ['isSecretParam', () => isSecretParam],
+                ['MARK', () => MARK],
+                ['isSensitiveWholeUrl', () => isSensitiveWholeUrl],
+                ['SCHEME_CH', () => SCHEME_CH],
+                ['STOP', () => STOP],
+                ['TRIM', () => TRIM],
+                ['scanCopyV2', () => scanCopyV2],
+                ['scanCopyR1', () => scanCopyR1],
+                ['SCAN_COPIES', () => SCAN_COPIES],
+                ['regexSpans', () => regexSpans],
+                ['URL_START_G', () => URL_START_G],
+                ['PSEP', () => PSEP],
+                ['decodeNameOnce', () => decodeNameOnce],
+                ['paramNameIsSecret', () => paramNameIsSecret],
+                ['urlStartBefore', () => urlStartBefore],
+                ['nameSpans', () => nameSpans],
+                ['XAI_KEY_SOURCE', () => XAI_KEY_SOURCE],
+                ['BEARER_SOURCE', () => BEARER_SOURCE],
+                ['HEADER_SOURCE', () => HEADER_SOURCE],
+                ['COOKIE_SOURCE', () => COOKIE_SOURCE],
+                ['COOKIE_NL_SOURCE', () => COOKIE_NL_SOURCE],
+                ['keptNel', () => keptNel],
+                ['RESCAN_TOKEN', () => RESCAN_TOKEN],
+                ['breakRescan', () => breakRescan],
+                ['BASIC_SOURCE', () => BASIC_SOURCE],
+                ['JSON_PAIR_SOURCE', () => JSON_PAIR_SOURCE],
+                ['SESSION_COOKIE_NAMES', () => SESSION_COOKIE_NAMES],
+                ['cookieIsSecret', () => cookieIsSecret],
+                ['textSecretSpans', () => textSecretSpans],
+                ['redactAll', () => redactAll],
+                ['sanitizeString', () => sanitizeString],
+                ['stripSecretFields', () => stripSecretFields],
+                ['CREDENTIAL_URL', () => CREDENTIAL_URL],
+                ['IMPORT_CLAUSE', () => IMPORT_CLAUSE],
+                ['LT_CH', () => LT_CH],
+                ['SEP_CS', () => SEP_CS],
+                ['XSTOP', () => XSTOP],
+                ['SEP_ONE', () => SEP_ONE],
+                ['extendSpan', () => extendSpan],
+                ['PARAM_DECODE_CAP', () => PARAM_DECODE_CAP],
+                ['SEP_NL', () => SEP_NL],
+                ['PARAM_VALUE', () => PARAM_VALUE],
+                ['STANDALONE_PARAM_SOURCE', () => STANDALONE_PARAM_SOURCE],
+                ['SEP_STRIP', () => SEP_STRIP],
+                ['normParamName', () => normParamName],
+                ['standaloneParamSpans', () => standaloneParamSpans],
+                ['carriedTail', () => carriedTail]
+            ];
+            const ser = (v) => typeof v === 'function' ? 'f:' + String(v)
+                : v instanceof RegExp ? 'r:' + String(v)
+                : Array.isArray(v) ? 'a:[' + v.map(ser).join('\u0001') + ']'
+                : (v !== null && typeof v === 'object') ? 'o:{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + ser(v[k])).join('\u0001') + '}'
+                : 'v:' + JSON.stringify(v);
+            const input = bindings.map(([name, get]) => {
+                let v;
+                try { v = get(); } catch (e) { throw new Error('secRuleId: missing rule binding ' + name); }
+                if (v === undefined) throw new Error('secRuleId: missing rule binding ' + name);
+                return name + '=' + ser(v);
+            }).join('\u0000');
+            let h1 = 0x811c9dc5, h2 = 0x050c5d1f;
+            for (let i = 0; i < input.length; i++) {
+                const c = input.charCodeAt(i);
+                h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+                h2 = Math.imul(h2 ^ c, 0x01000193) ^ (h1 >>> 15);
+                h2 >>>= 0;
             }
+            return 'sec-v2.2-' + h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0') + '-' + input.length.toString(36);
         }
 
-        function findRemovedSecretFields(value, fieldName = "") {
-            if (Array.isArray(value)) {
-                return [...new Set(value.flatMap(item => isSensitiveUrl(item)
-                    ? [fieldName || "URL value"]
-                    : findRemovedSecretFields(item, fieldName)))];
-            }
-            if (!value || typeof value !== "object") return [];
-            return [...new Set(Object.entries(value).flatMap(([name, nested]) => {
-                if (isSecretField(name) || isSensitiveUrl(nested)) return [name];
-                return findRemovedSecretFields(nested, name);
-            }))];
-        }
-
-        function stripSecretFields(value) {
-            if (Array.isArray(value)) return Array.from(value, item => isSensitiveUrl(item) ? null : stripSecretFields(item));
-            if (!value || typeof value !== 'object') return value;
-            return Object.fromEntries(Object.entries(value)
-                .filter(([name, nested]) => !isSecretField(name) && !isSensitiveUrl(nested))
-                .map(([name, nested]) => [name, stripSecretFields(nested)]));
-        }
-
-        function stripSecretFieldsInPlace(value) {
-            if (Array.isArray(value)) {
-                for (let index = value.length - 1; index >= 0; index--) {
-                    if (isSensitiveUrl(value[index])) value[index] = null;
-                    else stripSecretFieldsInPlace(value[index]);
-                }
-                return;
-            }
-            if (!value || typeof value !== 'object') return;
-            Object.entries(value).forEach(([name, nested]) => {
-                if (isSecretField(name) || isSensitiveUrl(nested)) delete value[name];
-                else stripSecretFieldsInPlace(nested);
-            });
+        // C2 memoized localStorage save. Per-session cache of sanitized string values, dropped whenever secRuleId() changes.
+        // Secret-named fields are re-checked on every save (never cached); sanitizeString is looked up at call time.
+        // Returns a callable save(project) -> string; also exposed as .save.
+        function makeProjectStorageSaver() {
+            let prev = new Map();
+            let rule = null;
+            const save = (project) => {
+                const id = secRuleId();
+                if (id !== rule) { prev = new Map(); rule = id; }
+                const next = new Map();
+                const replacer = (name, value) => {
+                    if (name !== '' && isSecretField(name)) return undefined;
+                    if (typeof value !== 'string') return value;
+                    let clean;
+                    if (next.has(value)) clean = next.get(value);
+                    else if (prev.has(value)) clean = prev.get(value);
+                    else clean = sanitizeString(value);
+                    next.set(value, clean);
+                    return clean;
+                };
+                const out = JSON.stringify(project, replacer);
+                prev = next;
+                return out;
+            };
+            save.save = save;
+            return save;
         }
 
         const DEFAULT_MODEL = 'grok-4.7';
@@ -808,9 +1124,7 @@
             return { ...projectData, setup: safeSetup };
         }
 
-        function projectStorageReplacer(name, value) {
-            return (isSecretField(name) || isSensitiveUrl(value)) ? undefined : value;
-        }
+
 
         function escapeHtml(text) {
             return String(text)
@@ -878,9 +1192,12 @@
             if (importedProject || saved) {
                 try {
                     const currentApiKey = project.setup.apiKey || document.getElementById('api-key')?.value || '';
-                    const parsed = importedProject || JSON.parse(saved);
-                    stripSecretFieldsInPlace(parsed);
-                    stripSecretFieldsInPlace(project);
+                    const loadReport = { dropped: [], redacted: [] };
+                    const parsed = stripSecretFields(importedProject || JSON.parse(saved), '', loadReport);
+                    // ref-v2.3 LOADNOTICE: a strip of saved data is never silent. Field paths only, never a value.
+                    const loadRemoved = loadReport.dropped.length + loadReport.redacted.length;
+                    if (!importedProject && loadRemoved) alert(`Saved project data contained credentials. Removed on load (${loadRemoved} field${loadRemoved === 1 ? '' : 's'}): ${[...loadReport.dropped, ...loadReport.redacted].join(', ')}. If this data was shared, rotate your API key at console.x.ai.`);
+                    project = stripSecretFields(project, '', { dropped: [], redacted: [] });
                     project = {
                         ...project,
                         ...parsed,
@@ -908,7 +1225,7 @@
             if (!Array.isArray(project.setup.collectionIds)) {
                 project.setup.collectionIds = ["collection_840cb08d-163e-430a-a1aa-dd65b500e9bb"];
             }
-            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject(), projectStorageReplacer));
+            localStorage.setItem('herbalBookForgeProject_v1.0.0', projectSaver(getStoredProject()));
             ['v0.14.0', 'v0.11.0', 'v0.10.0', 'v0.9.5', 'v0.9.3'].forEach(version => {
                 localStorage.removeItem(`herbalBookForgeProject_${version}`);
             });
@@ -930,9 +1247,19 @@
             updateFooter();
         }
 
+        let pendingSaveTimer = null;
+        const projectSaver = makeProjectStorageSaver();
+        function scheduleProjectSave() {
+            if (pendingSaveTimer !== null) clearTimeout(pendingSaveTimer);
+            pendingSaveTimer = setTimeout(() => { pendingSaveTimer = null; saveProject(); }, 1000);
+        }
+        function flushPendingSave() {
+            if (pendingSaveTimer === null) return;
+            clearTimeout(pendingSaveTimer); pendingSaveTimer = null; saveProject();
+        }
         function saveProject() {
             project.meta.lastEdited = new Date().toISOString();
-            localStorage.setItem('herbalBookForgeProject_v1.0.0', JSON.stringify(getStoredProject(), projectStorageReplacer));
+            localStorage.setItem('herbalBookForgeProject_v1.0.0', projectSaver(getStoredProject()));
             const status = document.getElementById('save-status');
             if (status) {
                 status.innerHTML = `Saved at ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
@@ -956,7 +1283,12 @@
 
         function exportProject() {
             const fileName = `${(project.meta.name || "herbal-book").replace(/[^a-z0-9-_ ]/gi, "").trim() || "herbal-book"}_session.json`;
-            const blob = new Blob([JSON.stringify(stripSecretFields(project), null, 2)], { type: 'application/json' });
+            flushPendingSave();
+            const report = { dropped: [], redacted: [] };
+            const clean = stripSecretFields(project, '', report);
+            const notice = exportNotice(report);
+            if (notice) showExportNotice(notice);
+            const blob = new Blob([JSON.stringify(clean, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -972,13 +1304,17 @@
             reader.onload = e => {
                 try {
                     const rawProject = JSON.parse(e.target.result);
-                    const removedFields = findRemovedSecretFields(rawProject);
-                    stripSecretFieldsInPlace(rawProject);
+                    // Import strip: same rule as export. The notice lists field paths only (never a value).
+                    const report = { dropped: [], redacted: [] };
+                    const cleanProject = stripSecretFields(rawProject, '', report);
                     project.meta.version = "1.0.0";
-                    loadProject(rawProject);
+                    loadProject(cleanProject);
                     saveProject();
-                    alert(removedFields.length
-                        ? `Project imported successfully. Sensitive fields removed: ${removedFields.join(", ")}. If the file was shared, rotate your API key at console.x.ai.`
+                    const removed = [];
+                    if (report.dropped.length) removed.push(`Sensitive fields removed: ${report.dropped.join(", ")}.`);
+                    if (report.redacted.length) removed.push(`${IMPORT_CLAUSE}${report.redacted.join(", ")}.`);
+                    alert(removed.length
+                        ? `Project imported successfully. ${removed.join(' ')} If the file was shared, rotate your API key at console.x.ai.`
                         : 'Project imported successfully.');
                 } catch (err) {
                     alert(`Import failed: ${err.message}`);
@@ -2415,6 +2751,14 @@
                 // Trigger onchange to render the draft workspace
                 select.dispatchEvent(new Event('change'));
             }
+        }
+
+        // Show a status line in the element with id statusId (was called but never defined; Engineering scan on 1e897af1).
+        function setStatusMessage(msg, statusId) {
+            const el = document.getElementById(statusId);
+            if (!el) return;
+            el.textContent = msg;
+            el.classList.remove('hidden');
         }
 
         // HBF.SA4 (v0.13.0): Apply suggestion from a safety flag — navigate to Drafting, select chapter, pre-fill revision instruction textarea

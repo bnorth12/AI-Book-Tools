@@ -1,0 +1,65 @@
+{
+ "_about": "ref-nel-fix7 (CoS 08:41): frozen ref-v23-rows.json S rows re-pinned to the kept-NEL output. oldOut = frozen fixture value (unchanged file); out = fix7 exact; out minus one U+0085 must equal oldOut.",
+ "rows": {
+  "CK-pre-U0085": {
+   "oldOut": "log <MARK>",
+   "out": "log <MARK>"
+  },
+  "CK-name-U0085": {
+   "oldOut": "log <MARK>",
+   "out": "log <MARK>"
+  },
+  "CK-q-U0085": {
+   "oldOut": "log <MARK>\" end",
+   "out": "log <MARK>\" end"
+  },
+  "NEL-Basic-0085": {
+   "oldOut": "use <MARK> please",
+   "out": "use <MARK> please"
+  },
+  "NEL-BasicHdr-0085": {
+   "oldOut": "Authorization: <MARK> ok",
+   "out": "Authorization: <MARK> ok"
+  },
+  "NEL-Bearer-0085": {
+   "oldOut": "use <MARK> please",
+   "out": "use <MARK> please"
+  },
+  "NEL-Token-0085": {
+   "oldOut": "<MARK> ok",
+   "out": "<MARK> ok"
+  },
+  "NEL-Digest-0085": {
+   "oldOut": "<MARK> ok",
+   "out": "<MARK> ok"
+  },
+  "NEL-AuthBare-0085": {
+   "oldOut": "<MARK> ok",
+   "out": "<MARK> ok"
+  },
+  "NEL-AuthPre-0085": {
+   "oldOut": "<MARK> ok",
+   "out": "<MARK> ok"
+  },
+  "NEL-XApiKey-0085": {
+   "oldOut": "<MARK> ok",
+   "out": "<MARK> ok"
+  },
+  "NEL-Cookie-0085": {
+   "oldOut": "x <MARK>\nok",
+   "out": "x <MARK>\nok"
+  },
+  "NEL-CookiePre-0085": {
+   "oldOut": "x <MARK>\nok",
+   "out": "x <MARK>\nok"
+  },
+  "NEL-probe-long-0085": {
+   "oldOut": "use <MARK> please",
+   "out": "use <MARK> please"
+  },
+  "NEL-mix-pct20-0085": {
+   "oldOut": "use <MARK> please",
+   "out": "use <MARK> please"
+  }
+ }
+}

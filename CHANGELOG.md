@@ -11,6 +11,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Post-release follow-up items only.
 
+### Security
+
+- HerbalBookForge fix185n (PR #185, narrowed by Brian's call): (b) is fixed. COOKIE_NL_SOURCE now checks for a token start
+  in O(1) before its COOKIE_GAP* lookbehind, so long space or tab runs after a Cookie header (:830/:833) are linear
+  (about 25 s down to a few ms at 64k). The matched set is unchanged (200k seeded fuzz: 0 differences vs 7a1cd426).
+  Out of scope by Brian's call: the password-in-link class (a) and (c) long, escaped or continuation key names:
+  secret key names over 64 characters (raw or after decoding), plus parameter names continued across a line break,
+  including short ones (e.g. `?x=1` then a newline then `abctoken=V`) and multi-line, `\r`, U+2028, `&`-newline and
+  over-64-character continuation prefixes. Both are
+  **not fixed**. They are tracked in the PR #185 follow-up issue under the multi-user/auth backlog item. Pins
+  25243682, d927e31a and 241bdd49 unchanged.
+- HerbalBookForge redaction fix7.5 (PR #185 T1/T2). T1: the userinfo patterns (V1_USERINFO, V2_USERINFO, SRC306,
+  schema/story-core-2.0.json :261/:274/:306 and the smoke harness copies) keep at most one line-break run between fixed
+  characters, and STANDALONE_PARAM_SOURCE checks the next character before its line-break lookbehind. Both match the
+  same strings as before and now run in linear time on long line-break runs. redactAll on 32768 newlines drops from
+  about 6.8 s to about 15 ms. T2: the free-text JSON pair pass decodes the key before isSecretField, and a key that does
+  not decode is treated as secret. tests/sec: 2555/2555 on Node 20 and 22. Smoke: 1798 PASS / 0 FAIL, pin 25243682 unchanged.
+- HerbalBookForge fix7.5-D: URL param names (paramNameIsSecret) and Cookie names (cookieIsSecret) are decoded until
+  stable, with the same 4-pass cap as the standalone param rule. A malformed name, or one still changing after 4 decodes,
+  is treated as secret. FLIP/F1 (`?%2574oken=x`) now removes the whole URL; re-pinned with gen-flip-f1.mjs.
+- HerbalBookForge fix7.5-D3: the F1 flip generator is committed as `tools/hbf/gen-flip-f1.mjs` (asserts the spec
+  output on all 3 strip paths before writing), and `rows.hbf.test.mjs` pins `hbf-rows-flip.json` at sha256 `241bdd49`.
+- HerbalBookForge credential redaction NEL fix (fix7.4): HBF `HerbalBookForge.html` sha256 `d824f617`, schema `6abefa05`,
+  smoke `3d79b90f` base; `tests/sec/hbf` rows and NEL tests; frozen `fixtures/ref-v23-rows.json` (`1ee8e5fe`) sha-pinned.
+  Gates: fix7.4 SUMS `8238ee8a` (Engineering `ba692fa3`, Reviewer `ecb5c93b`).
+- Smoke ReDoS2: the userinfo seeded-fuzz check now compares each pattern's diff set with the pinned TIGHTEN set
+  (`scripts/redos2-pinned-tighten-set-8238ee8a.json`, sha256 `25243682`) exactly, both ways; any LOOSEN is red.
+
+### Notes
+
+- Timing (Engineering): `ps` elapsed time and wall-clock durations include time the box was paused or suspended.
+  Read run durations from `/proc/uptime` (monotonic) deltas, not wall clock or `ps` etime. Timing run of record on fix7.4:
+  SUMS `ef1bfb8a`; Node 20.19.2 86m05s wall / 2326.5 s uptime, Node 22.23.3 70m52s wall / 1708.5 s uptime
+  (sequential legs; the gap is box pause/suspend, not test time). Earlier concurrent-leg wall times are load, not a baseline.
+
 ## [1.2.0] - 2026-04-19
 
 ### Added
