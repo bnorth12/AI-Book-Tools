@@ -1,0 +1,160 @@
+{
+  "schemaVersion": "2.1",
+  "coreVersion": "2.1",
+  "sourceTool": "fixture",
+  "sourceVersion": "1.0",
+  "exportedAt": "2026-10-23T00:00:00Z",
+  "workType": "fiction",
+  "novelData": {
+    "title": "The Lending Library at Saltmarsh",
+    "story": {
+      "book": {
+        "id": "bk_saltmarsh_library",
+        "title": "The Lending Library at Saltmarsh"
+      },
+      "chapters": [
+        {
+          "id": "ch_5",
+          "number": 5
+        }
+      ],
+      "scenes": [],
+      "chapterPlans": [
+        {
+          "chapter": 5,
+          "spineRef": "chapterOutlines[5] role=midpoint reversal",
+          "summary": "Mabel traces the razored ledger page to the vicarage, accuses the wrong man, and has to listen before the real debt surfaces. The library stays open; her certainty does not.",
+          "parts": [
+            {
+              "id": "p1",
+              "wordBudget": 700
+            },
+            {
+              "id": "p2",
+              "wordBudget": 700
+            },
+            {
+              "id": "p3",
+              "wordBudget": 600
+            },
+            {
+              "id": "p4",
+              "wordBudget": 500
+            }
+          ],
+          "scenes": [
+            {
+              "id": "ch5-s1",
+              "part": "p1",
+              "order": 1,
+              "pov": "mabel-pryce",
+              "cast": [
+                "mabel-pryce",
+                "arthur-lowe"
+              ],
+              "beat": "Mabel opens the overdue ledger at dawn and finds a page razored out at the spine; Arthur insists nobody but the vicar has touched it since Lent.",
+              "plotPoint": "The missing ledger page is discovered.",
+              "goal": "Find who removed the page before the library committee meets.",
+              "conflict": "Arthur protects the vicar out of habit and will not say more.",
+              "outcome": "no-and",
+              "beatsCovered": [
+                "incitingClue",
+                "settingHook"
+              ],
+              "wordBudget": 700,
+              "sourceRefs": [
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterOutlines[5]",
+                  "anchor": "Mabel finds the missing page was razored out",
+                  "quoteHash": "4f98f8afd2d3"
+                }
+              ]
+            },
+            {
+              "id": "ch5-s2",
+              "part": "p2",
+              "order": 2,
+              "pov": "mabel-pryce",
+              "cast": [
+                "mabel-pryce",
+                "rev-hollis"
+              ],
+              "beat": "At the vicarage Mabel lays out her case point by point and the vicar lets her finish, which unsettles her more than any denial would.",
+              "goal": "Get a confession from the vicar.",
+              "conflict": "He will not explain himself to someone who has already decided.",
+              "outcome": "yes-but",
+              "charArcStep": {
+                "charId": "mabel-pryce",
+                "step": "Her certainty costs her the answer she came for.",
+                "setback": true
+              },
+              "subplotBeat": {
+                "subplotIdx": 0,
+                "part": "flaw",
+                "mode": "echoes",
+                "note": "Mirrors her sister refusing to be solved."
+              },
+              "sequel": {
+                "reaction": "Mabel walks home stung.",
+                "dilemma": "Apologise or press harder.",
+                "decision": "She goes back to listen."
+              },
+              "sourceRefs": [
+                {
+                  "kind": "characterSheet",
+                  "id": "characters[Mabel Pryce].arc",
+                  "anchor": "Mabel Pryce enters brisk and certain, her flaw a habit of solving people instead of listening to them.",
+                  "quoteHash": "e971b3ed7d32"
+                }
+              ]
+            },
+            {
+              "id": "ch5-s3",
+              "part": "p3",
+              "order": 3,
+              "pov": "mabel-pryce",
+              "cast": [
+                "mabel-pryce",
+                "rev-hollis"
+              ],
+              "beat": "Mabel returns and asks one question, then waits; the vicar admits he hid a gambling debt in the ledger margin to keep it from the bishop.",
+              "plotPoint": "The page held a debt, not a crime.",
+              "storyArcStep": "Listening replaces solving.",
+              "goal": "Hear the truth.",
+              "conflict": "Shame keeps the vicar silent until she stops pushing.",
+              "outcome": "yes",
+              "sourceRefs": [
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterOutlines[5]",
+                  "anchor": "the vicar confesses he borrowed the book to hide a debt, not a crime",
+                  "quoteHash": "5ca5dfd7bfea"
+                }
+              ]
+            },
+            {
+              "id": "ch5-s4",
+              "part": "p4",
+              "order": 4,
+              "pov": "arthur-lowe",
+              "cast": [
+                "arthur-lowe",
+                "mabel-pryce"
+              ],
+              "beat": "Arthur watches Mabel paste a blank page into the ledger and initial it, and understands she has chosen to keep a secret for once.",
+              "outcome": "yes",
+              "wordBudget": 500,
+              "sourceRefs": [
+                {
+                  "kind": "userNote",
+                  "id": "note-ch5-close"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

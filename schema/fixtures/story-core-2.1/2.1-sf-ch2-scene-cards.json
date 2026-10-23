@@ -1,0 +1,301 @@
+{
+  "schemaVersion": "2.1",
+  "coreVersion": "2.1",
+  "sourceTool": "fixture",
+  "sourceVersion": "1.0",
+  "exportedAt": "2026-10-23T00:00:00Z",
+  "workType": "fiction",
+  "novelData": {
+    "title": "The Quantum Uncertainty Cat",
+    "story": {
+      "book": {
+        "id": "bk_quantum_cat",
+        "title": "The Quantum Uncertainty Cat"
+      },
+      "chapters": [
+        {
+          "id": "ch_2",
+          "number": 2
+        }
+      ],
+      "scenes": [],
+      "chapterPlans": [
+        {
+          "chapter": 2,
+          "spineRef": "chapterBlueprints[2] role=setup and complication",
+          "summary": "Elena and Bastian bring the observer array onto the spire cryogenic bus; a tenth-of-a-degree bearing drift splits them, Elena folds it into her math and Bastian re-seats the fitting without arguing. Aisha, isolated on a side channel, cannot witness a second flicker. Reyes files a skipped tug telemetry frame as margin. Nothing is named; the margin is already spent.",
+          "parts": [
+            {
+              "id": "p1",
+              "wordBudget": 1750
+            },
+            {
+              "id": "p2",
+              "wordBudget": 1750
+            }
+          ],
+          "scenes": [
+            {
+              "id": "ch2-s1",
+              "part": "p1",
+              "order": 1,
+              "pov": "elena-voss",
+              "cast": [
+                "elena-voss",
+                "bastian-kane"
+              ],
+              "beat": "Elena and Bastian bring the observer array onto the spire bus while the struts groan under thermal load; Bastian finds a bearing a tenth of a degree off and refuses to sign the board until the fitting is re-seated.",
+              "plotPoint": "Bearing drift found during bring-up; Bastian withholds his sign-off.",
+              "goal": "Get the array onto the cryogenic bus inside the shift window.",
+              "conflict": "Bastian will not sign over a hand-torqued fitting he does not trust.",
+              "outcome": "yes-but",
+              "charArcStep": {
+                "charId": "bastian-kane",
+                "step": "Wariness shown as procedure: he logs the drift and holds the signature."
+              },
+              "beatsCovered": [
+                "sceneGoal",
+                "sensoryWorldHook",
+                "characterBeats[0]"
+              ],
+              "wordBudget": 650,
+              "sourceRefs": [
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterOutlines[2]",
+                  "anchor": "Bastian's beat is pragmatic wariness: a bearing drifts a tenth of a degree, the signature of a hand-torqued fitting and a tired tech, and he will not sign the board until it is re-seated.",
+                  "quoteHash": "99885abfec80"
+                },
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterOutlines[2]",
+                  "anchor": "Deck plates carry a low metallic groan as support struts take thermal load.",
+                  "quoteHash": "faec25f80025"
+                },
+                {
+                  "kind": "characterSheet",
+                  "id": "characters[Bastian Kane].arc",
+                  "anchor": "Bastian enters pragmatic and wary, his flaw a tendency to dismiss philosophical implications in favor of immediate mechanical fixes",
+                  "quoteHash": "8df0cc87b7e5"
+                }
+              ]
+            },
+            {
+              "id": "ch2-s2",
+              "part": "p1",
+              "order": 2,
+              "pov": "elena-voss",
+              "cast": [
+                "bastian-kane",
+                "elena-voss"
+              ],
+              "beat": "Bastian tells Elena the drift sits outside anything a tired tech explains; Elena hears a residual and promises her next iteration of the phase equations will absorb it. The exchange ends with each of them more sure, and further apart.",
+              "plotPoint": "Warning delivered and dismissed; the drift is moved into the next iteration.",
+              "goal": "Bastian wants the drift treated as hardware.",
+              "conflict": "Elena is certain better math will close it alone.",
+              "outcome": "no",
+              "charArcStep": {
+                "charId": "elena-voss",
+                "step": "Her flaw hardens by being rewarded: solitary rigor looks like it is working.",
+                "setback": false
+              },
+              "storyArcStep": "Solitary competence chosen over interdependence while interdependence is available in the room.",
+              "beatsCovered": [
+                "dialogueTurn",
+                "castArcBeat",
+                "characterBeats[1]"
+              ],
+              "wordBudget": 600,
+              "sourceRefs": [
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterOutlines[2]",
+                  "anchor": "Elena reads the same drift as a residual her phase equations will absorb and shifts it into the next iteration",
+                  "quoteHash": "84e5c4dd4a3a"
+                },
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterArcs[2]",
+                  "anchor": "She does not ask Bastian what the hand-torque history implies",
+                  "quoteHash": "a72eec26bb51"
+                },
+                {
+                  "kind": "characterSheet",
+                  "id": "characters[Elena Voss].arc",
+                  "anchor": "her flaw a belief that individual competence and rigorous math can tame macroscopic coherence without broader accountability",
+                  "quoteHash": "062d988b8c69"
+                },
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterBlueprints[2].dialogueTurn",
+                  "anchor": "Bastian Kane must warn Elena Voss that the cooling-loop drift sits outside the human-error band",
+                  "quoteHash": "30d453a820db"
+                }
+              ]
+            },
+            {
+              "id": "ch2-s3",
+              "part": "p1",
+              "order": 3,
+              "pov": "elena-voss",
+              "cast": [
+                "elena-voss",
+                "bastian-kane"
+              ],
+              "beat": "The run proceeds on a fixed budget: every qubit spoken for, every trained-mind seat assigned, and a channel without an observer is simply dark. Bastian re-seats the fitting by hand, signs, and keeps his doubt to himself.",
+              "plotPoint": "Hard limit established: finite qubits and finite trained minds.",
+              "sequel": {
+                "reaction": "Bastian goes quiet rather than argue.",
+                "dilemma": "Escalate a drift Elena has already filed, or sign and watch it.",
+                "decision": "He signs and keeps a private log."
+              },
+              "beatsCovered": [
+                "turnOrPayoff",
+                "allowedPayoffs[0]"
+              ],
+              "wordBudget": 500,
+              "sourceRefs": [
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterOutlines[2]",
+                  "anchor": "the qubit budget is finite, the trained-mind seats are already assigned, and a channel without an observer is simply not observed",
+                  "quoteHash": "9b4b1132e718"
+                },
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterArcs[2]",
+                  "anchor": "He re-seats the fitting, signs, and keeps his doubt.",
+                  "quoteHash": "79f08685ab78"
+                }
+              ]
+            },
+            {
+              "id": "ch2-s4",
+              "part": "p2",
+              "order": 1,
+              "pov": "aisha-korvin",
+              "cast": [
+                "aisha-korvin"
+              ],
+              "beat": "In a side alcove Aisha holds one entangled channel in a cold headset; a second flicker needs a witness and she has nothing spare to give it. Protocol keeps her off the main brief, so she logs it, is thanked, and is not called back.",
+              "plotPoint": "Second flicker goes unwitnessed; Aisha is isolated by procedure.",
+              "subplotBeat": {
+                "subplotIdx": 1,
+                "part": "obstacle",
+                "mode": "complicates",
+                "note": "Trained-mind limit felt as isolation, not failure."
+              },
+              "charArcStep": {
+                "charId": "aisha-korvin",
+                "step": "Eager observer moves one notch toward essential witness; her idealism frays and is not repaired.",
+                "setback": true
+              },
+              "goal": "Witness both channels.",
+              "conflict": "She has no spare coherence and no one will recall her.",
+              "outcome": "no-and",
+              "beatsCovered": [
+                "subplotPressure[0]"
+              ],
+              "wordBudget": 800,
+              "sourceRefs": [
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterOutlines[2]",
+                  "anchor": "A second flicker asks for a witness, and she has no spare coherence to give it.",
+                  "quoteHash": "151799933d44"
+                },
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterOutlines[2]",
+                  "anchor": "Isolation is procedural, which is why it bites.",
+                  "quoteHash": "994f3dda2497"
+                },
+                {
+                  "kind": "characterSheet",
+                  "id": "characters[Aisha Korvin].arc",
+                  "anchor": "Aisha starts as an eager but untested observer, her flaw an idealistic belief that technical precision alone can shield her from the emotional cost of collapsing possibilities",
+                  "quoteHash": "533e53759821"
+                }
+              ]
+            },
+            {
+              "id": "ch2-s5",
+              "part": "p2",
+              "order": 2,
+              "pov": "jonas-reyes",
+              "cast": [
+                "jonas-reyes"
+              ],
+              "beat": "On an ice-hauling transfer tug, Reyes watches one range-telemetry frame drop out and come back clean; he weighs it against the burn, writes it off as margin, and keeps the tug on course.",
+              "plotPoint": "Tug telemetry skip logged as margin, not escalated.",
+              "subplotBeat": {
+                "subplotIdx": 3,
+                "part": "flaw",
+                "mode": "echoes",
+                "note": "Pragmatism that files anomalies as margin; echoes Elena's dismissal."
+              },
+              "beatsCovered": [
+                "subplotPressure[1]",
+                "worldHooks[1]"
+              ],
+              "wordBudget": 450,
+              "sourceRefs": [
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterOutlines[2]",
+                  "anchor": "sees one range-telemetry frame skip and return clean. He files it as margin and keeps the burn.",
+                  "quoteHash": "ce4fb4889502"
+                },
+                {
+                  "kind": "characterSheet",
+                  "id": "characters[Captain Jonas Reyes].arc",
+                  "anchor": "his flaw a tendency to prioritize immediate operational stability over philosophical questions of superposition",
+                  "quoteHash": "3f28ad54921a"
+                }
+              ]
+            },
+            {
+              "id": "ch2-s6",
+              "part": "p2",
+              "order": 3,
+              "pov": "elena-voss",
+              "cast": [
+                "elena-voss",
+                "bastian-kane",
+                "aisha-korvin"
+              ],
+              "beat": "Shift close: three small anomalies sit in three separate logs, and no one lines them up. The bearing, the channel and the telemetry stay unnamed, and the reader sees the margin is already spent.",
+              "plotPoint": "Unlinked anomalies carried into chapter 3; field escape stays deferred.",
+              "storyArcStep": "Early instability seeded; deferred threads untouched.",
+              "beatsCovered": [
+                "turnOrPayoff",
+                "deferredThreads[0]"
+              ],
+              "wordBudget": 500,
+              "sourceRefs": [
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterOutlines[2]",
+                  "anchor": "Bearing, channel, and telemetry stay unnamed into the next chapter.",
+                  "quoteHash": "3a49948a7592"
+                },
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterOutlines[2]",
+                  "anchor": "No one tells her the flicker lined up in time with Bastian's bearing.",
+                  "quoteHash": "1d12a0d9c8fb"
+                },
+                {
+                  "kind": "storyOutline",
+                  "id": "chapterBlueprints[2].turnOrPayoff",
+                  "anchor": "an unlogged flicker is already a consumed engineering margin",
+                  "quoteHash": "3b699cd61308"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
