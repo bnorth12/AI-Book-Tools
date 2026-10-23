@@ -2,7 +2,8 @@
  * ch2 RCA option 3 (CH2-RCA.md §4.3, F2/F3/F4a/F6): offline scorer-fix tests on seeded text.
  * Loads THIS checkout's NovelWriter.html in headless Chromium with every non-file request aborted
  * (no network, no API key, 0 tokens) and prints TAP.
- *   R1 cast aliases      nwScoreCast credits first names / explicit character aliases (F4a)
+ *   R1 cast aliases      nwScoreCast credits first names / explicit character aliases (F4a);
+ *                        R1f: first names / aliases are case-sensitive (lowercase 'will' is not Will Turner)
  *   R2 phrase-echo cap   one echoed phrase can't dominate nwScoreRepetition (F2)
  *   R3 length band       nwScoreLength WARNs above 1.2x target; short side unchanged (F3)
  *   R4 arcStep advisory  scoreObligationCoverage no longer gates on arcStep keywords (F6)
@@ -68,6 +69,17 @@ try {
       const bp3 = { characterBeats: [{ name: 'Sam Ortiz', beat: 'x' }, { name: 'Sam Reed', beat: 'y' }] };
       const c3 = nwScoreCast('Sam waited. Sam left. ' + filler(40, 4), bp3);
       t('R1e', 'shared first name is not credited to either character', c3.counts['Sam Ortiz'] === 0 && c3.counts['Sam Reed'] === 0, c3);
+      // R1f (Reviewer B1 on 6a5bc2c): a first name that is also a common word must not be credited when
+      // it appears lowercase. Surname matching is unchanged in this PR (N2), so the 'hall' -> Grace Hall
+      // surname hit stays and these assertions target first-name credit only.
+      novelData.characters = [{ name: 'Will Turner' }, { name: 'Grace Hall' }];
+      const bp4 = { characterBeats: [{ name: 'Will Turner', beat: 'x' }, { name: 'Grace Hall', beat: 'y' }] };
+      const probe = 'The engine will hold. It will not fail. By grace of the pump the hall stayed dry.';
+      const c4 = nwScoreCast(probe + ' ' + filler(40, 5), bp4);
+      t('R1f', "lowercase common-word first names ('will', 'grace') are not credited", c4.counts['Will Turner'] === 0 && c4.counts['Grace Hall'] === 1, c4);
+      const c5 = nwScoreCast(probe + ' Will checked the pump. Then Will swore. ' + filler(40, 6), bp4);
+      t('R1f.ctl', "control: capitalized 'Will' (incl. sentence-initial) is still credited, lowercase not", c5.counts['Will Turner'] === 2, c5);
+      t('R1f.cast', 'probe alone is not a cast PASS (missing characters stay missing)', c4.status !== 'PASS', c4);
 
       // ---- R2 phrase-echo cap
       const echo30 = filler(30, 9);

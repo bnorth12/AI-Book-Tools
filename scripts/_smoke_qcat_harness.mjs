@@ -836,6 +836,10 @@ async function loadEnvelope(page, envelope) {
   const htmlVer = (/var NW_SCORER_VERSION = '([^']+)'/.exec(HTML) || [])[1];
   check('23', 'harness scorer version matches NW_SCORER_VERSION', htmlVer === NW_HARNESS_SCORER_VERSION, 'html=' + htmlVer + ' harness=' + NW_HARNESS_SCORER_VERSION);
   const { pre: prePath, post: postPath } = calibrationPinPaths(FIX, htmlVer);
+  // F1 (Reviewer on 6a5bc2c): an unknown scorer version must throw, never fall back to the 8d.1 pins.
+  let unknownErr = null;
+  try { calibrationPinPaths(FIX, '8d.3'); } catch (e) { unknownErr = e; }
+  check('23b', 'calibrationPinPaths throws on unknown scorer version 8d.3 (no silent 8d.1 fallback)', !!unknownErr, unknownErr ? String(unknownErr.message) : 'returned ' + JSON.stringify(calibrationPinPaths(FIX, '8d.3')));
   const page = await openPage();
   const pair = await page.evaluate(async (book) => {
     function rows(s) {
