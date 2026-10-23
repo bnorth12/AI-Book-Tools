@@ -12718,27 +12718,39 @@ return c && c.name && c.backstory && c.arc; });
 		// the first name unless another known character shares that name token, and any explicit
 		// aliases / nicknames / shortName on the matching novelData.characters record.
 		// One regex alternation (longest first), so "Elena Voss" counts once, not twice.
+		// Case rules (Reviewer B1 on 6a5bc2c): the full name and surname match case-insensitively, as
+		// before (surname case is a tracked follow-up, N2). First names and explicit aliases are
+		// case-sensitive, so lowercase "will" / "grace" never credit Will Turner / Grace Hall. A
+		// lowercase-written alias (e.g. "doc") is also accepted with its first letter capitalized, for
+		// sentence starts. A capitalized first name at a sentence start ("Will the pump hold?") is still
+		// credited: that case is ambiguous without parsing and is recorded, not special-cased.
 		function nwCastAliasTerms(name, otherNames) {
 			var stripped = nwQcatStripTitles(name) || String(name || '');
 			var key = nwQcatNameKey(name);
 			var clean = function (w) { return String(w || '').replace(/[^A-Za-z'-]/g, ''); };
 			var parts = String(stripped).trim().split(/\s+/).map(clean).filter(Boolean);
 			var terms = [];
-			var add = function (t) { t = String(t || '').trim(); if (t.length >= 2 && terms.indexOf(t) < 0) terms.push(t); };
+			terms.caseSensitive = {};
+			var add = function (t, cs) {
+				t = String(t || '').trim().replace(/\s+/g, ' ');
+				if (t.length < 2) return;
+				if (terms.indexOf(t) < 0) { terms.push(t); if (cs) terms.caseSensitive[t] = 1; }
+				else if (!cs) delete terms.caseSensitive[t];
+			};
 			if (!parts.length) return terms;
-			add(parts.join(' '));
-			if (parts[parts.length - 1].length >= 2) add(parts[parts.length - 1]);
+			add(parts.join(' '), false);
+			if (parts[parts.length - 1].length >= 2) add(parts[parts.length - 1], false);
 			var otherTokens = {};
 			(otherNames || []).forEach(function (o) {
 				if (!o || nwQcatNameKey(o) === key) return;
 				nwQcatNameKey(o).split(' ').forEach(function (tok) { if (tok) otherTokens[tok] = 1; });
 			});
-			if (parts.length >= 2 && parts[0].length >= 3 && !otherTokens[parts[0].toLowerCase()]) add(parts[0]);
+			if (parts.length >= 2 && parts[0].length >= 3 && !otherTokens[parts[0].toLowerCase()]) add(parts[0], true);
 			(Array.isArray(novelData.characters) ? novelData.characters : []).forEach(function (c) {
 				if (!c || !c.name || nwQcatNameKey(c.name) !== key) return;
 				[].concat(c.aliases || [], c.nicknames || [], c.nickname || [], c.shortName || []).forEach(function (a) {
 					var aa = String(a || '').trim();
-					if (aa && !otherTokens[aa.toLowerCase()]) add(aa);
+					if (aa && !otherTokens[aa.toLowerCase()]) add(aa, true);
 				});
 			});
 			return terms;
@@ -12746,10 +12758,22 @@ return c && c.name && c.backstory && c.arc; });
 		function nwCountCastName(text, name, otherNames) {
 			var terms = nwCastAliasTerms(name, otherNames);
 			if (!terms.length) return 0;
-			terms.sort(function (a, b) { return b.length - a.length; });
-			var alt = terms.map(function (t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'); }).join('|');
+			var cs = terms.caseSensitive || {};
+			var sorted = terms.slice().sort(function (a, b) { return b.length - a.length; });
+			var alt = sorted.map(function (t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'); }).join('|');
 			var m = String(text || '').match(new RegExp('\\b(?:' + alt + ')\\b', 'gi'));
-			return m ? m.length : 0;
+			if (!m) return 0;
+			var ok = function (hit) {
+				hit = hit.replace(/\s+/g, ' ');
+				for (var i = 0; i < sorted.length; i++) {
+					var t = sorted[i];
+					if (hit.toLowerCase() !== t.toLowerCase()) continue;
+					if (!cs[t]) return true;
+					if (hit === t || hit === t.charAt(0).toUpperCase() + t.slice(1)) return true;
+				}
+				return false;
+			};
+			return m.filter(ok).length;
 		}
 		function nwScoreLength(text, target) {
 			var words = nwQcatWords(text);

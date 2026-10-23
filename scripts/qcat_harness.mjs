@@ -259,8 +259,13 @@ export async function runQcatHarness(opts) {
 
 // Scorer version (must match NW_SCORER_VERSION in NovelWriter.html) and its calibration pins.
 export const NW_HARNESS_SCORER_VERSION = '8d.2';
+// Known versions only: an unknown version throws rather than silently comparing against 8d.1 pins.
+const CALIBRATION_PIN_SUFFIX = { '8d.1': '', '8d.2': '.8d2' };
 export function calibrationPinPaths(fixDir, version = NW_HARNESS_SCORER_VERSION) {
-  const sfx = version === '8d.2' ? '.8d2' : '';
+  if (!Object.prototype.hasOwnProperty.call(CALIBRATION_PIN_SUFFIX, version)) {
+    throw new Error('calibrationPinPaths: no calibration pins for scorer version ' + JSON.stringify(version) + ' (known: ' + Object.keys(CALIBRATION_PIN_SUFFIX).join(', ') + ')');
+  }
+  const sfx = CALIBRATION_PIN_SUFFIX[version];
   return { pre: path.join(fixDir, 'calibration-pre-s1' + sfx + '.json'), post: path.join(fixDir, 'calibration-post-s1' + sfx + '.json') };
 }
 
