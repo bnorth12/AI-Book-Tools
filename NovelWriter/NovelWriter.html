@@ -6847,7 +6847,10 @@ const messages = [
 			});
 			const total = required.length || 1;
 			const covered = hits.length;
-			const ratio = covered / total;
+			// Engineering B2: with arcStep advisory, an arcStep-only blueprint (legacy plain-text fallback
+			// or {role, arcStep}) has no keyword obligations. Vacuous coverage passes (ratio 1) instead of
+			// failing closed on obligation_coverage<0.5 / short_low_coverage.
+			const ratio = required.length ? covered / required.length : 1;
 			const failures = [];
 			const charMiss = misses.filter(function (m) { return m.indexOf('char:') === 0; });
 			if (charMiss.length) failures.push('missing_characterBeats:' + charMiss.join(','));

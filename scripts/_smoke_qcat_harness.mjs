@@ -869,7 +869,7 @@ async function loadEnvelope(page, envelope) {
   } else {
     const pre = JSON.parse(fs.readFileSync(prePath, 'utf8'));
     check('23', 'unmigrated book-3ch scores deep-equal migrated (same run)', JSON.stringify(pair.unmigrated) === JSON.stringify(pair.migrated), JSON.stringify({ unmigrated: pair.unmigrated, migrated: pair.migrated }).slice(0, 1400));
-    check('23', 'post-S1 (migrated) scores deep-equal calibration-pre-s1.json', JSON.stringify(pair.migrated) === JSON.stringify(pre.book3ch), JSON.stringify({ migrated: pair.migrated, pre: pre.book3ch }).slice(0, 1400));
+    check('23', 'post-S1 (migrated) scores deep-equal ' + path.basename(prePath) + ' (scorer ' + htmlVer + ')', JSON.stringify(pair.migrated) === JSON.stringify(pre.book3ch), JSON.stringify({ migrated: pair.migrated, pre: pre.book3ch }).slice(0, 1400));
   }
   if (!fs.existsSync(postPath)) {
     check('23', 'post-S1 calibration pin file present', false, 'missing ' + postPath);
