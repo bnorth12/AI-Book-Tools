@@ -10,7 +10,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { chromium } from 'playwright';
-import { runQcatHarness } from './qcat_harness.mjs';
+import { runQcatHarness, calibrationPinPaths, NW_HARNESS_SCORER_VERSION } from './qcat_harness.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -833,8 +833,13 @@ async function loadEnvelope(page, envelope) {
 
 // ---------------- 23. REQ-SCH-07: unmigrated==migrated==pre-s1 baseline; post-s1 pin includes repetition ----
 {
-  const prePath = path.join(FIX, 'calibration-pre-s1.json');
-  const postPath = path.join(FIX, 'calibration-post-s1.json');
+  const htmlVer = (/var NW_SCORER_VERSION = '([^']+)'/.exec(HTML) || [])[1];
+  check('23', 'harness scorer version matches NW_SCORER_VERSION', htmlVer === NW_HARNESS_SCORER_VERSION, 'html=' + htmlVer + ' harness=' + NW_HARNESS_SCORER_VERSION);
+  const { pre: prePath, post: postPath } = calibrationPinPaths(FIX, htmlVer);
+  // F1 (Reviewer on 6a5bc2c): an unknown scorer version must throw, never fall back to the 8d.1 pins.
+  let unknownErr = null;
+  try { calibrationPinPaths(FIX, '8d.3'); } catch (e) { unknownErr = e; }
+  check('23b', 'calibrationPinPaths throws on unknown scorer version 8d.3 (no silent 8d.1 fallback)', !!unknownErr, unknownErr ? String(unknownErr.message) : 'returned ' + JSON.stringify(calibrationPinPaths(FIX, '8d.3')));
   const page = await openPage();
   const pair = await page.evaluate(async (book) => {
     function rows(s) {
@@ -864,7 +869,7 @@ async function loadEnvelope(page, envelope) {
   } else {
     const pre = JSON.parse(fs.readFileSync(prePath, 'utf8'));
     check('23', 'unmigrated book-3ch scores deep-equal migrated (same run)', JSON.stringify(pair.unmigrated) === JSON.stringify(pair.migrated), JSON.stringify({ unmigrated: pair.unmigrated, migrated: pair.migrated }).slice(0, 1400));
-    check('23', 'post-S1 (migrated) scores deep-equal calibration-pre-s1.json', JSON.stringify(pair.migrated) === JSON.stringify(pre.book3ch), JSON.stringify({ migrated: pair.migrated, pre: pre.book3ch }).slice(0, 1400));
+    check('23', 'post-S1 (migrated) scores deep-equal ' + path.basename(prePath) + ' (scorer ' + htmlVer + ')', JSON.stringify(pair.migrated) === JSON.stringify(pre.book3ch), JSON.stringify({ migrated: pair.migrated, pre: pre.book3ch }).slice(0, 1400));
   }
   if (!fs.existsSync(postPath)) {
     check('23', 'post-S1 calibration pin file present', false, 'missing ' + postPath);

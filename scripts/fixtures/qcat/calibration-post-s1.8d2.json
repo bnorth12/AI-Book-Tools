@@ -1,0 +1,35 @@
+{
+  "notes": "Pinned AFTER S1 migration of scripts/fixtures/qcat/book-3ch.json (stand-in for qcat-chapters-1-5 / ch6-8, which are not in this checkout). Includes repetition. Deep-equal to calibration-pre-s1.json book3ch (REQ-SCH-07). Scorer 8d.2 (RCA option 3 echo cap) copy of the historical 8d.1 pin; only change: ch2 repetition WARN->PASS. The unversioned file is the frozen 8d.1 baseline.",
+  "book3ch": [
+    {
+      "chapter": 1,
+      "overall": "FAIL",
+      "words": 16,
+      "replayInternal": 0,
+      "factsStatus": "PASS",
+      "noteLeak": "PASS",
+      "cast": "WARN",
+      "repetition": "PASS"
+    },
+    {
+      "chapter": 2,
+      "overall": "FAIL",
+      "words": 144,
+      "replayInternal": 31,
+      "factsStatus": "PASS",
+      "noteLeak": "PASS",
+      "cast": "PASS",
+      "repetition": "PASS"
+    },
+    {
+      "chapter": 3,
+      "overall": "WARN",
+      "words": 108,
+      "replayInternal": 0,
+      "factsStatus": "PASS",
+      "noteLeak": "PASS",
+      "cast": "PASS",
+      "repetition": "PASS"
+    }
+  ]
+}

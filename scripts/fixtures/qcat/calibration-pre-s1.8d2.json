@@ -1,0 +1,51 @@
+{
+  "notes": "REQ-SCH-07 pre-S1 baseline. Scored scripts/fixtures/qcat/book-3ch.json on main ab2de89 with the same harness scorer (nwScoreBook). Numbers + text hashes only; no book text. Scorer 8d.2 (RCA option 3 echo cap) copy of the historical 8d.1 pin; only change: ch2 repetition WARN->PASS. The unversioned file is the frozen 8d.1 baseline.",
+  "scoredAt": "ab2de893c35259b1124b49cc6fdb80611efcb52c",
+  "bookSha256": "d4f31b144a947ff098f247d80ef9eb6314f1e9eb29ad4dd995af4c8a2b2f85e8",
+  "chapterTextSha256": [
+    {
+      "chapter": 1,
+      "sha256": "37446e1b336d33358595b6b6476e47679c8b7059a003d75e08abdfdef33714cc"
+    },
+    {
+      "chapter": 2,
+      "sha256": "a48b2e5b4c19665f20064f9d3f020b928a795877e1c8036c12508f01ba19e335"
+    },
+    {
+      "chapter": 3,
+      "sha256": "fa4f586b9e817a08277bcc6ee3dc0294f389c56400c0adf7a973dd2e1e7000a9"
+    }
+  ],
+  "book3ch": [
+    {
+      "chapter": 1,
+      "overall": "FAIL",
+      "words": 16,
+      "replayInternal": 0,
+      "factsStatus": "PASS",
+      "noteLeak": "PASS",
+      "cast": "WARN",
+      "repetition": "PASS"
+    },
+    {
+      "chapter": 2,
+      "overall": "FAIL",
+      "words": 144,
+      "replayInternal": 31,
+      "factsStatus": "PASS",
+      "noteLeak": "PASS",
+      "cast": "PASS",
+      "repetition": "PASS"
+    },
+    {
+      "chapter": 3,
+      "overall": "WARN",
+      "words": 108,
+      "replayInternal": 0,
+      "factsStatus": "PASS",
+      "noteLeak": "PASS",
+      "cast": "PASS",
+      "repetition": "PASS"
+    }
+  ]
+}
