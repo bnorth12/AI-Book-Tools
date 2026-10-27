@@ -14632,6 +14632,10 @@ function isSecretField(k) { const n = normalizeName(k);
         }
 
         function nwBatchIdbPut(record, key) {
+            // N2: same redaction + refuse-if-key-still-present rule as autosave (covers discardInterruptedBatchRun write-back).
+            var safe;
+            try { safe = JSON.parse(nwAutosaveSerialize(record)); } catch (e) { nwAutosaveWarn(e); return Promise.reject(e); }
+            record = safe;
             return nwBatchOpenDb().then(function (db) {
                 return new Promise(function (resolve, reject) {
                     var tx;
