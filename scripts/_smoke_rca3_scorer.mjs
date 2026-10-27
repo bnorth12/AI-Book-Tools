@@ -6,6 +6,7 @@
  *                        R1f: first names / aliases are case-sensitive (lowercase 'will' is not Will Turner)
  *                        R1g-R1k: unique dialogueTurn short refs resolve to their character; shared
  *                        short names/aliases and alias==other full name credit nobody (Copilot #192)
+ *                        R1l-R1m: resolver uses the counter's rules (3+ letter first names, initial-capital alias)
  *   R2 phrase-echo cap   one echoed phrase can't dominate nwScoreRepetition (F2)
  *   R3 length band       nwScoreLength WARNs above 1.2x target; short side unchanged (F3)
  *   R4 arcStep advisory  scoreObligationCoverage no longer gates on arcStep keywords (F6);
@@ -103,6 +104,13 @@ try {
       novelData.characters = [{ name: 'Rowan Pike', aliases: ['Iris Vale'] }, { name: 'Iris Vale' }];
       const k7 = nwScoreCast('Iris Vale spoke. ' + filler(40, 12), { characterBeats: [{ name: 'Rowan Pike', beat: 'x' }, { name: 'Iris Vale', beat: 'y' }] });
       t('R1k', "alias equal to another character's full name is not credited to the alias owner", k7.counts['Rowan Pike'] === 0 && k7.counts['Iris Vale'] === 1, k7);
+      // R1l/R1m (Copilot r4384491596 BLOCK / r4384491615 on 44731480): the resolver must use the counter's rules.
+      novelData.characters = [{ name: 'Li Wei' }];
+      const k8 = nwScoreCast(filler(40, 14) + ' Li checked the loop. Li laughed. ' + filler(40, 15), { dialogueTurn: 'Li confronts the harbor master about the drift.' });
+      t('R1l', "two-letter first name: 'Li' in dialogueTurn with roster 'Li Wei' is not resolved to a name the counter can't count (PASS, count >= 1)", k8.status === 'PASS' && Object.values(k8.counts).some((v) => v >= 1), k8);
+      novelData.characters = [{ name: 'Mara Hale', aliases: ['doc'] }];
+      const k9 = nwScoreCast(filler(40, 16) + ' Doc checked the loop. Doc laughed. ' + filler(40, 17), { characterBeats: [{ name: 'Mara Hale', beat: 'x' }], dialogueTurn: 'Doc confronts the harbor master about the drift.' });
+      t('R1m', "lowercase alias 'doc': initial-capital 'Doc' in dialogueTurn resolves to Mara Hale (PASS)", k9.status === 'PASS' && k9.counts['Mara Hale'] === 2 && !('Doc' in k9.counts), k9);
       novelData.characters = [{ name: 'Will Turner' }, { name: 'Grace Hall' }];
       const c5 = nwScoreCast(probe + ' Will checked the pump. Then Will swore. ' + filler(40, 6), bp4);
       t('R1f.ctl', "control: capitalized 'Will' (incl. sentence-initial) is still credited, lowercase not", c5.counts['Will Turner'] === 2, c5);
