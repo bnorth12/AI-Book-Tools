@@ -15457,6 +15457,7 @@ function isSecretField(k) { const n = normalizeName(k);
             } else {
                 nwBatchSetStatus('Restored interrupted batch run (stopped at ch' + br.stoppedAt + ', user). Completed: ' + (br.completed.join(', ') || 'none') + '. Click Resume to continue.', 'stopped');
             }
+            if (typeof nwAutosaveOnBatchChoice === 'function') nwAutosaveOnBatchChoice('restore');
             return true;
         }
 
@@ -15495,7 +15496,7 @@ function isSecretField(k) { const n = normalizeName(k);
         // ---- M-STAB WP1: autosave (IndexedDB 'autosave' store keyed by bookId + synchronous localStorage mirror) ----
         // Records never contain novelData.apiKey or any isSecretField name (stripSecretFields on the whole record).
         var NW_AUTOSAVE = { store: 'autosave', lsKey: 'novelwriter.autosave.v1', discardKey: 'novelwriter.discarded.v1', debounceMs: 750 };
-        var nwAutosaveState = { timer: null, discarded: false, restoring: false, inFlight: null, inFlightCount: 0, lastSavedAt: null, lastError: null, ready: false, interrupted: null, blank: null, pending: null, dirty: false };
+        var nwAutosaveState = { timer: null, discarded: false, restoring: false, inFlight: null, inFlightCount: 0, lastSavedAt: null, lastError: null, ready: false, interrupted: null, blank: null, pending: null, dirty: false, conflict: null };
 
         function nwAutosaveNewBookId() {
             try { if (window.crypto && typeof crypto.randomUUID === 'function') return 'book-' + crypto.randomUUID(); } catch (_) { /* fall through */ }
@@ -15534,9 +15535,24 @@ function isSecretField(k) { const n = normalizeName(k);
             if (rec.novelData) delete rec.novelData.apiKey;
             return rec;
         }
+        /** CodeQL js/clear-text-storage: the only path from a record to storage. Drops every isSecretField name (incl. apiKey)
+         *  at any depth and redacts the live #apiKey / novelData.apiKey value wherever it appears, so it can never be stored. */
+        function nwAutosaveSerialize(rec) {
+            var keys = [];
+            try { var el = document.getElementById('apiKey'); if (el && typeof el.value === 'string') keys.push(el.value); } catch (_) { /* no input */ }
+            try { if (typeof novelData.apiKey === 'string') keys.push(novelData.apiKey); } catch (_) { /* no session */ }
+            keys = keys.map(function (k) { return String(k).trim(); }).filter(function (k, i, a) { return k.length >= 4 && a.indexOf(k) === i; });
+            var out = JSON.stringify(rec, function (k, v) {
+                if (k && (k === 'apiKey' || isSecretField(k))) return undefined;
+                if (typeof v === 'string' && keys.length) { for (var i = 0; i < keys.length; i++) { if (v.indexOf(keys[i]) >= 0) v = v.split(keys[i]).join('[redacted]'); } }
+                return v;
+            });
+            for (var j = 0; j < keys.length; j++) { if (out.indexOf(keys[j]) >= 0) throw new Error('autosave payload rejected'); }
+            return out;
+        }
         function nwAutosaveCanWrite() { return nwAutosaveState.ready && !nwAutosaveState.discarded && !nwAutosaveState.restoring; }
         function nwAutosaveWriteLocal(rec) {
-            try { localStorage.setItem(NW_AUTOSAVE.lsKey, JSON.stringify(rec)); return true; }
+            try { localStorage.setItem(NW_AUTOSAVE.lsKey, nwAutosaveSerialize(rec)); return true; }
             catch (e) { nwAutosaveWarn(e); return false; }
         }
         function nwAutosaveIdb(mode, fn) {
@@ -15561,7 +15577,9 @@ function isSecretField(k) { const n = normalizeName(k);
             nwAutosaveState.lastSavedAt = rec.savedAt;
             nwAutosaveState.dirty = false;
             if (opts && opts.localOnly) return rec;
-            var p = nwAutosaveIdb('readwrite', function (s) { s.put(rec); }).then(function () {
+            var safe;
+            try { safe = JSON.parse(nwAutosaveSerialize(rec)); } catch (e) { nwAutosaveWarn(e); return null; }
+            var p = nwAutosaveIdb('readwrite', function (s) { s.put(safe); }).then(function () {
                 if (okLs) nwAutosaveClearWarn();
             }, function (e) { nwAutosaveWarn(e); });
             nwAutosaveState.pending = p;
@@ -15586,10 +15604,53 @@ function isSecretField(k) { const n = normalizeName(k);
             setTimeout(function () { if (nwAutosaveState.inFlightCount === 0) nwAutosaveState.inFlight = null; nwAutosaveWriteNow(); }, 0);
             setTimeout(function () { if (!nwAutosaveState.timer) nwAutosaveWriteNow(); }, 200);
         }
+        /** Copilot #194: fields with no id (subplot textareas, character rows) and per-chapter textareas are not novelData keys. */
+        function nwAutosaveSyncDerived(t) {
+            var m;
+            if (t.classList && t.classList.contains('subplot')) {
+                var subs = Array.from(document.getElementsByClassName('subplot'));
+                var prev = Array.isArray(novelData.subplots) ? novelData.subplots : [];
+                novelData.subplots = subs.map(function (el, i) {
+                    if (el === t) return String(t.value);
+                    var v = (el && el.value != null) ? String(el.value).trim() : '';
+                    return v || (prev[i] == null ? '' : prev[i]);
+                });
+                return true;
+            }
+            if (t.closest && t.closest('.character') && typeof nwCollectCharactersFromDom === 'function') { novelData.characters = nwCollectCharactersFromDom(); return true; }
+            if (!t.id) return false;
+            if ((m = /^chapterContent(\d+)$/.exec(t.id))) {
+                var i = Number(m[1]) - 1, c = String(t.value);
+                if (!Array.isArray(novelData.chapterOutlines)) novelData.chapterOutlines = [];
+                if (!Array.isArray(novelData.chapterArcs)) novelData.chapterArcs = [];
+                var om = c.match(/Outline:(.*?)(\n\nArc:|$)/s), am = c.match(/Arc:(.*)/s);
+                novelData.chapterOutlines[i] = om ? om[1].trim() : '';
+                novelData.chapterArcs[i] = am ? am[1].trim() : '';
+                return true;
+            }
+            if ((m = /^chapterImprovement(\d+)$/.exec(t.id))) {
+                if (!Array.isArray(novelData.chapterImprovements)) novelData.chapterImprovements = [];
+                novelData.chapterImprovements[Number(m[1]) - 1] = String(t.value);
+                return true;
+            }
+            if ((m = /^chapter(?:Gen|Edit)Content(\d+)$/.exec(t.id))) {
+                if (!Array.isArray(novelData.chapters)) novelData.chapters = [];
+                novelData.chapters[Number(m[1]) - 1] = String(t.value);
+                return true;
+            }
+            return false;
+        }
         function nwAutosaveOnInput(ev) {
             var t = ev && ev.target;
-            if (!t || !t.id || t.id === 'apiKey') return;
+            if (!t || t.id === 'apiKey') return;
+            if (!t.id) {
+                if (!nwAutosaveSyncDerived(t)) return;
+                if (ev.isTrusted && nwAutosaveState.discarded) nwAutosaveState.discarded = false;
+                nwAutosaveSchedule();
+                return;
+            }
             if (ev.isTrusted && nwAutosaveState.discarded) nwAutosaveState.discarded = false;
+            nwAutosaveSyncDerived(t);
             if (Object.prototype.hasOwnProperty.call(novelData, t.id)) {
                 var cur = novelData[t.id];
                 if (typeof cur === 'number') { var n = Number(t.value); if (t.value !== '' && !isNaN(n)) novelData[t.id] = n; }
@@ -15659,7 +15720,7 @@ function isSecretField(k) { const n = normalizeName(k);
                 b.hidden = false;
             }
         }
-        async function nwAutosaveDiscard() {
+        async function nwAutosaveDiscard(opts) {
             nwAutosaveState.discarded = true;
             nwAutosaveState.dirty = false;
             if (nwAutosaveState.timer) { clearTimeout(nwAutosaveState.timer); nwAutosaveState.timer = null; }
@@ -15670,7 +15731,7 @@ function isSecretField(k) { const n = normalizeName(k);
             try { await nwAutosaveIdb('readwrite', function (s) { s.clear(); }); } catch (e) { console.warn('[autosave] discard failed: ' + ((e && e.name) || 'Error')); }
             try { localStorage.removeItem(NW_AUTOSAVE.lsKey); localStorage.removeItem(NW_AUTOSAVE.discardKey); } catch (_) { /* ignore */ }
             var key = document.getElementById('apiKey').value;
-            if (nwAutosaveState.blank) {
+            if (nwAutosaveState.blank && !(opts && opts.keepSession)) {
                 nwAutosaveState.restoring = true;
                 try {
                     novelData = JSON.parse(JSON.stringify(nwAutosaveState.blank));
@@ -15692,11 +15753,37 @@ function isSecretField(k) { const n = normalizeName(k);
             msg.textContent = 'Both an autosave (' + nwAutosaveFmtCT(rec.savedAt) + ' CT) and an interrupted batch checkpoint (' + nwAutosaveFmtCT(ckpt.savedAt) + ' CT) exist. '
                 + (autoNewer ? 'The autosave is newer.' : 'The batch checkpoint is newer.') + ' Choose which to keep: ';
             var a = document.createElement('button'); a.type = 'button'; a.id = 'nwAutosaveConflictRestore'; a.textContent = 'Restore autosave';
-            a.addEventListener('click', function () { c.hidden = true; nwAutosaveState.ready = true; nwAutosaveApply(rec); });
+            a.addEventListener('click', async function () {
+                nwAutosaveState.conflict = null; c.hidden = true;
+                // Choosing the autosave retires the checkpoint: clears nwBatchState.interrupted and the batch lock.
+                try { if (typeof discardInterruptedBatchRun === 'function') await discardInterruptedBatchRun(); } catch (e) { console.warn('[autosave] checkpoint discard failed: ' + ((e && e.name) || 'Error')); }
+                nwAutosaveApply(rec);
+                nwAutosaveState.ready = true;
+                nwAutosaveApplyLockSafe();
+            });
             var d = document.createElement('button'); d.type = 'button'; d.id = 'nwAutosaveConflictDiscard'; d.textContent = 'Discard autosave'; d.style.marginLeft = '6px';
-            d.addEventListener('click', function () { c.hidden = true; nwAutosaveDiscard().then(function () { nwAutosaveState.discarded = false; nwAutosaveState.ready = true; }); });
+            d.addEventListener('click', function () {
+                // Nothing from the autosave was applied: drop the record, keep the current session (never reset to blank).
+                if (!nwAutosaveState.conflict) { c.hidden = true; return; } // stale button after the prompt was resolved
+                nwAutosaveState.conflict = null; c.hidden = true;
+                nwAutosaveDiscard({ keepSession: true }).then(function () { nwAutosaveState.discarded = false; nwAutosaveState.ready = true; });
+            });
             c.appendChild(msg); c.appendChild(a); c.appendChild(d);
             c.hidden = false;
+            nwAutosaveState.conflict = rec;
+        }
+        function nwAutosaveApplyLockSafe() { try { if (typeof nwBatchApplyLock === 'function') nwBatchApplyLock(); } catch (_) { /* ignore */ } }
+        /** Copilot #194: the batch checkpoint was restored or discarded from batchRestoreBox while the conflict prompt was open. */
+        function nwAutosaveOnBatchChoice(kind) {
+            // A discarded checkpoint leaves the prompt open: the user still chooses between the autosave and the current session.
+            if (!nwAutosaveState.conflict || kind !== 'restore') return;
+            nwAutosaveState.conflict = null;
+            var c = document.getElementById('nwAutosaveConflict');
+            if (c) { c.hidden = true; c.textContent = ''; }
+            // The checkpoint is now the session; it supersedes the autosave record. Turn autosave on and save it.
+            nwAutosaveState.discarded = false;
+            nwAutosaveState.ready = true;
+            nwAutosaveWriteNow();
         }
         async function nwAutosaveInit() {
             try { if (window.__nwBatchRestoreCheck) await window.__nwBatchRestoreCheck; } catch (_) { /* batch check logs its own errors */ }
