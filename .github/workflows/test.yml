@@ -75,6 +75,10 @@ jobs:
         timeout-minutes: 5
         run: npm run test:contract:story-core
 
+      - name: Story Core 2.1 chapterPlan/sceneCard smoke
+        timeout-minutes: 5
+        run: npm run test:smoke:nw-story-core-21
+
       - name: NovelWriter Q1-Q3 trust smoke
         timeout-minutes: 5
         run: npm run test:smoke:nw-trust-q1q3

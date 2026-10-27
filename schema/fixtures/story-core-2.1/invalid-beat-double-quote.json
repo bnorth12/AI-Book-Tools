@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "2.1",
+  "coreVersion": "2.1",
+  "sourceTool": "fixture",
+  "sourceVersion": "1.0",
+  "exportedAt": "2026-10-23T00:00:00Z",
+  "workType": "fiction",
+  "novelData": {
+    "title": "Second Proof",
+    "story": {
+      "book": {
+        "id": "bk_second_proof",
+        "title": "Second Proof"
+      },
+      "chapters": [
+        {
+          "id": "ch_1",
+          "number": 1
+        }
+      ],
+      "scenes": [],
+      "chapterPlans": [
+        {
+          "chapter": 1,
+          "scenes": [
+            {
+              "id": "ch1-s1",
+              "part": "p1",
+              "order": 1,
+              "beat": "Dana reads the sign aloud, \"Closed for good\", and decides the oven is coming with the lease anyway.",
+              "outcome": "no"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

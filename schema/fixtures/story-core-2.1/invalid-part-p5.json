@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "2.1",
+  "coreVersion": "2.1",
+  "sourceTool": "fixture",
+  "sourceVersion": "1.0",
+  "exportedAt": "2026-10-23T00:00:00Z",
+  "workType": "fiction",
+  "novelData": {
+    "title": "Second Proof",
+    "story": {
+      "book": {
+        "id": "bk_second_proof",
+        "title": "Second Proof"
+      },
+      "chapters": [
+        {
+          "id": "ch_1",
+          "number": 1
+        }
+      ],
+      "scenes": [],
+      "chapterPlans": [
+        {
+          "chapter": 1,
+          "scenes": [
+            {
+              "id": "ch1-s1",
+              "part": "p5",
+              "order": 1,
+              "beat": "Dana signs the lease on the bakery and finds the oven predates the building, and the landlord will not pay to replace it.",
+              "outcome": "no"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

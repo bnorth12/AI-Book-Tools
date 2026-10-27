@@ -1,0 +1,558 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema/story-core-2.1.json",
+  "title": "AI Book Tools Story Core 2.1",
+  "description": "Additive shared book/story contract. Unknown fields are preserved, but secret-bearing keys and credential-bearing URL values are forbidden. 2.1 is add-only over 2.0: it adds the optional novelData.story.chapterPlans (chapterPlan/sceneCard), and every 2.0 document validates unchanged (schemaVersion 2.0 or 2.1).",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "enum": ["2.0", "2.1"]
+    },
+    "coreVersion": {
+      "type": "string"
+    },
+    "sourceTool": {
+      "type": "string"
+    },
+    "sourceVersion": {
+      "type": "string"
+    },
+    "exportedAt": {
+      "type": "string"
+    },
+    "workType": {
+      "enum": ["fiction", "nonfiction"]
+    },
+    "novelData": {
+      "type": "object",
+      "properties": {
+        "story": {
+          "$ref": "#/$defs/story"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ext": {
+      "type": "object",
+      "properties": {
+        "novelWriter": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "bookEditor": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "bookDecomposer": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "providerConfig": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "coreVersion",
+    "sourceTool",
+    "sourceVersion",
+    "exportedAt",
+    "workType",
+    "novelData"
+  ],
+  "allOf": [
+    {
+      "$ref": "#/$defs/noSecrets"
+    },
+    {
+      "if": {
+        "properties": {
+          "workType": {
+            "const": "fiction"
+          }
+        },
+        "required": ["workType"]
+      },
+      "then": {
+        "properties": {
+          "novelData": {
+            "type": "object",
+            "properties": {
+              "story": {
+                "$ref": "#/$defs/story"
+              }
+            },
+            "required": ["story"]
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "story": {
+      "type": "object",
+      "properties": {
+        "book": {
+          "$ref": "#/$defs/book"
+        },
+        "chapters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/chapter"
+          }
+        },
+        "scenes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scene"
+          }
+        },
+        "chapterPlans": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/chapterPlan"
+          }
+        }
+      },
+      "required": ["book"],
+      "additionalProperties": true
+    },
+    "book": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "synopsis": {
+          "type": ["string", "null"]
+        },
+        "seriesId": {
+          "type": ["string", "null"]
+        },
+        "bookNumber": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        }
+      },
+      "required": ["id", "title"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/provenance"
+        }
+      ],
+      "additionalProperties": true
+    },
+    "chapter": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^ch_"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": ["id"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/provenance"
+        }
+      ],
+      "additionalProperties": true
+    },
+    "scene": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^sc_"
+        },
+        "chapterId": {
+          "type": "string",
+          "pattern": "^ch_"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "breakApproved": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id", "chapterId", "order", "breakApproved"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/provenance"
+        }
+      ],
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "enum": ["ai", "user", "import"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "approved": {
+          "type": "boolean"
+        },
+        "approvedAt": {
+          "type": "string"
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "span": {
+          "type": "object",
+          "properties": {
+            "chapter": {
+              "type": "string"
+            },
+            "start": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "end": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": ["chapter", "start", "end"],
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "noSecrets": {
+      "allOf": [
+        {
+          "if": {
+            "type": "object"
+          },
+          "then": {
+            "type": "object",
+            "patternProperties": {
+              "^(?:[^]*[tT][-_\\r\\n\\u2028\\u2029]*[oO][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[nN][-_\\r\\n\\u2028\\u2029]*|[^]*[aA][-_\\r\\n\\u2028\\u2029]*[pP][-_\\r\\n\\u2028\\u2029]*[iI][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[yY][^]*|[-_\\r\\n\\u2028\\u2029]*[oO][-_\\r\\n\\u2028\\u2029]*[pP][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[nN][-_\\r\\n\\u2028\\u2029]*[aA][-_\\r\\n\\u2028\\u2029]*[iI][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[yY][-_\\r\\n\\u2028\\u2029]*|[-_\\r\\n\\u2028\\u2029]*[xX][-_\\r\\n\\u2028\\u2029]*[aA][-_\\r\\n\\u2028\\u2029]*[iI][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[yY][-_\\r\\n\\u2028\\u2029]*|[-_\\r\\n\\u2028\\u2029]*[aA][-_\\r\\n\\u2028\\u2029]*[nN][-_\\r\\n\\u2028\\u2029]*[tT][-_\\r\\n\\u2028\\u2029]*[hH][-_\\r\\n\\u2028\\u2029]*[rR][-_\\r\\n\\u2028\\u2029]*[oO][-_\\r\\n\\u2028\\u2029]*[pP][-_\\r\\n\\u2028\\u2029]*[iI][-_\\r\\n\\u2028\\u2029]*[cC][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[yY][-_\\r\\n\\u2028\\u2029]*|[-_\\r\\n\\u2028\\u2029]*[gG][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[mM][-_\\r\\n\\u2028\\u2029]*[iI][-_\\r\\n\\u2028\\u2029]*[nN][-_\\r\\n\\u2028\\u2029]*[iI][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[yY][-_\\r\\n\\u2028\\u2029]*|[-_\\r\\n\\u2028\\u2029]*[gG][-_\\r\\n\\u2028\\u2029]*[iI][-_\\r\\n\\u2028\\u2029]*[tT][-_\\r\\n\\u2028\\u2029]*[hH][-_\\r\\n\\u2028\\u2029]*[uU][-_\\r\\n\\u2028\\u2029]*[bB][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[yY][-_\\r\\n\\u2028\\u2029]*|[-_\\r\\n\\u2028\\u2029]*[gG][-_\\r\\n\\u2028\\u2029]*[oO][-_\\r\\n\\u2028\\u2029]*[oO][-_\\r\\n\\u2028\\u2029]*[gG][-_\\r\\n\\u2028\\u2029]*[lL][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[yY][-_\\r\\n\\u2028\\u2029]*|[-_\\r\\n\\u2028\\u2029]*[aA][-_\\r\\n\\u2028\\u2029]*[wW][-_\\r\\n\\u2028\\u2029]*[sS][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[yY][-_\\r\\n\\u2028\\u2029]*|[-_\\r\\n\\u2028\\u2029]*[pP][-_\\r\\n\\u2028\\u2029]*[rR][-_\\r\\n\\u2028\\u2029]*[iI][-_\\r\\n\\u2028\\u2029]*[vV][-_\\r\\n\\u2028\\u2029]*[aA][-_\\r\\n\\u2028\\u2029]*[tT][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[yY][-_\\r\\n\\u2028\\u2029]*|[-_\\r\\n\\u2028\\u2029]*[sS][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[cC][-_\\r\\n\\u2028\\u2029]*[rR][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[tT][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[yY][-_\\r\\n\\u2028\\u2029]*|[-_\\r\\n\\u2028\\u2029]*[aA][-_\\r\\n\\u2028\\u2029]*[cC][-_\\r\\n\\u2028\\u2029]*[cC][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[sS][-_\\r\\n\\u2028\\u2029]*[sS][-_\\r\\n\\u2028\\u2029]*[kK\\u212A][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[yY][-_\\r\\n\\u2028\\u2029]*|[^]*[sS][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[cC][-_\\r\\n\\u2028\\u2029]*[rR][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[tT][^]*|[^]*[pP][-_\\r\\n\\u2028\\u2029]*[aA][-_\\r\\n\\u2028\\u2029]*[sS][-_\\r\\n\\u2028\\u2029]*[sS][-_\\r\\n\\u2028\\u2029]*[wW][-_\\r\\n\\u2028\\u2029]*[oO][-_\\r\\n\\u2028\\u2029]*[rR][-_\\r\\n\\u2028\\u2029]*[dD][^]*|[-_\\r\\n\\u2028\\u2029]*[pP][-_\\r\\n\\u2028\\u2029]*[aA][-_\\r\\n\\u2028\\u2029]*[sS][-_\\r\\n\\u2028\\u2029]*[sS][-_\\r\\n\\u2028\\u2029]*[wW][-_\\r\\n\\u2028\\u2029]*[dD][-_\\r\\n\\u2028\\u2029]*|[-_\\r\\n\\u2028\\u2029]*[aA][-_\\r\\n\\u2028\\u2029]*[uU][-_\\r\\n\\u2028\\u2029]*[tT][-_\\r\\n\\u2028\\u2029]*[hH][-_\\r\\n\\u2028\\u2029]*[oO][-_\\r\\n\\u2028\\u2029]*[rR][-_\\r\\n\\u2028\\u2029]*[iI][-_\\r\\n\\u2028\\u2029]*[zZ][-_\\r\\n\\u2028\\u2029]*[aA][-_\\r\\n\\u2028\\u2029]*[tT][-_\\r\\n\\u2028\\u2029]*[iI][-_\\r\\n\\u2028\\u2029]*[oO][-_\\r\\n\\u2028\\u2029]*[nN][-_\\r\\n\\u2028\\u2029]*|[-_\\r\\n\\u2028\\u2029]*[bB][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[aA][-_\\r\\n\\u2028\\u2029]*[rR][-_\\r\\n\\u2028\\u2029]*[eE][-_\\r\\n\\u2028\\u2029]*[rR][^]*)$": false
+            },
+            "properties": {
+              "endpoint": {
+                "allOf": [
+                  {
+                    "not": {
+                      "type": "string",
+                      "pattern": "://(?=[^/@])[\\r\\n\\u2028\\u2029]*[^/@\\r\\n\\u2028\\u2029][^/@\\r\\n\\u2028\\u2029:]*[\\r\\n\\u2028\\u2029]*:[\\r\\n\\u2028\\u2029]*(?:[^/@\\r\\n\\u2028\\u2029]+[\\r\\n\\u2028\\u2029]*)?@"
+                    }
+                  },
+                  {
+                    "$ref": "#/$defs/noSecrets"
+                  }
+                ]
+              },
+              "url": {
+                "allOf": [
+                  {
+                    "not": {
+                      "type": "string",
+                      "pattern": "://(?=[^/@])[\\r\\n\\u2028\\u2029]*[^/@\\r\\n\\u2028\\u2029][^/@\\r\\n\\u2028\\u2029:]*[\\r\\n\\u2028\\u2029]*:[\\r\\n\\u2028\\u2029]*(?:[^/@\\r\\n\\u2028\\u2029]+[\\r\\n\\u2028\\u2029]*)?@"
+                    }
+                  },
+                  {
+                    "$ref": "#/$defs/noSecrets"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/noSecrets"
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "array"
+          },
+          "then": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/noSecrets"
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "string"
+          },
+          "then": {
+            "type": "string",
+            "not": {
+              "pattern": "://(?=[^/@])[\\r\\n\\u2028\\u2029]*[^/@\\r\\n\\u2028\\u2029][^/@\\r\\n\\u2028\\u2029:]*[\\r\\n\\u2028\\u2029]*:[\\r\\n\\u2028\\u2029]*(?:[^/@\\r\\n\\u2028\\u2029]+[\\r\\n\\u2028\\u2029]*)?@|(?://|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})(?:(?!//|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})[^\\r\\n\\u2028\\u2029])*?[?&#](?=[^?&=#\\r\\n\\u2028\\u2029]*[\\r\\n\\u2028\\u2029]*=)[^?&=#\\r\\n\\u2028\\u2029]*?(?:(?<![A-Za-z0-9_-])[A-Za-z0-9_-]*?[tT][-_]*[oO][-_]*[kK\\u212A][-_]*[eE][-_]*[nN][-_]*(?![A-Za-z0-9_-])|[aA][-_]*[pP][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY]|[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT]|[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[oO][-_]*[rR][-_]*[dD]|(?<![A-Za-z0-9_-])(?:[-_]*[oO][-_]*[pP][-_]*[eE][-_]*[nN][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[xX][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[nN][-_]*[tT][-_]*[hH][-_]*[rR][-_]*[oO][-_]*[pP][-_]*[iI][-_]*[cC][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[eE][-_]*[mM][-_]*[iI][-_]*[nN][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[iI][-_]*[tT][-_]*[hH][-_]*[uU][-_]*[bB][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[oO][-_]*[oO][-_]*[gG][-_]*[lL][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[wW][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[pP][-_]*[rR][-_]*[iI][-_]*[vV][-_]*[aA][-_]*[tT][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[cC][-_]*[cC][-_]*[eE][-_]*[sS][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[uU][-_]*[tT][-_]*[hH][-_]*[oO][-_]*[rR][-_]*[iI][-_]*[zZ][-_]*[aA][-_]*[tT][-_]*[iI][-_]*[oO][-_]*[nN][-_]*|[-_]*[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[dD][-_]*)(?![A-Za-z0-9_-])|(?<![A-Za-z0-9_-])[-_]*[bB][-_]*[eE][-_]*[aA][-_]*[rR][-_]*[eE][-_]*[rR])|(?://|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})(?:(?!//|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})[^\\r\\n\\u2028\\u2029])*?[?&](?:(?=[^?&=#\\r\\n\\u2028\\u2029]*(?:[aA][-_]*[pP][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY]|[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT]|[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[oO][-_]*[rR][-_]*[dD]))(?=([^?&=#\\r\\n\\u2028\\u2029]*))\\1|[^?&=#\\r\\n\\u2028\\u2029]*[tT][-_]*[oO][-_]*[kK\\u212A][-_]*[eE][-_]*[nN][-_]*|(?:[-_]*[oO][-_]*[pP][-_]*[eE][-_]*[nN][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[xX][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[nN][-_]*[tT][-_]*[hH][-_]*[rR][-_]*[oO][-_]*[pP][-_]*[iI][-_]*[cC][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[eE][-_]*[mM][-_]*[iI][-_]*[nN][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[iI][-_]*[tT][-_]*[hH][-_]*[uU][-_]*[bB][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[oO][-_]*[oO][-_]*[gG][-_]*[lL][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[wW][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[pP][-_]*[rR][-_]*[iI][-_]*[vV][-_]*[aA][-_]*[tT][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[cC][-_]*[cC][-_]*[eE][-_]*[sS][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[uU][-_]*[tT][-_]*[hH][-_]*[oO][-_]*[rR][-_]*[iI][-_]*[zZ][-_]*[aA][-_]*[tT][-_]*[iI][-_]*[oO][-_]*[nN][-_]*|[-_]*[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[dD][-_]*)|[-_]*[bB][-_]*[eE][-_]*[aA][-_]*[rR][-_]*[eE][-_]*[rR](?=([^?&=#\\r\\n\\u2028\\u2029]*))\\2)(?=[\\t\\n\\v\\f\\r \\u0085\\u00a0\\u00ad\\u1680\\u180e\\u2000-\\u200d\\u2028\\u2029\\u202f\\u205f\\u2060\\u3000\\ufeff]|[/@?#&=\\u0022\\u0027]|;(?!$)|$)|(?://|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})(?:(?!//|(?<![A-Za-z0-9._~%+/@-])[A-Za-z0-9-]+\\.[A-Za-z]{2})[^\\r\\n\\u2028\\u2029])*?[?&](?:(?=[^?&=#\\r\\n\\u2028\\u2029]*(?:[aA][-_]*[pP][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY]|[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT]|[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[oO][-_]*[rR][-_]*[dD]))(?=([^?&=#\\r\\n\\u2028\\u2029]*))\\3|[^?&=#\\r\\n\\u2028\\u2029]*[tT][-_]*[oO][-_]*[kK\\u212A][-_]*[eE][-_]*[nN][-_]*|(?:[-_]*[oO][-_]*[pP][-_]*[eE][-_]*[nN][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[xX][-_]*[aA][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[nN][-_]*[tT][-_]*[hH][-_]*[rR][-_]*[oO][-_]*[pP][-_]*[iI][-_]*[cC][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[eE][-_]*[mM][-_]*[iI][-_]*[nN][-_]*[iI][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[iI][-_]*[tT][-_]*[hH][-_]*[uU][-_]*[bB][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[gG][-_]*[oO][-_]*[oO][-_]*[gG][-_]*[lL][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[wW][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[pP][-_]*[rR][-_]*[iI][-_]*[vV][-_]*[aA][-_]*[tT][-_]*[eE][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[sS][-_]*[eE][-_]*[cC][-_]*[rR][-_]*[eE][-_]*[tT][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[cC][-_]*[cC][-_]*[eE][-_]*[sS][-_]*[sS][-_]*[kK\\u212A][-_]*[eE][-_]*[yY][-_]*|[-_]*[aA][-_]*[uU][-_]*[tT][-_]*[hH][-_]*[oO][-_]*[rR][-_]*[iI][-_]*[zZ][-_]*[aA][-_]*[tT][-_]*[iI][-_]*[oO][-_]*[nN][-_]*|[-_]*[pP][-_]*[aA][-_]*[sS][-_]*[sS][-_]*[wW][-_]*[dD][-_]*)|[-_]*[bB][-_]*[eE][-_]*[aA][-_]*[rR][-_]*[eE][-_]*[rR](?=([^?&=#\\r\\n\\u2028\\u2029]*))\\4)(?:[\\r\\n\\u2028\\u2029]*=|&|#|$)"
+            }
+          }
+        }
+      ]
+    },
+    "chapterPlan": {
+      "description": "One outline per chapter (NovelWriter scaffold PLAN-v1.2 section 9(a)). Optional; tools that do not plan scenes ignore it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chapter",
+        "scenes"
+      ],
+      "properties": {
+        "chapter": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "spineRef": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 1200
+        },
+        "parts": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "enum": [
+                  "p1",
+                  "p2",
+                  "p3",
+                  "p4"
+                ]
+              },
+              "wordBudget": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "scenes": {
+          "type": "array",
+          "maxItems": 40,
+          "items": {
+            "$ref": "#/$defs/sceneCard"
+          }
+        }
+      }
+    },
+    "sceneCard": {
+      "description": "One planned scene. Required: part, order, beat. Characters are referenced by id, not by name.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "part",
+        "order",
+        "beat"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "part": {
+          "description": "Chapter part this scene belongs to, p1-p4 (matches parts maxItems 4).",
+          "enum": [
+            "p1",
+            "p2",
+            "p3",
+            "p4"
+          ]
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "beat": {
+          "description": "What happens in the scene, in prose, 20-400 characters. Must not contain double quotes: straight (\") and curly (\u201C \u201D) double quotes are rejected so beats stay prose, not dialogue. This also blocks quoted titles; write titles without double quotes.",
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 400,
+          "pattern": "^[^\"\u201C\u201D]*$"
+        },
+        "plotPoint": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "subplotBeat": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "subplotIdx",
+            "part"
+          ],
+          "properties": {
+            "subplotIdx": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "part": {
+              "enum": [
+                "want",
+                "obstacle",
+                "flaw",
+                "stakes"
+              ]
+            },
+            "mode": {
+              "enum": [
+                "echoes",
+                "complicates"
+              ]
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 240
+            }
+          }
+        },
+        "charArcStep": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "charId",
+            "step"
+          ],
+          "properties": {
+            "charId": {
+              "type": "string"
+            },
+            "step": {
+              "type": "string",
+              "maxLength": 240
+            },
+            "setback": {
+              "type": "boolean"
+            }
+          }
+        },
+        "storyArcStep": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "goal": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "conflict": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "outcome": {
+          "description": "Scene outcome: yes (resolution), no, yes-but, no-and.",
+          "enum": [
+            "yes",
+            "no",
+            "yes-but",
+            "no-and"
+          ]
+        },
+        "sequel": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reaction": {
+              "type": "string"
+            },
+            "dilemma": {
+              "type": "string"
+            },
+            "decision": {
+              "type": "string"
+            }
+          }
+        },
+        "pov": {
+          "type": "string"
+        },
+        "cast": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "string"
+          }
+        },
+        "beatsCovered": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string"
+          }
+        },
+        "wordBudget": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sourceRefs": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "storyOutline",
+                  "characterSheet",
+                  "reference",
+                  "research",
+                  "userNote"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "anchor": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "quoteHash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{12}$"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -31,6 +31,7 @@
     "test:smoke:nw-trust-q1q3": "node scripts/_smoke_nw_trust_q1q3.mjs",
     "test:smoke:nw-writing-plans": "node scripts/_smoke_nw_writing_plans.mjs",
     "test:smoke:nw-rca3-scorer": "node scripts/_smoke_rca3_scorer.mjs",
+    "test:smoke:nw-story-core-21": "node scripts/_smoke_nw_story_core_21.mjs",
     "smoke:nw-167": "node scripts/_smoke_nw_167_gates.mjs",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:install": "playwright install chromium",
