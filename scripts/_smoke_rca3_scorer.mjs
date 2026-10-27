@@ -4,6 +4,8 @@
  * (no network, no API key, 0 tokens) and prints TAP.
  *   R1 cast aliases      nwScoreCast credits first names / explicit character aliases (F4a);
  *                        R1f: first names / aliases are case-sensitive (lowercase 'will' is not Will Turner)
+ *                        R1g-R1k: unique dialogueTurn short refs resolve to their character; shared
+ *                        short names/aliases and alias==other full name credit nobody (Copilot #192)
  *   R2 phrase-echo cap   one echoed phrase can't dominate nwScoreRepetition (F2)
  *   R3 length band       nwScoreLength WARNs above 1.2x target; short side unchanged (F3)
  *   R4 arcStep advisory  scoreObligationCoverage no longer gates on arcStep keywords (F6);
@@ -30,6 +32,8 @@ try {
     return route.abort();
   });
   const page = await context.newPage();
+  const pageErrors = [];
+  page.on('pageerror', (e) => pageErrors.push(String(e && e.message || e)));
   page.on('dialog', (d) => d.dismiss().catch(() => {}));
   await page.goto(pathToFileURL(HTML_PATH).href, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForFunction(() => typeof nwScoreCast === 'function' && typeof scoreObligationCoverage === 'function');
@@ -78,6 +82,28 @@ try {
       const probe = 'The engine will hold. It will not fail. By grace of the pump the hall stayed dry.';
       const c4 = nwScoreCast(probe + ' ' + filler(40, 5), bp4);
       t('R1f', "lowercase common-word first names ('will', 'grace') are not credited", c4.counts['Will Turner'] === 0 && c4.counts['Grace Hall'] === 1, c4);
+      // R1g-R1k (Copilot r4384123085 BLOCK / r4384123057 on 2772fd6): short refs in dialogueTurn that map to
+      // exactly one character resolve to that character; ambiguous short refs and aliases still collide.
+      novelData.characters = [{ name: 'Elena Voss', role: 'lead' }];
+      const kbp5 = { characterBeats: [{ name: 'Elena Voss', beat: 'x' }], dialogueTurn: 'Elena confronts the harbor master about the drift.' };
+      const k5 = nwScoreCast(filler(40, 6) + ' Elena checked the loop. Elena laughed. ' + filler(40, 7), kbp5);
+      t('R1g', "one-character roster: 'Elena' in dialogueTurn resolves to Elena Voss (count >= 1, no self-collision)", k5.counts['Elena Voss'] >= 1 && !('Elena' in k5.counts) && k5.status === 'PASS', k5);
+      novelData.characters = [{ name: 'Elena Voss' }];
+      const k5b = nwScoreCast(filler(40, 8) + ' Elena checked the loop. Elena laughed. ' + filler(40, 9), { dialogueTurn: 'Elena warns the crew about the drift.' });
+      t('R1h', "dialogueTurn-only 'Elena' resolves to the sole roster character and is credited", k5b.counts['Elena Voss'] === 2 && k5b.status === 'PASS', k5b);
+      novelData.characters = [{ name: 'Mara Hale', aliases: ['Doc'] }, { name: 'Ivo Brandt', aliases: ['Doc'] }];
+      const kbp6 = { characterBeats: [{ name: 'Mara Hale', beat: 'x' }, { name: 'Ivo Brandt', beat: 'y' }], dialogueTurn: 'Doc argues with the pilot.' };
+      const k6 = nwScoreCast('Doc waited. Doc left. ' + filler(40, 10), kbp6);
+      t('R1i', "control: shared short name 'Doc' credits NEITHER character", k6.counts['Mara Hale'] === 0 && k6.counts['Ivo Brandt'] === 0, k6);
+      const k6c = nwScoreCast('Doc waited. Doc left. ' + filler(40, 13), { characterBeats: [{ name: 'Mara Hale', beat: 'x' }, { name: 'Ivo Brandt', beat: 'y' }] });
+      t('R1i2', "control: shared alias 'Doc' credits NEITHER character even when dialogueTurn does not name Doc", k6c.counts['Mara Hale'] === 0 && k6c.counts['Ivo Brandt'] === 0, k6c);
+      novelData.characters = [{ name: 'Sam Ortiz' }, { name: 'Sam Reed' }];
+      const k6b = nwScoreCast('Sam waited. Sam left. ' + filler(40, 11), { characterBeats: [{ name: 'Sam Ortiz', beat: 'x' }, { name: 'Sam Reed', beat: 'y' }], dialogueTurn: 'Sam argues with the pilot.' });
+      t('R1j', "control: ambiguous dialogueTurn 'Sam' is not resolved; neither Sam is credited", k6b.counts['Sam Ortiz'] === 0 && k6b.counts['Sam Reed'] === 0, k6b);
+      novelData.characters = [{ name: 'Rowan Pike', aliases: ['Iris Vale'] }, { name: 'Iris Vale' }];
+      const k7 = nwScoreCast('Iris Vale spoke. ' + filler(40, 12), { characterBeats: [{ name: 'Rowan Pike', beat: 'x' }, { name: 'Iris Vale', beat: 'y' }] });
+      t('R1k', "alias equal to another character's full name is not credited to the alias owner", k7.counts['Rowan Pike'] === 0 && k7.counts['Iris Vale'] === 1, k7);
+      novelData.characters = [{ name: 'Will Turner' }, { name: 'Grace Hall' }];
       const c5 = nwScoreCast(probe + ' Will checked the pump. Then Will swore. ' + filler(40, 6), bp4);
       t('R1f.ctl', "control: capitalized 'Will' (incl. sentence-initial) is still credited, lowercase not", c5.counts['Will Turner'] === 2, c5);
       t('R1f.cast', 'probe alone is not a cast PASS (missing characters stay missing)', c4.status !== 'PASS', c4);
@@ -144,7 +170,7 @@ try {
     return out;
   });
   console.log('TAP version 13');
-  console.log('1..' + (results.length + 1));
+  console.log('1..' + (results.length + 2));
   for (const r of results) {
     n++;
     if (!r.ok) failed++;
@@ -155,6 +181,10 @@ try {
   // The page may try to load a CDN asset; every non-file request is aborted above, so nothing leaves the box.
   console.log(`ok ${n} - NET every non-file request aborted (${blocked.length} attempted)`);
   for (const u of blocked) console.log('  # aborted ' + u);
+  n++;
+  if (pageErrors.length) failed++;
+  console.log(`${pageErrors.length ? 'not ok' : 'ok'} ${n} - PAGEERROR no uncaught page errors (${pageErrors.length})`);
+  for (const m of pageErrors) console.log('  # pageerror ' + m.slice(0, 200));
   console.log(`# pass ${n - failed} fail ${failed}`);
 } catch (e) {
   failed++;
