@@ -1078,7 +1078,21 @@ report.config.model = await page.evaluate(() => document.getElementById('model')
         throw new Error('plot/setting digest helpers missing');
       }
       const pack = buildGenerateChapterUserContent(1, 1, {});
-      const need = [
+      // c7c18b4 (hard requirements + writing plans): with a blueprint the obligations JSON line is replaced by
+      // '- **Chapter plan (reference):**' with de-jargoned keys (arcStep -> 'arc Step'), plus a HARD REQUIREMENTS block.
+      const planShape = pack.indexOf('- **Chapter plan (reference):**') >= 0;
+      const need = planShape ? [
+        'Chapter plan (reference)',
+        'HARD REQUIREMENTS',
+        'OBLIGATION CHECKLIST',
+        '"arc Step"',
+        '"character Beats"',
+        '"subplot Pressure"',
+        '"world Hooks"',
+        '"allowed Payoffs"',
+        '"deferred Threads"',
+        'ObligationRetrieve'
+      ] : [
         'Chapter Blueprint (obligations JSON)',
         'OBLIGATION CHECKLIST',
         'arcStep',
