@@ -608,6 +608,47 @@ try {
       await context.close();
     }
   }
+  // ---- FIX2b N2 (Reviewer/Engineering): batch checkpoints must redact the key value in prose, like autosave.
+  if (T('R6')) {
+    const { page, context } = await newPage();
+    const r = await page.evaluate(async (K) => {
+      document.getElementById('apiKey').value = K; novelData.apiKey = K;
+      novelData.chapters = [{ title: 'Ch1', text: 'prose ' + K + ' prose' }];
+      novelData.subplots = [{ title: 'sp', description: 'subplot ' + K }];
+      novelData.chapterContent1 = 'outline ' + K;
+      novelData.generalPlot = 'plot ' + K;
+      novelData.batchRun = { id: 'r6run', status: 'running', nextIndex: 0, chapters: [], note: 'br ' + K };
+      const read = () => new Promise((res, rej) => { const q = indexedDB.open('novelwriter', 2); q.onsuccess = () => { const g = q.result.transaction('checkpoints').objectStore('checkpoints').getAll(); g.onsuccess = () => res(g.result); g.onerror = rej; }; q.onerror = rej; });
+      let err1 = null; try { await nwBatchCheckpoint(true); } catch (e) { err1 = String(e && e.name); }
+      const a = await read();
+      nwBatchState.interrupted = { key: 'r6back', active: true, savedAt: new Date().toISOString(), novelData: { chapters: [{ text: 'wb ' + K }] }, batchRun: { id: 'r6back', note: 'wb ' + K } };
+      let err2 = null; try { await discardInterruptedBatchRun(); } catch (e) { err2 = String(e && e.name); }
+      const b = await read();
+      const cnt = (x) => (JSON.stringify(x).split(K).length - 1);
+      const one = a.find((x) => x && x.key === 'r6run'); const back = b.find((x) => x && x.key === 'r6back');
+      return { err1, err2, cpHits: cnt(a), allHits: cnt(b), plot: one && one.novelData && one.novelData.generalPlot, text: one && one.novelData && one.novelData.chapters && one.novelData.chapters[0].text, sub: one && one.novelData && one.novelData.subplots && one.novelData.subplots[0].description, backText: back && back.novelData.chapters[0].text, backActive: back && back.active };
+    }, FAKE);
+    check('R6.checkpoint-no-key-value', r.cpHits === 0 && r.err1 === null, `hits=${r.cpHits} err=${r.err1}`);
+    check('R6.checkpoint-prose-redacted', r.text === 'prose [redacted] prose' && r.sub === 'subplot [redacted]', `text-redacted=${/\[redacted\]/.test(r.text || '')} sub-redacted=${/\[redacted\]/.test(r.sub || '')}`);
+    check('R6.generalPlot-redacted', r.plot === 'plot [redacted]', `redacted=${/\[redacted\]/.test(r.plot || '')} keyHits=${scan(r.plot || '')}`);
+    check('R6.discard-writeback-redacted', r.allHits === 0 && r.backText === 'wb [redacted]' && r.backActive === false, `hits=${r.allHits} redacted=${/\[redacted\]/.test(r.backText || '')} active=${r.backActive}`);
+    await context.close();
+  }
+  if (T('R6')) {
+    const { page, context } = await newPage();
+    const r = await page.evaluate(async (K) => {
+      document.getElementById('apiKey').value = K; novelData.apiKey = K;
+      novelData.chapters = [{ title: 'Ch1', text: 'refuse' }];
+      const w = document.getElementById('nwAutosaveWarn'); if (w) { w.hidden = true; w.textContent = ''; }
+      novelData.batchRun = { id: 'r6refuse', status: 'running', nextIndex: 0, chapters: [], notes: { [K]: 1 } };
+      let rejected = false; try { await nwBatchCheckpoint(true); } catch (_) { rejected = true; }
+      const rows = await new Promise((res, rej) => { const q = indexedDB.open('novelwriter', 2); q.onsuccess = () => { const g = q.result.transaction('checkpoints').objectStore('checkpoints').getAll(); g.onsuccess = () => res(g.result); g.onerror = rej; }; q.onerror = rej; });
+      const el = document.getElementById('nwAutosaveWarn');
+      return { rejected, stored: rows.some((x) => x && x.key === 'r6refuse'), shown: !!el && !el.hidden, text: el ? el.textContent : '' };
+    }, FAKE);
+    check('R6.refused-checkpoint-warns', r.rejected && !r.stored && r.shown && /^Autosave failed \([A-Za-z]+\)\. Last good copy kept\.$/.test(r.text) && scan(r.text) === 0, JSON.stringify({ rejected: r.rejected, stored: r.stored, shown: r.shown, text: r.text, keyHits: scan(r.text) }));
+    await context.close();
+  }
 } catch (e) {
   check('B.harness', false, (e && e.name) + ': ' + String(e && e.message).split('\n')[0]);
 } finally {
