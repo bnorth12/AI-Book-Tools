@@ -585,6 +585,29 @@ try {
     check('R4.serializer-drops-apiKey', unit.ok, unit.why);
     await context.close();
   }
+  // ---- FIX2 B1 (Engineering 09b90205, Copilot r4387553007): a failed IDB clear must not drop the Discard tombstone.
+  if (T('R5')) {
+    for (const persist of [false, true]) {
+      const tag = persist ? 'R5.clear-fails-every-load' : 'R5.clear-fails-once';
+      const stubClear = () => { IDBObjectStore.prototype.clear = function () { throw new DOMException('clear failed', 'UnknownError'); }; };
+      const { page, context } = await newPage(persist ? { initScript: () => { if (sessionStorage.getItem('r5stub')) { IDBObjectStore.prototype.clear = function () { throw new DOMException('clear failed', 'UnknownError'); }; } } } : {});
+      await typeVal(page, '#title', 'R5-draft'); await settle(1000);
+      await load(page, true);
+      const restored = /Restored autosave/.test(await bannerText(page));
+      await page.evaluate(stubClear);
+      if (persist) await page.evaluate(() => sessionStorage.setItem('r5stub', '1'));
+      const b = page.locator('#nwAutosaveBanner button', { hasText: 'Discard' });
+      const hasBtn = await b.count(); if (hasBtn) await b.click();
+      await settle(500);
+      const tomb = await page.evaluate(() => localStorage.getItem('novelwriter.discarded.v1'));
+      await load(page, true); await settle(300);
+      const t = await page.evaluate(() => document.getElementById('title').value);
+      const banner = await bannerText(page);
+      check(`${tag}.tombstone-kept`, !!tomb, `tomb=${!!tomb}`);
+      check(`${tag}.draft-not-restored`, restored && hasBtn === 1 && t !== 'R5-draft' && !/Restored autosave/.test(banner), JSON.stringify({ restored, hasBtn, t, banner: banner.slice(0, 60) }));
+      await context.close();
+    }
+  }
 } catch (e) {
   check('B.harness', false, (e && e.name) + ': ' + String(e && e.message).split('\n')[0]);
 } finally {
