@@ -4066,6 +4066,7 @@ let activeAICallCount = 0;
 			const abortRace = new Promise((_, reject) => { abortReject = reject; });
 			abortRace.catch(() => {});
 
+		    if (typeof nwAutosaveCallStart === 'function') nwAutosaveCallStart(operationName);
 		    try {
 		        var _est = (typeof nwTimingAvgFor === 'function') ? nwTimingAvgFor(taskType) : { avg: 0 };
 		        callTick = nwCallStart(operationName, callLabel, {
@@ -4249,6 +4250,7 @@ let activeAICallCount = 0;
 				setExecutionStatus(operationName, 'failed', error.message || 'API call failed.');
 		        throw error;
 		    } finally {
+		        if (typeof nwAutosaveCallEnd === 'function') nwAutosaveCallEnd();
 		        clearTimeout(timeoutTimer);
 		        nwCallEnd(callTick);
 		        if (loadingDiv) loadingDiv.style.display = 'none';
@@ -11413,16 +11415,37 @@ return c && c.name && c.backstory && c.arc; });
 		    // ---- NW.GEN: Session Import/Export Functions ----
 		    // NW.GEN.SES.1: exportSession() SHALL serialise novelData into a schema-versioned JSON envelope (schemaVersion: '1.0') and trigger a file download.
 		    // NW.GEN.SES.2: importSession() SHALL accept a JSON file, detect whether it is an envelope or bare novelData, normalise it, and restore the full UI state.
-		    const SECRET_FIELD_DENYLIST = {
-		        exact: ["apiKey", "api_key", "accessToken", "access_token", "authToken", "authorization", "privateKey"],
-		        patterns: [/secret/i, /password/i, /^bearer/i]
-		    };
-
-		    function isSecretField(name) {
-		        const normalized = String(name).toLowerCase();
-		        return SECRET_FIELD_DENYLIST.exact.some(field => field.toLowerCase() === normalized)
-		            || SECRET_FIELD_DENYLIST.patterns.some(pattern => pattern.test(normalized));
-		    }
+// SEC-SWEEP #180 shared copy: begin
+		    // isSecretField + helpers below are a verbatim copy of HerbalBookForge.html (SEC-SWEEP #180); keep in sync
+		    // (parity: scripts/_smoke_nw_autosave.mjs T-PAR-1/T-PAR-2).
+const FOLD = { '\u017F': 's', '\u0131': 'i', '\u0130': 'I', '\u212A': 'K', '\u0307': '-' };
+const foldCase = (s) => s.replace(/[\u017F\u0131\u0130\u212A\u0307]/g, (c) => FOLD[c]);
+const EXACT = ['openaikey','xaikey','anthropickey','geminikey','githubkey','googlekey','awskey','privatekey','secretkey','accesskey','authorization','passwd'];
+const CRED_EXACT = ['credential','credentials','pwd','jwt','auth','sessionid']; // v2.3: exact (normalized) only; author/authorStyle unaffected
+const KEY_STEMS = ['openaikey','xaikey','anthropickey','geminikey','githubkey','googlekey','awskey','privatekey','privkey','secretkey','accesskey'];
+const STEM_MAX = 12; // longest stem: anthropickey
+const normalizeName = (k) => foldCase(String(k)).toLowerCase().replace(/[-_\r\n\u2028\u2029]/g, '');
+const cls = (c) => { const x = c.charCodeAt(0); if (x >= 97 && x <= 122) return 'l'; if (x >= 65 && x <= 90) return 'u'; if (x >= 48 && x <= 57) return 'd'; return (x < 128 || x === 0x2028 || x === 0x2029) ? 's' : 'l'; };
+function nameWords(k) {
+  const s = foldCase(String(k)); const w = []; let cur = '';
+  for (let i = 0; i < s.length; i++) {
+    const t = cls(s[i]); if (t === 's') { if (cur) w.push(cur); cur = ''; continue; }
+    const p = cur ? cls(s[i - 1]) : 's', nx = i + 1 < s.length ? cls(s[i + 1]) : 's';
+    if (cur && ((t === 'd') !== (p === 'd') || (p === 'l' && t === 'u') || (p === 'u' && t === 'u' && nx === 'l'))) { w.push(cur); cur = ''; }
+    cur += s[i];
+  }
+  if (cur) w.push(cur);
+  return w.map((x) => x.toLowerCase());
+}
+function hasProviderKeyWords(k) { const w = nameWords(k);
+  for (let i = 0; i < w.length; i++) { let acc = ''; for (let j = i; j < w.length; j++) { acc += w[j]; if (acc.length > STEM_MAX) break; if (KEY_STEMS.includes(acc)) return true; } }
+  return false; }
+function isSecretField(k) { const n = normalizeName(k);
+  return n.endsWith('token') || n.includes('apikey') || n.includes('secret') || n.includes('password') || n.startsWith('bearer') || EXACT.includes(n)
+    || CRED_EXACT.includes(n) || hasProviderKeyWords(k)
+    || n.endsWith('cookie') || n.endsWith('cookies'); } // v2.3 N2(5)
+		    // Legacy name kept for readers; the live rule is isSecretField above.
+		    const SECRET_FIELD_DENYLIST = { exact: EXACT.concat(CRED_EXACT), stems: KEY_STEMS };
 
 		    function isSensitiveUrl(value) {
 		        if (typeof value !== 'string') return false;
@@ -11461,6 +11484,8 @@ return c && c.name && c.backstory && c.arc; });
 		            .filter(([name, nested]) => !isSecretField(name) && !isSensitiveUrl(nested))
 		            .map(([name, nested]) => [name, stripSecretFields(nested)]));
 		    }
+
+// SEC-SWEEP #180 shared copy: end
 
 		    // Export the entire session as JSON using the shared schema envelope.
 			function exportSession() {
@@ -11646,6 +11671,7 @@ return c && c.name && c.backstory && c.arc; });
 		        });
 		    })();
 
+		    mergedNovelData.bookId = (typeof normalizedNovelData.bookId === 'string' && normalizedNovelData.bookId) ? normalizedNovelData.bookId : nwAutosaveNewBookId();
 		    return {
 		        novelData: mergedNovelData,
 		        requestLog: {
@@ -11659,6 +11685,7 @@ return c && c.name && c.backstory && c.arc; });
 
 		// Push the current novelData into every tab's controls (shared by importSession and the Generate All restore).
 		function applySessionDataToUI() {
+		    if (typeof nwAutosaveEnsureBookId === 'function') nwAutosaveEnsureBookId();
 		    document.getElementById('apiKey').value = novelData.apiKey || '';
 		    document.getElementById('model').value = novelData.model || 'grok-4.7';
 		    ensureModelSelected();
@@ -14586,12 +14613,18 @@ return c && c.name && c.backstory && c.arc; });
                 var idb = window.indexedDB;
                 if (!idb) { reject(new Error('IndexedDB unavailable')); return; }
                 var req;
-                try { req = idb.open(NW_BATCH.idbName, 1); } catch (e) { reject(e); return; }
+                // v2 (M-STAB WP1): adds the 'autosave' store (keyPath bookId); 'checkpoints' is kept as is.
+                try { req = idb.open(NW_BATCH.idbName, 2); } catch (e) { reject(e); return; }
                 req.onupgradeneeded = function () {
                     var db = req.result;
                     if (!db.objectStoreNames.contains(NW_BATCH.idbStore)) db.createObjectStore(NW_BATCH.idbStore);
+                    if (!db.objectStoreNames.contains('autosave')) db.createObjectStore('autosave', { keyPath: 'bookId' });
                 };
-                req.onsuccess = function () { resolve(req.result); };
+                req.onsuccess = function () {
+                    var db = req.result;
+                    db.onversionchange = function () { try { db.close(); } catch (_) { /* closed */ } nwBatchDbPromise = null; };
+                    resolve(db);
+                };
                 req.onerror = function () { reject(req.error || new Error('IndexedDB open failed')); };
             });
             nwBatchDbPromise.catch(function () { nwBatchDbPromise = null; });
@@ -15459,6 +15492,245 @@ return c && c.name && c.backstory && c.arc; });
             try { nwBatchRefreshEstimate(); } catch (e) { console.warn('[batch] estimate', e); }
             window.__nwBatchRestoreCheck = nwBatchCheckForInterrupted();
         });
+        // ---- M-STAB WP1: autosave (IndexedDB 'autosave' store keyed by bookId + synchronous localStorage mirror) ----
+        // Records never contain novelData.apiKey or any isSecretField name (stripSecretFields on the whole record).
+        var NW_AUTOSAVE = { store: 'autosave', lsKey: 'novelwriter.autosave.v1', discardKey: 'novelwriter.discarded.v1', debounceMs: 750 };
+        var nwAutosaveState = { timer: null, discarded: false, restoring: false, inFlight: null, inFlightCount: 0, lastSavedAt: null, lastError: null, ready: false, interrupted: null, blank: null, pending: null, dirty: false };
+
+        function nwAutosaveNewBookId() {
+            try { if (window.crypto && typeof crypto.randomUUID === 'function') return 'book-' + crypto.randomUUID(); } catch (_) { /* fall through */ }
+            return 'book-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+        }
+        function nwAutosaveEnsureBookId() {
+            if (typeof novelData.bookId !== 'string' || !novelData.bookId) novelData.bookId = nwAutosaveNewBookId();
+            return novelData.bookId;
+        }
+        function nwAutosaveEl(id, cls) {
+            var el = document.getElementById(id);
+            if (!el && document.body) {
+                el = document.createElement('div');
+                el.id = id; el.className = cls || ''; el.hidden = true;
+                el.style.cssText = 'margin:6px 0;padding:8px 10px;border:1px solid #c9a227;background:#fff8e1;color:#333;';
+                document.body.insertBefore(el, document.body.firstChild);
+            }
+            return el;
+        }
+        function nwAutosaveWarn(err) {
+            var name = (err && typeof err.name === 'string' && /^[A-Za-z]{1,40}$/.test(err.name)) ? err.name : 'Error';
+            nwAutosaveState.lastError = name;
+            var el = nwAutosaveEl('nwAutosaveWarn');
+            if (el) { el.setAttribute('role', 'alert'); el.textContent = 'Autosave failed (' + name + '). Last good copy kept.'; el.hidden = false; }
+            console.warn('[autosave] write failed: ' + name);
+        }
+        function nwAutosaveClearWarn() {
+            var el = document.getElementById('nwAutosaveWarn');
+            if (el && /^Autosave failed/.test(el.textContent)) el.hidden = true;
+        }
+        function nwAutosaveBuildRecord() {
+            var nd = JSON.parse(JSON.stringify(novelData));
+            delete nd.apiKey;
+            var rec = { v: 1, bookId: nwAutosaveEnsureBookId(), savedAt: new Date().toISOString(), inFlight: nwAutosaveState.inFlight ? { operationName: String(nwAutosaveState.inFlight.operationName || ''), startedAt: nwAutosaveState.inFlight.startedAt } : null, novelData: nd };
+            rec = stripSecretFields(rec);
+            if (rec.novelData) delete rec.novelData.apiKey;
+            return rec;
+        }
+        function nwAutosaveCanWrite() { return nwAutosaveState.ready && !nwAutosaveState.discarded && !nwAutosaveState.restoring; }
+        function nwAutosaveWriteLocal(rec) {
+            try { localStorage.setItem(NW_AUTOSAVE.lsKey, JSON.stringify(rec)); return true; }
+            catch (e) { nwAutosaveWarn(e); return false; }
+        }
+        function nwAutosaveIdb(mode, fn) {
+            return nwBatchOpenDb().then(function (db) {
+                return new Promise(function (resolve, reject) {
+                    var tx, out;
+                    try { tx = db.transaction(NW_AUTOSAVE.store, mode); out = fn(tx.objectStore(NW_AUTOSAVE.store)); }
+                    catch (e) { try { if (tx) tx.abort(); } catch (_) { /* finished */ } reject(e); return; }
+                    tx.oncomplete = function () { resolve(out && 'result' in out ? out.result : undefined); };
+                    tx.onerror = function () { reject(tx.error || new Error('autosave transaction failed')); };
+                    tx.onabort = function () { reject(tx.error || new Error('autosave transaction aborted')); };
+                });
+            });
+        }
+        /** Synchronous localStorage write now; IndexedDB put follows (transactional, failure keeps the previous record). */
+        function nwAutosaveWriteNow(opts) {
+            if (!nwAutosaveCanWrite()) return null;
+            if (nwAutosaveState.timer) { clearTimeout(nwAutosaveState.timer); nwAutosaveState.timer = null; }
+            var rec;
+            try { rec = nwAutosaveBuildRecord(); } catch (e) { nwAutosaveWarn(e); return null; }
+            var okLs = nwAutosaveWriteLocal(rec);
+            nwAutosaveState.lastSavedAt = rec.savedAt;
+            nwAutosaveState.dirty = false;
+            if (opts && opts.localOnly) return rec;
+            var p = nwAutosaveIdb('readwrite', function (s) { s.put(rec); }).then(function () {
+                if (okLs) nwAutosaveClearWarn();
+            }, function (e) { nwAutosaveWarn(e); });
+            nwAutosaveState.pending = p;
+            return rec;
+        }
+        function nwAutosaveSchedule() {
+            if (!nwAutosaveCanWrite()) return;
+            nwAutosaveState.dirty = true;
+            if (nwAutosaveState.timer) clearTimeout(nwAutosaveState.timer);
+            nwAutosaveState.timer = setTimeout(function () { nwAutosaveState.timer = null; nwAutosaveWriteNow(); }, NW_AUTOSAVE.debounceMs);
+        }
+        function nwAutosaveCallStart(operationName) {
+            nwAutosaveState.inFlightCount++;
+            nwAutosaveState.inFlight = { operationName: operationName, startedAt: new Date().toISOString() };
+            nwAutosaveWriteNow();
+        }
+        function nwAutosaveCallEnd() {
+            nwAutosaveState.inFlightCount = Math.max(0, nwAutosaveState.inFlightCount - 1);
+            nwAutosaveState.dirty = true;
+            // Flush after the caller has applied the result (settled or rejected), then once more for late writers.
+            // inFlight is cleared here, not synchronously: a call cancelled by page unload stays marked interrupted.
+            setTimeout(function () { if (nwAutosaveState.inFlightCount === 0) nwAutosaveState.inFlight = null; nwAutosaveWriteNow(); }, 0);
+            setTimeout(function () { if (!nwAutosaveState.timer) nwAutosaveWriteNow(); }, 200);
+        }
+        function nwAutosaveOnInput(ev) {
+            var t = ev && ev.target;
+            if (!t || !t.id || t.id === 'apiKey') return;
+            if (ev.isTrusted && nwAutosaveState.discarded) nwAutosaveState.discarded = false;
+            if (Object.prototype.hasOwnProperty.call(novelData, t.id)) {
+                var cur = novelData[t.id];
+                if (typeof cur === 'number') { var n = Number(t.value); if (t.value !== '' && !isNaN(n)) novelData[t.id] = n; }
+                else if (typeof cur === 'boolean') { if (t.type === 'checkbox') novelData[t.id] = !!t.checked; }
+                else if (typeof cur === 'string') novelData[t.id] = t.value;
+            }
+            nwAutosaveSchedule();
+        }
+        function nwAutosaveOnHide() {
+            if (nwAutosaveState.timer || nwAutosaveState.dirty || nwAutosaveState.inFlightCount > 0) nwAutosaveWriteNow({ localOnly: true });
+        }
+        function nwAutosaveReadLocal() {
+            var raw = null;
+            try { raw = localStorage.getItem(NW_AUTOSAVE.lsKey); } catch (e) { return null; }
+            if (raw == null) return null;
+            try {
+                var rec = JSON.parse(raw);
+                if (!rec || typeof rec !== 'object' || !rec.novelData || typeof rec.novelData !== 'object' || typeof rec.savedAt !== 'string') throw new SyntaxError('bad record');
+                return rec;
+            } catch (e) {
+                var w = nwAutosaveEl('nwAutosaveWarn');
+                if (w) { w.setAttribute('role', 'alert'); w.textContent = 'Autosave copy in this browser was unreadable and was ignored.'; w.hidden = false; }
+                console.warn('[autosave] local copy unreadable: ' + ((e && e.name) || 'Error'));
+                return null;
+            }
+        }
+        function nwAutosaveReadIdb() {
+            return nwAutosaveIdb('readonly', function (s) { return s.getAll(); }).then(function (all) {
+                var recs = (all || []).filter(function (r) { return r && r.novelData && typeof r.savedAt === 'string'; });
+                recs.sort(function (a, b) { return String(b.savedAt).localeCompare(String(a.savedAt)); });
+                return recs[0] || null;
+            }, function (e) { console.warn('[autosave] read failed: ' + ((e && e.name) || 'Error')); return null; });
+        }
+        function nwAutosaveFmtCT(iso) {
+            try { return new Date(iso).toLocaleString('en-US', { timeZone: 'America/Chicago' }); } catch (_) { return String(iso); }
+        }
+        function nwAutosaveApply(rec) {
+            nwAutosaveState.restoring = true;
+            var wasImporting = nwBatchState.importing;
+            nwBatchState.importing = true;
+            nwBatchApplyLock();
+            try {
+                var restored = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: JSON.parse(JSON.stringify(rec.novelData)) });
+                var nd = (typeof nwMigrateSession === 'function') ? nwMigrateSession(restored.novelData) : restored.novelData;
+                nd.apiKey = '';
+                novelData = nd;
+                if (rec.bookId && !novelData.bookId) novelData.bookId = rec.bookId;
+                applySessionDataToUI();
+                document.getElementById('apiKey').value = '';
+                novelData.apiKey = '';
+            } finally {
+                nwBatchState.importing = wasImporting;
+                nwBatchApplyLock();
+                nwAutosaveState.restoring = false;
+            }
+            nwAutosaveState.interrupted = rec.inFlight || null;
+            var b = nwAutosaveEl('nwAutosaveBanner');
+            if (b) {
+                b.setAttribute('role', 'status');
+                b.textContent = '';
+                var msg = document.createElement('span');
+                msg.textContent = 'Restored autosave from ' + nwAutosaveFmtCT(rec.savedAt) + ' CT.' + (rec.inFlight ? ' The AI step "' + String(rec.inFlight.operationName || 'AI call') + '" was interrupted; run it again.' : '') + ' Your API key was not saved; re-enter it.';
+                var btn = document.createElement('button');
+                btn.type = 'button'; btn.id = 'nwAutosaveDiscard'; btn.textContent = 'Discard'; btn.style.marginLeft = '10px';
+                btn.addEventListener('click', function () { nwAutosaveDiscard(); });
+                b.appendChild(msg); b.appendChild(btn);
+                b.hidden = false;
+            }
+        }
+        async function nwAutosaveDiscard() {
+            nwAutosaveState.discarded = true;
+            nwAutosaveState.dirty = false;
+            if (nwAutosaveState.timer) { clearTimeout(nwAutosaveState.timer); nwAutosaveState.timer = null; }
+            // Synchronous tombstone first: a reload before the IndexedDB delete completes still honours the Discard.
+            try { localStorage.setItem(NW_AUTOSAVE.discardKey, new Date().toISOString()); } catch (_) { /* ignore */ }
+            try { localStorage.removeItem(NW_AUTOSAVE.lsKey); } catch (_) { /* ignore */ }
+            try { if (nwAutosaveState.pending) await nwAutosaveState.pending.catch(function () {}); } catch (_) { /* ignore */ }
+            try { await nwAutosaveIdb('readwrite', function (s) { s.clear(); }); } catch (e) { console.warn('[autosave] discard failed: ' + ((e && e.name) || 'Error')); }
+            try { localStorage.removeItem(NW_AUTOSAVE.lsKey); localStorage.removeItem(NW_AUTOSAVE.discardKey); } catch (_) { /* ignore */ }
+            var key = document.getElementById('apiKey').value;
+            if (nwAutosaveState.blank) {
+                nwAutosaveState.restoring = true;
+                try {
+                    novelData = JSON.parse(JSON.stringify(nwAutosaveState.blank));
+                    novelData.apiKey = key;
+                    applySessionDataToUI();
+                    document.getElementById('apiKey').value = key;
+                } finally { nwAutosaveState.restoring = false; }
+            }
+            ['nwAutosaveBanner', 'nwAutosaveConflict'].forEach(function (id) { var el = document.getElementById(id); if (el) el.hidden = true; });
+            nwAutosaveState.interrupted = null;
+        }
+        function nwAutosaveShowConflict(rec, ckpt) {
+            var autoNewer = String(rec.savedAt) > String(ckpt.savedAt);
+            var c = nwAutosaveEl('nwAutosaveConflict');
+            if (!c) return;
+            c.setAttribute('role', 'alert');
+            c.textContent = '';
+            var msg = document.createElement('span');
+            msg.textContent = 'Both an autosave (' + nwAutosaveFmtCT(rec.savedAt) + ' CT) and an interrupted batch checkpoint (' + nwAutosaveFmtCT(ckpt.savedAt) + ' CT) exist. '
+                + (autoNewer ? 'The autosave is newer.' : 'The batch checkpoint is newer.') + ' Choose which to keep: ';
+            var a = document.createElement('button'); a.type = 'button'; a.id = 'nwAutosaveConflictRestore'; a.textContent = 'Restore autosave';
+            a.addEventListener('click', function () { c.hidden = true; nwAutosaveState.ready = true; nwAutosaveApply(rec); });
+            var d = document.createElement('button'); d.type = 'button'; d.id = 'nwAutosaveConflictDiscard'; d.textContent = 'Discard autosave'; d.style.marginLeft = '6px';
+            d.addEventListener('click', function () { c.hidden = true; nwAutosaveDiscard().then(function () { nwAutosaveState.discarded = false; nwAutosaveState.ready = true; }); });
+            c.appendChild(msg); c.appendChild(a); c.appendChild(d);
+            c.hidden = false;
+        }
+        async function nwAutosaveInit() {
+            try { if (window.__nwBatchRestoreCheck) await window.__nwBatchRestoreCheck; } catch (_) { /* batch check logs its own errors */ }
+            var blank = JSON.parse(JSON.stringify(novelData)); delete blank.apiKey; delete blank.bookId;
+            nwAutosaveState.blank = blank;
+            var tomb = null;
+            try { tomb = localStorage.getItem(NW_AUTOSAVE.discardKey); } catch (_) { tomb = null; }
+            if (tomb) {
+                try { localStorage.removeItem(NW_AUTOSAVE.lsKey); } catch (_) { /* ignore */ }
+                try { await nwAutosaveIdb('readwrite', function (s) { s.clear(); }); } catch (e) { console.warn('[autosave] discard failed: ' + ((e && e.name) || 'Error')); }
+                try { localStorage.removeItem(NW_AUTOSAVE.discardKey); } catch (_) { /* ignore */ }
+            }
+            var ls = nwAutosaveReadLocal();
+            var idb = await nwAutosaveReadIdb();
+            var rec = (ls && idb) ? (String(ls.savedAt) >= String(idb.savedAt) ? ls : idb) : (ls || idb);
+            if (rec && nwBatchState.interrupted) {
+                nwAutosaveShowConflict(rec, nwBatchState.interrupted);
+            } else {
+                if (rec) {
+                    try { nwAutosaveApply(rec); } catch (e) { console.warn('[autosave] restore failed: ' + ((e && e.name) || 'Error')); }
+                }
+                nwAutosaveState.ready = true;
+            }
+            nwAutosaveEnsureBookId();
+            window.__nwAutosaveReady = true;
+        }
+        document.addEventListener('input', nwAutosaveOnInput, true);
+        document.addEventListener('change', nwAutosaveOnInput, true);
+        window.addEventListener('pagehide', nwAutosaveOnHide);
+        document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') nwAutosaveOnHide(); });
+        document.addEventListener('DOMContentLoaded', function () { window.__nwAutosaveInit = nwAutosaveInit(); });
+        window.nwAutosaveStatus = function () { return { ready: nwAutosaveState.ready, discarded: nwAutosaveState.discarded, inFlight: nwAutosaveState.inFlight, interrupted: nwAutosaveState.interrupted, lastSavedAt: nwAutosaveState.lastSavedAt, lastError: nwAutosaveState.lastError }; };
+        window.nwAutosaveDiscard = nwAutosaveDiscard;
+
         window.generateAllChapters = generateAllChapters;
         window.resumeBatchRun = resumeBatchRun;
         window.pauseBatchRun = pauseBatchRun;

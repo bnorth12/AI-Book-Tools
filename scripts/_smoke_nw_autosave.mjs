@@ -24,6 +24,7 @@ function check(id, ok, detail = '') {
   results.push({ id, ok: !!ok });
   console.log(`${ok ? 'PASS' : 'FAIL'} ${id}${detail ? ' :: ' + String(detail).slice(0, 400) : ''}`);
 }
+const diffKeys = (a, b) => [...new Set([...Object.keys(a || {}), ...Object.keys(b || {})])].filter((k) => canon((a || {})[k]) !== canon((b || {})[k])).join(',');
 const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x)) ? Object.keys(x).sort().reduce((o, kk) => (o[kk] = x[kk], o), {}) : x);
 
 // ---------------------------------------------------------------- Part A: node / vm
@@ -166,6 +167,10 @@ function autosaveRecs(d) {
   const idb = (d.idb.autosave || [])[0] || null;
   return { lsKey, lsRaw: lsKey ? d.ls[lsKey] : null, ls, idb, idbRaw: idb ? JSON.stringify(idb) : null };
 }
+// Restore runs the import path (normalizeImportedSessionData + nwMigrateSession + applySessionDataToUI), which adds
+// ext.novelWriter.migratedBy, character/subplot ids and UI-derived chapter fields. Those are compared out; all else is deep-equal.
+const DERIVED = ['ext', 'editedChapters', 'bookText', 'chapterScenes', 'chapterFingerprints'];
+const mig = (nd) => { const c = JSON.parse(JSON.stringify(nd || {})); for (const k of DERIVED) delete c[k]; for (const k of ['characters', 'subplots']) if (Array.isArray(c[k])) c[k] = c[k].map((x) => { if (x && typeof x === 'object') { const y = { ...x }; delete y.id; return y; } return x; }); return c; };
 const pageState = (page) => page.evaluate(() => {
   const cur = JSON.parse(JSON.stringify(novelData)); delete cur.apiKey;
   const s = typeof stripSecretFields === 'function' ? stripSecretFields(cur) : cur;
@@ -212,17 +217,17 @@ try {
       check(`P1.${st}.saved-after-settle`, okLs && okIdb, `stage=${rv} ls=${!!okLs} idb=${!!okIdb}`);
       await load(page, true);
       const after = await pageState(page);
-      check(`P4.${st}.reload-restores`, canon(after.nd) === canon(ps.nd) && /Restored autosave from .+ CT/.test(await bannerText(page)));
+      check(`P4.${st}.reload-restores`, canon(mig(after.nd)) === canon(mig(ps.nd)) && /Restored autosave from .+ CT/.test(await bannerText(page)), 'diff=' + diffKeys(mig(after.nd), mig(ps.nd)));
       await fillKey(page);
     }
     // chapters boundary (seeded chapter text + a settled AI call flush).
-    await page.evaluate(() => { novelData.chapters = ['Chapter one seeded text for autosave boundary.']; });
-    await page.evaluate(async () => { try { await callAI('Reply with exactly: ok', 50); } catch (_) {} });
+    await page.evaluate(() => { novelData.chapters = Array.from({ length: Number(novelData.numChapters) || 1 }, (_, i) => (i === 0 ? 'Chapter one seeded text for autosave boundary.' : '')); });
+    await page.evaluate(async () => { try { await callAI([{ role: 'user', content: 'Reply with exactly: ok' }], document.getElementById('tab1'), { operationName: 'autosaveSmoke' }); } catch (_) {} });
     await settle(300);
     const psC = await pageState(page);
     await load(page, true);
     const afterC = await pageState(page);
-    check('P4.chapters.reload-restores', afterC.nd.chapters?.[0] === psC.nd.chapters?.[0] && psC.nd.chapters?.[0]?.startsWith('Chapter one') && canon(afterC.nd) === canon(psC.nd));
+    check('P4.chapters.reload-restores', afterC.nd.chapters?.[0] === psC.nd.chapters?.[0] && psC.nd.chapters?.[0]?.startsWith('Chapter one') && canon(mig(afterC.nd)) === canon(mig(psC.nd)), 'diff=' + diffKeys(mig(afterC.nd), mig(psC.nd)) + ' ' + JSON.stringify(psC.nd.chapters).slice(0, 120) + ' -> ' + JSON.stringify(afterC.nd.chapters).slice(0, 120));
     await context.close();
   }
 
@@ -246,8 +251,8 @@ try {
       }
       await load(page, true).catch(() => {});
       const after = await pageState(page);
-      const eq = ['title', 'genre', 'authors', 'author', 'storyArc', 'generalPlot', 'setting', 'characters'].every((k) => canon(after.nd[k]) === canon(before.nd[k]));
-      check(`${mode}.prior-tabs-intact`, eq && /Restored autosave/.test(await bannerText(page)));
+      const eq = ['title', 'genre', 'authors', 'author', 'storyArc', 'generalPlot', 'setting', 'characters'].every((k) => canon(mig(after.nd)[k]) === canon(mig(before.nd)[k]));
+      check(`${mode}.prior-tabs-intact`, eq && /Restored autosave/.test(await bannerText(page)), 'diff=' + diffKeys(mig(after.nd), mig(before.nd)) + ' banner=' + JSON.stringify((await bannerText(page)).slice(0, 80)));
       if (mode === 'P3') check('P3.interrupted-stage-marked', /interrupted/i.test(await bannerText(page)));
       await context.close();
     }
@@ -264,7 +269,7 @@ try {
     pageErrors.length = 0;
     await load(page, true);
     const st = await pageState(page);
-    check('P5.corrupt-recovered', pageErrors.length === 0 && /autosave/i.test(await warnText(page)) && st.nd.title === marker, `errors=${pageErrors.length}`);
+    check('P5.corrupt-recovered', pageErrors.length === 0 && /autosave/i.test(await warnText(page)) && st.nd.title === marker, `errors=${pageErrors.length} warn=${JSON.stringify(await warnText(page))} title=${st.nd.title === marker}`);
     await context.close();
   }
 
@@ -382,7 +387,7 @@ try {
       const before = rd();
       novelData.title = 'X10-after';
       await new Promise((r) => setTimeout(r, 5));
-      let t0 = 0; try { await callAI('Reply with exactly: ok', 50); } catch (_) { } t0 = performance.now();
+      let t0 = 0; try { await callAI([{ role: 'user', content: 'Reply with exactly: ok' }], document.getElementById('tab1'), { operationName: 'autosaveSmoke' }); } catch (_) { } t0 = performance.now();
       while (performance.now() - t0 < 300) { const s = rd(); if (s && s !== before) return { dt: performance.now() - t0, ok: true }; await new Promise((r) => setTimeout(r, 2)); }
       return { ok: false };
     });
@@ -442,7 +447,7 @@ try {
     ok = await prime('ii');
     await fillKey(page);
     ai.setMode('default', 'delay:800');
-    await page.evaluate(() => { window.__f1 = callAI('Reply with exactly: ok', 50).catch(() => {}); });
+    await page.evaluate(() => { window.__f1 = callAI([{ role: 'user', content: 'Reply with exactly: ok' }], document.getElementById('tab1'), { operationName: 'autosaveSmoke' }).catch(() => {}); });
     await settle(100); await discard();
     await page.evaluate(() => window.__f1); await settle(300);
     ai.setMode('default', 'ok');
