@@ -15728,8 +15728,10 @@ function isSecretField(k) { const n = normalizeName(k);
             try { localStorage.setItem(NW_AUTOSAVE.discardKey, new Date().toISOString()); } catch (_) { /* ignore */ }
             try { localStorage.removeItem(NW_AUTOSAVE.lsKey); } catch (_) { /* ignore */ }
             try { if (nwAutosaveState.pending) await nwAutosaveState.pending.catch(function () {}); } catch (_) { /* ignore */ }
-            try { await nwAutosaveIdb('readwrite', function (s) { s.clear(); }); } catch (e) { console.warn('[autosave] discard failed: ' + ((e && e.name) || 'Error')); }
-            try { localStorage.removeItem(NW_AUTOSAVE.lsKey); localStorage.removeItem(NW_AUTOSAVE.discardKey); } catch (_) { /* ignore */ }
+            // Drop the tombstone only once the IndexedDB clear has succeeded; if it throws, keep it so a reload still honours the Discard.
+            var cleared = false;
+            try { await nwAutosaveIdb('readwrite', function (s) { s.clear(); }); cleared = true; } catch (e) { console.warn('[autosave] discard failed: ' + ((e && e.name) || 'Error')); }
+            try { localStorage.removeItem(NW_AUTOSAVE.lsKey); if (cleared) localStorage.removeItem(NW_AUTOSAVE.discardKey); } catch (_) { /* ignore */ }
             var key = document.getElementById('apiKey').value;
             if (nwAutosaveState.blank && !(opts && opts.keepSession)) {
                 nwAutosaveState.restoring = true;
@@ -15791,13 +15793,20 @@ function isSecretField(k) { const n = normalizeName(k);
             nwAutosaveState.blank = blank;
             var tomb = null;
             try { tomb = localStorage.getItem(NW_AUTOSAVE.discardKey); } catch (_) { tomb = null; }
-            if (tomb) {
-                try { localStorage.removeItem(NW_AUTOSAVE.lsKey); } catch (_) { /* ignore */ }
-                try { await nwAutosaveIdb('readwrite', function (s) { s.clear(); }); } catch (e) { console.warn('[autosave] discard failed: ' + ((e && e.name) || 'Error')); }
-                try { localStorage.removeItem(NW_AUTOSAVE.discardKey); } catch (_) { /* ignore */ }
-            }
             var ls = nwAutosaveReadLocal();
             var idb = await nwAutosaveReadIdb();
+            if (tomb) {
+                // Records saved at or before the Discard are never restored. The tombstone is dropped only after the
+                // IndexedDB clear succeeds; if the clear throws it stays, so the next load tries again.
+                var nwStale = function (r) { return !!r && String(r.savedAt || '') <= String(tomb); };
+                if (nwStale(ls)) { try { localStorage.removeItem(NW_AUTOSAVE.lsKey); } catch (_) { /* ignore */ } ls = null; }
+                var cleared = true;
+                if (nwStale(idb)) {
+                    try { await nwAutosaveIdb('readwrite', function (s) { s.clear(); }); } catch (e) { cleared = false; console.warn('[autosave] discard failed: ' + ((e && e.name) || 'Error')); }
+                    idb = null;
+                }
+                if (cleared) { try { localStorage.removeItem(NW_AUTOSAVE.discardKey); } catch (_) { /* ignore */ } }
+            }
             var rec = (ls && idb) ? (String(ls.savedAt) >= String(idb.savedAt) ? ls : idb) : (ls || idb);
             if (rec && nwBatchState.interrupted) {
                 nwAutosaveShowConflict(rec, nwBatchState.interrupted);
