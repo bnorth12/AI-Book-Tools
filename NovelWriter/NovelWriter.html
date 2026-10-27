@@ -12943,7 +12943,9 @@ return c && c.name && c.backstory && c.arc; });
 				if (rosterKeys[k] === undefined) { rosterKeys[k] = roster.length; roster.push({ name: nm, refs: [] }); }
 				var r = roster[rosterKeys[k]];
 				var parts = String(nwQcatStripTitles(nm) || nm).trim().split(/\s+/);
-				if (parts.length >= 2) r.refs.push(parts[0]);
+				// Copilot #192 r4384491596: same rule as nwCastAliasTerms -- only 3+ letter first names are
+				// countable short refs, so a 2-letter first name ('Li') is never resolved away to a full name.
+				if (parts.length >= 2 && parts[0].length >= 3) r.refs.push(parts[0]);
 				[].concat(c.aliases || [], c.nicknames || [], c.nickname || [], c.shortName || []).forEach(function (a) {
 					var aa = String(a || '').trim();
 					if (aa) r.refs.push(aa);
@@ -12952,7 +12954,12 @@ return c && c.name && c.backstory && c.arc; });
 			function resolveShort(n) {
 				var k = nwQcatNameKey(n);
 				if (!k || rosterKeys[k] !== undefined) return n;
-				var hits = roster.filter(function (r) { return r.refs.indexOf(n) >= 0; });
+				// Copilot #192 r4384491615: match like nwCountCastName -- exact spelling or initial capital
+				// ('doc' alias matches 'Doc').
+				var nn = String(n || '').trim();
+				var hits = roster.filter(function (r) {
+					return r.refs.some(function (ref) { return nn === ref || nn === ref.charAt(0).toUpperCase() + ref.slice(1); });
+				});
 				return hits.length === 1 ? hits[0].name : n;
 			}
 			dialogueNames = dialogueNames.map(resolveShort);
