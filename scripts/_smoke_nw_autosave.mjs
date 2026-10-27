@@ -465,6 +465,126 @@ try {
     check('F1.iv.reload', ok && await empty() && !(await bannerText(page)));
     await context.close();
   }
+  const typeVal = (page, sel, v) => page.evaluate(([q, x]) => { const el = document.querySelector(q); el.value = x; el.dispatchEvent(new Event('input', { bubbles: true })); }, [sel, v]);
+  // ---- FIX1 (Copilot #194 r4387552939): typed subplot + chapterContentN edits reach novelData and the autosave record.
+  if (T('R1')) {
+    const { page, context } = await newPage();
+    await setupStory(page);
+    await settle(200);
+    const sub = 'R1-subplot-' + Date.now();
+    const subSel = '#subplotList textarea.subplot';
+    const hasSub = await page.locator(subSel).count();
+    const typeIn = (sel, v) => page.evaluate(([q, x]) => { const el = document.querySelector(q); el.value = x; el.dispatchEvent(new Event('input', { bubbles: true })); }, [sel, v]);
+    if (hasSub) await typeIn(subSel, sub);
+    const hasCc = await page.locator('#chapterContent1').count();
+    const cc = 'Outline: R1 outline text\n\nArc: R1 arc text';
+    if (hasCc) await typeIn('#chapterContent1', cc);
+    const hasImp = await page.locator('#chapterImprovement1').count();
+    if (hasImp) await typeIn('#chapterImprovement1', 'R1 improvement note');
+    await settle(1000);
+    const r = autosaveRecs(await dump(page));
+    const recSub = (x) => { const s = x?.novelData?.subplots?.[0]; return typeof s === 'string' ? s : (s && (s.summary || s.title)) || ''; };
+    check('R1.subplot-typed-saved', hasSub > 0 && recSub(r.ls) === sub && recSub(r.idb) === sub, `dom=${hasSub} ls=${JSON.stringify(recSub(r.ls)).slice(0, 60)}`);
+    check('R1.chapterContent-typed-saved', hasCc > 0 && r.ls?.novelData?.chapterOutlines?.[0] === 'R1 outline text' && r.ls?.novelData?.chapterArcs?.[0] === 'R1 arc text' && r.idb?.novelData?.chapterOutlines?.[0] === 'R1 outline text', `dom=${hasCc} out=${JSON.stringify(r.ls?.novelData?.chapterOutlines?.[0])}`);
+    check('R1.chapterImprovement-typed-saved', hasImp > 0 && r.ls?.novelData?.chapterImprovements?.[0] === 'R1 improvement note', `dom=${hasImp}`);
+    const memSub = await page.evaluate(() => novelData.subplots && novelData.subplots[0]);
+    check('R1.subplot-in-novelData', memSub === sub, JSON.stringify(memSub).slice(0, 60));
+    await load(page, true);
+    const after = await page.evaluate(() => ({ sub: (document.querySelector('#subplotList textarea.subplot') || {}).value || '', cc: (document.getElementById('chapterContent1') || {}).value || '' }));
+    check('R1.reload-restores-typed', after.sub === sub && /R1 outline text/.test(after.cc) && /R1 arc text/.test(after.cc), JSON.stringify({ sub: after.sub.slice(0, 40), cc: after.cc.slice(0, 60) }));
+    await context.close();
+  }
+
+  // ---- FIX2/FIX3 (r4387553057, r4387553119): conflict-path choices.
+  async function conflictPage() {
+    const ctx = await newPage();
+    const { page } = ctx;
+    await page.evaluate(async () => {
+      document.getElementById('title').value = 'R-ckpt-title'; novelData.title = 'R-ckpt-title';
+      novelData.batchRun = { id: 'run-r23', startedAt: new Date().toISOString(), completed: [], inFlight: null, status: 'running', reason: 'user', stoppedAt: 1, range: { from: 1, to: 1 } };
+      if (typeof nwBatchState !== 'undefined') nwBatchState.runId = 'run-r23';
+      if (typeof nwBatchCheckpoint === 'function') await nwBatchCheckpoint(true);
+    });
+    await settle(50);
+    await edit(page, '#title', 'R-auto-title'); await settle(1000);
+    await load(page, true);
+    const shown = await page.evaluate(() => { const b = document.getElementById('nwAutosaveConflict'); return !!(b && b.offsetParent !== null); });
+    return { ...ctx, shown };
+  }
+  const lockState = (page) => page.evaluate(() => ({
+    locked: typeof nwBatchIsLocked === 'function' ? nwBatchIsLocked() : null,
+    interrupted: !!(window.nwBatchState && nwBatchState.interrupted) || (typeof nwBatchState !== 'undefined' && !!nwBatchState.interrupted),
+    restoreBox: (() => { const b = document.getElementById('batchRestoreBox'); return !!(b && !b.hidden); })(),
+    batchFromDisabled: (() => { const b = document.getElementById('batchFrom'); return b ? !!b.disabled : null; })(),
+    ready: typeof nwAutosaveState !== 'undefined' ? !!nwAutosaveState.ready : null,
+    conflict: (() => { const b = document.getElementById('nwAutosaveConflict'); return !!(b && !b.hidden); })(),
+    title: document.getElementById('title').value,
+  }));
+  if (T('R2')) {
+    const { page, context, shown } = await conflictPage();
+    if (shown) await page.click('#nwAutosaveConflictRestore');
+    await settle(300);
+    const s = await lockState(page);
+    check('R2.restore-autosave-unlocks', shown && s.locked === false && !s.interrupted && !s.restoreBox && s.batchFromDisabled === false && s.title === 'R-auto-title', JSON.stringify(s));
+    await typeVal(page, '#title', 'R2-after'); await settle(1000);
+    const r = autosaveRecs(await dump(page));
+    check('R2.autosave-on-after-restore', r.ls?.novelData?.title === 'R2-after', JSON.stringify(r.ls?.novelData?.title));
+    await load(page, true);
+    const c2 = await page.evaluate(() => { const b = document.getElementById('nwAutosaveConflict'); return !!(b && b.offsetParent !== null); });
+    const s2 = await lockState(page);
+    check('R2.checkpoint-not-resurrected', !c2 && s2.locked === false && s2.title === 'R2-after', JSON.stringify({ c2, ...s2 }));
+    await context.close();
+  }
+  if (T('R3')) {
+    const { page, context, shown } = await conflictPage();
+    if (shown) await page.evaluate(() => document.getElementById('batchRestoreBtn').click());
+    await settle(500);
+    const s = await lockState(page);
+    check('R3.ckpt-restore-resolves-conflict', shown && s.ready === true && s.conflict === false && s.title === 'R-ckpt-title', JSON.stringify(s));
+    await typeVal(page, '#title', 'R3-after'); await settle(1000);
+    const r = autosaveRecs(await dump(page));
+    check('R3.autosave-on-after-ckpt-restore', r.ls?.novelData?.title === 'R3-after' && r.idb?.novelData?.title === 'R3-after', JSON.stringify(r.ls?.novelData?.title));
+    // A stale "Discard autosave" button must not blank the restored session.
+    await page.evaluate(() => { const b = document.getElementById('nwAutosaveConflictDiscard'); if (b) b.click(); });
+    await settle(500);
+    const t = await page.evaluate(() => ({ title: document.getElementById('title').value, nd: novelData.title }));
+    check('R3.stale-discard-keeps-session', t.title === 'R3-after' && t.nd === 'R3-after', JSON.stringify(t));
+    await context.close();
+    // Discard autosave from the conflict prompt keeps the current session (nothing from the autosave was applied).
+    const B = await conflictPage();
+    if (B.shown) await typeVal(B.page, '#title', 'R3-typed-during-prompt');
+    const pre = await B.page.evaluate(() => JSON.stringify({ t: document.getElementById('title').value, g: document.getElementById('genre').value }));
+    if (B.shown) await B.page.click('#nwAutosaveConflictDiscard');
+    await settle(500);
+    const post = await B.page.evaluate(() => JSON.stringify({ t: document.getElementById('title').value, g: document.getElementById('genre').value }));
+    const sB = await lockState(B.page);
+    check('R3.conflict-discard-no-blank', B.shown && post === pre && /R3-typed-during-prompt/.test(post) && sB.ready === true && sB.conflict === false, `pre=${pre} post=${post}`);
+    await B.context.close();
+  }
+
+  // ---- FIX4 (CodeQL js/clear-text-storage :15539): the key value never reaches any autosave payload.
+  if (T('R4')) {
+    const { page, context, consoleLines } = await newPage();
+    await page.fill('#apiKey', FAKE);
+    await page.evaluate((f) => {
+      novelData.apiKey = f;
+      novelData.generalPlot = 'Plot text with a pasted key ' + f + ' inside.';
+      novelData.secProbe2 = { deep: [{ apiKey: f }, { note: 'x' + f + 'y' }] };
+    }, FAKE);
+    await edit(page, '#title', 'R4-title'); await settle(1000);
+    const d = await dump(page); const r = autosaveRecs(d);
+    check('R4.key-value-never-persisted', r.ls?.novelData?.title === 'R4-title' && r.idb?.novelData?.title === 'R4-title' && scan(JSON.stringify(d)) === 0 && scan(consoleLines.join('\n')) === 0, `hits=${scan(JSON.stringify(d))}`);
+    check('R4.surrounding-text-kept', /Plot text with a pasted key .* inside\./.test(r.ls?.novelData?.generalPlot || ''), '');
+    const x3 = await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false })); return localStorage.getItem('novelwriter.autosave.v1') || ''; });
+    check('R4.pagehide-key-value-never-persisted', x3.includes('R4-title') && scan(x3) === 0);
+    const unit = await page.evaluate(() => {
+      if (typeof nwAutosaveSerialize !== 'function') return { ok: false, why: 'no nwAutosaveSerialize' };
+      const s = nwAutosaveSerialize(nwAutosaveBuildRecord());
+      return { ok: typeof s === 'string' && !/"apiKey"\s*:/.test(s), why: '' };
+    });
+    check('R4.serializer-drops-apiKey', unit.ok, unit.why);
+    await context.close();
+  }
 } catch (e) {
   check('B.harness', false, (e && e.name) + ': ' + String(e && e.message).split('\n')[0]);
 } finally {
