@@ -170,6 +170,7 @@ async function openPage(htmlPath) {
   const page = await browser.newPage();
   page.setDefaultTimeout(EVAL_MS);
   page.setDefaultNavigationTimeout(20000);
+  page.on('pageerror', (e) => pageErrors.push(String(e && e.message || e)));
   page.on('dialog', (d) => d.accept().catch(() => {}));
   await page.route('**/*', async (route) => {
     const url = route.request().url();

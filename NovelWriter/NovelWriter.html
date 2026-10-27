@@ -2422,7 +2422,14 @@ let activeAICallCount = 0;
 			return set;
 		}
 
+		// #167 B3: field names (never values) kept with the wrong type during one import; shown on screen after it.
+		var nwImportWrongTypeSink = null;
+		function nwNoteWrongTypeField(name) {
+			if (Array.isArray(nwImportWrongTypeSink) && nwImportWrongTypeSink.indexOf(name) < 0) nwImportWrongTypeSink.push(name);
+		}
+
 		function nwWarnWrongType(key, value) {
+			nwNoteWrongTypeField(String(key));
 			console.warn('normalizeImportedSessionData: ' + key + ' has wrong type; keeping as-is', value);
 		}
 
@@ -2505,6 +2512,7 @@ let activeAICallCount = 0;
 
 		function nwWarnNestedWrongTypes(sw) {
 			if (nwHasOwn(sw, 'systems') && sw.systems != null && !Array.isArray(sw.systems)) {
+				nwNoteWrongTypeField('storyWorld.systems');
 				console.warn('normalizeImportedSessionData: storyWorld.systems has wrong type; keeping as-is', sw.systems);
 			}
 		}
@@ -2539,6 +2547,7 @@ let activeAICallCount = 0;
 			if (nwHasOwn(nd, 'subplotsMeta') && !Array.isArray(nd.subplotsMeta)) {
 				if ((typeof NW_S1_KEEP_WRONG_TYPES === 'undefined' || NW_S1_KEEP_WRONG_TYPES)
 					&& (typeof NW_S1_KEEP_WRONG_SUBPLOTS_META === 'undefined' || NW_S1_KEEP_WRONG_SUBPLOTS_META)) {
+					nwNoteWrongTypeField('subplotsMeta');
 					console.warn('nwCopySubplotMetaFromRaw: subplotsMeta has wrong type; keeping as-is', nd.subplotsMeta);
 					return;
 				}
@@ -7199,8 +7208,9 @@ return c && c.name && c.backstory && c.arc; });
 					if (!present && blueprintWins) {
 						nwPushPlanConflict(chapterNum, 'Cast conflict: ' + name + ' stays on the page.');
 						castOut.push(name);
-					} else if (present || !blueprintWins) {
-						if (present) castOut.push(name);
+					} else {
+						// #167 C2-1: on the false path a blueprint-only name stays; plan-only names merge below.
+						castOut.push(name);
 					}
 				});
 				if (!blueprintWins) planCast.forEach(function (p) {
@@ -7208,7 +7218,6 @@ return c && c.name && c.backstory && c.arc; });
 					var have = castOut.some(function (c) { return String(c).toLowerCase() === pl || pl.indexOf(String(c).toLowerCase()) >= 0; });
 					if (!have) castOut.push(p);
 				});
-				if (!blueprintWins) castOut = planCast.slice();
 				if (castOut.length) add('cast', '- On-page cast: ' + castOut.join('; ') + '; each speaks or acts');
 				var planBeats = planItems.filter(function (it) { return it && it.kind === 'beat'; });
 				(planBeats.length ? planBeats.map(function (it) { return it.label; }) : beatTexts).forEach(function (b) { add('beat', '- Beats: ' + b); });
@@ -7398,7 +7407,7 @@ return c && c.name && c.backstory && c.arc; });
 			return items;
 		}
 
-		function nwStoreWritingPlan(n, items, builtBy, builtFrom) {
+		function nwStoreWritingPlan(n, items, builtBy, builtFrom, worldFrom) {
 			if (nwPlansAreLocked()) return { ok: false, reason: 'locked' };
 			if (!Array.isArray(novelData.chapterWritingPlans)) novelData.chapterWritingPlans = [];
 			var prev = novelData.chapterWritingPlans[n - 1];
@@ -7406,6 +7415,10 @@ return c && c.name && c.backstory && c.arc; });
 			if (prev && typeof prev === 'object' && !Array.isArray(prev) && prev.worldFrom) plan.worldFrom = prev.worldFrom;
 			plan.builtFrom = nwComputeBuiltFrom(n);
 			if (builtFrom != null) plan.builtFrom = builtFrom;
+			// #167 W1: an AI plan with worldBeat items carries the world fingerprint captured before callAI.
+			if (worldFrom !== undefined && plan.items.some(function (it) { return it && it.kind === 'worldBeat'; })) {
+				if (worldFrom) plan.worldFrom = worldFrom; else delete plan.worldFrom;
+			}
 			novelData.chapterWritingPlans[n - 1] = plan;
 			var old = document.getElementById('writingPlanPanel' + n);
 			if (old && old.parentNode) old.parentNode.replaceChild(nwRenderWritingPlanPanel(n), old);
@@ -7415,11 +7428,12 @@ return c && c.name && c.backstory && c.arc; });
 		async function nwBuildWritingPlanAI(n) {
 			var sent = [n];
 			var capturedFrom = nwComputeBuiltFrom(n);
+			var capturedWorld = nwComputeWorldFrom(n);
 			var response = null;
 			try {
 				response = await callAI([
 					{ role: 'system', content: (typeof getSkillSystemPrompt === 'function') ? getSkillSystemPrompt('tab5.buildWritingPlan', 'Return JSON only.') : 'Return JSON only.' },
-					{ role: 'user', content: 'Build a writing plan for chapter ' + sent.join(',') + '. Blueprint: ' + JSON.stringify(getChapterBlueprint(n) || null) }
+					{ role: 'user', content: 'Build a writing plan for chapter ' + sent.join(',') + '. Blueprint: ' + JSON.stringify(getChapterBlueprint(n) || null) + ' Chapter outline: ' + JSON.stringify(digestText(String((novelData.chapterOutlines || [])[n - 1] || ''), 1000)) }
 				], document.getElementById('tab5'), {
 					operationName: 'buildWritingPlan_' + n,
 					taskType: 'other',
@@ -7430,15 +7444,15 @@ return c && c.name && c.backstory && c.arc; });
 				});
 			} catch (e) {
 				if (typeof nwNotify === 'function') nwNotify('Writing plan AI failed for chapter ' + n + '; used the heuristic.', { level: 'warn' });
-				return nwStoreWritingPlan(n, nwHeuristicWritingPlan(n), 'heuristic', capturedFrom);
+				return nwStoreWritingPlan(n, nwHeuristicWritingPlan(n), 'heuristic', capturedFrom, capturedWorld);
 			}
 			var items = response && Array.isArray(response.items) ? response.items : null;
 			if (!items) {
 				if (typeof nwNotify === 'function') nwNotify('Writing plan AI returned no items for chapter ' + n + '; used the heuristic.', { level: 'warn' });
 				items = nwHeuristicWritingPlan(n);
-				return nwStoreWritingPlan(n, items, 'heuristic', capturedFrom);
+				return nwStoreWritingPlan(n, items, 'heuristic', capturedFrom, capturedWorld);
 			}
-			return nwStoreWritingPlan(n, items, 'ai', capturedFrom);
+			return nwStoreWritingPlan(n, items, 'ai', capturedFrom, capturedWorld);
 		}
 
 		async function nwBuildWritingPlan(n, opts) {
@@ -11816,6 +11830,7 @@ function isSecretField(k) { const n = normalizeName(k);
 		        }
 		        try {
 		            const rawSessionData = JSON.parse(e.target.result);
+		            nwImportWrongTypeSink = [];
 		            const { novelData: importedNovelData, requestLog: importedRequestLog, importMode, warnings } = normalizeImportedSessionData(rawSessionData);
 		            const migratedNovelData = (typeof nwMigrateSession === 'function') ? nwMigrateSession(importedNovelData) : importedNovelData;
 		            const existingApiKey = document.getElementById('apiKey').value;
@@ -11844,6 +11859,9 @@ function isSecretField(k) { const n = normalizeName(k);
 		                if (typeof nwBatchRefreshEstimate === 'function') nwBatchRefreshEstimate();
 		            }
 
+		            if (nwImportWrongTypeSink && nwImportWrongTypeSink.length) {
+		                nwNotify('Import kept fields with the wrong type: ' + nwImportWrongTypeSink.join(', ') + '. Check them before generating.', { level: 'warn', visible: true });
+		            }
 		            if (warnings.length > 0) {
 		                console.warn('Import completed with warnings:', warnings);
 		            }
@@ -11860,6 +11878,7 @@ function isSecretField(k) { const n = normalizeName(k);
 		                alert('Session imported with minor issues. Check console for details.');
 		            }
 		        } finally {
+		            nwImportWrongTypeSink = null;
 		            if (typeof nwBatchState !== 'undefined' && nwBatchState) {
 		                nwBatchState.importing = false;
 		                if (typeof nwBatchApplyLock === 'function') nwBatchApplyLock();
@@ -14278,6 +14297,7 @@ function isSecretField(k) { const n = normalizeName(k);
                 if (typeof alert === 'function') alert(msg);
             } else {
                 console.warn(msg);
+                if (opts.visible && typeof nwToast === 'function') nwToast(msg, 15000);
             }
         }
 
@@ -14518,6 +14538,14 @@ function isSecretField(k) { const n = normalizeName(k);
         }
 
         /** perChapter = mean real tokens of chapters generated by batches in this session, else maxTokens x passes. */
+        /** #167 C1-7: a chapter needs a plan build only when its plan is missing, empty, or stale. */
+        function nwBatchPlanNeedsBuild(n) {
+            var p = (typeof novelData !== 'undefined' && novelData && Array.isArray(novelData.chapterWritingPlans)) ? novelData.chapterWritingPlans[n - 1] : null;
+            var items = p && typeof p === 'object' ? (Array.isArray(p.items) ? p.items : (Array.isArray(p) ? p : [])) : [];
+            if (!items.length) return true;
+            return !!nwWritingPlanIsStale(n);
+        }
+
         function nwBatchEstimate(planned) {
             var w = nwBatchState.windows.filter(function (x) { return x && x.tokens > 0; });
             var perChapter;
@@ -14529,13 +14557,15 @@ function isSecretField(k) { const n = normalizeName(k);
                 perChapter = nwBatchMaxTokens() * nwBatchPasses();
                 source = 'fallback';
             }
-            var count = Number(planned) || 0;
+            var plannedList = Array.isArray(planned) ? planned : null;
+            var count = plannedList ? plannedList.length : (Number(planned) || 0);
             var total = perChapter * count;
             var planBuildCalls = 0;
             var buildEl = nwBatchEl('batchBuildPlansFirst');
             var aiEl = nwBatchEl('batchBuildPlansUseAI');
             if (buildEl && buildEl.checked && aiEl && aiEl.checked) {
                 planBuildCalls = count;
+                if (plannedList) planBuildCalls = plannedList.filter(nwBatchPlanNeedsBuild).length;
                 total += planBuildCalls * 1500;
             }
             var auditInputChars = 0;
@@ -14826,7 +14856,7 @@ function isSecretField(k) { const n = normalizeName(k);
             if (toEl) { toEl.max = String(n); if (!toEl.value || parseInt(toEl.value, 10) > n) toEl.value = String(n); }
             var o = nwBatchReadOptions();
             var plan = nwBatchPlan({ from: o.from, to: o.to }, o.regenerateExisting, [], null);
-            var est = nwBatchEstimate(plan.planned.length);
+            var est = nwBatchEstimate(plan.planned);
             var capEl = nwBatchEl('batchTokenCap');
             var hintEl = nwBatchEl('batchEstimateHint');
             if (hintEl) {
@@ -15128,7 +15158,7 @@ function isSecretField(k) { const n = normalizeName(k);
                     nwBatchApplyLock();
                     return { started: false, reason: 'empty-plan', skipped: plan.skipped };
                 }
-                var est = nwBatchEstimate(plan.planned.length);
+                var est = nwBatchEstimate(plan.planned);
                 var used = resume ? (Number(br.tokensUsed) || 0) : 0;
                 var defaultCap = Math.ceil(est.total * NW_BATCH.capFactor) + used;
                 // Resume keeps the saved run cap (also after restore/import) unless the user edited the cap input since.
