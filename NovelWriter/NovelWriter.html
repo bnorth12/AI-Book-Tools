@@ -12744,16 +12744,28 @@ return c && c.name && c.backstory && c.arc; });
 			add(parts.join(' '), false);
 			if (parts[parts.length - 1].length >= 2) add(parts[parts.length - 1], false);
 			var otherTokens = {};
+			var otherFull = {};
 			(otherNames || []).forEach(function (o) {
 				if (!o || nwQcatNameKey(o) === key) return;
+				otherFull[nwQcatNameKey(o)] = 1;
 				nwQcatNameKey(o).split(' ').forEach(function (tok) { if (tok) otherTokens[tok] = 1; });
+			});
+			// Copilot #192: an alias shared with another character, or equal to another character's full
+			// name, credits neither owner (same rule as a shared first name).
+			(Array.isArray(novelData.characters) ? novelData.characters : []).forEach(function (c) {
+				if (!c || !c.name || nwQcatNameKey(c.name) === key) return;
+				otherFull[nwQcatNameKey(c.name)] = 1;
+				[].concat(c.aliases || [], c.nicknames || [], c.nickname || [], c.shortName || []).forEach(function (a) {
+					var ak = nwQcatNameKey(String(a || ''));
+					if (ak) otherFull[ak] = 1;
+				});
 			});
 			if (parts.length >= 2 && parts[0].length >= 3 && !otherTokens[parts[0].toLowerCase()]) add(parts[0], true);
 			(Array.isArray(novelData.characters) ? novelData.characters : []).forEach(function (c) {
 				if (!c || !c.name || nwQcatNameKey(c.name) !== key) return;
 				[].concat(c.aliases || [], c.nicknames || [], c.nickname || [], c.shortName || []).forEach(function (a) {
 					var aa = String(a || '').trim();
-					if (aa && !otherTokens[aa.toLowerCase()]) add(aa, true);
+					if (aa && !otherTokens[aa.toLowerCase()] && !otherFull[nwQcatNameKey(aa)]) add(aa, true);
 				});
 			});
 			return terms;
@@ -12918,6 +12930,32 @@ return c && c.name && c.backstory && c.arc; });
 			(Array.isArray(bp && bp.characterBeats) ? bp.characterBeats : []).forEach(function (b) {
 				if (b && b.name) add(b.name);
 			});
+			// Copilot #192 (BLOCK): a short ref in dialogueTurn ("Elena") that maps to exactly one known
+			// character (first name or explicit alias) resolves to that character before the required list
+			// and collision set are built, so it can't collide with its own owner. Refs shared by 2+
+			// characters stay as written and keep the collision behavior.
+			var roster = [];
+			var rosterKeys = {};
+			(Array.isArray(novelData.characters) ? novelData.characters : []).concat(Array.isArray(bp && bp.characterBeats) ? bp.characterBeats : []).forEach(function (c) {
+				var nm = c && c.name && String(c.name).trim();
+				var k = nm && nwQcatNameKey(nm);
+				if (!k) return;
+				if (rosterKeys[k] === undefined) { rosterKeys[k] = roster.length; roster.push({ name: nm, refs: [] }); }
+				var r = roster[rosterKeys[k]];
+				var parts = String(nwQcatStripTitles(nm) || nm).trim().split(/\s+/);
+				if (parts.length >= 2) r.refs.push(parts[0]);
+				[].concat(c.aliases || [], c.nicknames || [], c.nickname || [], c.shortName || []).forEach(function (a) {
+					var aa = String(a || '').trim();
+					if (aa) r.refs.push(aa);
+				});
+			});
+			function resolveShort(n) {
+				var k = nwQcatNameKey(n);
+				if (!k || rosterKeys[k] !== undefined) return n;
+				var hits = roster.filter(function (r) { return r.refs.indexOf(n) >= 0; });
+				return hits.length === 1 ? hits[0].name : n;
+			}
+			dialogueNames = dialogueNames.map(resolveShort);
 			dialogueNames.forEach(function (n) {
 				add(n);
 				var key = nwQcatNameKey(n);
