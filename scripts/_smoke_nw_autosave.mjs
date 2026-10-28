@@ -649,6 +649,98 @@ try {
     check('R6.refused-checkpoint-warns', r.rejected && !r.stored && r.shown && /^Autosave failed \([A-Za-z]+\)\. Last good copy kept\.$/.test(r.text) && scan(r.text) === 0, JSON.stringify({ rejected: r.rejected, stored: r.stored, shown: r.shown, text: r.text, keyHits: scan(r.text) }));
     await context.close();
   }
+  // ---- FIX3 (Copilot on 25c6405a): a key pasted into the title must never become an IndexedDB key or any storage name.
+  // Canary variants: exact, full-width, long-s. Checks IDB keys (getAllKeys), DB/store names, localStorage key names, values.
+  if (T('R7')) {
+    const FW = [...FAKE].map((c) => (c >= '!' && c <= '~') ? String.fromCharCode(c.charCodeAt(0) + 0xFEE0) : c).join('');
+    const LS = FAKE.replace(/S/g, '\u017F');
+    const fold = (s) => String(s).normalize('NFKC').replace(/\u017F/g, 's').toLowerCase();
+    const hit = (s) => fold(s).includes(fold(FAKE)) ? 1 : 0;
+    const storageNames = (page) => page.evaluate(async () => {
+      const out = { dbs: [], stores: [], keys: [], lsKeys: [], values: [] };
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); out.lsKeys.push(k); out.values.push(localStorage.getItem(k)); }
+      const dbs = indexedDB.databases ? await indexedDB.databases() : [{ name: 'novelwriter' }];
+      for (const d of dbs) {
+        out.dbs.push(d.name);
+        const db = await new Promise((res, rej) => { const r = indexedDB.open(d.name); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+        for (const s of Array.from(db.objectStoreNames)) {
+          out.stores.push(s);
+          const st = () => db.transaction(s, 'readonly').objectStore(s);
+          out.keys.push(...(await new Promise((res) => { const q = st().getAllKeys(); q.onsuccess = () => res(q.result.map(String)); q.onerror = () => res(['ERR']); })));
+          out.values.push(JSON.stringify(await new Promise((res) => { const q = st().getAll(); q.onsuccess = () => res(q.result); q.onerror = () => res([]); })));
+        }
+        db.close();
+      }
+      return out;
+    });
+    const verdict = (id, n, extra = '') => {
+      const nameHits = [...n.dbs, ...n.stores, ...n.keys, ...n.lsKeys].reduce((a, s) => a + hit(s), 0);
+      const valHits = n.values.reduce((a, s) => a + scan(s), 0);
+      check(`R7.${id}.no-canary-in-keys-or-names`, nameHits === 0 && n.keys.length > 0, `nameHits=${nameHits} idbKeys=${n.keys.length} stores=${n.stores.length}${extra}`);
+      check(`R7.${id}.no-key-value-stored`, valHits === 0, `valueHits=${valHits}`);
+    };
+    for (const [vn, V] of [['exact', FAKE], ['fullwidth', FW], ['longs', LS]]) {
+      // (a) batch-put path: real nwBatchStart up to its first checkpoint; chapter generation is stubbed to never settle.
+      {
+        const { page, context } = await newPage();
+        await page.evaluate((a) => {
+          document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+          document.getElementById('title').value = 'T ' + a.V + ' T'; novelData.title = 'T ' + a.V + ' T';
+          novelData.chapters = ['']; novelData.batchRun = null;
+          window.nwBatchPreflight = () => ({ passed: true, failures: [], message: '' });
+          window.nwBatchPlan = () => ({ planned: [1], skipped: [] });
+          window.nwBatchRunChapter = () => new Promise(() => {});
+          window.__r7 = nwBatchStart(false).then((r) => r, (e) => ({ err: String(e && e.name) }));
+        }, { K: FAKE, V });
+        await page.waitForFunction(() => new Promise((res) => { const q = indexedDB.open('novelwriter'); q.onsuccess = () => { const db = q.result; if (!db.objectStoreNames.contains('checkpoints')) { db.close(); return res(false); } const g = db.transaction('checkpoints').objectStore('checkpoints').count(); g.onsuccess = () => { db.close(); res(g.result > 0); }; g.onerror = () => res(false); }; q.onerror = () => res(false); }), null, { timeout: 10000 }).catch(() => {});
+        const brId = await page.evaluate(() => novelData.batchRun && novelData.batchRun.id);
+        verdict(`batch-put.${vn}`, await storageNames(page), ` brIdHit=${hit(brId || '')}`);
+        await context.close();
+      }
+      // (b) discard write-back path: a legacy title-based checkpoint (as written by 25c6405a) is read on load, then discarded.
+      {
+        const { page, context } = await newPage();
+        await page.evaluate(async (a) => {
+          const legacy = 'T ' + a.V + ' T|2026-10-27T00:00:00.000Z';
+          const rec = { key: legacy, savedAt: new Date().toISOString(), active: true, novelData: { title: 'legacy', chapters: ['x'] }, batchRun: { id: legacy, completed: [], inFlight: null } };
+          await new Promise((res, rej) => { const q = indexedDB.open('novelwriter', 2); q.onsuccess = () => { const tx = q.result.transaction('checkpoints', 'readwrite'); tx.objectStore('checkpoints').put(rec, legacy); tx.oncomplete = () => { q.result.close(); res(); }; tx.onerror = rej; }; q.onerror = rej; });
+          document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+          nwBatchState.interrupted = null;
+          await nwBatchCheckForInterrupted();
+          await discardInterruptedBatchRun();
+        }, { K: FAKE, V });
+        await settle(300);
+        const n = await storageNames(page);
+        const rows = await page.evaluate(() => new Promise((res) => { const q = indexedDB.open('novelwriter'); q.onsuccess = () => { const g = q.result.transaction('checkpoints').objectStore('checkpoints').getAll(); g.onsuccess = () => res(g.result.map((r) => ({ active: r.active, opaque: /^br_[0-9a-z]{10}$/.test(String(r.key)) }))); }; }));
+        verdict(`discard-writeback.${vn}`, n, ` rows=${JSON.stringify(rows)}`);
+        check(`R7.discard-writeback.${vn}.row-kept-inactive-opaque`, rows.length === 1 && rows[0].active === false && rows[0].opaque, JSON.stringify(rows));
+        await context.close();
+      }
+    }
+    // (c) imported/resumed run carrying a legacy title-based batchRun.id: the next checkpoint must not use it as a key.
+    {
+      const { page, context } = await newPage();
+      await page.evaluate(async (K) => {
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        novelData.batchRun = { id: 'T ' + K + ' T|2026-10-27T00:00:00.000Z', completed: [], inFlight: null, chapterUsage: [], priorDrafts: [] };
+        try { await nwBatchCheckpoint(true); } catch (_) { /* counted below */ }
+      }, FAKE);
+      verdict('import-legacy-id.exact', await storageNames(page));
+      await context.close();
+    }
+    // (d) autosave keyPath bookId carrying user text (e.g. from an imported/hand-edited session file).
+    for (const [vn, V] of [['exact', FAKE], ['fullwidth', FW], ['longs', LS]]) {
+      const { page, context } = await newPage();
+      await page.evaluate(async (a) => {
+        document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+        novelData.bookId = 'book-' + a.V;
+        try { await nwAutosaveWriteNow({ force: true }); } catch (_) { /* counted below */ }
+      }, { K: FAKE, V });
+      await settle(500);
+      verdict(`autosave-bookId.${vn}`, await storageNames(page));
+      await context.close();
+    }
+  }
 } catch (e) {
   check('B.harness', false, (e && e.name) + ': ' + String(e && e.message).split('\n')[0]);
 } finally {
