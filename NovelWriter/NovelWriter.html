@@ -15632,9 +15632,13 @@ function isSecretField(k) { const n = normalizeName(k);
             try { safe = JSON.parse(nwAutosaveSerialize(rec)); } catch (e) { nwAutosaveWarn(e); return null; }
             var p = nwAutosaveIdb('readwrite', function (s) { s.put(safe); }).then(function () {
                 if (okLs) nwAutosaveClearWarn();
-                // FIX5: bookId re-key (ensure/restore/import) - delete the previous row only after the new-id write succeeded.
-                var prev = nwAutosaveState.idbBookId; nwAutosaveState.idbBookId = safe.bookId;
-                if (typeof prev === 'string' && prev && prev !== safe.bookId) return nwAutosaveIdb('readwrite', function (s) { s.delete(prev); }).catch(function (e) { nwAutosaveState.idbBookId = prev; nwAutosaveWarn(e); });
+                // FIX5/FIX6 (B1): the store holds one book. After the put succeeded, delete every other key, including rows
+                // from earlier sessions that were never restored (conflict path). On failure warn; the next write retries.
+                nwAutosaveState.idbBookId = safe.bookId;
+                return nwAutosaveIdb('readwrite', function (s) {
+                    var q = s.getAllKeys();
+                    q.onsuccess = function () { (q.result || []).forEach(function (k) { if (k !== safe.bookId) s.delete(k); }); };
+                }).catch(function (e) { nwAutosaveWarn(e); });
             }, function (e) { nwAutosaveWarn(e); });
             nwAutosaveState.pending = p;
             return rec;
