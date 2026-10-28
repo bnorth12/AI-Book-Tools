@@ -14633,6 +14633,8 @@ function isSecretField(k) { const n = normalizeName(k);
         }
 
         // FIX3b: checkpoint keys must be opaque br_ ids and must never contain the live key text.
+        /** FIX7: comparison form for live-key matching - NFKC (full-width, long-s, ...) then lower case. */
+        function nwFoldKeyText(s) { s = String(s); try { s = s.normalize('NFKC'); } catch (_) { /* no normalize */ } return s.toLowerCase(); }
         function nwBatchLiveKeys() {
             var out = [];
             try { var el = document.getElementById('apiKey'); if (el && typeof el.value === 'string') out.push(el.value.trim()); } catch (_) { /* no DOM */ }
@@ -15550,8 +15552,8 @@ function isSecretField(k) { const n = normalizeName(k);
         }
         function nwAutosaveIsBookId(id) {
             if (typeof id !== 'string' || !/^book-[0-9a-z-]{8,64}$/.test(id)) return false;
-            var low = id.toLowerCase(); // N4: ids embedding a live key (any case) are invalid -> callers assign a fresh id.
-            return !nwBatchLiveKeys().some(function (k) { return low.indexOf(k.toLowerCase()) >= 0; });
+            var low = nwFoldKeyText(id); // N4/FIX7: ids embedding a live key (any case, NFKC variants) are invalid -> fresh id.
+            return !nwBatchLiveKeys().some(function (k) { return low.indexOf(nwFoldKeyText(k)) >= 0; });
         }
         function nwAutosaveEnsureBookId() {
             if (!nwAutosaveIsBookId(novelData.bookId)) novelData.bookId = nwAutosaveNewBookId();
@@ -15579,9 +15581,11 @@ function isSecretField(k) { const n = normalizeName(k);
             if (el && /^Autosave failed/.test(el.textContent)) el.hidden = true;
         }
         function nwAutosaveBuildRecord() {
+            var bookId = nwAutosaveEnsureBookId(); // FIX7: validate/replace BEFORE the copy so nd.bookId is never the rejected id
             var nd = JSON.parse(JSON.stringify(novelData));
             delete nd.apiKey;
-            var rec = { v: 1, bookId: nwAutosaveEnsureBookId(), savedAt: new Date().toISOString(), inFlight: nwAutosaveState.inFlight ? { operationName: String(nwAutosaveState.inFlight.operationName || ''), startedAt: nwAutosaveState.inFlight.startedAt } : null, novelData: nd };
+            nd.bookId = bookId;
+            var rec = { v: 1, bookId: bookId, savedAt: new Date().toISOString(), inFlight: nwAutosaveState.inFlight ? { operationName: String(nwAutosaveState.inFlight.operationName || ''), startedAt: nwAutosaveState.inFlight.startedAt } : null, novelData: nd };
             rec = stripSecretFields(rec);
             if (rec.novelData) delete rec.novelData.apiKey;
             return rec;
@@ -15589,16 +15593,25 @@ function isSecretField(k) { const n = normalizeName(k);
         /** CodeQL js/clear-text-storage: the only path from a record to storage. Drops every isSecretField name (incl. apiKey)
          *  at any depth and redacts the live #apiKey / novelData.apiKey value wherever it appears, so it can never be stored. */
         function nwAutosaveSerialize(rec) {
-            var keys = [];
-            try { var el = document.getElementById('apiKey'); if (el && typeof el.value === 'string') keys.push(el.value); } catch (_) { /* no input */ }
-            try { if (typeof novelData.apiKey === 'string') keys.push(novelData.apiKey); } catch (_) { /* no session */ }
-            keys = keys.map(function (k) { return String(k).trim(); }).filter(function (k, i, a) { return k.length >= 4 && a.indexOf(k) === i; });
+            // FIX7: match live keys case-insensitively after NFKC. Span-safe redaction: case-only variants are replaced in place
+            // with a case-insensitive regex on the original text (same length, spans exact). If the NFKC-folded string still
+            // holds a key (full-width, long-s or other length-changing forms), the whole string value becomes '[redacted]'.
+            var keys = nwBatchLiveKeys().filter(function (k, i, a) { return a.indexOf(k) === i; });
+            var folded = keys.map(nwFoldKeyText);
+            var res = keys.map(function (k) { return new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'); });
             var out = JSON.stringify(rec, function (k, v) {
                 if (k && (k === 'apiKey' || isSecretField(k))) return undefined;
-                if (typeof v === 'string' && keys.length) { for (var i = 0; i < keys.length; i++) { if (v.indexOf(keys[i]) >= 0) v = v.split(keys[i]).join('[redacted]'); } }
+                if (typeof v === 'string' && keys.length) {
+                    for (var i = 0; i < keys.length; i++) {
+                        if (nwFoldKeyText(v).indexOf(folded[i]) < 0) continue;
+                        v = v.replace(res[i], '[redacted]');
+                        if (nwFoldKeyText(v).indexOf(folded[i]) >= 0) v = '[redacted]';
+                    }
+                }
                 return v;
             });
-            for (var j = 0; j < keys.length; j++) { if (out.indexOf(keys[j]) >= 0) throw new Error('autosave payload rejected'); }
+            var fout = nwFoldKeyText(out);
+            for (var j = 0; j < keys.length; j++) { if (out.indexOf(keys[j]) >= 0 || fout.indexOf(folded[j]) >= 0) throw new Error('autosave payload rejected'); }
             return out;
         }
         function nwAutosaveCanWrite() { return nwAutosaveState.ready && !nwAutosaveState.discarded && !nwAutosaveState.restoring; }
@@ -15630,15 +15643,15 @@ function isSecretField(k) { const n = normalizeName(k);
             if (opts && opts.localOnly) return rec;
             var safe;
             try { safe = JSON.parse(nwAutosaveSerialize(rec)); } catch (e) { nwAutosaveWarn(e); return null; }
-            var p = nwAutosaveIdb('readwrite', function (s) { s.put(safe); }).then(function () {
-                if (okLs) nwAutosaveClearWarn();
-                // FIX5/FIX6 (B1): the store holds one book. After the put succeeded, delete every other key, including rows
-                // from earlier sessions that were never restored (conflict path). On failure warn; the next write retries.
+            // FIX5/FIX6/FIX7: the store holds one book. put + "delete every other key" run in ONE readwrite transaction, so
+            // overlapping saves serialize and can never empty the store; a failure aborts both, warns, and the next write retries.
+            var p = nwAutosaveIdb('readwrite', function (s) {
+                s.put(safe);
+                var q = s.getAllKeys();
+                q.onsuccess = function () { (q.result || []).forEach(function (k) { if (k !== safe.bookId) s.delete(k); }); };
+            }).then(function () {
                 nwAutosaveState.idbBookId = safe.bookId;
-                return nwAutosaveIdb('readwrite', function (s) {
-                    var q = s.getAllKeys();
-                    q.onsuccess = function () { (q.result || []).forEach(function (k) { if (k !== safe.bookId) s.delete(k); }); };
-                }).catch(function (e) { nwAutosaveWarn(e); });
+                if (okLs) nwAutosaveClearWarn();
             }, function (e) { nwAutosaveWarn(e); });
             nwAutosaveState.pending = p;
             return rec;
@@ -15755,7 +15768,8 @@ function isSecretField(k) { const n = normalizeName(k);
                 var nd = (typeof nwMigrateSession === 'function') ? nwMigrateSession(restored.novelData) : restored.novelData;
                 nd.apiKey = '';
                 novelData = nd;
-                if (!nwAutosaveIsBookId(novelData.bookId)) novelData.bookId = nwAutosaveIsBookId(rec.bookId) ? rec.bookId : nwAutosaveNewBookId(); // N4
+                // N4/FIX7: never bring a rejected id back - use the validated keyPath id, else a validated nested id, else fresh.
+                novelData.bookId = nwAutosaveIsBookId(rec.bookId) ? rec.bookId : (nwAutosaveIsBookId(novelData.bookId) ? novelData.bookId : nwAutosaveNewBookId());
                 if (typeof rec.bookId === 'string' && rec.bookId) nwAutosaveState.idbBookId = rec.bookId; // FIX5: next good write deletes it if re-keyed
                 applySessionDataToUI();
                 document.getElementById('apiKey').value = '';
