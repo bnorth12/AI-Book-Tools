@@ -796,6 +796,52 @@ try {
       verdict('import-empty-key-rekey', await storageNames(page));
       await context.close();
     }
+    // (h) FIX6 B1 (Reviewer on 9a014f71): a canary row left by an earlier session, then the batch-conflict path
+    // (Apply skipped) -> pick checkpoint -> save. No store key or name may keep the canary.
+    {
+      const { page, context } = await newPage();
+      const seed = (p) => p.evaluate(async (K) => {
+        const id = 'book-' + K.toLowerCase();
+        await nwAutosaveIdb('readwrite', function (st) { st.put({ v: 1, bookId: id, savedAt: '2000-01-01T00:00:00.000Z', inFlight: null, novelData: { title: 'old-session', chapters: [] } }); });
+      }, FAKE);
+      await seed(page);
+      await page.evaluate(async () => {
+        document.getElementById('title').value = 'R-ckpt-title'; novelData.title = 'R-ckpt-title';
+        novelData.batchRun = { id: 'run-r7h', startedAt: new Date().toISOString(), completed: [], inFlight: null, status: 'running', reason: 'user', stoppedAt: 1, range: { from: 1, to: 1 } };
+        if (typeof nwBatchState !== 'undefined') nwBatchState.runId = 'run-r7h';
+        await nwBatchCheckpoint(true);
+      });
+      await settle(50);
+      await edit(page, '#title', 'R7h-auto'); await settle(1000);
+      await load(page, true);
+      const shown = await page.evaluate(() => { const b = document.getElementById('nwAutosaveConflict'); return !!(b && b.offsetParent !== null); });
+      if (shown) await page.evaluate(() => document.getElementById('batchRestoreBtn').click());
+      await settle(500);
+      await typeVal(page, '#title', 'R7h-after'); await settle(1000);
+      await page.evaluate(async () => { try { await nwAutosaveState.pending; } catch (_) { /* counted below */ } });
+      await settle(300);
+      check('R7.FIX6.B1.conflict-path-shown', shown, `shown=${shown}`);
+      verdict('prior-session-canary-conflict-ckpt', await storageNames(page));
+      await context.close();
+    }
+    // (i) FIX6 coverage: restore hook - restoring a re-keyed record then saving removes the old row.
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (K) => {
+        const id = 'book-' + K.toLowerCase();
+        const rec = { v: 1, bookId: id, savedAt: new Date().toISOString(), inFlight: null, novelData: { title: 'r7i', bookId: id, chapters: [] } };
+        await nwAutosaveIdb('readwrite', function (st) { st.put(rec); });
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        let err = null; try { await nwAutosaveApply(rec); } catch (e) { err = String(e && e.name); }
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        const keys = await nwAutosaveIdb('readonly', function (st) { return st.getAllKeys(); });
+        return { err, rekeyed: novelData.bookId !== id, oldGone: !(keys || []).map(String).includes(id), keys: (keys || []).length };
+      }, FAKE);
+      await settle(300);
+      check('R7.FIX6.restore-hook-old-row-deleted', r.rekeyed && r.oldGone, JSON.stringify(r));
+      verdict('restore-hook-rekey', await storageNames(page));
+      await context.close();
+    }
   }
   // ---- FIX3b: nwBatchIdbPut key guard + coverage ack keys carry the opaque br_ id.
   if (T('R8')) {
