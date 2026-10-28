@@ -17,6 +17,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HTML_PATH = path.join(ROOT, 'NovelWriter', 'NovelWriter.html');
 const URL_ = pathToFileURL(HTML_PATH).href;
 const FAKE = 'FAKE-MOCK-KEY-0000';
+const FAKE_S = 'FAKE-MOCK-KEY-SAFE-0000'; // FIX7: still obviously fake; contains S for the long-s variant
 const ONLY = process.env.NW_AUTOSAVE_ONLY ? new RegExp(process.env.NW_AUTOSAVE_ONLY) : null;
 
 const results = [];
@@ -652,6 +653,8 @@ try {
   // ---- FIX3 (Copilot on 25c6405a): a key pasted into the title must never become an IndexedDB key or any storage name.
   // Canary variants: exact, full-width, long-s. Checks IDB keys (getAllKeys), DB/store names, localStorage key names, values.
   if (T('R7')) {
+    // FIX7 (Copilot r4399441450): R7 uses an S-containing fake so the long-s variant differs from the exact key.
+    const FAKE = FAKE_S;
     const FW = [...FAKE].map((c) => (c >= '!' && c <= '~') ? String.fromCharCode(c.charCodeAt(0) + 0xFEE0) : c).join('');
     const LS = FAKE.replace(/S/g, '\u017F');
     const fold = (s) => String(s).normalize('NFKC').replace(/\u017F/g, 's').toLowerCase();
@@ -675,7 +678,7 @@ try {
     });
     const verdict = (id, n, extra = '') => {
       const nameHits = [...n.dbs, ...n.stores, ...n.keys, ...n.lsKeys].reduce((a, s) => a + hit(s), 0);
-      const valHits = n.values.reduce((a, s) => a + scan(s), 0);
+      const valHits = n.values.reduce((a, s) => a + scan(s) + hit(s), 0); // FIX7: case/NFKC-folded value scan
       check(`R7.${id}.no-canary-in-keys-or-names`, nameHits === 0 && n.keys.length > 0, `nameHits=${nameHits} idbKeys=${n.keys.length} stores=${n.stores.length}${extra}`);
       check(`R7.${id}.no-key-value-stored`, valHits === 0, `valueHits=${valHits}`);
     };
@@ -840,6 +843,74 @@ try {
       await settle(300);
       check('R7.FIX6.restore-hook-old-row-deleted', r.rekeyed && r.oldGone, JSON.stringify(r));
       verdict('restore-hook-rekey', await storageNames(page));
+      await context.close();
+    }
+    // ---- FIX7 rows (Copilot da7e7178 r4399441347/r4399441260 + CoS ruling): case/NFKC variants, nested bookId, overlap.
+    const MIX = [...FAKE].map((c, i) => (i % 2 ? c.toLowerCase() : c.toUpperCase())).join('');
+    // (j)/(k) canary variant in the title -> stored autosave values must not keep it.
+    for (const [vn, V] of [['mixedcase', MIX], ['fullwidth', FW], ['longs', LS]]) {
+      const { page, context } = await newPage();
+      await page.evaluate(async (a) => {
+        document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+        document.getElementById('title').value = 'T ' + a.V + ' T'; novelData.title = 'T ' + a.V + ' T';
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+      }, { K: FAKE, V });
+      await settle(300);
+      verdict(`FIX7.title.${vn}`, await storageNames(page));
+      await context.close();
+    }
+    // (l) canary variant in bookId -> record values, store keys and localStorage key names.
+    for (const [vn, V] of [['mixedcase', MIX], ['fullwidth', FW]]) {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (a) => {
+        document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+        novelData.bookId = 'book-' + a.V;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        const rows = await nwAutosaveIdb('readonly', function (st) { return st.getAll(); });
+        return { nested: (rows || []).map((x) => x && x.novelData && x.novelData.bookId) };
+      }, { K: FAKE, V });
+      await settle(300);
+      check(`R7.FIX7.bookId.${vn}.nested-bookId-clean`, r.nested.length === 1 && r.nested.every((x) => !hit(x || '')), JSON.stringify({ n: r.nested.length, hits: r.nested.map((x) => hit(x || '')) }));
+      verdict(`FIX7.bookId.${vn}`, await storageNames(page));
+      await context.close();
+    }
+    // (m) off-list: imported bookId with a lowercase canary while the key is empty -> save -> key entered -> save ->
+    // reload/restore -> save. No store key, record novelData.bookId or serialized value may contain the canary.
+    {
+      const { page, context } = await newPage();
+      await page.evaluate(async (K) => {
+        const low = 'book-' + K.toLowerCase();
+        document.getElementById('apiKey').value = ''; novelData.apiKey = '';
+        novelData = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: { title: 'r7m', bookId: low, chapters: [] } }).novelData;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+      }, FAKE);
+      await settle(300);
+      await load(page, true); await settle(500);
+      const r = await page.evaluate(async (K) => {
+        const restoredId = novelData.bookId;
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        const rows = await nwAutosaveIdb('readonly', function (st) { return st.getAll(); });
+        return { restoredId, nested: (rows || []).map((x) => x && x.novelData && x.novelData.bookId), title: novelData.title };
+      }, FAKE);
+      check('R7.FIX7.import-rekey-reload.restored-and-clean', r.title === 'r7m' && !hit(r.restoredId || '') && r.nested.length === 1 && r.nested.every((x) => !hit(x || '')), JSON.stringify({ title: r.title, restoredHit: hit(r.restoredId || ''), n: r.nested.length, hits: r.nested.map((x) => hit(x || '')) }));
+      verdict('FIX7.import-rekey-reload', await storageNames(page));
+      await context.close();
+    }
+    // (n) overlapping saves for two book ids must leave exactly one autosave row (put + sweep in one transaction).
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async () => {
+        novelData.bookId = 'book-overlapaaaa1'; nwAutosaveWriteNow({ force: true }); const p1 = nwAutosaveState.pending;
+        novelData.bookId = 'book-overlapbbbb2'; nwAutosaveWriteNow({ force: true }); const p2 = nwAutosaveState.pending;
+        try { await Promise.all([p1, p2]); } catch (_) { /* counted below */ }
+        await new Promise((res) => setTimeout(res, 300));
+        const keys = await nwAutosaveIdb('readonly', function (st) { return st.getAllKeys(); });
+        return { keys: (keys || []).map(String) };
+      });
+      check('R7.FIX7.overlapping-saves-one-row', r.keys.length === 1 && r.keys[0] === 'book-overlapbbbb2', JSON.stringify(r));
       await context.close();
     }
   }
