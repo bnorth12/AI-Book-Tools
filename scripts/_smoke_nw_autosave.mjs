@@ -740,6 +740,42 @@ try {
       verdict(`autosave-bookId.${vn}`, await storageNames(page));
       await context.close();
     }
+    // (e) N4 (Reviewer on 420fc92b): a bookId embedding the live key in a different case must be rejected and never stored.
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (K) => {
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        const low = 'book-' + K.toLowerCase();
+        const shape = /^book-[0-9a-z-]{8,64}$/.test(low);
+        const valid = nwAutosaveIsBookId(low);
+        const fresh = (x) => typeof x === 'string' && x !== low && /^book-[0-9a-z-]{8,64}$/.test(x) && !x.includes(K.toLowerCase());
+        // import path
+        let imp = null; try { const n = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: { title: 'n4', bookId: low } }); imp = n && n.novelData ? n.novelData.bookId : null; } catch (e) { imp = 'ERR ' + (e && e.name); }
+        // create/ensure path (autosave write)
+        novelData.bookId = low;
+        try { await nwAutosaveWriteNow({ force: true }); } catch (_) { /* counted below */ }
+        return { shape, valid, importFresh: fresh(imp), createFresh: fresh(novelData.bookId) };
+      }, FAKE);
+      await settle(500);
+      check('R7.N4.bookId-lowercase-key-rejected', r.shape === true && r.valid === false && r.importFresh && r.createFresh, JSON.stringify(r));
+      verdict('autosave-bookId.lowercase', await storageNames(page));
+      await context.close();
+    }
+    // (f) N4 restore path: an autosave record whose bookId embeds the lowercase live key must restore with a fresh id.
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (K) => {
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        const low = 'book-' + K.toLowerCase();
+        novelData.bookId = '';
+        let err = null; try { await nwAutosaveApply({ bookId: low, savedAt: new Date().toISOString(), novelData: { title: 'n4r', bookId: low, chapters: [] } }); } catch (e) { err = String(e && e.name); }
+        const id = novelData.bookId;
+        return { err, fresh: typeof id === 'string' && id !== low && /^book-[0-9a-z-]{8,64}$/.test(id) && !id.includes(K.toLowerCase()) };
+      }, FAKE);
+      await settle(300);
+      check('R7.N4.restore-lowercase-key-bookId-fresh', r.fresh === true, JSON.stringify(r));
+      await context.close();
+    }
   }
   // ---- FIX3b: nwBatchIdbPut key guard + coverage ack keys carry the opaque br_ id.
   if (T('R8')) {
