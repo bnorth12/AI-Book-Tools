@@ -11671,7 +11671,8 @@ function isSecretField(k) { const n = normalizeName(k);
 		        });
 		    })();
 
-		    mergedNovelData.bookId = (typeof normalizedNovelData.bookId === 'string' && normalizedNovelData.bookId) ? normalizedNovelData.bookId : nwAutosaveNewBookId();
+		    // FIX3: bookId is the autosave IDB key (keyPath); accept only an app-generated id, never free text from the file.
+		    mergedNovelData.bookId = (typeof nwAutosaveIsBookId === 'function' ? nwAutosaveIsBookId(normalizedNovelData.bookId) : false) ? normalizedNovelData.bookId : nwAutosaveNewBookId();
 		    return {
 		        novelData: mergedNovelData,
 		        requestLog: {
@@ -14654,9 +14655,27 @@ function isSecretField(k) { const n = normalizeName(k);
             });
         }
 
-        /** { novelData (no apiKey), batchRun } keyed by batchRun.id (title + startedAt of the first run). */
+        // FIX3: checkpoint keys are opaque ids only. A legacy id (built from the title before FIX3) is replaced
+        // in place; the caller deletes the legacy row only after the new write succeeds.
+        function nwBatchIsOpaqueId(id) { return typeof id === 'string' && /^br_[0-9a-z]{10}$/.test(id); }
+        function nwBatchEnsureOpaqueRec(rec) {
+            var legacy = null;
+            var cur = rec.batchRun && rec.batchRun.id;
+            if (!nwBatchIsOpaqueId(cur)) { legacy = rec.key != null ? rec.key : (cur != null ? cur : null); cur = nwOpaqueId('br_'); if (rec.batchRun) rec.batchRun.id = cur; }
+            else if (rec.key != null && rec.key !== cur) legacy = rec.key;
+            rec.key = cur;
+            return legacy;
+        }
+        function nwBatchDropLegacy(legacy) {
+            if (legacy == null) return undefined;
+            return nwBatchIdbDelete(legacy).catch(function (e) { console.warn('[batch] legacy checkpoint delete', e && e.name); });
+        }
+
+        /** { novelData (no apiKey), batchRun } keyed by batchRun.id (opaque 'br_' id, FIX3). */
         function nwBatchCheckpoint(active) {
             var br = novelData.batchRun;
+            var legacyId = null;
+            if (!nwBatchIsOpaqueId(br.id)) { legacyId = br.id != null ? br.id : null; br.id = nwOpaqueId('br_'); }
             br.updatedAt = new Date().toISOString();
             var nd = stripSecretFields(JSON.parse(JSON.stringify(novelData)));
             delete nd.batchRun;
@@ -14664,7 +14683,7 @@ function isSecretField(k) { const n = normalizeName(k);
             delete brCopy.rejectedDraft; // session export only, never checkpointed
             if (typeof NW_6B_CHECKPOINT_COVERAGE_ACK !== 'undefined' && !NW_6B_CHECKPOINT_COVERAGE_ACK) delete brCopy.coverageAck;
             var rec = { key: br.id, savedAt: br.updatedAt, active: active !== false, novelData: nd, batchRun: brCopy };
-            return nwBatchIdbPut(rec, br.id);
+            return nwBatchIdbPut(rec, br.id).then(function () { return nwBatchDropLegacy(legacyId); });
         }
 
         function nwBatchFindInterrupted() {
@@ -14672,9 +14691,19 @@ function isSecretField(k) { const n = normalizeName(k);
                 return new Promise(function (resolve, reject) {
                     var req = db.transaction(NW_BATCH.idbStore, 'readonly').objectStore(NW_BATCH.idbStore).getAll();
                     req.onsuccess = function () {
-                        var recs = (req.result || []).filter(function (r) { return r && r.active && r.batchRun && r.novelData; });
-                        recs.sort(function (a, b) { return String(b.savedAt).localeCompare(String(a.savedAt)); });
-                        resolve(recs[0] || null);
+                        var all = req.result || [];
+                        // FIX3: migrate legacy title-keyed rows on read: write under an opaque id, then delete the old row.
+                        // If the new write fails the old row is left as is and not offered for restore.
+                        Promise.all(all.map(function (r) {
+                            if (!r || typeof r !== 'object') return r;
+                            var legacy = nwBatchEnsureOpaqueRec(r);
+                            if (legacy == null) return r;
+                            return nwBatchIdbPut(r, r.key).then(function () { return nwBatchDropLegacy(legacy); }).then(function () { return r; }, function (e) { console.warn('[batch] legacy checkpoint migrate', e && e.name); return null; });
+                        })).then(function (rows) {
+                            var recs = rows.filter(function (r) { return r && r.active && r.batchRun && r.novelData; });
+                            recs.sort(function (a, b) { return String(b.savedAt).localeCompare(String(a.savedAt)); });
+                            resolve(recs[0] || null);
+                        }, reject);
                     };
                     req.onerror = function () { reject(req.error || new Error('checkpoint read failed')); };
                 });
@@ -15148,7 +15177,7 @@ function isSecretField(k) { const n = normalizeName(k);
                     if (!Array.isArray(br.usageEstimated)) br.usageEstimated = [];
                 } else {
                     br = novelData.batchRun = {
-                        id: (novelData.title || 'Untitled') + '|' + now,
+                        id: nwOpaqueId('br_'), // FIX3: opaque; never built from the title or other user text
                         startedAt: now,
                         updatedAt: now,
                         range: range,
@@ -15469,7 +15498,8 @@ function isSecretField(k) { const n = normalizeName(k);
             var rec = nwBatchState.interrupted;
             if (!rec) return false;
             rec.active = false;
-            try { await nwBatchIdbPut(rec, rec.key || rec.batchRun.id); } catch (e) { console.warn('[batch] discard checkpoint', e); }
+            var legacy = nwBatchEnsureOpaqueRec(rec);
+            try { await nwBatchIdbPut(rec, rec.key); await nwBatchDropLegacy(legacy); } catch (e) { console.warn('[batch] discard checkpoint', e); }
             nwBatchState.interrupted = null;
             nwBatchShow('batchRestoreBox', false);
             nwBatchApplyLock();
@@ -15506,8 +15536,9 @@ function isSecretField(k) { const n = normalizeName(k);
             try { if (window.crypto && typeof crypto.randomUUID === 'function') return 'book-' + crypto.randomUUID(); } catch (_) { /* fall through */ }
             return 'book-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
         }
+        function nwAutosaveIsBookId(id) { return typeof id === 'string' && /^book-[0-9a-z-]{8,64}$/.test(id); }
         function nwAutosaveEnsureBookId() {
-            if (typeof novelData.bookId !== 'string' || !novelData.bookId) novelData.bookId = nwAutosaveNewBookId();
+            if (!nwAutosaveIsBookId(novelData.bookId)) novelData.bookId = nwAutosaveNewBookId();
             return novelData.bookId;
         }
         function nwAutosaveEl(id, cls) {
@@ -15701,7 +15732,7 @@ function isSecretField(k) { const n = normalizeName(k);
                 var nd = (typeof nwMigrateSession === 'function') ? nwMigrateSession(restored.novelData) : restored.novelData;
                 nd.apiKey = '';
                 novelData = nd;
-                if (rec.bookId && !novelData.bookId) novelData.bookId = rec.bookId;
+                if (nwAutosaveIsBookId(rec.bookId) && !novelData.bookId) novelData.bookId = rec.bookId;
                 applySessionDataToUI();
                 document.getElementById('apiKey').value = '';
                 novelData.apiKey = '';

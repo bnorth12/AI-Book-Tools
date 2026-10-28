@@ -406,7 +406,7 @@ try {
     const { page, context } = await newPage({ initScript: init });
     await settle(500);
     const d = await dump(page);
-    check('X11.idb-upgrade', d.version === 2 && Array.isArray(d.idb.autosave) && (d.idb.checkpoints || []).some((c) => c && c.key === 'run-old' && c.novelData?.title === 'X11'), `v=${d.version} stores=${Object.keys(d.idb)}`);
+    check('X11.idb-upgrade', d.version === 2 && Array.isArray(d.idb.autosave) && (d.idb.checkpoints || []).some((c) => c && /^br_[0-9a-z]{10}$/.test(c.key) && c.batchRun?.id === c.key && c.novelData?.title === 'X11'), `v=${d.version} stores=${Object.keys(d.idb)}`);
     await context.close();
   }
 
@@ -625,7 +625,7 @@ try {
       let err2 = null; try { await discardInterruptedBatchRun(); } catch (e) { err2 = String(e && e.name); }
       const b = await read();
       const cnt = (x) => (JSON.stringify(x).split(K).length - 1);
-      const one = a.find((x) => x && x.key === 'r6run'); const back = b.find((x) => x && x.key === 'r6back');
+      const one = a.find((x) => x && x.batchRun && x.batchRun.note === 'br [redacted]'); const back = b.find((x) => x && x.batchRun && x.batchRun.note === 'wb [redacted]');
       return { err1, err2, cpHits: cnt(a), allHits: cnt(b), plot: one && one.novelData && one.novelData.generalPlot, text: one && one.novelData && one.novelData.chapters && one.novelData.chapters[0].text, sub: one && one.novelData && one.novelData.subplots && one.novelData.subplots[0].description, backText: back && back.novelData.chapters[0].text, backActive: back && back.active };
     }, FAKE);
     check('R6.checkpoint-no-key-value', r.cpHits === 0 && r.err1 === null, `hits=${r.cpHits} err=${r.err1}`);
