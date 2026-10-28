@@ -776,6 +776,26 @@ try {
       check('R7.N4.restore-lowercase-key-bookId-fresh', r.fresh === true, JSON.stringify(r));
       await context.close();
     }
+    // (g) FIX5 (CoS): import a canary bookId while the key is empty, autosave, then enter the key and autosave again.
+    // The re-keyed write must delete the old row so no store key or name keeps the canary.
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (K) => {
+        const low = 'book-' + K.toLowerCase();
+        document.getElementById('apiKey').value = ''; novelData.apiKey = '';
+        const n = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: { title: 'n5', bookId: low, chapters: [] } });
+        novelData = n.novelData;
+        const firstId = novelData.bookId;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        return { firstWasCanary: firstId === low, newId: novelData.bookId !== low };
+      }, FAKE);
+      await settle(500);
+      check('R7.FIX5.import-empty-key-then-key.setup', r.firstWasCanary && r.newId, JSON.stringify(r));
+      verdict('import-empty-key-rekey', await storageNames(page));
+      await context.close();
+    }
   }
   // ---- FIX3b: nwBatchIdbPut key guard + coverage ack keys carry the opaque br_ id.
   if (T('R8')) {
