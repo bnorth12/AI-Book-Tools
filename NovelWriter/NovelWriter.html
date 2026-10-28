@@ -14633,9 +14633,10 @@ function isSecretField(k) { const n = normalizeName(k);
         }
 
         // FIX3b: checkpoint keys must be opaque br_ ids and must never contain the live key text.
-        /** FIX7/FIX8: comparison form for live-key matching - strip default-ignorables (ZWSP, SHY, WJ, ...), NFKC (full-width,
-         *  long-s, ...), lower case, then strip combining marks (after lower case: 'İ'.toLowerCase() yields i + U+0307). */
-        function nwFoldKeyText(s) { s = String(s).replace(/\p{Default_Ignorable_Code_Point}/gu, ''); try { s = s.normalize('NFKC'); } catch (_) { /* no normalize */ } return s.toLowerCase().replace(/\p{M}/gu, ''); }
+        /** FIX7/FIX8/FIX9: comparison form for live-key matching - strip default-ignorables (ZWSP, SHY, WJ, ...), NFKD (full-width,
+         *  long-s, Kelvin, and decomposes accented letters), lower case, then strip combining marks (after lower case:
+         *  'İ'.toLowerCase() yields i + U+0307; NFKD splits U+00E9 into e + U+0301, which NFKC would have recomposed). */
+        function nwFoldKeyText(s) { s = String(s).replace(/\p{Default_Ignorable_Code_Point}/gu, ''); try { s = s.normalize('NFKD'); } catch (_) { /* no normalize */ } return s.toLowerCase().replace(/\p{M}/gu, ''); }
         function nwBatchLiveKeys() {
             var out = [];
             try { var el = document.getElementById('apiKey'); if (el && typeof el.value === 'string') out.push(el.value.trim()); } catch (_) { /* no DOM */ }
