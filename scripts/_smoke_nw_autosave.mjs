@@ -657,7 +657,8 @@ try {
     const FAKE = FAKE_S;
     const FW = [...FAKE].map((c) => (c >= '!' && c <= '~') ? String.fromCharCode(c.charCodeAt(0) + 0xFEE0) : c).join('');
     const LS = FAKE.replace(/S/g, '\u017F');
-    const fold = (s) => String(s).normalize('NFKC').replace(/\u017F/g, 's').toLowerCase();
+    // FIX8: fold mirrors the app order - strip default-ignorables, NFKC, lower case, strip combining marks.
+    const fold = (s) => String(s).replace(/\p{Default_Ignorable_Code_Point}/gu, '').normalize('NFKC').replace(/\u017F/g, 's').toLowerCase().replace(/\p{M}/gu, '');
     const hit = (s) => fold(s).includes(fold(FAKE)) ? 1 : 0;
     const storageNames = (page) => page.evaluate(async () => {
       const out = { dbs: [], stores: [], keys: [], lsKeys: [], values: [] };
@@ -913,6 +914,35 @@ try {
       check('R7.FIX7.overlapping-saves-one-row', r.keys.length === 1 && r.keys[0] === 'book-overlapbbbb2', JSON.stringify(r));
       await context.close();
     }
+    // ---- FIX8 rows (Reviewer B1, Fiction option A): default-ignorable code points inserted mid-key, and Turkish dotted I.
+    // Saves go through the real autosave path; stored values, store keys and localStorage key names are scanned.
+    const mid = (k, ch) => k.slice(0, 8) + ch + k.slice(8);
+    const fix8 = async (id, K, V) => {
+      for (const where of ['title', 'bookId']) {
+        const { page, context } = await newPage();
+        const r = await page.evaluate(async (a) => {
+          document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+          if (a.where === 'title') { document.getElementById('title').value = 'T ' + a.V + ' T'; novelData.title = 'T ' + a.V + ' T'; } else novelData.bookId = 'book-' + a.V;
+          try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+          const rows = await nwAutosaveIdb('readonly', function (st) { return st.getAll(); });
+          return { nested: (rows || []).map((x) => x && x.novelData && x.novelData.bookId) };
+        }, { K, V, where });
+        await settle(300);
+        if (where === 'bookId') check(`R7.FIX8.${id}.bookId.nested-bookId-clean`, r.nested.length === 1 && r.nested.every((x) => !foldHit(x || '', K)), JSON.stringify({ n: r.nested.length, hits: r.nested.map((x) => foldHit(x || '', K)) }));
+        const n = await storageNames(page);
+        const nameHits = [...n.dbs, ...n.stores, ...n.keys, ...n.lsKeys].reduce((a, s) => a + foldHit(s, K), 0);
+        const valHits = n.values.reduce((a, s) => a + foldHit(s, K) + (String(s).includes(K) ? 1 : 0), 0);
+        check(`R7.FIX8.${id}.${where}.no-canary-in-keys-or-names`, nameHits === 0 && n.keys.length > 0, `nameHits=${nameHits} idbKeys=${n.keys.length}`);
+        check(`R7.FIX8.${id}.${where}.no-key-value-stored`, valHits === 0, `valueHits=${valHits}`);
+        await context.close();
+      }
+    };
+    const foldHit = (s, K) => fold(s).includes(fold(K)) ? 1 : 0;
+    for (const [vn, ch] of [['zwsp', '\u200B'], ['shy', '\u00AD'], ['wj', '\u2060']]) await fix8(vn, FAKE, mid(FAKE, ch));
+    // Turkish: synthetic key containing 'i'; the canary uses U+0130. 'İ'.toLowerCase() is 'i' + U+0307, so only a
+    // post-lowercase \p{M} strip makes it match. (Dotless U+0131 has no decomposition to 'i'; not a key copy under this fold.)
+    const FAKE_I = 'FAKE-MOCK-KEY-SAFE-iiii-0000';
+    await fix8('turkish-dotted-I', FAKE_I, FAKE_I.replace(/i/g, '\u0130'));
   }
   // ---- FIX3b: nwBatchIdbPut key guard + coverage ack keys carry the opaque br_ id.
   if (T('R8')) {
