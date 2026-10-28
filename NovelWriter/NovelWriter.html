@@ -14632,7 +14632,19 @@ function isSecretField(k) { const n = normalizeName(k);
             return nwBatchDbPromise;
         }
 
+        // FIX3b: checkpoint keys must be opaque br_ ids and must never contain the live key text.
+        function nwBatchLiveKeys() {
+            var out = [];
+            try { var el = document.getElementById('apiKey'); if (el && typeof el.value === 'string') out.push(el.value.trim()); } catch (_) { /* no DOM */ }
+            try { if (novelData && typeof novelData.apiKey === 'string') out.push(novelData.apiKey.trim()); } catch (_) { /* no data */ }
+            return out.filter(function (k) { return k.length >= 4; });
+        }
+        function nwBatchKeyOk(key) {
+            if (!nwBatchIsOpaqueId(key)) return false;
+            return !nwBatchLiveKeys().some(function (k) { return key.indexOf(k) >= 0; });
+        }
         function nwBatchIdbPut(record, key) {
+            if (!nwBatchKeyOk(key)) { var ke = new Error('checkpoint key rejected'); ke.name = 'CheckpointKeyError'; return Promise.reject(ke); }
             // N2: same redaction + refuse-if-key-still-present rule as autosave (covers discardInterruptedBatchRun write-back).
             var safe;
             try { safe = JSON.parse(nwAutosaveSerialize(record)); } catch (e) { nwAutosaveWarn(e); return Promise.reject(e); }

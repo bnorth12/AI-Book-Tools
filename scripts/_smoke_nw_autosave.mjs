@@ -741,6 +741,56 @@ try {
       await context.close();
     }
   }
+  // ---- FIX3b: nwBatchIdbPut key guard + coverage ack keys carry the opaque br_ id.
+  if (T('R8')) {
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (K) => {
+        document.getElementById('apiKey').value = '  ' + K + '  '; novelData.apiKey = K;
+        const count = () => new Promise((res) => { const q = indexedDB.open('novelwriter', 2); q.onsuccess = () => { const g = q.result.transaction('checkpoints').objectStore('checkpoints').getAllKeys(); g.onsuccess = () => { q.result.close(); res(g.result.map(String)); }; }; });
+        const tryPut = async (key) => { try { await nwBatchIdbPut({ key, active: false, novelData: {}, batchRun: { id: key } }, key); return 'ok'; } catch (e) { return String(e && e.name); } };
+        const out = {};
+        out.nonBr = await tryPut('legacy-title|2026');
+        out.badBr = await tryPut('br_ABCDEFGHIJ');
+        // live-key text inside an otherwise br_-shaped key (key set to a 4+ char fragment that fits the id alphabet)
+        document.getElementById('apiKey').value = 'zq9x'; novelData.apiKey = 'zq9x';
+        out.brWithKey = await tryPut('br_aazq9xaaaa');
+        document.getElementById('apiKey').value = 'zq9'; novelData.apiKey = 'zq9';
+        out.shortKeyIgnored = await tryPut('br_aazq9baaaa');
+        out.keys = await count();
+        return out;
+      }, FAKE);
+      check('R8.guard.non-br-key-rejected', r.nonBr === 'CheckpointKeyError' && !r.keys.includes('legacy-title|2026'), JSON.stringify(r));
+      check('R8.guard.non-opaque-br-rejected', r.badBr === 'CheckpointKeyError' && !r.keys.includes('br_ABCDEFGHIJ'), r.badBr);
+      check('R8.guard.br-key-with-live-key-rejected', r.brWithKey === 'CheckpointKeyError' && !r.keys.includes('br_aazq9xaaaa'), r.brWithKey);
+      check('R8.guard.valid-br-key-written', r.shortKeyIgnored === 'ok' && r.keys.length === 1 && r.keys[0] === 'br_aazq9baaaa', JSON.stringify(r.keys));
+      await context.close();
+    }
+    for (const [vn, V] of [['exact', FAKE], ['fullwidth', [...FAKE].map((c) => (c >= '!' && c <= '~') ? String.fromCharCode(c.charCodeAt(0) + 0xFEE0) : c).join('')]]) {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (a) => {
+        document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+        document.getElementById('title').value = 'T ' + a.V + ' T'; novelData.title = 'T ' + a.V + ' T';
+        novelData.chapters = ['']; novelData.batchRun = null;
+        window.nwBatchPreflight = () => ({ passed: true, failures: [], message: '' });
+        window.nwBatchPlan = () => ({ planned: [1], skipped: [] });
+        window.nwBatchRunChapter = async () => ({ ok: false, reason: 'coverage', detail: 'mut coverage' });
+        const s1 = await nwBatchStart(false);
+        const br = novelData.batchRun || {};
+        nwBatchState.coverageAck = null;
+        const s2 = await nwBatchStart(true);
+        const ackKey = nwBatchState.coverageAck;
+        nwBatchState.coverageDecideOwner = null; br.coverageAck = null;
+        const d = await nwBatchCoverageDecide('skip');
+        return { s1: s1 && s1.reason, s2: s2 && s2.reason, id: br.id, ackKey, decide: d, skipAck: nwBatchState.coverageAck, brAck: JSON.stringify(br.coverageAck || null) };
+      }, { K: FAKE, V });
+      const fold = (s) => String(s).normalize('NFKC').toLowerCase();
+      const clean = (s) => !fold(s).includes(fold(FAKE)) && !/T /.test(String(s));
+      check(`R8.ackKey.${vn}.opaque-br-id`, r.s2 === 'confirm-coverage' && /^br_[0-9a-z]{10}:1$/.test(String(r.ackKey)) && r.ackKey === r.id + ':1' && clean(r.ackKey), JSON.stringify({ s1: r.s1, s2: r.s2, ackKeyShape: /^br_[0-9a-z]{10}:1$/.test(String(r.ackKey)), clean: clean(r.ackKey) }));
+      check(`R8.coverageAck.${vn}.opaque-br-id`, /^br_[0-9a-z]{10}:1$/.test(String(r.skipAck)) && r.skipAck === r.id + ':1' && clean(r.skipAck) && clean(r.brAck), JSON.stringify({ decide: r.decide, skipShape: /^br_[0-9a-z]{10}:1$/.test(String(r.skipAck)), clean: clean(r.skipAck) && clean(r.brAck) }));
+      await context.close();
+    }
+  }
 } catch (e) {
   check('B.harness', false, (e && e.name) + ': ' + String(e && e.message).split('\n')[0]);
 } finally {
