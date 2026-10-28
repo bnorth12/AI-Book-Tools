@@ -657,8 +657,8 @@ try {
     const FAKE = FAKE_S;
     const FW = [...FAKE].map((c) => (c >= '!' && c <= '~') ? String.fromCharCode(c.charCodeAt(0) + 0xFEE0) : c).join('');
     const LS = FAKE.replace(/S/g, '\u017F');
-    // FIX8: fold mirrors the app order - strip default-ignorables, NFKC, lower case, strip combining marks.
-    const fold = (s) => String(s).replace(/\p{Default_Ignorable_Code_Point}/gu, '').normalize('NFKC').replace(/\u017F/g, 's').toLowerCase().replace(/\p{M}/gu, '');
+    // FIX8/FIX9: fold mirrors the app order - strip default-ignorables, NFKD, lower case, strip combining marks.
+    const fold = (s) => String(s).replace(/\p{Default_Ignorable_Code_Point}/gu, '').normalize('NFKD').replace(/\u017F/g, 's').toLowerCase().replace(/\p{M}/gu, '');
     const hit = (s) => fold(s).includes(fold(FAKE)) ? 1 : 0;
     const storageNames = (page) => page.evaluate(async () => {
       const out = { dbs: [], stores: [], keys: [], lsKeys: [], values: [] };
@@ -943,6 +943,12 @@ try {
     // post-lowercase \p{M} strip makes it match. (Dotless U+0131 has no decomposition to 'i'; not a key copy under this fold.)
     const FAKE_I = 'FAKE-MOCK-KEY-SAFE-iiii-0000';
     await fix8('turkish-dotted-I', FAKE_I, FAKE_I.replace(/i/g, '\u0130'));
+    // ---- FIX9: accents. Synthetic key with 'e'; (a) e + U+0301 mid-key, (b) precomposed U+00E9 for an 'e'. Under NFKC the
+    // pair composes to U+00E9 (not a mark), so only NFKD + \p{M} strip folds both back to the key. Kelvin sign kept as regression.
+    const FAKE_E = 'FAKE-MOCK-KEY-SAFE-eeee-0000';
+    await fix8('e-combining-acute', FAKE_E, FAKE_E.replace('eeee', 'ee\u0301ee'));
+    await fix8('e-precomposed-acute', FAKE_E, FAKE_E.replace('eeee', 'e\u00E9ee'));
+    await fix8('kelvin', FAKE, FAKE.replace(/K/g, '\u212A'));
   }
   // ---- FIX3b: nwBatchIdbPut key guard + coverage ack keys carry the opaque br_ id.
   if (T('R8')) {
