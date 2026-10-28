@@ -15548,7 +15548,11 @@ function isSecretField(k) { const n = normalizeName(k);
             try { if (window.crypto && typeof crypto.randomUUID === 'function') return 'book-' + crypto.randomUUID(); } catch (_) { /* fall through */ }
             return 'book-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
         }
-        function nwAutosaveIsBookId(id) { return typeof id === 'string' && /^book-[0-9a-z-]{8,64}$/.test(id); }
+        function nwAutosaveIsBookId(id) {
+            if (typeof id !== 'string' || !/^book-[0-9a-z-]{8,64}$/.test(id)) return false;
+            var low = id.toLowerCase(); // N4: ids embedding a live key (any case) are invalid -> callers assign a fresh id.
+            return !nwBatchLiveKeys().some(function (k) { return low.indexOf(k.toLowerCase()) >= 0; });
+        }
         function nwAutosaveEnsureBookId() {
             if (!nwAutosaveIsBookId(novelData.bookId)) novelData.bookId = nwAutosaveNewBookId();
             return novelData.bookId;
@@ -15744,7 +15748,7 @@ function isSecretField(k) { const n = normalizeName(k);
                 var nd = (typeof nwMigrateSession === 'function') ? nwMigrateSession(restored.novelData) : restored.novelData;
                 nd.apiKey = '';
                 novelData = nd;
-                if (nwAutosaveIsBookId(rec.bookId) && !novelData.bookId) novelData.bookId = rec.bookId;
+                if (!nwAutosaveIsBookId(novelData.bookId)) novelData.bookId = nwAutosaveIsBookId(rec.bookId) ? rec.bookId : nwAutosaveNewBookId(); // N4
                 applySessionDataToUI();
                 document.getElementById('apiKey').value = '';
                 novelData.apiKey = '';
