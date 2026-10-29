@@ -17,6 +17,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HTML_PATH = path.join(ROOT, 'NovelWriter', 'NovelWriter.html');
 const URL_ = pathToFileURL(HTML_PATH).href;
 const FAKE = 'FAKE-MOCK-KEY-0000';
+const FAKE_S = 'FAKE-MOCK-KEY-SAFE-0000'; // FIX7: still obviously fake; contains S for the long-s variant
 const ONLY = process.env.NW_AUTOSAVE_ONLY ? new RegExp(process.env.NW_AUTOSAVE_ONLY) : null;
 
 const results = [];
@@ -406,7 +407,7 @@ try {
     const { page, context } = await newPage({ initScript: init });
     await settle(500);
     const d = await dump(page);
-    check('X11.idb-upgrade', d.version === 2 && Array.isArray(d.idb.autosave) && (d.idb.checkpoints || []).some((c) => c && c.key === 'run-old' && c.novelData?.title === 'X11'), `v=${d.version} stores=${Object.keys(d.idb)}`);
+    check('X11.idb-upgrade', d.version === 2 && Array.isArray(d.idb.autosave) && (d.idb.checkpoints || []).some((c) => c && /^br_[0-9a-z]{10}$/.test(c.key) && c.batchRun?.id === c.key && c.novelData?.title === 'X11'), `v=${d.version} stores=${Object.keys(d.idb)}`);
     await context.close();
   }
 
@@ -625,7 +626,7 @@ try {
       let err2 = null; try { await discardInterruptedBatchRun(); } catch (e) { err2 = String(e && e.name); }
       const b = await read();
       const cnt = (x) => (JSON.stringify(x).split(K).length - 1);
-      const one = a.find((x) => x && x.key === 'r6run'); const back = b.find((x) => x && x.key === 'r6back');
+      const one = a.find((x) => x && x.batchRun && x.batchRun.note === 'br [redacted]'); const back = b.find((x) => x && x.batchRun && x.batchRun.note === 'wb [redacted]');
       return { err1, err2, cpHits: cnt(a), allHits: cnt(b), plot: one && one.novelData && one.novelData.generalPlot, text: one && one.novelData && one.novelData.chapters && one.novelData.chapters[0].text, sub: one && one.novelData && one.novelData.subplots && one.novelData.subplots[0].description, backText: back && back.novelData.chapters[0].text, backActive: back && back.active };
     }, FAKE);
     check('R6.checkpoint-no-key-value', r.cpHits === 0 && r.err1 === null, `hits=${r.cpHits} err=${r.err1}`);
@@ -648,6 +649,356 @@ try {
     }, FAKE);
     check('R6.refused-checkpoint-warns', r.rejected && !r.stored && r.shown && /^Autosave failed \([A-Za-z]+\)\. Last good copy kept\.$/.test(r.text) && scan(r.text) === 0, JSON.stringify({ rejected: r.rejected, stored: r.stored, shown: r.shown, text: r.text, keyHits: scan(r.text) }));
     await context.close();
+  }
+  // ---- FIX3 (Copilot on 25c6405a): a key pasted into the title must never become an IndexedDB key or any storage name.
+  // Canary variants: exact, full-width, long-s. Checks IDB keys (getAllKeys), DB/store names, localStorage key names, values.
+  if (T('R7')) {
+    // FIX7 (Copilot r4399441450): R7 uses an S-containing fake so the long-s variant differs from the exact key.
+    const FAKE = FAKE_S;
+    const FW = [...FAKE].map((c) => (c >= '!' && c <= '~') ? String.fromCharCode(c.charCodeAt(0) + 0xFEE0) : c).join('');
+    const LS = FAKE.replace(/S/g, '\u017F');
+    // FIX8/FIX9: fold mirrors the app order - strip default-ignorables, NFKD, lower case, strip combining marks.
+    const fold = (s) => String(s).replace(/\p{Default_Ignorable_Code_Point}/gu, '').normalize('NFKD').replace(/\u017F/g, 's').toLowerCase().replace(/\p{M}/gu, '');
+    const hit = (s) => fold(s).includes(fold(FAKE)) ? 1 : 0;
+    const storageNames = (page) => page.evaluate(async () => {
+      const out = { dbs: [], stores: [], keys: [], lsKeys: [], values: [] };
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); out.lsKeys.push(k); out.values.push(localStorage.getItem(k)); }
+      const dbs = indexedDB.databases ? await indexedDB.databases() : [{ name: 'novelwriter' }];
+      for (const d of dbs) {
+        out.dbs.push(d.name);
+        const db = await new Promise((res, rej) => { const r = indexedDB.open(d.name); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+        for (const s of Array.from(db.objectStoreNames)) {
+          out.stores.push(s);
+          const st = () => db.transaction(s, 'readonly').objectStore(s);
+          out.keys.push(...(await new Promise((res) => { const q = st().getAllKeys(); q.onsuccess = () => res(q.result.map(String)); q.onerror = () => res(['ERR']); })));
+          out.values.push(JSON.stringify(await new Promise((res) => { const q = st().getAll(); q.onsuccess = () => res(q.result); q.onerror = () => res([]); })));
+        }
+        db.close();
+      }
+      return out;
+    });
+    const verdict = (id, n, extra = '') => {
+      const nameHits = [...n.dbs, ...n.stores, ...n.keys, ...n.lsKeys].reduce((a, s) => a + hit(s), 0);
+      const valHits = n.values.reduce((a, s) => a + scan(s) + hit(s), 0); // FIX7: case/NFKC-folded value scan
+      check(`R7.${id}.no-canary-in-keys-or-names`, nameHits === 0 && n.keys.length > 0, `nameHits=${nameHits} idbKeys=${n.keys.length} stores=${n.stores.length}${extra}`);
+      check(`R7.${id}.no-key-value-stored`, valHits === 0, `valueHits=${valHits}`);
+    };
+    for (const [vn, V] of [['exact', FAKE], ['fullwidth', FW], ['longs', LS]]) {
+      // (a) batch-put path: real nwBatchStart up to its first checkpoint; chapter generation is stubbed to never settle.
+      {
+        const { page, context } = await newPage();
+        await page.evaluate((a) => {
+          document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+          document.getElementById('title').value = 'T ' + a.V + ' T'; novelData.title = 'T ' + a.V + ' T';
+          novelData.chapters = ['']; novelData.batchRun = null;
+          window.nwBatchPreflight = () => ({ passed: true, failures: [], message: '' });
+          window.nwBatchPlan = () => ({ planned: [1], skipped: [] });
+          window.nwBatchRunChapter = () => new Promise(() => {});
+          window.__r7 = nwBatchStart(false).then((r) => r, (e) => ({ err: String(e && e.name) }));
+        }, { K: FAKE, V });
+        await page.waitForFunction(() => new Promise((res) => { const q = indexedDB.open('novelwriter'); q.onsuccess = () => { const db = q.result; if (!db.objectStoreNames.contains('checkpoints')) { db.close(); return res(false); } const g = db.transaction('checkpoints').objectStore('checkpoints').count(); g.onsuccess = () => { db.close(); res(g.result > 0); }; g.onerror = () => res(false); }; q.onerror = () => res(false); }), null, { timeout: 10000 }).catch(() => {});
+        const brId = await page.evaluate(() => novelData.batchRun && novelData.batchRun.id);
+        verdict(`batch-put.${vn}`, await storageNames(page), ` brIdHit=${hit(brId || '')}`);
+        await context.close();
+      }
+      // (b) discard write-back path: a legacy title-based checkpoint (as written by 25c6405a) is read on load, then discarded.
+      {
+        const { page, context } = await newPage();
+        await page.evaluate(async (a) => {
+          const legacy = 'T ' + a.V + ' T|2026-10-27T00:00:00.000Z';
+          const rec = { key: legacy, savedAt: new Date().toISOString(), active: true, novelData: { title: 'legacy', chapters: ['x'] }, batchRun: { id: legacy, completed: [], inFlight: null } };
+          await new Promise((res, rej) => { const q = indexedDB.open('novelwriter', 2); q.onsuccess = () => { const tx = q.result.transaction('checkpoints', 'readwrite'); tx.objectStore('checkpoints').put(rec, legacy); tx.oncomplete = () => { q.result.close(); res(); }; tx.onerror = rej; }; q.onerror = rej; });
+          document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+          nwBatchState.interrupted = null;
+          await nwBatchCheckForInterrupted();
+          await discardInterruptedBatchRun();
+        }, { K: FAKE, V });
+        await settle(300);
+        const n = await storageNames(page);
+        const rows = await page.evaluate(() => new Promise((res) => { const q = indexedDB.open('novelwriter'); q.onsuccess = () => { const g = q.result.transaction('checkpoints').objectStore('checkpoints').getAll(); g.onsuccess = () => res(g.result.map((r) => ({ active: r.active, opaque: /^br_[0-9a-z]{10}$/.test(String(r.key)) }))); }; }));
+        verdict(`discard-writeback.${vn}`, n, ` rows=${JSON.stringify(rows)}`);
+        check(`R7.discard-writeback.${vn}.row-kept-inactive-opaque`, rows.length === 1 && rows[0].active === false && rows[0].opaque, JSON.stringify(rows));
+        await context.close();
+      }
+    }
+    // (c) imported/resumed run carrying a legacy title-based batchRun.id: the next checkpoint must not use it as a key.
+    {
+      const { page, context } = await newPage();
+      await page.evaluate(async (K) => {
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        novelData.batchRun = { id: 'T ' + K + ' T|2026-10-27T00:00:00.000Z', completed: [], inFlight: null, chapterUsage: [], priorDrafts: [] };
+        try { await nwBatchCheckpoint(true); } catch (_) { /* counted below */ }
+      }, FAKE);
+      verdict('import-legacy-id.exact', await storageNames(page));
+      await context.close();
+    }
+    // (d) autosave keyPath bookId carrying user text (e.g. from an imported/hand-edited session file).
+    for (const [vn, V] of [['exact', FAKE], ['fullwidth', FW], ['longs', LS]]) {
+      const { page, context } = await newPage();
+      await page.evaluate(async (a) => {
+        document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+        novelData.bookId = 'book-' + a.V;
+        try { await nwAutosaveWriteNow({ force: true }); } catch (_) { /* counted below */ }
+      }, { K: FAKE, V });
+      await settle(500);
+      verdict(`autosave-bookId.${vn}`, await storageNames(page));
+      await context.close();
+    }
+    // (e) N4 (Reviewer on 420fc92b): a bookId embedding the live key in a different case must be rejected and never stored.
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (K) => {
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        const low = 'book-' + K.toLowerCase();
+        const shape = /^book-[0-9a-z-]{8,64}$/.test(low);
+        const valid = nwAutosaveIsBookId(low);
+        const fresh = (x) => typeof x === 'string' && x !== low && /^book-[0-9a-z-]{8,64}$/.test(x) && !x.includes(K.toLowerCase());
+        // import path
+        let imp = null; try { const n = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: { title: 'n4', bookId: low } }); imp = n && n.novelData ? n.novelData.bookId : null; } catch (e) { imp = 'ERR ' + (e && e.name); }
+        // create/ensure path (autosave write)
+        novelData.bookId = low;
+        try { await nwAutosaveWriteNow({ force: true }); } catch (_) { /* counted below */ }
+        return { shape, valid, importFresh: fresh(imp), createFresh: fresh(novelData.bookId) };
+      }, FAKE);
+      await settle(500);
+      check('R7.N4.bookId-lowercase-key-rejected', r.shape === true && r.valid === false && r.importFresh && r.createFresh, JSON.stringify(r));
+      verdict('autosave-bookId.lowercase', await storageNames(page));
+      await context.close();
+    }
+    // (f) N4 restore path: an autosave record whose bookId embeds the lowercase live key must restore with a fresh id.
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (K) => {
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        const low = 'book-' + K.toLowerCase();
+        novelData.bookId = '';
+        let err = null; try { await nwAutosaveApply({ bookId: low, savedAt: new Date().toISOString(), novelData: { title: 'n4r', bookId: low, chapters: [] } }); } catch (e) { err = String(e && e.name); }
+        const id = novelData.bookId;
+        return { err, fresh: typeof id === 'string' && id !== low && /^book-[0-9a-z-]{8,64}$/.test(id) && !id.includes(K.toLowerCase()) };
+      }, FAKE);
+      await settle(300);
+      check('R7.N4.restore-lowercase-key-bookId-fresh', r.fresh === true, JSON.stringify(r));
+      await context.close();
+    }
+    // (g) FIX5 (CoS): import a canary bookId while the key is empty, autosave, then enter the key and autosave again.
+    // The re-keyed write must delete the old row so no store key or name keeps the canary.
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (K) => {
+        const low = 'book-' + K.toLowerCase();
+        document.getElementById('apiKey').value = ''; novelData.apiKey = '';
+        const n = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: { title: 'n5', bookId: low, chapters: [] } });
+        novelData = n.novelData;
+        const firstId = novelData.bookId;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        return { firstWasCanary: firstId === low, newId: novelData.bookId !== low };
+      }, FAKE);
+      await settle(500);
+      check('R7.FIX5.import-empty-key-then-key.setup', r.firstWasCanary && r.newId, JSON.stringify(r));
+      verdict('import-empty-key-rekey', await storageNames(page));
+      await context.close();
+    }
+    // (h) FIX6 B1 (Reviewer on 9a014f71): a canary row left by an earlier session, then the batch-conflict path
+    // (Apply skipped) -> pick checkpoint -> save. No store key or name may keep the canary.
+    {
+      const { page, context } = await newPage();
+      const seed = (p) => p.evaluate(async (K) => {
+        const id = 'book-' + K.toLowerCase();
+        await nwAutosaveIdb('readwrite', function (st) { st.put({ v: 1, bookId: id, savedAt: '2000-01-01T00:00:00.000Z', inFlight: null, novelData: { title: 'old-session', chapters: [] } }); });
+      }, FAKE);
+      await seed(page);
+      await page.evaluate(async () => {
+        document.getElementById('title').value = 'R-ckpt-title'; novelData.title = 'R-ckpt-title';
+        novelData.batchRun = { id: 'run-r7h', startedAt: new Date().toISOString(), completed: [], inFlight: null, status: 'running', reason: 'user', stoppedAt: 1, range: { from: 1, to: 1 } };
+        if (typeof nwBatchState !== 'undefined') nwBatchState.runId = 'run-r7h';
+        await nwBatchCheckpoint(true);
+      });
+      await settle(50);
+      await edit(page, '#title', 'R7h-auto'); await settle(1000);
+      await load(page, true);
+      const shown = await page.evaluate(() => { const b = document.getElementById('nwAutosaveConflict'); return !!(b && b.offsetParent !== null); });
+      if (shown) await page.evaluate(() => document.getElementById('batchRestoreBtn').click());
+      await settle(500);
+      await typeVal(page, '#title', 'R7h-after'); await settle(1000);
+      await page.evaluate(async () => { try { await nwAutosaveState.pending; } catch (_) { /* counted below */ } });
+      await settle(300);
+      check('R7.FIX6.B1.conflict-path-shown', shown, `shown=${shown}`);
+      verdict('prior-session-canary-conflict-ckpt', await storageNames(page));
+      await context.close();
+    }
+    // (i) FIX6 coverage: restore hook - restoring a re-keyed record then saving removes the old row.
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (K) => {
+        const id = 'book-' + K.toLowerCase();
+        const rec = { v: 1, bookId: id, savedAt: new Date().toISOString(), inFlight: null, novelData: { title: 'r7i', bookId: id, chapters: [] } };
+        await nwAutosaveIdb('readwrite', function (st) { st.put(rec); });
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        let err = null; try { await nwAutosaveApply(rec); } catch (e) { err = String(e && e.name); }
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        const keys = await nwAutosaveIdb('readonly', function (st) { return st.getAllKeys(); });
+        return { err, rekeyed: novelData.bookId !== id, oldGone: !(keys || []).map(String).includes(id), keys: (keys || []).length };
+      }, FAKE);
+      await settle(300);
+      check('R7.FIX6.restore-hook-old-row-deleted', r.rekeyed && r.oldGone, JSON.stringify(r));
+      verdict('restore-hook-rekey', await storageNames(page));
+      await context.close();
+    }
+    // ---- FIX7 rows (Copilot da7e7178 r4399441347/r4399441260 + CoS ruling): case/NFKC variants, nested bookId, overlap.
+    const MIX = [...FAKE].map((c, i) => (i % 2 ? c.toLowerCase() : c.toUpperCase())).join('');
+    // (j)/(k) canary variant in the title -> stored autosave values must not keep it.
+    for (const [vn, V] of [['mixedcase', MIX], ['fullwidth', FW], ['longs', LS]]) {
+      const { page, context } = await newPage();
+      await page.evaluate(async (a) => {
+        document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+        document.getElementById('title').value = 'T ' + a.V + ' T'; novelData.title = 'T ' + a.V + ' T';
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+      }, { K: FAKE, V });
+      await settle(300);
+      verdict(`FIX7.title.${vn}`, await storageNames(page));
+      await context.close();
+    }
+    // (l) canary variant in bookId -> record values, store keys and localStorage key names.
+    for (const [vn, V] of [['mixedcase', MIX], ['fullwidth', FW]]) {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (a) => {
+        document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+        novelData.bookId = 'book-' + a.V;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        const rows = await nwAutosaveIdb('readonly', function (st) { return st.getAll(); });
+        return { nested: (rows || []).map((x) => x && x.novelData && x.novelData.bookId) };
+      }, { K: FAKE, V });
+      await settle(300);
+      check(`R7.FIX7.bookId.${vn}.nested-bookId-clean`, r.nested.length === 1 && r.nested.every((x) => !hit(x || '')), JSON.stringify({ n: r.nested.length, hits: r.nested.map((x) => hit(x || '')) }));
+      verdict(`FIX7.bookId.${vn}`, await storageNames(page));
+      await context.close();
+    }
+    // (m) off-list: imported bookId with a lowercase canary while the key is empty -> save -> key entered -> save ->
+    // reload/restore -> save. No store key, record novelData.bookId or serialized value may contain the canary.
+    {
+      const { page, context } = await newPage();
+      await page.evaluate(async (K) => {
+        const low = 'book-' + K.toLowerCase();
+        document.getElementById('apiKey').value = ''; novelData.apiKey = '';
+        novelData = normalizeImportedSessionData({ schemaVersion: '1.0', novelData: { title: 'r7m', bookId: low, chapters: [] } }).novelData;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+      }, FAKE);
+      await settle(300);
+      await load(page, true); await settle(500);
+      const r = await page.evaluate(async (K) => {
+        const restoredId = novelData.bookId;
+        document.getElementById('apiKey').value = K; novelData.apiKey = K;
+        try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+        const rows = await nwAutosaveIdb('readonly', function (st) { return st.getAll(); });
+        return { restoredId, nested: (rows || []).map((x) => x && x.novelData && x.novelData.bookId), title: novelData.title };
+      }, FAKE);
+      check('R7.FIX7.import-rekey-reload.restored-and-clean', r.title === 'r7m' && !hit(r.restoredId || '') && r.nested.length === 1 && r.nested.every((x) => !hit(x || '')), JSON.stringify({ title: r.title, restoredHit: hit(r.restoredId || ''), n: r.nested.length, hits: r.nested.map((x) => hit(x || '')) }));
+      verdict('FIX7.import-rekey-reload', await storageNames(page));
+      await context.close();
+    }
+    // (n) overlapping saves for two book ids must leave exactly one autosave row (put + sweep in one transaction).
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async () => {
+        novelData.bookId = 'book-overlapaaaa1'; nwAutosaveWriteNow({ force: true }); const p1 = nwAutosaveState.pending;
+        novelData.bookId = 'book-overlapbbbb2'; nwAutosaveWriteNow({ force: true }); const p2 = nwAutosaveState.pending;
+        try { await Promise.all([p1, p2]); } catch (_) { /* counted below */ }
+        await new Promise((res) => setTimeout(res, 300));
+        const keys = await nwAutosaveIdb('readonly', function (st) { return st.getAllKeys(); });
+        return { keys: (keys || []).map(String) };
+      });
+      check('R7.FIX7.overlapping-saves-one-row', r.keys.length === 1 && r.keys[0] === 'book-overlapbbbb2', JSON.stringify(r));
+      await context.close();
+    }
+    // ---- FIX8 rows (Reviewer B1, Fiction option A): default-ignorable code points inserted mid-key, and Turkish dotted I.
+    // Saves go through the real autosave path; stored values, store keys and localStorage key names are scanned.
+    const mid = (k, ch) => k.slice(0, 8) + ch + k.slice(8);
+    const fix8 = async (id, K, V) => {
+      for (const where of ['title', 'bookId']) {
+        const { page, context } = await newPage();
+        const r = await page.evaluate(async (a) => {
+          document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+          if (a.where === 'title') { document.getElementById('title').value = 'T ' + a.V + ' T'; novelData.title = 'T ' + a.V + ' T'; } else novelData.bookId = 'book-' + a.V;
+          try { nwAutosaveWriteNow({ force: true }); await nwAutosaveState.pending; } catch (_) { /* counted below */ }
+          const rows = await nwAutosaveIdb('readonly', function (st) { return st.getAll(); });
+          return { nested: (rows || []).map((x) => x && x.novelData && x.novelData.bookId) };
+        }, { K, V, where });
+        await settle(300);
+        if (where === 'bookId') check(`R7.FIX8.${id}.bookId.nested-bookId-clean`, r.nested.length === 1 && r.nested.every((x) => !foldHit(x || '', K)), JSON.stringify({ n: r.nested.length, hits: r.nested.map((x) => foldHit(x || '', K)) }));
+        const n = await storageNames(page);
+        const nameHits = [...n.dbs, ...n.stores, ...n.keys, ...n.lsKeys].reduce((a, s) => a + foldHit(s, K), 0);
+        const valHits = n.values.reduce((a, s) => a + foldHit(s, K) + (String(s).includes(K) ? 1 : 0), 0);
+        check(`R7.FIX8.${id}.${where}.no-canary-in-keys-or-names`, nameHits === 0 && n.keys.length > 0, `nameHits=${nameHits} idbKeys=${n.keys.length}`);
+        check(`R7.FIX8.${id}.${where}.no-key-value-stored`, valHits === 0, `valueHits=${valHits}`);
+        await context.close();
+      }
+    };
+    const foldHit = (s, K) => fold(s).includes(fold(K)) ? 1 : 0;
+    for (const [vn, ch] of [['zwsp', '\u200B'], ['shy', '\u00AD'], ['wj', '\u2060']]) await fix8(vn, FAKE, mid(FAKE, ch));
+    // Turkish: synthetic key containing 'i'; the canary uses U+0130. 'İ'.toLowerCase() is 'i' + U+0307, so only a
+    // post-lowercase \p{M} strip makes it match. (Dotless U+0131 has no decomposition to 'i'; not a key copy under this fold.)
+    const FAKE_I = 'FAKE-MOCK-KEY-SAFE-iiii-0000';
+    await fix8('turkish-dotted-I', FAKE_I, FAKE_I.replace(/i/g, '\u0130'));
+    // ---- FIX9: accents. Synthetic key with 'e'; (a) e + U+0301 mid-key, (b) precomposed U+00E9 for an 'e'. Under NFKC the
+    // pair composes to U+00E9 (not a mark), so only NFKD + \p{M} strip folds both back to the key. Kelvin sign kept as regression.
+    const FAKE_E = 'FAKE-MOCK-KEY-SAFE-eeee-0000';
+    await fix8('e-combining-acute', FAKE_E, FAKE_E.replace('eeee', 'ee\u0301ee'));
+    await fix8('e-precomposed-acute', FAKE_E, FAKE_E.replace('eeee', 'e\u00E9ee'));
+    await fix8('kelvin', FAKE, FAKE.replace(/K/g, '\u212A'));
+  }
+  // ---- FIX3b: nwBatchIdbPut key guard + coverage ack keys carry the opaque br_ id.
+  if (T('R8')) {
+    {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (K) => {
+        document.getElementById('apiKey').value = '  ' + K + '  '; novelData.apiKey = K;
+        const count = () => new Promise((res) => { const q = indexedDB.open('novelwriter', 2); q.onsuccess = () => { const g = q.result.transaction('checkpoints').objectStore('checkpoints').getAllKeys(); g.onsuccess = () => { q.result.close(); res(g.result.map(String)); }; }; });
+        const tryPut = async (key) => { try { await nwBatchIdbPut({ key, active: false, novelData: {}, batchRun: { id: key } }, key); return 'ok'; } catch (e) { return String(e && e.name); } };
+        const out = {};
+        out.nonBr = await tryPut('legacy-title|2026');
+        out.badBr = await tryPut('br_ABCDEFGHIJ');
+        // live-key text inside an otherwise br_-shaped key (key set to a 4+ char fragment that fits the id alphabet)
+        document.getElementById('apiKey').value = 'zq9x'; novelData.apiKey = 'zq9x';
+        out.brWithKey = await tryPut('br_aazq9xaaaa');
+        document.getElementById('apiKey').value = 'zq9'; novelData.apiKey = 'zq9';
+        out.shortKeyIgnored = await tryPut('br_aazq9baaaa');
+        out.keys = await count();
+        return out;
+      }, FAKE);
+      check('R8.guard.non-br-key-rejected', r.nonBr === 'CheckpointKeyError' && !r.keys.includes('legacy-title|2026'), JSON.stringify(r));
+      check('R8.guard.non-opaque-br-rejected', r.badBr === 'CheckpointKeyError' && !r.keys.includes('br_ABCDEFGHIJ'), r.badBr);
+      check('R8.guard.br-key-with-live-key-rejected', r.brWithKey === 'CheckpointKeyError' && !r.keys.includes('br_aazq9xaaaa'), r.brWithKey);
+      check('R8.guard.valid-br-key-written', r.shortKeyIgnored === 'ok' && r.keys.length === 1 && r.keys[0] === 'br_aazq9baaaa', JSON.stringify(r.keys));
+      await context.close();
+    }
+    for (const [vn, V] of [['exact', FAKE], ['fullwidth', [...FAKE].map((c) => (c >= '!' && c <= '~') ? String.fromCharCode(c.charCodeAt(0) + 0xFEE0) : c).join('')]]) {
+      const { page, context } = await newPage();
+      const r = await page.evaluate(async (a) => {
+        document.getElementById('apiKey').value = a.K; novelData.apiKey = a.K;
+        document.getElementById('title').value = 'T ' + a.V + ' T'; novelData.title = 'T ' + a.V + ' T';
+        novelData.chapters = ['']; novelData.batchRun = null;
+        window.nwBatchPreflight = () => ({ passed: true, failures: [], message: '' });
+        window.nwBatchPlan = () => ({ planned: [1], skipped: [] });
+        window.nwBatchRunChapter = async () => ({ ok: false, reason: 'coverage', detail: 'mut coverage' });
+        const s1 = await nwBatchStart(false);
+        const br = novelData.batchRun || {};
+        nwBatchState.coverageAck = null;
+        const s2 = await nwBatchStart(true);
+        const ackKey = nwBatchState.coverageAck;
+        nwBatchState.coverageDecideOwner = null; br.coverageAck = null;
+        const d = await nwBatchCoverageDecide('skip');
+        return { s1: s1 && s1.reason, s2: s2 && s2.reason, id: br.id, ackKey, decide: d, skipAck: nwBatchState.coverageAck, brAck: JSON.stringify(br.coverageAck || null) };
+      }, { K: FAKE, V });
+      const fold = (s) => String(s).normalize('NFKC').toLowerCase();
+      const clean = (s) => !fold(s).includes(fold(FAKE)) && !/T /.test(String(s));
+      check(`R8.ackKey.${vn}.opaque-br-id`, r.s2 === 'confirm-coverage' && /^br_[0-9a-z]{10}:1$/.test(String(r.ackKey)) && r.ackKey === r.id + ':1' && clean(r.ackKey), JSON.stringify({ s1: r.s1, s2: r.s2, ackKeyShape: /^br_[0-9a-z]{10}:1$/.test(String(r.ackKey)), clean: clean(r.ackKey) }));
+      check(`R8.coverageAck.${vn}.opaque-br-id`, /^br_[0-9a-z]{10}:1$/.test(String(r.skipAck)) && r.skipAck === r.id + ':1' && clean(r.skipAck) && clean(r.brAck), JSON.stringify({ decide: r.decide, skipShape: /^br_[0-9a-z]{10}:1$/.test(String(r.skipAck)), clean: clean(r.skipAck) && clean(r.brAck) }));
+      await context.close();
+    }
   }
 } catch (e) {
   check('B.harness', false, (e && e.name) + ': ' + String(e && e.message).split('\n')[0]);
