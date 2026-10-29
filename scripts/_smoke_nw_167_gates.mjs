@@ -1,5 +1,6 @@
 /**
  * Offline smoke for #167 gates that 4a and 4c need (REQ-TR-02, REQ-WP-01, REQ-WP-05).
+ * #167 batch 1 adds TR02c (C2-1 dead dedupe) and W1 (C1-11 worldFrom captured before callAI).
  * No network, no API key. Mutations copy the HTML and substitute one real code anchor. Each must turn its named check red.
  *
  *   node scripts/_smoke_nw_167_gates.mjs
@@ -203,6 +204,78 @@ async function runSuite(page, only) {
       }
     }
 
+    if (want('TR02c')) {
+      try {
+        applyBook(book);
+        const src = Function.prototype.toString.call(nwBuildHardRequirements);
+        if (src.indexOf('var blueprintWins = true;') < 0) fail('TR02c', 'blueprintWins anchor missing');
+        else {
+          const buildFalse = eval('(' + src.replace('var blueprintWins = true;', 'var blueprintWins = false;') + ')');
+          // Plan cast lacks the blueprint name 'Mira' (test-integrity: a name NOT already on the plan list).
+          novelData.chapterWritingPlans[0] = {
+            items: [
+              { kind: 'cast', label: 'Rask ExtraName167', detail: 'plan-only' },
+              { kind: 'setting', label: 'Observation Guild chambers in the Martian arcologies', detail: '' }
+            ],
+            builtBy: 'user',
+            builtFrom: 'old'
+          };
+          window.__nwPlanConflicts = [];
+          const merged = parseCast(buildFalse(1));
+          const lower = merged.map((n) => String(n).toLowerCase());
+          if (merged.indexOf('Mira') < 0) fail('TR02c', 'blueprint-only name dropped on the false path: ' + JSON.stringify(merged));
+          else if (merged.indexOf('Rask ExtraName167') < 0) fail('TR02c', 'plan-only name missing: ' + JSON.stringify(merged));
+          else if (lower.length !== new Set(lower).size) fail('TR02c', 'duplicates ' + JSON.stringify(merged));
+          else if (merged.length !== 2) fail('TR02c', 'expected exactly Mira + Rask: ' + JSON.stringify(merged));
+          else pass('TR02c');
+        }
+      } catch (e) { fail('TR02c', e && e.stack || e); }
+    }
+
+    if (want('W1')) {
+      try {
+        // (a) AI plan with a worldBeat stores the pre-call world fingerprint and is fresh.
+        applyBook(book);
+        window.callAI = async function () {
+          return { items: [{ kind: 'worldBeat', label: 'W1 world beat from stub', detail: '' }, { kind: 'beat', label: 'W1 beat', detail: '' }] };
+        };
+        const wantWorld = nwComputeWorldFrom(1);
+        const r1 = await nwBuildWritingPlan(1, { useAI: true });
+        const p1 = novelData.chapterWritingPlans[0];
+        let w1err = '';
+        if (!wantWorld) w1err = 'fixture storyWorld gave no world fingerprint';
+        else if (!r1 || !r1.ok || !p1) w1err = 'plan not saved ' + JSON.stringify(r1);
+        else if (p1.worldFrom !== wantWorld) w1err = '(a) worldFrom=' + p1.worldFrom + ' want=' + wantWorld;
+        else if (nwPlanIsStale(1)) w1err = '(a) fresh AI worldBeat plan reads stale';
+        if (!w1err) {
+          // (b) storyWorld edit while callAI is in flight: worldFrom is the pre-call value and the plan reads stale.
+          applyBook(book);
+          let release = null;
+          window.callAI = function () {
+            return new Promise((resolve) => {
+              release = () => resolve({ items: [{ kind: 'worldBeat', label: 'W1 world beat late', detail: '' }] });
+            });
+          };
+          const before = nwComputeWorldFrom(1);
+          const pending = nwBuildWritingPlan(1, { useAI: true });
+          const t0 = Date.now();
+          while (typeof release !== 'function' && Date.now() - t0 < 5000) await new Promise((r) => setTimeout(r, 10));
+          if (typeof release !== 'function') w1err = '(b) callAI was not deferred';
+          else {
+            novelData.storyWorld = Object.assign({}, novelData.storyWorld, { immersionWeight: 0.77 });
+            const after = nwComputeWorldFrom(1);
+            release();
+            await pending;
+            const p2 = novelData.chapterWritingPlans[0];
+            if (after === before) w1err = '(b) in-flight storyWorld edit did not change the world fingerprint';
+            else if (!p2 || p2.worldFrom !== before) w1err = '(b) worldFrom=' + (p2 && p2.worldFrom) + ' before=' + before + ' after=' + after;
+            else if (!nwPlanIsStale(1)) w1err = '(b) plan not stale after in-flight world edit';
+          }
+        }
+        if (w1err) fail('W1', w1err); else pass('W1');
+      } catch (e) { fail('W1', e && e.stack || e); }
+    }
+
     if (want('WP01')) {
       try {
         applyBook(book);
@@ -349,6 +422,8 @@ await page.close();
 const names = {
   TR02a: 'when blueprintWins is set, chapter cast exactly equals the blueprint cast',
   TR02b: 'when blueprintWins is false, the plan cast merges in with no duplicates',
+  TR02c: 'when blueprintWins is false, blueprint-only names survive and plan-only names merge, no duplicates',
+  W1: 'AI worldBeat plan stores the pre-call worldFrom; fresh unless storyWorld changed during the call',
   WP01: 'subplotPressure value survives the writing-plan round-trip',
   WP01b: 'array subplotPressure yields one trimmed beat line per item from nwBlueprintBeatTexts',
   WP05: 'builtFrom is the pre-call fingerprint and nwPlanIsStale is true after an in-flight edit',
@@ -362,9 +437,17 @@ Object.keys(names).forEach((id) => {
 
 const mutations = [
   ['MUT-TR02-reappend',
-    "if (!blueprintWins) castOut = planCast.slice();\n\t\t\t\tif (castOut.length) add('cast', '- On-page cast: ' + castOut.join('; ') + '; each speaks or acts');",
-    "if (!blueprintWins) castOut = planCast.slice();\n\t\t\t\tplanCast.forEach(function (p) {\n\t\t\t\t\tvar pl = p.toLowerCase();\n\t\t\t\t\tvar have = castOut.some(function (c) { return String(c).toLowerCase() === pl || pl.indexOf(String(c).toLowerCase()) >= 0; });\n\t\t\t\t\tif (!have) castOut.push(p);\n\t\t\t\t});\n\t\t\t\tif (castOut.length) add('cast', '- On-page cast: ' + castOut.join('; ') + '; each speaks or acts');",
+    "\t\t\t\tif (castOut.length) add('cast', '- On-page cast: ' + castOut.join('; ') + '; each speaks or acts');",
+    "\t\t\t\tplanCast.forEach(function (p) {\n\t\t\t\t\tvar pl = p.toLowerCase();\n\t\t\t\t\tvar have = castOut.some(function (c) { return String(c).toLowerCase() === pl || pl.indexOf(String(c).toLowerCase()) >= 0; });\n\t\t\t\t\tif (!have) castOut.push(p);\n\t\t\t\t});\n\t\t\t\tif (castOut.length) add('cast', '- On-page cast: ' + castOut.join('; ') + '; each speaks or acts');",
     'TR02a'],
+  ['MUT-TR02c',
+    "\t\t\t\tif (castOut.length) add('cast', '- On-page cast: ' + castOut.join('; ') + '; each speaks or acts');",
+    "\t\t\t\tif (!blueprintWins) castOut = planCast.slice();\n\t\t\t\tif (castOut.length) add('cast', '- On-page cast: ' + castOut.join('; ') + '; each speaks or acts');",
+    'TR02c'],
+  ['MUT-W1',
+    "return nwStoreWritingPlan(n, items, 'ai', capturedFrom, capturedWorld);",
+    "return nwStoreWritingPlan(n, items, 'ai', capturedFrom, nwComputeWorldFrom(n));",
+    'W1'],
   ['MUT-WP01-drop',
     "function nwBlueprintBeatTexts(bp) {\n\t\t\tvar lines = [];\n\t\t\tif (!bp || typeof bp !== 'object') return lines;",
     "function nwBlueprintBeatTexts(bp) {\n\t\t\tvar lines = [];\n\t\t\tif (!bp || typeof bp !== 'object') return lines;\n\t\t\tbp = Object.assign({}, bp);\n\t\t\tdelete bp.subplotPressure;",

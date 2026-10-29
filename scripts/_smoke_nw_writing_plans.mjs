@@ -1,5 +1,7 @@
 /**
  * Offline smoke for slot 4p writing plans (REQ-WP-01..07 + WP:P12).
+ * #167 batch 1 adds OUTL (C1-6), EST (C1-7), KAW (B3/C1-10) and PAGEERR (C1-8, meta-check).
+ * NW_SMOKE_INJECT_PAGEERR=1 throws one uncaught error per page (used by the PAGEERR meta-check only).
  * No network, no API key. Mutations copy the HTML and substitute one real code anchor. Each must turn its named check red.
  *
  *   node scripts/_smoke_nw_writing_plans.mjs
@@ -8,6 +10,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { spawnSync } from 'child_process';
 import { chromium } from 'playwright';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -130,6 +133,9 @@ function mutateCopy(from, to) {
   return { ok: true, copy, dir };
 }
 
+const SELF_PATH = fileURLToPath(import.meta.url);
+const INJECT_PAGEERR = process.env.NW_SMOKE_INJECT_PAGEERR === '1';
+const pageErrors = [];
 const HARD_MS = 120000;
 const EVAL_MS = 90000;
 const argv = process.argv.slice(2);
@@ -164,6 +170,7 @@ async function openPage(htmlPath) {
   const page = await browser.newPage();
   page.setDefaultTimeout(EVAL_MS);
   page.setDefaultNavigationTimeout(20000);
+  page.on('pageerror', (e) => pageErrors.push(String(e && e.message || e)));
   page.on('dialog', (d) => d.accept().catch(() => {}));
   await page.route('**/*', async (route) => {
     const url = route.request().url();
@@ -172,11 +179,15 @@ async function openPage(htmlPath) {
   });
   await page.goto(pathToFileURL(htmlPath || HTML_PATH).href, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForFunction(() => typeof nwBatchApplyLock === 'function' && typeof novelData !== 'undefined', null, { timeout: 20000 });
+  if (INJECT_PAGEERR) {
+    await page.evaluate(() => { setTimeout(() => { throw new Error('pe167'); }, 0); });
+    await page.waitForTimeout(200);
+  }
   return page;
 }
 
 async function runSuite(page, only) {
-  return raceEval(page.evaluate(async ({ book, gateBook, only }) => {
+  return raceEval(page.evaluate(async ({ book, gateBook, only, estCallerPassesList }) => {
     const out = {};
     const fail = (id, detail) => { out[id] = { ok: false, detail: String(detail == null ? '' : detail).slice(0, 1500) }; };
     const pass = (id) => { out[id] = { ok: true, detail: '' }; };
@@ -582,8 +593,76 @@ async function runSuite(page, only) {
       } catch (e) { fail('P12', e && e.stack || e); }
     }
 
+    if (want('OUTL')) {
+      try {
+        applyBook(book);
+        const head = 'OUTL-CH1-MARKER-167';
+        const tail = 'OUTL-CH1-TAIL-167';
+        novelData.chapterOutlines = [head + ' ' + 'dock clock '.repeat(150) + tail, 'OUTL-CH2-MARKER-167 the morning shift.'];
+        let sentUser = '';
+        window.callAI = async function (messages) {
+          const u = (messages || []).find((m) => m && m.role === 'user');
+          sentUser = String(u && u.content || '');
+          return { items: [{ kind: 'beat', label: 'OUTL beat', detail: '' }] };
+        };
+        await nwBuildWritingPlan(1, { useAI: true });
+        if (sentUser.indexOf(head) < 0) fail('OUTL', 'chapter-1 outline missing from the plan request');
+        else if (sentUser.indexOf('OUTL-CH2-MARKER-167') >= 0) fail('OUTL', 'chapter-2 outline leaked into the chapter-1 request');
+        else if (sentUser.indexOf(tail) >= 0) fail('OUTL', 'outline not capped at 1000 chars');
+        else pass('OUTL');
+      } catch (e) { fail('OUTL', e && e.stack || e); }
+    }
+
+    if (want('EST')) {
+      try {
+        applyBook(book);
+        novelData.numChapters = 3;
+        novelData.chapters = ['', '', ''];
+        novelData.chapterOutlines = novelData.chapterOutlines.concat(['Chapter three outline.']);
+        novelData.chapterWritingPlans = [null, null, null];
+        const fresh = await nwBuildWritingPlan(1, { useAI: false });
+        novelData.chapterWritingPlans[1] = { items: [{ kind: 'beat', label: 'stale beat', detail: '' }], builtBy: 'heuristic', builtFrom: 'stale-167' };
+        document.getElementById('batchBuildPlansFirst').checked = true;
+        document.getElementById('batchBuildPlansUseAI').checked = true;
+        const est = nwBatchEstimate([1, 2, 3]);
+        if (!fresh || !fresh.ok || nwPlanIsStale(1)) fail('EST', 'ch1 plan is not fresh: ' + JSON.stringify(fresh && fresh.ok));
+        else if (!nwPlanIsStale(2)) fail('EST', 'ch2 plan is not stale');
+        else if (!est || est.planBuildCalls !== 2) fail('EST', 'planBuildCalls want 2 (ch2 stale + ch3 missing), got ' + JSON.stringify(est && est.planBuildCalls));
+        else if (!estCallerPassesList) fail('EST', 'Generate All callers still pass plan.planned.length');
+        else pass('EST');
+      } catch (e) { fail('EST', e && e.stack || e); }
+    }
+
+    if (want('KAW')) {
+      try {
+        const VALUE = 'KAW-VALUE-167-do-not-show';
+        const file = {
+          genre: 'mystery',
+          title: 'KAW import',
+          numChapters: 2,
+          chapters: ['', ''],
+          chapterRequirements: VALUE + '-req',
+          storyWorld: { locations: [], systems: VALUE + '-sys' }
+        };
+        const toast = document.getElementById('nwToast');
+        if (toast) { toast.textContent = ''; toast.hidden = true; }
+        const input = document.getElementById('importFile');
+        const dt = new DataTransfer();
+        dt.items.add(new File([JSON.stringify(file)], 'kaw167.json', { type: 'application/json' }));
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        const t0 = Date.now();
+        while (Date.now() - t0 < 5000 && !(toast && !toast.hidden && /wrong type/.test(toast.textContent || ''))) await new Promise((r) => setTimeout(r, 25));
+        const text = toast ? String(toast.textContent || '') : '';
+        if (!toast || toast.hidden || !/wrong type/.test(text)) fail('KAW', 'no visible keep-and-warn notice; toast=' + JSON.stringify(text));
+        else if (text.indexOf('chapterRequirements') < 0 || text.indexOf('storyWorld.systems') < 0) fail('KAW', 'notice does not name both fields: ' + JSON.stringify(text));
+        else if (text.indexOf(VALUE) >= 0) fail('KAW', 'notice leaked a field value');
+        else pass('KAW');
+      } catch (e) { fail('KAW', e && e.stack || e); }
+    }
+
     return out;
-  }, { book: smallBook(), gateBook: enriched(FX), only: only || null }), EVAL_MS, 'plans runSuite');
+  }, { book: smallBook(), gateBook: enriched(FX), only: only || null, estCallerPassesList: HTML.indexOf('nwBatchEstimate(plan.planned.length)') < 0 && HTML.indexOf('nwBatchEstimate(plan.planned)') >= 0 }), EVAL_MS, 'plans runSuite');
 }
 
 try {
@@ -616,7 +695,10 @@ const names = {
   P10d: 'rebuilding a user plan asks for a confirm',
   P10e: 'migration does not write builtFrom, so the plan stays stale',
   P11: 'a conflicting plan setting loses to the blueprint and raises one warning',
-  P12: 'a plan edit during pause is refused'
+  P12: 'a plan edit during pause is refused',
+  OUTL: 'AI plan request carries this chapter outline only, capped at 1000 chars',
+  EST: 'estimate counts plan builds only for missing or stale plans',
+  KAW: 'import keep-and-warn shows one on-screen notice naming the fields, no values'
 };
 if (!ONLY && !green.P10) {
   const parts = ['P10a', 'P10b', 'P10c', 'P10d', 'P10e'].filter((id) => green[id] && green[id].ok);
@@ -639,7 +721,10 @@ const mutations = [
   ['MUT-two-chapters-one-call', 'var sent = [n];', 'var sent = [n, n + 1];', 'P2'],
   ['MUT-estimate-omits-ai', 'if (buildEl && buildEl.checked && aiEl && aiEl.checked) {\n                planBuildCalls = count;', 'if (false && buildEl && buildEl.checked && aiEl && aiEl.checked) {\n                planBuildCalls = count;', 'P2'],
   ['MUT-innerHTML', "el.textContent = String(text == null ? '' : text);", "el.innerHTML = String(text == null ? '' : text);", 'P7'],
-  ['WP:P12', 'return nwBatchSetupIsLocked();', 'return nwBatchIsLocked();', 'P12']
+  ['WP:P12', 'return nwBatchSetupIsLocked();', 'return nwBatchIsLocked();', 'P12'],
+  ['MUT-OUTL', " + ' Chapter outline: ' + JSON.stringify(digestText(String((novelData.chapterOutlines || [])[n - 1] || ''), 1000)) }", ' }', 'OUTL'],
+  ['MUT-EST', '                if (plannedList) planBuildCalls = plannedList.filter(nwBatchPlanNeedsBuild).length;\n', '', 'EST'],
+  ['MUT-KAW', "nwNotify('Import kept fields with the wrong type: ' + nwImportWrongTypeSink.join(', ') + '. Check them before generating.', { level: 'warn', visible: true });", 'void 0;', 'KAW']
 ];
 
 for (const [id, from, to, kills] of mutations) {
@@ -655,6 +740,33 @@ for (const [id, from, to, kills] of mutations) {
   const turnedRed = result && result[kills] && result[kills].ok === false;
   check(id, 'mutation turns ' + kills + ' red', turnedRed, turnedRed ? '' : ('still green: ' + JSON.stringify(result && result[kills])));
 }
+
+// PAGEERR meta-check: the suite must exit 1 when a page throws. MUT-PAGEERR removes the listener and expects exit 0.
+function runSelf(scriptPath) {
+  const env = Object.assign({}, process.env, { NW_SMOKE_INJECT_PAGEERR: '1' });
+  for (const k of ['XAI_API_KEY', 'GROK_API_KEY', 'NW_E2E_LIVE', 'NW_SMOKE_ONLY']) delete env[k];
+  const r = spawnSync(process.execPath, [scriptPath, '--only', 'P7'], { env, encoding: 'utf8', timeout: 60000 });
+  return { status: r.status, out: String(r.stdout || '') + String(r.stderr || '') };
+}
+if (!ONLY && !INJECT_PAGEERR) {
+  console.log('plans: meta PAGEERR');
+  const r = runSelf(SELF_PATH);
+  check('PAGEERR', 'an uncaught page error makes the suite exit 1', r.status === 1 && r.out.indexOf('pe167') >= 0, 'rc=' + r.status + ' ' + r.out.slice(-400));
+  console.log('plans: mutation MUT-PAGEERR');
+  const listener = "  page.on('pageerror', (e) => pageErrors.push(String(e && e.message || e)));\n";
+  const selfSrc = fs.readFileSync(SELF_PATH, 'utf8').replace(/\r\n/g, '\n');
+  if (selfSrc.split(listener).length !== 2) check('MUT-PAGEERR', 'mutation turns PAGEERR red', false, 'anchor not unique: pageerror listener');
+  else {
+    const mutPath = path.join(SCRIPT_DIR, '.tmp-mut-pageerr-' + process.pid + '.mjs');
+    try {
+      fs.writeFileSync(mutPath, selfSrc.replace(listener, ''));
+      const m = runSelf(mutPath);
+      check('MUT-PAGEERR', 'mutation turns PAGEERR red', m.status === 0, 'still green: rc=' + m.status + ' ' + m.out.slice(-300));
+    } finally { try { fs.unlinkSync(mutPath); } catch (_) {} }
+  }
+}
+
+if (pageErrors.length) check('PAGE', 'no uncaught pageerror events', false, pageErrors.join(' | '));
 
 let failed = 0;
 checks.forEach((c) => {
