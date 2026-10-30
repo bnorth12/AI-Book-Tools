@@ -81,6 +81,6 @@
     "katex": "^0.18.2"
   },
   "dependencies": {
-    "dotenv": "^18.0.6"
+    "dotenv": "^18.0.9"
   }
 }
